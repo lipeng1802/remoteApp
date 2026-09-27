@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- P0 协议规范、共享测试向量和两端工程骨架已创建；Mac 构建/测试/DMG 与 Windows Release 构建、6 项协议测试、Setup.exe 打包均已通过。用户已确认当前 Windows 机器安装、启动、关闭后重复打开及卸载正常；无预装 .NET 环境及跨设备环境验证仍待完成。
+- P0 协议规范、共享测试向量和两端工程骨架已创建；Mac 构建/测试/DMG 与 Windows Release 构建、6 项协议测试、Setup.exe 打包均已通过。用户已确认当前 Windows 机器安装、启动、关闭后重复打开及卸载正常；Mac 使用手机热点、Windows 位于另一网络时，Tailscale 双向 ping 均已直连成功。无预装 .NET 环境及应用层 TCP/TLS 可达性仍待验证。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -16,7 +16,7 @@
 - Git 分支：`main`
 - 已安装并选中 Xcode 15.2（Build 15C500b），macOS SDK 14.2、Swift 5.9.2；Swift Debug 测试与 Release 构建均已通过。
 - 当前 Mac 未检测到 `dotnet`；Windows 工程应在 Windows 设备安装 .NET 8 SDK 后验证。
-- 用户已确认 Mac 和 Windows 均安装 Tailscale、登录同一账号并能看到两台设备；Windows 实测双方在线，Windows 到 Mac 的 Tailscale ping 直连成功（71 ms）。Mac 到 Windows 与不同物理网络测试尚待完成。
+- 用户已确认 Mac 和 Windows 均安装 Tailscale、登录同一账号并能看到两台设备；Mac 使用手机热点，与 Windows 不在同一物理网络。Windows 到 Mac 的 Tailscale ping 直连成功（71 ms），Mac 到 Windows 的反向 ping 也直连成功（最近一次约 5 ms），跨外网 Tailscale 层验证通过。
 
 已知 Windows 目标环境：
 
@@ -36,7 +36,7 @@
 
 ## 下一会话唯一目标
 
-完成 P0 的 Tailscale 连通验证：两端已安装、登录，Windows 到 Mac 已直连成功。接下来由用户在 Mac 执行到 Windows 的 `tailscale ping`，确认不同物理网络条件下仍可达。只记录成功/失败、direct/relay 和延迟，不记录真实地址或凭据。Tailscale ping 不等于应用 TCP/TLS 端口可达，应用层测试需要后续单独设计，不修改防火墙或擅自开放监听。
+完成 P0 最后一项应用层基线：设计一个仅绑定 Windows Tailscale 地址的临时 TCP 测试监听，并从 Mac 验证跨外网端口可达。不得绑定所有接口、修改公网防火墙规则或把真实地址写入仓库。Tailscale 网络层跨外网双向直连已经通过，不需要重复。
 
 Windows 安装、启动、重复打开及卸载已获用户确认正常；无预装 .NET 环境验证仍是待办。本次不开始屏幕采集、输入控制、H.264 或自建穿透/中继。
 
@@ -248,3 +248,61 @@ Mac 验证命令与结果：本次未重复执行，沿用历史 Mac 构建、6 
 - 待用户在 Mac 反向运行 `tailscale ping --c 5 --timeout 5s <Windows Tailscale 地址>` 并反馈结果。需另行确认两台设备是否使用不同物理网络；当前不能将结果标记为外网测试通过。
 - `tailscale ping` 检查 Tailscale 层路径，不证明 Windows 应用端口、TLS、认证或屏幕传输可用。
 - 本轮只更新文档；`git diff --check` 通过。
+
+## Tailscale 双向连通验证完成（2026-09-27）
+
+- Mac 端已安装 Tailscale、完成登录，CLI 状态为 `Running`。
+- Mac 端识别到唯一一台 Windows 对端，状态在线。
+- Mac 到 Windows 的 `tailscale ping --c 5 --timeout 5s` 退出码为 0，确认路径为 direct；最近一次响应约 5 ms。Tailscale 在确认 direct 后提前结束，因此实际返回一条响应。
+- 结合此前 Windows 到 Mac 的 direct 结果，当前已完成双向 Tailscale 层可达验证。
+- 未输出或写入真实设备名、Tailscale 地址或凭据；未修改防火墙、网络配置或应用监听状态。
+- 用户确认 Mac 使用手机热点，Windows 位于另一网络；因此本次可标记为“不同物理网络下的 Tailscale 双向直连验收通过”。
+- 本次只证明 Tailscale 网络层可达，不证明应用 TCP/TLS、认证、屏幕帧或远程输入链路可用。
+- 下一步唯一目标：完成仅绑定 Windows Tailscale 地址的临时 TCP 端口可达性验证；该项通过后结束 P0，进入 JPEG 只读链路。
+
+## Windows 端下一步：临时 TCP 端口验证
+
+先在 Windows 仓库执行 `git pull --ff-only origin main` 并确认工作区干净。随后在 PowerShell 运行以下一次性监听器。它只绑定 Windows 的 Tailscale IPv4 地址，收到一个请求后自动关闭，不安装服务、不绑定所有接口。
+
+```powershell
+$port = 47474
+$tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
+$tailscaleIp = (& $tailscale ip -4 | Select-Object -First 1).Trim()
+
+if (!$tailscaleIp) {
+    throw "未找到 Windows 的 Tailscale IPv4 地址"
+}
+
+$listener = [System.Net.Sockets.TcpListener]::new(
+    [System.Net.IPAddress]::Parse($tailscaleIp),
+    $port
+)
+
+try {
+    $listener.Start()
+    Write-Host "READY: 临时监听已启动，端口 $port"
+
+    $client = $listener.AcceptTcpClient()
+    try {
+        $stream = $client.GetStream()
+        $reader = [System.IO.StreamReader]::new($stream)
+        $writer = [System.IO.StreamWriter]::new($stream)
+        $writer.AutoFlush = $true
+
+        $message = $reader.ReadLine()
+        Write-Host "收到测试消息：" $message
+        $writer.WriteLine("prd-p0-ok")
+    }
+    finally {
+        $client.Dispose()
+    }
+}
+finally {
+    $listener.Stop()
+    Write-Host "临时监听已关闭"
+}
+```
+
+看到 `READY: 临时监听已启动，端口 47474` 后，保持 PowerShell 窗口运行并通知 Mac 端。Mac 将通过已登录的 Tailscale peer 信息发送一行 `prd-p0-test`，预期收到 `prd-p0-ok`；真实设备名和地址不得写入仓库。
+
+如果 Windows 弹出防火墙提示或 Mac 连接超时，不要全局放行、不要修改公网规则。记录提示或错误后停止，等待设计仅限 Tailscale 地址、测试后立即删除的临时规则。
