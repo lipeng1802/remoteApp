@@ -1,10 +1,10 @@
 # 下一次 Codex 会话交接
 
-最后整理：2026-09-27。请以顶部的当前状态、下一会话唯一目标和末尾的跨网络 TCP 复测通过记录为准；中间按时间保留的失败、待确认及下一步描述均为历史记录。
+最后整理：2026-09-28。请以顶部的当前状态、当前唯一目标和文末最新记录为准；中间按时间保留的失败、待确认及下一步描述均为历史记录。
 
 ## 当前状态
 
-- P0 已完成。P1 认证门禁已在 Mac/Windows 通过 12 项测试，证书指纹/TOFU 决策又在两端通过累计 15 项测试。Mac 已新增 Keychain 指纹存储实现及可替换存储协调器，累计 18 项测试通过；测试覆盖首次批准后保存、后续自动信任、拒绝首次信任不保存、证书变化拒绝且不再次提示。尚未建立 TLS 网络连接、Windows 服务端证书持久化或真实 JPEG 屏幕链路。
+- P0 已完成。P1 认证门禁已在 Mac/Windows 通过 12 项测试，证书指纹/TOFU 决策又在两端通过累计 15 项测试。Mac 已新增 Keychain 指纹存储与实际 TLS 客户端，累计 18 项测试通过；Windows 已新增自签名服务端证书、当前用户证书库存储、单次 TLS 服务和 2 项测试，等待目标机执行累计 17 项测试及双机握手。尚未传输真实 JPEG 屏幕数据。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -36,9 +36,9 @@
 - `packaging/macos`：从 Swift Release 构建组装 `.app`、签名并生成 `.dmg` 的脚本。
 - `packaging/windows`：发布 self-contained win-x64 Agent 并使用 Inno Setup 生成 `Setup.exe` 的脚本。
 
-## 下一会话唯一目标
+## 当前唯一目标
 
-实现最小 TLS 客户端/服务端连接：Windows 生成并持久化服务端证书，仅绑定 Tailscale 地址；Mac 在 TLS 验证回调中使用已实现的 TOFU/Keychain 协调器。先以固定测试消息验证握手和指纹策略，不传输屏幕。当前不得启动真实屏幕采集或发送 JPEG；不开发输入控制、H.264 或自建穿透/中继。
+在 Windows 目标机完成 17 项测试，然后运行单次 TLS 服务；Mac 连接时核对两端打印的 SHA-256 指纹并明确批准，随后重启服务再连接一次，确认 Keychain 固定指纹可自动放行。服务仅绑定 Windows Tailscale IPv4，并只接受当前唯一在线 Mac 的源地址。仍不传输屏幕；不得启动 JPEG、输入控制、H.264 或自建穿透/中继。
 
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
@@ -398,3 +398,37 @@ dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProt
 - 尚未实现实际 TLS socket、Windows 服务端证书生成/持久化或网络握手，不发送屏幕数据。
 
 下一步唯一目标：实现只传固定测试消息的最小 TLS Windows 服务端与 Mac 客户端，连接层调用现有 TOFU/Keychain 协调器；服务端仅绑定 Tailscale 地址。真实 JPEG 必须继续等待 TLS 和应用认证串联通过。
+
+## 最小 TLS 客户端/服务端实现（2026-09-28）
+
+- Windows 新增 RSA 2048 / SHA-256 自签名服务端证书，带服务端认证 EKU、非 CA 约束和数字签名/密钥交换用途。首次运行后保存到当前用户 `My` 证书库，后续运行复用同一有效证书，避免正常重启触发指纹变化。
+- Windows 新增单次 TLS 1.2/1.3 探测服务：最多等待 5 分钟，只处理固定且最多 32 字节的请求，返回固定响应后关闭；启动工具拒绝非 Tailscale IPv4 绑定，脚本只选择本机 Tailscale 地址，并限定当前唯一在线 Mac 的 Tailscale 源地址。未修改防火墙。
+- Mac 新增基于 Network.framework 的 TLS 客户端。验证回调提取叶证书 DER，调用现有 TOFU/Keychain 协调器；首次连接打印 SHA-256 指纹并要求输入 `y`，证书变化直接拒绝。响应读取上限为 32 字节。
+- 新增 `TLSProbeClient` 与 `TlsProbeServer` 命令行验收工具；它们只发送 `prd-tls-test` / `prd-tls-ok` 常量，不发送屏幕、设备密钥或其他业务数据。
+- Windows 测试新增“自签名证书约束”和“loopback TLS 握手/TOFU/固定消息”2 项，目标机预期累计 `17/17 tests passed`。本 Mac 没有 .NET SDK，本轮不能把 Windows 编译或测试标记为已通过。
+- Mac `swift test`：18 项测试、0 失败；`swift build -c release`：通过。SwiftPM 用户缓存警告来自 Codex 沙箱，不影响构建结果。
+- `git diff --check`：通过。
+
+Windows 目标机先验证并启动服务（仓库根目录 PowerShell）：
+
+```powershell
+git pull --ff-only origin main
+dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
+if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
+
+dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
+if ($LASTEXITCODE -ne 0) { throw 'Protocol/TLS tests failed' }
+
+.\scripts\p1\Start-TailscaleTlsProbe.ps1
+```
+
+预期测试为 `17/17 tests passed`。服务打印 `READY` 和 `CERTIFICATE_SHA256 ...` 后保持窗口开启。在 Mac 仓库根目录，用 Tailscale 中显示的 Windows IPv4 运行：
+
+```bash
+cd macos/RemoteController
+swift run TLSProbeClient <Windows-Tailscale-IPv4>
+```
+
+Mac 首次显示的指纹必须与 Windows 的 `CERTIFICATE_SHA256` 完全相同；相同才输入 `y`。预期 Mac 和 Windows 均打印 `PASS`，Windows 随后打印 `CLOSED`。再在 Windows 重启同一脚本，并在 Mac 重跑同一命令；第二次不应询问批准，且两端仍应 `PASS`。这两次真实跨网络握手尚待用户执行，未完成前不得宣称 TLS 联调通过。
+
+下一轮唯一目标：完成 Windows 17 项测试和上述两次跨网络 TLS 握手；若发现编译或运行问题先修复。通过后才把应用认证帧接入 TLS 通道，屏幕帧仍继续禁止。

@@ -1,4 +1,10 @@
 using System.Text.Json;
+using System.Net;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using RemoteProtocol;
 
 var tests = new (string Name, Action Run)[]
@@ -18,6 +24,8 @@ var tests = new (string Name, Action Run)[]
     ("certificate fingerprint golden vector", CertificateFingerprintGoldenVector),
     ("certificate first-use decision", CertificateFirstUseDecision),
     ("certificate match and mismatch decisions", CertificateMatchAndMismatchDecisions),
+    ("self-signed agent certificate", SelfSignedAgentCertificate),
+    ("loopback TLS probe", LoopbackTlsProbe),
 };
 
 var failures = 0;
@@ -278,6 +286,80 @@ static void CertificateMatchAndMismatchDecisions()
             stored,
             Enumerable.Repeat((byte)9, 64).ToArray()).Decision,
         "changed certificate");
+}
+
+static void SelfSignedAgentCertificate()
+{
+    using var certificate = AgentCertificateFactory.CreateSelfSigned();
+    Equal(true, certificate.HasPrivateKey, "certificate private key");
+    Equal(AgentCertificateFactory.SubjectName, certificate.Subject, "certificate subject");
+
+    var basicConstraints = certificate.Extensions.OfType<X509BasicConstraintsExtension>().Single();
+    Equal(false, basicConstraints.CertificateAuthority, "certificate is not a CA");
+    var enhancedKeyUsage = certificate.Extensions.OfType<X509EnhancedKeyUsageExtension>().Single();
+    Equal(
+        true,
+        enhancedKeyUsage.EnhancedKeyUsages.Cast<Oid>().Any(oid => oid.Value == "1.3.6.1.5.5.7.3.1"),
+        "certificate server authentication usage");
+}
+
+static void LoopbackTlsProbe()
+{
+    using var certificate = AgentCertificateFactory.CreateSelfSigned();
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+    var port = GetAvailableLoopbackPort();
+    var server = TlsProbeServer.RunOnceAsync(
+        IPAddress.Loopback,
+        IPAddress.Loopback,
+        port,
+        certificate,
+        timeout.Token);
+
+    using var client = new TcpClient(AddressFamily.InterNetwork);
+    client.ConnectAsync(IPAddress.Loopback, port, timeout.Token).GetAwaiter().GetResult();
+    CertificateTrustEvaluation? evaluation = null;
+    using var tls = new SslStream(client.GetStream(), false, (_, peerCertificate, _, _) =>
+    {
+        if (peerCertificate is null)
+        {
+            return false;
+        }
+        evaluation = CertificateTrustPolicy.Evaluate(null, peerCertificate.Export(X509ContentType.Cert));
+        return evaluation.Decision == CertificateTrustDecision.TrustOnFirstUse;
+    });
+    tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+    {
+        TargetHost = "localhost",
+        EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+        CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+    }, timeout.Token).GetAwaiter().GetResult();
+    tls.WriteAsync(TlsProbeServer.Request, timeout.Token).AsTask().GetAwaiter().GetResult();
+    tls.FlushAsync(timeout.Token).GetAwaiter().GetResult();
+
+    var response = new byte[TlsProbeServer.Response.Length];
+    tls.ReadExactlyAsync(response, timeout.Token).AsTask().GetAwaiter().GetResult();
+    server.GetAwaiter().GetResult();
+
+    if (evaluation is null)
+    {
+        throw new InvalidOperationException("TLS peer certificate was not evaluated.");
+    }
+    Equal(CertificateTrustDecision.TrustOnFirstUse, evaluation.Decision, "TLS peer trust decision");
+    SequenceEqual(TlsProbeServer.Response.ToArray(), response, "TLS probe response");
+}
+
+static int GetAvailableLoopbackPort()
+{
+    var listener = new TcpListener(IPAddress.Loopback, 0);
+    listener.Start();
+    try
+    {
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+    finally
+    {
+        listener.Stop();
+    }
 }
 
 static void Equal<T>(T expected, T actual, string context)

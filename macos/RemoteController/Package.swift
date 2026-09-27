@@ -7,12 +7,17 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "RemoteProtocol", targets: ["RemoteProtocol"]),
-        .executable(name: "RemoteController", targets: ["RemoteController"])
+        .executable(name: "RemoteController", targets: ["RemoteController"]),
+        .executable(name: "TLSProbeClient", targets: ["TLSProbeClient"])
     ],
     targets: [
         .target(name: "RemoteProtocol"),
         .executableTarget(
             name: "RemoteController",
+            dependencies: ["RemoteProtocol"]
+        ),
+        .executableTarget(
+            name: "TLSProbeClient",
             dependencies: ["RemoteProtocol"]
         ),
         .testTarget(
