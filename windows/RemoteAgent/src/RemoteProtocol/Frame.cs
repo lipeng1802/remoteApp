@@ -46,6 +46,9 @@ public enum ProtocolError
     NonzeroFlags,
     MessageTooLarge,
     IncompleteFrame,
+    InvalidPayload,
+    AuthRequired,
+    InvalidState,
 }
 
 public sealed class ProtocolException(ProtocolError error, string message) : Exception(message)

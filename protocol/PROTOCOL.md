@@ -209,15 +209,21 @@ must repeat the entire handshake.
 
 ## 9. Transport security
 
-Production sessions require TLS. P3 will define certificate creation, first-use
-trust, and certificate fingerprint pinning. Until that implementation exists,
-all skeleton code is test-only and must not expose a listening port. Tailscale
-addresses alone are not an authentication decision.
+Production sessions require TLS. The minimum TLS transport, certificate
+creation, first-use trust, and certificate fingerprint pinning are prerequisites
+for sending real P1 screen frames. P3 retains security hardening, persistence,
+rate limiting, and reconnect work. Until the minimum TLS implementation exists,
+all skeleton code is test-only and must not expose an application listening
+port. Tailscale addresses alone are not an authentication decision.
 
 ## 10. Golden vectors
 
 `protocol/testdata/v1.json` is the cross-language source of truth for framing
-tests. Frames are stored as hexadecimal text so they remain reviewable in Git;
-tests decode the text to the exact wire bytes before parsing. Any framing change
-must update this document, both language implementations, and these vectors in
-the same change.
+tests. `protocol/testdata/auth-v1.json` fixes the device key, both hello nonces,
+challenge, agent identifier, and expected HMAC-SHA256 response for authentication
+interop tests. Values are test-only and are not usable device credentials.
+
+Vectors are stored as hexadecimal text so they remain reviewable in Git; tests
+decode the text to the exact wire bytes before parsing. Any framing or
+authentication change must update this document, both language implementations,
+and these vectors in the same change.

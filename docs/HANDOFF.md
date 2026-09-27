@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- P0 协议规范、共享测试向量和两端工程骨架已创建；Mac 构建/测试/DMG 与 Windows Release 构建、6 项协议测试、Setup.exe 打包均已通过。用户已确认当前 Windows 机器安装、启动、关闭后重复打开及卸载正常；Mac 使用手机热点、Windows 位于另一网络时，Tailscale 双向 ping 均已直连成功。局域网及 Mac 手机热点到 Windows 的跨网络 TCP 请求/响应均已通过，临时监听关闭并确认端口释放；无预装 .NET 环境及 TLS/认证仍待验证。
+- P0 已完成：两端构建、6 项帧协议测试、开发版打包、Windows 本机安装冒烟、跨网络 Tailscale 双向直连和 TCP 请求/响应均已通过。P1 已开始安全会话门禁切片：Swift 与 C# 已实现 HELLO/认证载荷、HMAC-SHA256 和认证前消息拒绝；Mac 端累计 12 项测试及 Release 构建通过，Windows 端新增 6 项测试尚待目标机实际验证。TLS 与真实 JPEG 屏幕链路尚未开始。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -38,9 +38,7 @@
 
 ## 下一会话唯一目标
 
-P0 的两端构建、6 项协议基线测试、开发版打包、Windows 本机安装冒烟、跨网络 Tailscale 双向直连和 Mac 到 Windows 临时 TCP 请求/响应均已通过。临时监听已经关闭，没有修改防火墙。
-
-下一开发目标：在后续会话确定 P1 JPEG 只读链路的最小实现与验证范围；真实屏幕传输前需要 TLS 和应用会话认证保护。当前 TCP 探针只验证传输可达性，不代表 TLS、认证或视频链路通过。本轮不启动 P1，不开发输入控制、H.264 或自建穿透/中继。
+在 Windows 11 目标机实际构建当前提交并运行扩展后的 12 项协议/认证测试，修正任何 C# 编译或跨语言 HMAC 差异。该验证通过后，下一切片才实现最低 TLS 传输与证书首次信任/指纹固定。当前不得启动真实屏幕采集、应用监听或发送 JPEG；不开发输入控制、H.264 或自建穿透/中继。
 
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
@@ -62,7 +60,7 @@ dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProt
 .\packaging\windows\build-installer.ps1 -Version 0.1.0
 ```
 
-预期：solution 无警告/错误完成构建，测试运行器输出 `6/6 tests passed`，`artifacts\windows` 生成可在未预装 .NET Runtime 的 Windows 11 x64 上安装的 `PersonalRemoteDesktopAgent-0.1.0-win-x64-Setup.exe`。
+P0 历史预期为 `6/6 tests passed`。P1 当前代码在 Windows 复验时应输出 `12/12 tests passed`；本轮无需重新生成安装包，除非 Windows 构建修正影响发布内容。
 
 ## 可直接复制到新会话的提示词
 
@@ -339,3 +337,35 @@ PY
 - 结论：Mac 手机热点到 Windows 原网络的 TCP 请求/响应验证通过。先前拒绝连接现象在重启一次性监听后消失，本轮无需防火墙或网络配置改动。
 - P0 开发计划要求的测试端口可达性已验证；不将结果扩展为 TLS、认证或 JPEG 链路通过。无预装 .NET 安装验收仍待完成。
 - 新增有界 TCP 验证脚本，修订交接示例和状态记录；本轮没有修改应用代码、重建安装包或启动后续功能。git diff --check 通过，脚本与最终交接记录纳入本次 Git 提交。
+
+## P1 安全会话门禁切片（2026-09-27，Mac 实现与验证）
+
+完成内容：
+
+- 新增 `protocol/testdata/auth-v1.json`，固定测试专用 device key、双方 nonce、challenge、agent identifier 与预期 HMAC-SHA256，供 Swift/C# 跨语言读取。
+- Swift 与 C# 均新增 HELLO、AUTH_CHALLENGE、AUTH_RESULT 载荷的严格长度/枚举/版本校验，以及协议规定的 HMAC-SHA256 响应计算和恒定时间比较。
+- 两端均新增会话门禁：未认证时拒绝 SCREEN_INFO、JPEG/H.264、心跳和全部输入消息；握手消息顺序错误也被拒绝。
+- Agent 门禁不接受调用方传入的“认证成功”布尔值，而是保存收到的 32 字节响应，并在完成认证时自行恒定时间比较预期响应；错误响应进入 closing。
+- 本轮没有网络监听、TLS、证书、密钥持久化、屏幕采集、JPEG 发送或输入功能。测试向量不是真实设备凭据。
+
+Mac 验证：
+
+- `swift test --disable-sandbox --scratch-path /tmp/prd-p1-remotecontroller-build`：通过，原 6 项帧测试和新增 6 项认证/状态测试合计 `12 tests, 0 failures`。
+- `swift build -c release --disable-sandbox --scratch-path /tmp/prd-p1-remotecontroller-release`：通过。
+- Ruby/OpenSSL 独立复算 `auth-v1.json`：HMAC 与预期值一致。
+- XML 项目文件解析和 `git diff --check`：通过。
+
+Windows 待验证：
+
+```powershell
+git pull --ff-only origin main
+dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
+if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
+
+dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
+if ($LASTEXITCODE -ne 0) { throw 'Protocol/auth tests failed' }
+```
+
+预期：构建 0 错误，测试打印 12 条 PASS 和 `12/12 tests passed`，其中 authentication golden vector 必须与 Swift 相同。本轮 Mac 没有 .NET SDK，不能把 C# 静态检查标记为实际构建通过。
+
+下一步唯一目标：完成上述 Windows 构建与 12 项测试，修复发现的问题并更新本文件。通过后再设计最低 TLS 传输和证书首次信任/指纹固定；在此之前禁止真实屏幕帧传输。

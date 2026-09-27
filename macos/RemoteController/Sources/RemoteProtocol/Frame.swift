@@ -60,6 +60,9 @@ public enum ProtocolError: Error, Equatable {
     case nonzeroFlags(UInt16)
     case messageTooLarge(Int)
     case incompleteFrame
+    case invalidPayload
+    case authRequired
+    case invalidState
 }
 
 public enum FrameCodec {
