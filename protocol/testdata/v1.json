@@ -1,0 +1,36 @@
+{
+  "protocolVersion": 1,
+  "headerLength": 28,
+  "vectors": [
+    {
+      "name": "controller_hello_minimal",
+      "frameHex": "505244310001001c00010000000000290000000100000000000000000100010001000000010000000000000000000000000000000000000000000000000000000000000000",
+      "messageType": 1,
+      "flags": 0,
+      "payloadLength": 41,
+      "sequence": 1,
+      "timestampMicros": 0,
+      "payloadHex": "0100010001000000010000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "ping_with_identifier",
+      "frameHex": "505244310001001c000c0000000000080000002a00000000000f42401122334455667788",
+      "messageType": 12,
+      "flags": 0,
+      "payloadLength": 8,
+      "sequence": 42,
+      "timestampMicros": 1000000,
+      "payloadHex": "1122334455667788"
+    },
+    {
+      "name": "empty_disconnect",
+      "frameHex": "505244310001001c000e000000000000000000070000000000000000",
+      "messageType": 14,
+      "flags": 0,
+      "payloadLength": 0,
+      "sequence": 7,
+      "timestampMicros": 0,
+      "payloadHex": ""
+    }
+  ]
+}

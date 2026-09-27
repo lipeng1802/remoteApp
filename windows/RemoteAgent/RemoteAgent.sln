@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemoteProtocol", "src\RemoteProtocol\RemoteProtocol.csproj", "{8E30AA15-7F1A-4055-B85B-A96709B7A4C1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemoteAgent", "src\RemoteAgent\RemoteAgent.csproj", "{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemoteProtocol.Tests", "tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj", "{0F6EBA63-AE2F-405C-9E62-0D54913B127F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8E30AA15-7F1A-4055-B85B-A96709B7A4C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8E30AA15-7F1A-4055-B85B-A96709B7A4C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8E30AA15-7F1A-4055-B85B-A96709B7A4C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8E30AA15-7F1A-4055-B85B-A96709B7A4C1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F6EBA63-AE2F-405C-9E62-0D54913B127F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F6EBA63-AE2F-405C-9E62-0D54913B127F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F6EBA63-AE2F-405C-9E62-0D54913B127F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F6EBA63-AE2F-405C-9E62-0D54913B127F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
