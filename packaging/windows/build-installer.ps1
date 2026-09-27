@@ -21,6 +21,10 @@ dotnet publish $Project `
     -p:PublishSingleFile=true `
     -p:Version=$Version
 
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed with exit code $LASTEXITCODE."
+}
+
 $Compiler = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 if ($null -eq $Compiler) {
     $DefaultCompiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"

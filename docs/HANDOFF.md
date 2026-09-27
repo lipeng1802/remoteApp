@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- P0“环境与协议基线”已经开始，协议规范、共享测试向量和两端最小工程骨架已创建。
+- P0 协议规范、共享测试向量和两端工程骨架已创建；Mac 构建/测试/DMG 与 Windows Release 构建、6 项协议测试、Setup.exe 打包均已通过。用户已确认当前 Windows 机器安装、启动、关闭后重复打开及卸载正常；无预装 .NET 环境及跨设备环境验证仍待完成。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -16,13 +16,13 @@
 - Git 分支：`main`
 - 已安装并选中 Xcode 15.2（Build 15C500b），macOS SDK 14.2、Swift 5.9.2；Swift Debug 测试与 Release 构建均已通过。
 - 当前 Mac 未检测到 `dotnet`；Windows 工程应在 Windows 设备安装 .NET 8 SDK 后验证。
-- 当前 Mac 未检测到 Tailscale，Windows 也尚未安装 Tailscale。
+- 用户已确认 Mac 和 Windows 均安装 Tailscale、登录同一账号并能看到两台设备；Windows 实测双方在线，Windows 到 Mac 的 Tailscale ping 直连成功（71 ms）。Mac 到 Windows 与不同物理网络测试尚待完成。
 
 已知 Windows 目标环境：
 
 - Windows 11 25H2，x64。
 - 主显示器为 4K；具体 DPI 缩放由 Agent 运行时检测，不写死。
-- .NET 环境未知；开发验证需要 .NET 8 SDK，最终发布采用 self-contained x64，不要求用户预装运行时。
+- 用户已安装 .NET SDK 8.0.425 x64 与 Inno Setup 6.7.3；2026-09-27 已实际通过构建、测试和打包。发布配置为 self-contained win-x64，包含 .NET / Windows Desktop 8.0.31；无预装运行时机器上的安装启动尚待验收。
 - 两台设备可以处于不同物理网络，但跨设备联调前必须授权加入同一个 Tailscale tailnet。
 
 已创建：
@@ -36,7 +36,9 @@
 
 ## 下一会话唯一目标
 
-完成 P0 的 Windows 构建验证：在 Windows 安装 .NET 8 SDK 后运行 C# 构建与协议测试，并修正发现的跨语言差异。之后安装 Tailscale，在不同物理网络的两台设备上加入同一个 tailnet 并验证基础可达性。不要开始屏幕采集、输入控制或 H.264。
+完成 P0 的 Tailscale 连通验证：两端已安装、登录，Windows 到 Mac 已直连成功。接下来由用户在 Mac 执行到 Windows 的 `tailscale ping`，确认不同物理网络条件下仍可达。只记录成功/失败、direct/relay 和延迟，不记录真实地址或凭据。Tailscale ping 不等于应用 TCP/TLS 端口可达，应用层测试需要后续单独设计，不修改防火墙或擅自开放监听。
+
+Windows 安装、启动、重复打开及卸载已获用户确认正常；无预装 .NET 环境验证仍是待办。本次不开始屏幕采集、输入控制、H.264 或自建穿透/中继。
 
 Mac 验证命令：
 
@@ -112,3 +114,137 @@ Windows 验证命令与结果：未运行；当前 Mac 没有 `dotnet`，需要�
 已知问题/阻塞：Windows 侧尚无 .NET 8 SDK 和安装包验证结果；本机 Docker daemon 未运行，无法借助现有容器验证 C#；Tailscale 尚未安装。macOS 当前使用 ad-hoc 签名，只适合开发测试；公开分发前需要 Developer ID 签名与 Apple 公证。
 
 下一轮唯一目标：在 Windows 11 x64 目标机完成 C# 实际构建与 6 项协议测试，并修正发现的问题。
+
+## Windows 验证尝试与修正（2026-09-27）
+
+完成的里程碑：完成 Windows 环境检查和两处静态修正；Windows 实际构建、6 项协议测试和 Setup.exe 成功打包仍未完成，不能标记 P0 通过。
+
+环境与初始状态：
+
+- 仓库位于工作目录下的 `remoteApp`，分支 `main`，开始时 `git status --short` 无输出。
+- 已完整阅读 README、开发计划、测试计划和本交接文档；未找到仓库内 AGENTS.md。
+- 当前运行于 Windows x64，DisplayVersion 25H2，Build 26200.9550。
+- `dotnet --info`：Host 6.0.36，只有 Microsoft.NETCore.App / Microsoft.WindowsDesktop.App 6.0.36，`No SDKs were found`。
+- PATH 与默认 `C:\Program Files (x86)\Inno Setup 6` 未发现 ISCC；不排除其他自定义安装位置。
+- 普通执行器及备用读取工具因 `CryptUnprotectData failed: 2148073483` 无法启动；经工具审批的沙箱外命令可用。
+
+主要改动：
+
+- 测试运行器的 `Equal<T>` 改用 `EqualityComparer<T>.Default`，移除枚举无法满足的 `IEquatable<T>` 约束；保留原有 6 项测试。
+- `build-installer.ps1` 在 `dotnet publish` 后立即检查退出码，失败就抛出错误，避免继续打包或误报成功。
+- 未改协议、共享向量、Swift 或产品功能。共享向量项目路径经实际解析确认原有四层 `..` 正确，未保留路径修改。
+
+Windows 验证命令与结果：
+
+- `dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release`：失败，缺少 SDK，退出码 `-2147450735`；尚未进入 C# 编译。
+- `dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release`：同样因缺少 SDK 失败；6 项测试均未运行，不能宣称 `6/6 tests passed`。
+- `.\packaging\windows\build-installer.ps1 -Version 0.1.0`：实际调用后，在发布阶段按预期抛出 `dotnet publish failed with exit code -2147450735.`；未调用 ISCC、未生成 Setup.exe。
+- PowerShell Parser：打包脚本语法通过。
+- 测试 csproj 的共享向量路径解析：通过，确实指向仓库 `protocol/testdata/v1.json`。
+- PowerShell 独立读取 3 组 golden vectors：magic、版本、头长、消息类型、flags、payload 长度、sequence、timestamp 和 payload 全部匹配；这不是 C# 协议测试，也不是新的 Swift/C# 互操作验收。
+- `git diff --check`：通过。
+
+Mac 验证命令与结果：本轮未运行；沿用上文历史结果，未将其当作 Windows 验证证据。
+
+手工测试结果：未安装或启动 Agent，未执行安装/卸载、无预装运行时机器测试和跨设备连接。未安装系统软件、未修改防火墙。
+
+已知问题/阻塞：缺少 .NET 8 SDK；未定位到 Inno Setup 6。静态修正尚需实际 .NET 构建确认；成功打包和安装验收均待工具就绪。
+
+下一轮唯一目标：补齐或定位工具后，完成以下 Windows 复验及安装冒烟测试，仍不开展后续功能。
+
+### Windows 工具就绪后的准确复验命令
+
+在 PowerShell 中进入本仓库根目录（当前机器如下；其他机器替换为实际克隆路径）。需要 .NET 8 SDK 和 Inno Setup 6 已就绪；不应以 .NET Runtime 代替 SDK。
+
+```powershell
+Set-Location -LiteralPath 'H:\chatgpt\远程软件开发\remoteApp'
+dotnet --info
+dotnet --list-sdks
+# 预期包含 8.0.x SDK。若工具安装在自定义位置，先将其目录加入当前会话 PATH。
+
+dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
+if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
+
+dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
+if ($LASTEXITCODE -ne 0) { throw 'Protocol tests failed' }
+
+.\packaging\windows\build-installer.ps1 -Version 0.1.0
+
+$installer = '.\artifacts\windows\PersonalRemoteDesktopAgent-0.1.0-win-x64-Setup.exe'
+if (!(Test-Path -LiteralPath $installer)) { throw 'Installer not found' }
+Get-Item -LiteralPath $installer | Select-Object Name, Length
+Get-FileHash -LiteralPath $installer -Algorithm SHA256
+```
+
+预期结果：Release 构建 0 警告、0 错误；测试输出 6 条 PASS 和 `6/6 tests passed`；发布与 ISCC 编译成功，生成非空的指定 Setup.exe，并记录实际 SHA-256。安装包存在及哈希不能代替安装验收。
+
+在没有预装 .NET 运行时的 Windows 11 x64 测试机上，手工运行生成的 Setup.exe，完成安装、启动 WPF 占位窗口、关闭及卸载；预期无需另装 .NET、无启动异常、卸载成功。本轮尚未验证这些预期。
+
+## Windows 实际构建与打包完成（2026-09-27，工具安装后续验）
+
+本节取代上文“Windows 验证尝试与修正”中的当前阻塞结论；此前失败记录保留为历史。
+
+完成的里程碑：本次限定目标已完成——Windows Release 实际构建、原有 6 项协议测试及 Setup.exe 打包全部通过。P0 其余跨设备环境验证和安装冒烟不因此自动视为通过。
+
+主要改动：沿用并验证本次已修正的两处代码：测试断言使用 `EqualityComparer<T>.Default` 支持枚举；打包入口在 `dotnet publish` 失败时立即终止。未发现需要修改协议或共享向量的跨语言问题。本次续验仅更新交接结果，未开发后续功能。
+
+工具版本：用户自行安装 .NET SDK 8.0.425 x64、MSBuild 17.11.48 和 Inno Setup 6.7.3（默认安装目录）。
+
+Windows 验证命令与结果：
+
+- `dotnet --info`：确认 SDK 8.0.425、Host 8.0.31、RID win-x64。
+- `dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release`：退出码 0，0 警告、0 错误，协议库、WPF 应用、测试运行器全部构建成功。
+- `dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release`：退出码 0，`6/6 tests passed`。
+  - golden vectors decode and re-encode
+  - one-byte stream splits
+  - coalesced frames
+  - invalid magic
+  - oversized payload rejected from header
+  - incomplete frame rejected at end
+- `.\packaging\windows\build-installer.ps1 -Version 0.1.0`：退出码 0；self-contained win-x64 发布成功；Inno Setup 6.7.3 输出 `Successful compile`。
+- 发布运行时配置包含 Microsoft.NETCore.App / Microsoft.WindowsDesktop.App 8.0.31 的 `includedFrameworks`，与自带运行时的配置一致。
+- `git diff --check`：通过。
+
+产物：
+
+- 路径：`artifacts/windows/PersonalRemoteDesktopAgent-0.1.0-win-x64-Setup.exe`。
+- 版本：0.1.0。
+- 大小：49,225,694 字节，约 46.9 MiB。
+- SHA-256：`FE002EFDEFC04ABCDD835D6486816A54FE0A0FE5FC319127A13EC5AC151C4DDD`。
+- Authenticode：NotSigned，当前为未签名开发版。
+- 产物位于 Git 忽略的 artifacts 目录，未加入版本控制。
+
+Mac 验证命令与结果：本次未重复执行，沿用历史 Mac 构建、6 项测试与 DMG 验证记录。
+
+手工测试结果：本次未启动安装程序或 Agent，未进行安装/卸载及跨设备连接测试。当前机器已安装 .NET，不能充当“未预装运行时”的验收环境。
+
+已知问题/阻塞：此前 SDK 和 Inno Setup 缺失已解决；本次构建、协议测试和打包无阻塞。尚待无预装 .NET 的 Windows 11 x64 环境完成安装、启动、关闭、卸载验证；正式签名、Tailscale 联调均不在本轮范围。首次调用 SDK 时，.NET CLI 自动创建了 ASP.NET Core HTTPS 开发证书；未运行 trust 命令，本项目未使用该证书。未修改防火墙或安装其他软件。
+
+下一轮唯一目标：手工验收上述开发版 Setup.exe，预期能安装并显示 P0 占位窗口，无需另装 .NET，关闭及卸载正常。仍不开展 H.264、输入控制、自建公网穿透或中继。
+
+## 用户手工验收反馈（2026-09-27）
+
+- 用户确认：“测试安装和卸载都正常”。记录为当前 Windows 机器上的安装、卸载验收通过；结果来自用户手工测试，非自动化验证。
+- 用户未单独确认占位窗口启动、关闭后重新启动的结果，因此不将这些检查标为已通过。
+- 当前机器已安装 .NET SDK / Runtime；本次反馈不替代无预装 .NET 环境的 self-contained 验证。
+- 本轮仅更新交接文档，未修改代码或重新构建安装包；`git diff --check` 通过。
+- 下一步：补充启动/重新启动结果；有条件时在无预装 .NET 的 Windows 11 x64 环境验收。后续开发阶段先验证 Tailscale 基础可达性，再推进 JPEG 只读链路；安装 Tailscale 或改变网络配置前仍需用户授权。本轮未开始后续功能。
+
+## 启动验收通过与网络准备（2026-09-27）
+
+- 用户补充确认程序可以正常启动、重复打开；结合此前反馈，本机安装、启动、重复打开、卸载冒烟通过。
+- 用户要求“继续下一步”，当前任务推进至 Tailscale 基础连通验证。
+- Windows 只读检查：PATH、默认 Program Files 安装路径和服务列表均未检测到 Tailscale；默认 Downloads 目录也未发现 Tailscale 安装包。未据此断言其他自定义位置不存在。
+- 已询问安装方式与 Mac 可操作状态，等待用户答复；未安装软件、修改防火墙或启动监听端口。
+- 两端加入同一 tailnet 后先使用 `tailscale ping` 检查对端可达性；这不等同于应用 TCP/TLS 连接、认证或屏幕链路通过。
+- 官方安装说明：https://tailscale.com/docs/install/windows 与 https://tailscale.com/docs/install/mac 。
+
+## Tailscale 单向连通验证（2026-09-27）
+
+- 用户确认两端均已安装 Tailscale，登录同一账号，设备列表能看到两台设备。
+- Windows CLI 版本 1.102.4；`status --json` 显示 BackendState=Running、本机在线、Health 为空；唯一 macOS 对端在线。
+- 执行 `tailscale ping --c 5 --timeout 5s <Mac Tailscale 地址>`：退出码 0，收到直连 pong，71 ms。默认遇到 direct 即停止，所以本次实际只有一条响应，并非 5 次延迟采样。
+- 未把真实设备名、IP 或凭据写入仓库；未修改防火墙、未安装软件、未启动测试端口。
+- 待用户在 Mac 反向运行 `tailscale ping --c 5 --timeout 5s <Windows Tailscale 地址>` 并反馈结果。需另行确认两台设备是否使用不同物理网络；当前不能将结果标记为外网测试通过。
+- `tailscale ping` 检查 Tailscale 层路径，不证明 Windows 应用端口、TLS、认证或屏幕传输可用。
+- 本轮只更新文档；`git diff --check` 通过。

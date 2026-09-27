@@ -111,9 +111,9 @@ static void IncompleteFrame()
     Throws(ProtocolError.IncompleteFrame, decoder.Finish);
 }
 
-static void Equal<T>(T expected, T actual, string context) where T : IEquatable<T>
+static void Equal<T>(T expected, T actual, string context)
 {
-    if (!expected.Equals(actual))
+    if (!EqualityComparer<T>.Default.Equals(expected, actual))
     {
         throw new InvalidOperationException($"{context}: expected {expected}, got {actual}");
     }
