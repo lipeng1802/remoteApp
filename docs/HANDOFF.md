@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- P0 已完成。P1 认证门禁已在 Mac/Windows 实际通过 12 项测试。TLS 首个子切片已实现 Swift/C# 证书 SHA-256 指纹和 TOFU 决策（首次返回待批准指纹、已固定指纹匹配放行、变化立即拒绝）；Mac 累计 15 项测试通过，Windows 新增 3 项证书测试待验证。尚未建立 TLS 网络连接、Keychain/Windows 安全存储或真实 JPEG 屏幕链路。
+- P0 已完成。P1 认证门禁已在 Mac/Windows 通过 12 项测试，证书指纹/TOFU 决策又在两端通过累计 15 项测试。Mac 已新增 Keychain 指纹存储实现及可替换存储协调器，累计 18 项测试通过；测试覆盖首次批准后保存、后续自动信任、拒绝首次信任不保存、证书变化拒绝且不再次提示。尚未建立 TLS 网络连接、Windows 服务端证书持久化或真实 JPEG 屏幕链路。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -38,7 +38,7 @@
 
 ## 下一会话唯一目标
 
-在 Windows 11 目标机实际构建当前提交并运行扩展后的 15 项测试，验证 C# 证书 SHA-256 指纹与 Swift 相同，并确认首次信任、匹配和变化拒绝三种决策。通过后才实现实际 TLS 连接和指纹持久化。当前不得启动真实屏幕采集、应用监听或发送 JPEG；不开发输入控制、H.264 或自建穿透/中继。
+实现最小 TLS 客户端/服务端连接：Windows 生成并持久化服务端证书，仅绑定 Tailscale 地址；Mac 在 TLS 验证回调中使用已实现的 TOFU/Keychain 协调器。先以固定测试消息验证握手和指纹策略，不传输屏幕。当前不得启动真实屏幕采集或发送 JPEG；不开发输入控制、H.264 或自建穿透/中继。
 
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
@@ -387,3 +387,14 @@ dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProt
 ```
 
 预期输出 15 条 PASS 与 `15/15 tests passed`。通过后下一唯一目标是实现最小 TLS 客户端/服务端连接，并将用户批准后的指纹分别持久化到 macOS Keychain 和 Windows 受保护存储；仍不发送屏幕帧。
+
+## macOS Keychain 指纹持久化切片（2026-09-27）
+
+- 用户确认 Windows 端证书指纹/TOFU 扩展测试 `15/15 tests passed`，该跨语言切片验证完成。
+- 新增 `TrustedFingerprintStore` 抽象和 `KeychainTrustedFingerprintStore`。Keychain 条目使用固定 service、设备标识作为 account、32 字节指纹作为 data，并设置 `AfterFirstUnlockThisDeviceOnly`；支持查询、覆盖和移除。
+- 新增 `StoredCertificateTrustCoordinator`：首次连接必须由上层明确批准才写入；拒绝时不写入；后续匹配自动信任；指纹变化直接拒绝且不会再次调用首次批准回调。
+- 自动测试使用内存 store，避免测试污染用户真实 Keychain。Keychain API 已参与 Release 编译，但真实 Keychain 写入留到 TLS UI 集成时手工验证。
+- Mac `swift test`：累计 `18 tests, 0 failures`。
+- 尚未实现实际 TLS socket、Windows 服务端证书生成/持久化或网络握手，不发送屏幕数据。
+
+下一步唯一目标：实现只传固定测试消息的最小 TLS Windows 服务端与 Mac 客户端，连接层调用现有 TOFU/Keychain 协调器；服务端仅绑定 Tailscale 地址。真实 JPEG 必须继续等待 TLS 和应用认证串联通过。
