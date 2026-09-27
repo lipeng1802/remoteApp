@@ -221,7 +221,9 @@ port. Tailscale addresses alone are not an authentication decision.
 `protocol/testdata/v1.json` is the cross-language source of truth for framing
 tests. `protocol/testdata/auth-v1.json` fixes the device key, both hello nonces,
 challenge, agent identifier, and expected HMAC-SHA256 response for authentication
-interop tests. Values are test-only and are not usable device credentials.
+interop tests. `protocol/testdata/tls-v1.json` fixes test DER bytes and their
+SHA-256 certificate fingerprint for trust-policy interop tests. Values are
+test-only and are not usable certificates or device credentials.
 
 Vectors are stored as hexadecimal text so they remain reviewable in Git; tests
 decode the text to the exact wire bytes before parsing. Any framing or

@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- P0 已完成：两端构建、6 项帧协议测试、开发版打包、Windows 本机安装冒烟、跨网络 Tailscale 双向直连和 TCP 请求/响应均已通过。P1 已开始安全会话门禁切片：Swift 与 C# 已实现 HELLO/认证载荷、HMAC-SHA256 和认证前消息拒绝；Mac 端累计 12 项测试及 Release 构建通过，Windows 端新增 6 项测试尚待目标机实际验证。TLS 与真实 JPEG 屏幕链路尚未开始。
+- P0 已完成。P1 认证门禁已在 Mac/Windows 实际通过 12 项测试。TLS 首个子切片已实现 Swift/C# 证书 SHA-256 指纹和 TOFU 决策（首次返回待批准指纹、已固定指纹匹配放行、变化立即拒绝）；Mac 累计 15 项测试通过，Windows 新增 3 项证书测试待验证。尚未建立 TLS 网络连接、Keychain/Windows 安全存储或真实 JPEG 屏幕链路。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -38,7 +38,7 @@
 
 ## 下一会话唯一目标
 
-在 Windows 11 目标机实际构建当前提交并运行扩展后的 12 项协议/认证测试，修正任何 C# 编译或跨语言 HMAC 差异。该验证通过后，下一切片才实现最低 TLS 传输与证书首次信任/指纹固定。当前不得启动真实屏幕采集、应用监听或发送 JPEG；不开发输入控制、H.264 或自建穿透/中继。
+在 Windows 11 目标机实际构建当前提交并运行扩展后的 15 项测试，验证 C# 证书 SHA-256 指纹与 Swift 相同，并确认首次信任、匹配和变化拒绝三种决策。通过后才实现实际 TLS 连接和指纹持久化。当前不得启动真实屏幕采集、应用监听或发送 JPEG；不开发输入控制、H.264 或自建穿透/中继。
 
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
@@ -369,3 +369,21 @@ if ($LASTEXITCODE -ne 0) { throw 'Protocol/auth tests failed' }
 预期：构建 0 错误，测试打印 12 条 PASS 和 `12/12 tests passed`，其中 authentication golden vector 必须与 Swift 相同。本轮 Mac 没有 .NET SDK，不能把 C# 静态检查标记为实际构建通过。
 
 下一步唯一目标：完成上述 Windows 构建与 12 项测试，修复发现的问题并更新本文件。通过后再设计最低 TLS 传输和证书首次信任/指纹固定；在此之前禁止真实屏幕帧传输。
+
+## P1 认证门禁跨平台通过与 TLS 指纹切片（2026-09-27）
+
+- 用户反馈 Windows 目标机实际运行扩展测试，`12/12 tests passed`；未报告编译错误或 HMAC 差异。因此认证门禁切片完成跨平台验证。
+- 新增 `protocol/testdata/tls-v1.json`，固定测试 DER 字节和 SHA-256 指纹；它不是有效生产证书。
+- Swift/C# 均新增证书指纹计算和 TOFU 决策：首次连接返回待用户批准的指纹，不自动持久化；匹配已固定指纹时放行；证书变化时拒绝。
+- Mac `swift test`：累计 15 项测试、0 失败，其中新增指纹 golden vector、首次信任和匹配/变化拒绝 3 项。
+- 本轮尚未建立实际 TLS socket、生成证书、访问 Keychain/Windows 证书存储或启动监听端口；不能宣称 TLS 已通过。
+
+Windows 下一步验证：
+
+```powershell
+git pull --ff-only origin main
+dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
+dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
+```
+
+预期输出 15 条 PASS 与 `15/15 tests passed`。通过后下一唯一目标是实现最小 TLS 客户端/服务端连接，并将用户批准后的指纹分别持久化到 macOS Keychain 和 Windows 受保护存储；仍不发送屏幕帧。

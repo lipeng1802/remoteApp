@@ -21,7 +21,7 @@ P0“环境与协议基线”已经完成：
 - `macos/RemoteController` 是 SwiftPM 管理的 SwiftUI/协议骨架。
 - `windows/RemoteAgent` 是 .NET 8 WPF/协议骨架。
 
-P0 已完成，P1 已开始实现真实 JPEG 传输前的安全门禁：Swift 与 C# 均包含 HELLO、认证挑战/响应载荷、HMAC-SHA256 和会话状态检查；Mac 端 12 项协议/认证测试已通过，Windows 端新增测试等待目标机验证。
+P0 已完成，P1 已开始实现真实 JPEG 传输前的安全门禁：Swift 与 C# 均包含 HELLO、认证挑战/响应载荷、HMAC-SHA256、会话状态检查，以及证书 SHA-256 指纹和首次信任决策。两端 12 项协议/认证测试已通过；Mac 端新增 3 项证书信任测试也已通过，Windows 等待对等验证。
 
 网络监听、屏幕采集和输入注入在 P0 中均未启用。
 

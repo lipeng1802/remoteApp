@@ -15,6 +15,9 @@ var tests = new (string Name, Action Run)[]
     ("video rejected before authentication", VideoBeforeAuthentication),
     ("controller authentication transition", ControllerAuthenticationTransition),
     ("agent authentication transition", AgentAuthenticationTransition),
+    ("certificate fingerprint golden vector", CertificateFingerprintGoldenVector),
+    ("certificate first-use decision", CertificateFirstUseDecision),
+    ("certificate match and mismatch decisions", CertificateMatchAndMismatchDecisions),
 };
 
 var failures = 0;
@@ -53,6 +56,16 @@ static AuthVector LoadAuthVector()
     {
         PropertyNameCaseInsensitive = true,
     }) ?? throw new InvalidOperationException("Unable to decode the authentication vector.");
+}
+
+static TlsVector LoadTlsVector()
+{
+    var path = Path.Combine(AppContext.BaseDirectory, "testdata", "tls-v1.json");
+    var json = File.ReadAllText(path);
+    return JsonSerializer.Deserialize<TlsVector>(json, new JsonSerializerOptions
+    {
+        PropertyNameCaseInsensitive = true,
+    }) ?? throw new InvalidOperationException("Unable to decode the TLS vector.");
 }
 
 static void GoldenVectors()
@@ -232,6 +245,41 @@ static SessionGate AgentGateWithResponse(byte responseByte)
     return gate;
 }
 
+static void CertificateFingerprintGoldenVector()
+{
+    var vector = LoadTlsVector();
+    var fingerprint = CertificateFingerprint.FromCertificateDer(
+        Convert.FromHexString(vector.CertificateDerHex));
+    Equal(vector.Sha256FingerprintHex, fingerprint.Hexadecimal, "certificate fingerprint");
+}
+
+static void CertificateFirstUseDecision()
+{
+    var certificate = Enumerable.Repeat((byte)7, 64).ToArray();
+    var evaluation = CertificateTrustPolicy.Evaluate(null, certificate);
+    Equal(CertificateTrustDecision.TrustOnFirstUse, evaluation.Decision, "first-use decision");
+    SequenceEqual(
+        CertificateFingerprint.FromCertificateDer(certificate).Bytes,
+        evaluation.PresentedFingerprint.Bytes,
+        "presented fingerprint");
+}
+
+static void CertificateMatchAndMismatchDecisions()
+{
+    var certificate = Enumerable.Repeat((byte)8, 64).ToArray();
+    var stored = CertificateFingerprint.FromCertificateDer(certificate);
+    Equal(
+        CertificateTrustDecision.Trusted,
+        CertificateTrustPolicy.Evaluate(stored, certificate).Decision,
+        "matching certificate");
+    Equal(
+        CertificateTrustDecision.RejectFingerprintMismatch,
+        CertificateTrustPolicy.Evaluate(
+            stored,
+            Enumerable.Repeat((byte)9, 64).ToArray()).Decision,
+        "changed certificate");
+}
+
 static void Equal<T>(T expected, T actual, string context)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
@@ -279,3 +327,7 @@ internal sealed record AuthVector(
     string ChallengeHex,
     string AgentIdentifierHex,
     string ResponseHex);
+
+internal sealed record TlsVector(
+    string CertificateDerHex,
+    string Sha256FingerprintHex);
