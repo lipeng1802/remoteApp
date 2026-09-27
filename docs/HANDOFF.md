@@ -1,8 +1,10 @@
 # 下一次 Codex 会话交接
 
+最后整理：2026-09-27。请以顶部的当前状态、下一会话唯一目标和末尾的跨网络 TCP 复测通过记录为准；中间按时间保留的失败、待确认及下一步描述均为历史记录。
+
 ## 当前状态
 
-- P0 协议规范、共享测试向量和两端工程骨架已创建；Mac 构建/测试/DMG 与 Windows Release 构建、6 项协议测试、Setup.exe 打包均已通过。用户已确认当前 Windows 机器安装、启动、关闭后重复打开及卸载正常；Mac 使用手机热点、Windows 位于另一网络时，Tailscale 双向 ping 均已直连成功。无预装 .NET 环境及应用层 TCP/TLS 可达性仍待验证。
+- P0 协议规范、共享测试向量和两端工程骨架已创建；Mac 构建/测试/DMG 与 Windows Release 构建、6 项协议测试、Setup.exe 打包均已通过。用户已确认当前 Windows 机器安装、启动、关闭后重复打开及卸载正常；Mac 使用手机热点、Windows 位于另一网络时，Tailscale 双向 ping 均已直连成功。局域网及 Mac 手机热点到 Windows 的跨网络 TCP 请求/响应均已通过，临时监听关闭并确认端口释放；无预装 .NET 环境及 TLS/认证仍待验证。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -15,7 +17,7 @@
 - 开发目录：`/Users/lipeng/Documents/ChatGPT/远程软件开发`
 - Git 分支：`main`
 - 已安装并选中 Xcode 15.2（Build 15C500b），macOS SDK 14.2、Swift 5.9.2；Swift Debug 测试与 Release 构建均已通过。
-- 当前 Mac 未检测到 `dotnet`；Windows 工程应在 Windows 设备安装 .NET 8 SDK 后验证。
+- Mac 不承担 Windows 实际构建；Windows 工程已在目标机使用 .NET 8 SDK 完成验证。
 - 用户已确认 Mac 和 Windows 均安装 Tailscale、登录同一账号并能看到两台设备；Mac 使用手机热点，与 Windows 不在同一物理网络。Windows 到 Mac 的 Tailscale ping 直连成功（71 ms），Mac 到 Windows 的反向 ping 也直连成功（最近一次约 5 ms），跨外网 Tailscale 层验证通过。
 
 已知 Windows 目标环境：
@@ -23,7 +25,7 @@
 - Windows 11 25H2，x64。
 - 主显示器为 4K；具体 DPI 缩放由 Agent 运行时检测，不写死。
 - 用户已安装 .NET SDK 8.0.425 x64 与 Inno Setup 6.7.3；2026-09-27 已实际通过构建、测试和打包。发布配置为 self-contained win-x64，包含 .NET / Windows Desktop 8.0.31；无预装运行时机器上的安装启动尚待验收。
-- 两台设备可以处于不同物理网络，但跨设备联调前必须授权加入同一个 Tailscale tailnet。
+- 两台设备已由用户安装 Tailscale 并加入同一个 tailnet，跨网络 ping 与临时 TCP 请求/响应均已通过。
 
 已创建：
 
@@ -36,9 +38,11 @@
 
 ## 下一会话唯一目标
 
-完成 P0 最后一项应用层基线：设计一个仅绑定 Windows Tailscale 地址的临时 TCP 测试监听，并从 Mac 验证跨外网端口可达。不得绑定所有接口、修改公网防火墙规则或把真实地址写入仓库。Tailscale 网络层跨外网双向直连已经通过，不需要重复。
+P0 的两端构建、6 项协议基线测试、开发版打包、Windows 本机安装冒烟、跨网络 Tailscale 双向直连和 Mac 到 Windows 临时 TCP 请求/响应均已通过。临时监听已经关闭，没有修改防火墙。
 
-Windows 安装、启动、重复打开及卸载已获用户确认正常；无预装 .NET 环境验证仍是待办。本次不开始屏幕采集、输入控制、H.264 或自建穿透/中继。
+下一开发目标：在后续会话确定 P1 JPEG 只读链路的最小实现与验证范围；真实屏幕传输前需要 TLS 和应用会话认证保护。当前 TCP 探针只验证传输可达性，不代表 TLS、认证或视频链路通过。本轮不启动 P1，不开发输入控制、H.264 或自建穿透/中继。
+
+独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
 Mac 验证命令：
 
@@ -65,9 +69,11 @@ dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProt
 ```text
 请继续开发当前仓库中的 Personal Remote Desktop MVP。
 
-先完整阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md 和 docs/HANDOFF.md，并检查 git status。P0 的协议规范、跨语言测试向量、两端工程骨架和打包入口已经创建，Mac 构建、测试和开发版 DMG 已通过；此次只完成 Windows 实际构建、6 项协议测试和 Setup.exe 打包验证，修正发现的编译或跨语言问题。
+先完整阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md 和 docs/HANDOFF.md，并检查 git status。P0 两端构建、各 6 项协议测试、DMG/Setup.exe 打包、Windows 本机安装/启动/重复打开/卸载、跨网络 Tailscale 双向直连以及 Mac 手机热点到 Windows 的 TCP 请求/响应已通过。一次性 TCP 监听已关闭，无需重复这些验证，除非相关代码改变。
 
-不要开始 H.264、鼠标键盘控制、自建公网穿透或中继。不要擅自安装大型系统软件或修改防火墙。Windows 代码若无法在当前 Mac 验证，请给出要在 Windows 机器运行的准确命令和预期结果。完成后更新 docs/HANDOFF.md，写明改动、验证结果、阻塞项和下一步。
+下一目标是确定并实现 P1 JPEG 只读链路的第一个可验证切片。先检查现有协议和认证状态机设计，明确最小交付与测试；真实屏幕帧只能在 TLS 与应用认证成功后发送。未认证时不能发送屏幕或接受输入，正式监听只绑定 Tailscale 地址。
+
+不开发 H.264、鼠标键盘控制、自建穿透或中继；不擅自安装系统软件或修改防火墙。无预装 .NET 的 Windows 安装验收仍单独保留，不得标为完成。当前平台不能验证的部分给出另一端准确命令和预期结果。结束时更新 HANDOFF，记录改动、实际验证结果、阻塞及下一步。
 ```
 
 ## 每轮结束时更新格式
@@ -83,7 +89,7 @@ Windows 验证命令与结果：
 下一轮唯一目标：
 ```
 
-## 本轮记录
+## 历史记录：初始工程与 Mac 验证
 
 日期：2026-09-27
 
@@ -260,49 +266,76 @@ Mac 验证命令与结果：本次未重复执行，沿用历史 Mac 构建、6 
 - 本次只证明 Tailscale 网络层可达，不证明应用 TCP/TLS、认证、屏幕帧或远程输入链路可用。
 - 下一步唯一目标：完成仅绑定 Windows Tailscale 地址的临时 TCP 端口可达性验证；该项通过后结束 P0，进入 JPEG 只读链路。
 
-## Windows 端下一步：临时 TCP 端口验证
+## Windows 端：临时 TCP 端口验证
 
-先在 Windows 仓库执行 `git pull --ff-only origin main` 并确认工作区干净。随后在 PowerShell 运行以下一次性监听器。它只绑定 Windows 的 Tailscale IPv4 地址，收到一个请求后自动关闭，不安装服务、不绑定所有接口。
+在 Windows 仓库根目录执行：
 
 ```powershell
-$port = 47474
-$tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
-$tailscaleIp = (& $tailscale ip -4 | Select-Object -First 1).Trim()
-
-if (!$tailscaleIp) {
-    throw "未找到 Windows 的 Tailscale IPv4 地址"
-}
-
-$listener = [System.Net.Sockets.TcpListener]::new(
-    [System.Net.IPAddress]::Parse($tailscaleIp),
-    $port
-)
-
-try {
-    $listener.Start()
-    Write-Host "READY: 临时监听已启动，端口 $port"
-
-    $client = $listener.AcceptTcpClient()
-    try {
-        $stream = $client.GetStream()
-        $reader = [System.IO.StreamReader]::new($stream)
-        $writer = [System.IO.StreamWriter]::new($stream)
-        $writer.AutoFlush = $true
-
-        $message = $reader.ReadLine()
-        Write-Host "收到测试消息：" $message
-        $writer.WriteLine("prd-p0-ok")
-    }
-    finally {
-        $client.Dispose()
-    }
-}
-finally {
-    $listener.Stop()
-    Write-Host "临时监听已关闭"
-}
+.\scripts\p0\Test-TailscaleTcp.ps1 -WaitSeconds 300
 ```
 
-看到 `READY: 临时监听已启动，端口 47474` 后，保持 PowerShell 窗口运行并通知 Mac 端。Mac 将通过已登录的 Tailscale peer 信息发送一行 `prd-p0-test`，预期收到 `prd-p0-ok`；真实设备名和地址不得写入仓库。
+脚本只绑定 Tailscale 分配给本机的 IPv4 地址、端口 47474，只接受唯一在线 Mac 对端的地址。最长等待 300 秒；请求读取总时限默认 5 秒，最多读取固定 11 字节（`prd-p0-test` 加 LF），精确匹配后返回 `prd-p0-ok` 加 LF。成功、失败或超时都会关闭客户端和监听器，不安装服务、不修改防火墙、不打印地址或请求内容。`-LoopbackTest` 仅供 Windows 本地行为检查，不算跨网络验证。
 
-如果 Windows 弹出防火墙提示或 Mac 连接超时，不要全局放行、不要修改公网规则。记录提示或错误后停止，等待设计仅限 Tailscale 地址、测试后立即删除的临时规则。
+Mac 保持手机热点，在 Windows 输出 READY 后运行：
+
+```bash
+python3 - <<'PY'
+import json, socket, subprocess
+ts = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+status = json.loads(subprocess.check_output([ts, "status", "--json"], timeout=10))
+peers = [p for p in status.get("Peer", {}).values()
+         if p.get("OS") == "windows" and p.get("Online")]
+assert len(peers) == 1, "需要恰好一台在线 Windows 设备"
+ip = next(a for a in peers[0]["TailscaleIPs"] if "." in a)
+with socket.create_connection((ip, 47474), timeout=10) as s:
+    s.sendall(b"prd-p0-test\n")
+    reply = s.makefile("rb").readline(32)
+    assert reply == b"prd-p0-ok\n", "响应不符合预期"
+print("PASS: 跨网络 TCP 请求/响应成功")
+PY
+```
+
+预期 Mac 输出 PASS，Windows 输出 PASS 和 CLOSED，最后检查端口不再监听。只有两端结果及不同物理网络条件均确认后，才记录跨网络 TCP 通过。本测试不验证 TLS、认证或视频传输。
+
+如果 Windows 弹出防火墙提示或 Mac 连接超时，不要全局放行、不要修改公网规则；先记录错误并结束监听，再评估原因。
+
+## Windows P0 剩余项核查（2026-09-27，基于 abdbc17）
+
+- 核查开始时工作区干净，main 与本地 origin/main 跟踪引用一致。Mac 最新提交 abdbc17 仅修改 HANDOFF.md，未修改 Windows、协议或打包代码；因此沿用已通过的 Release 构建、6 项协议测试和打包结果，本次没有无必要地重复构建。
+- 最新交接已记录：Mac 使用手机热点、Windows 位于另一网络，双向 Tailscale ping direct 通过。这是网络层结果，不是 TCP/TLS 或应用认证结果。
+- 本次 Windows 实查：Tailscale 为 Running、本机与唯一 Mac 对端均在线、Health 为空；47474 无监听。未启动监听或修改防火墙。
+- 原 Setup.exe 仍在本机，SHA-256 与已验收产物一致：FE002EFDEFC04ABCDD835D6486816A54FE0A0FE5FC319127A13EC5AC151C4DDD。
+
+剩余验证：
+
+1. P0 开发计划明确要求的 TCP 测试端口：仅绑定 Windows Tailscale 地址，由不同物理网络的 Mac 发出 `prd-p0-test` 并收到 `prd-p0-ok`，最后确认监听关闭。当前没有执行结果。
+2. self-contained 安装验收：在未预装 .NET 的 Windows 11 x64 环境完成安装、启动、关闭和卸载；当前开发机已安装 .NET，不能替代此项。
+
+当时的临时 TCP 脚本检查（问题已由当前脚本解决）：旧示例的 AcceptTcpClient 和 ReadLine 没有超时，ReadLine 也没有长度上限，且收到任意文本都会回复成功。实际执行前应补充等待/读取超时、固定消息校验、输入长度限制和 finally 清理；只记录固定状态，不回显任意输入。该测试不涉及屏幕、输入或应用凭据；即便通过，也不能宣称 TLS 或认证已经通过。
+
+范围说明：现有 6 项测试是 P0 基线，并未覆盖 TEST_PLAN.md 中所有未来测试。未支持版本、未知类型、非零 flags、最大合法载荷等协议边界仍可在后续补测；认证、JPEG、输入、重连、H.264 及正式签名属于后续阶段，不应作为本次已有 P0 测试的通过项。
+
+本轮改动仅为交接核查记录；git diff --check 通过。下一步唯一目标仍是临时 TCP 跨网络请求/响应验证，需 Mac 端配合，禁止擅自修改防火墙。
+
+## 临时 TCP 首次实测（2026-09-27，用户后续确认实际为局域网）
+
+- 准备阶段用户表示 Mac 已连接热点；后续明确反馈首次成功实际为局域网测试，因此本节只记录局域网通过，不作为跨网络 TCP 证据。
+- 新增 `scripts/p0/Test-TailscaleTcp.ps1`：仅绑定本机 Tailscale IPv4，限定唯一在线 Mac 的源地址，固定 11 字节请求校验，300 秒连接等待上限、5 秒请求读取总时限；任何结束路径均释放监听。只传输测试常量，不涉及屏幕或凭据，不打印实际地址。
+- Windows 回环行为验证 4/4 通过：正确请求收到 `prd-p0-ok`；错误请求退出码 1；读取超时退出码 1；等待连接超时退出码 1。每例均确认 finally 关闭并可重新绑定测试端口。
+- 实际运行 `.\scripts\p0\Test-TailscaleTcp.ps1 -WaitSeconds 300`，输出 READY，系统只读检查确认 47474 仅绑定本机 Tailscale 地址，Mac 在线。
+- 随后收到匹配 Mac 地址的连接和精确测试请求；Windows 输出 `PASS expected request received; response sent`、`CLOSED temporary listener`，退出码 0。
+- 结束后通过 Get-NetTCPConnection 确认 47474 已无监听。
+- 用户确认局域网测试成功，结合 Windows 请求/响应输出，局域网 TCP 双端验收通过。随后切换手机热点重试发生 ConnectionRefusedError（Errno 61）；首次成功后监听已自动结束，重试时只读确认 47474 无监听。优先重启监听后复测，不能据此判断跨网络不可达。
+- 未修改防火墙、安装系统软件或启动常驻服务。回环与网络测试均未涉及 TLS、应用认证、视频或输入，不能替代这些后续验收。
+- 本轮未重建 Agent 或 Setup.exe；应用代码未变。PowerShell 语法检查、git diff --check 通过。脚本和交接改动尚未提交。
+- 剩余：保持 Mac 手机热点，重新启动一次性监听并重测跨网络 TCP；无预装 .NET 的 Windows 环境安装验收仍待完成。
+
+## 跨网络 TCP 复测通过（2026-09-27）
+
+- 首次局域网成功后监听按设计自动关闭；用户切换手机热点直接重试时收到 ConnectionRefusedError。Windows 随后确认端口无监听，未据此修改防火墙。
+- 重新运行 `.\scripts\p0\Test-TailscaleTcp.ps1 -WaitSeconds 300`，确认 READY 后请用户保持 Mac 手机热点，重新运行相同 Python 请求命令。
+- 用户反馈“已执行，显示成功”；Windows 同时输出 `PASS expected request received; response sent` 与 `CLOSED temporary listener`，退出码 0。
+- Get-NetTCPConnection 再次确认 47474 无监听，临时测试已清理完成。
+- 结论：Mac 手机热点到 Windows 原网络的 TCP 请求/响应验证通过。先前拒绝连接现象在重启一次性监听后消失，本轮无需防火墙或网络配置改动。
+- P0 开发计划要求的测试端口可达性已验证；不将结果扩展为 TLS、认证或 JPEG 链路通过。无预装 .NET 安装验收仍待完成。
+- 新增有界 TCP 验证脚本，修订交接示例和状态记录；本轮没有修改应用代码、重建安装包或启动后续功能。git diff --check 通过，脚本与最终交接记录纳入本次 Git 提交。
