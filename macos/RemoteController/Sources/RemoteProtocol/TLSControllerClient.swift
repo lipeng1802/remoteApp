@@ -3,6 +3,8 @@ import Network
 import Security
 
 public enum TLSProbeError: Error, Equatable {
+    case authenticationRejected
+    case invalidDeviceKey
     case invalidPort
     case missingPeerCertificate
     case firstUseRejected
@@ -17,10 +19,6 @@ public enum TLSProbeError: Error, Equatable {
 public final class TLSControllerClient {
     public typealias FirstUseApproval = (CertificateFingerprint) -> Bool
     public typealias Completion = (Result<Void, TLSProbeError>) -> Void
-
-    private static let request = Data("prd-tls-test\n".utf8)
-    private static let expectedResponse = Data("prd-tls-ok\n".utf8)
-    private static let maximumResponseLength = 32
 
     private let queue: DispatchQueue
     private let trustCoordinator: StoredCertificateTrustCoordinator
@@ -37,6 +35,8 @@ public final class TLSControllerClient {
         host: String,
         port: UInt16,
         deviceIdentifier: String,
+        deviceKey: Data,
+        sendPreAuthenticationPing: Bool = false,
         timeout: TimeInterval = 10,
         approveFirstUse: @escaping FirstUseApproval,
         completion: @escaping Completion
@@ -46,6 +46,9 @@ public final class TLSControllerClient {
             return
         }
 
+        let session: AuthenticatedProbeSession
+        do { session = try AuthenticatedProbeSession(deviceKey: deviceKey) }
+        catch { completion(.failure(.invalidDeviceKey)); return }
         let tlsOptions = NWProtocolTLS.Options()
         sec_protocol_options_set_min_tls_protocol_version(
             tlsOptions.securityProtocolOptions,
@@ -87,13 +90,21 @@ public final class TLSControllerClient {
             port: networkPort,
             using: parameters
         )
-        let state = ProbeState(connection: connection, completion: completion)
+        let state = ProbeState(connection: connection, session: session, completion: completion)
 
         connection.stateUpdateHandler = { [weak self, weak state] newState in
             guard let self, let state else { return }
             switch newState {
             case .ready:
-                self.sendRequest(state)
+                do {
+                    let first: Frame
+                    if sendPreAuthenticationPing {
+                        first = Frame(type: .ping, sequence: 1, payload: Data(repeating: 0, count: 8))
+                    } else {
+                        first = try state.session.start()
+                    }
+                    self.send([first], state: state)
+                } catch { state.finish(.failure(.unexpectedResponse)) }
             case .failed:
                 state.finish(.failure(.connectionFailed))
             case .cancelled:
@@ -109,47 +120,46 @@ public final class TLSControllerClient {
         connection.start(queue: queue)
     }
 
-    private func sendRequest(_ state: ProbeState) {
-        state.connection.send(content: Self.request, completion: .contentProcessed { [weak self, weak state] error in
-            guard let self, let state else { return }
-            if error != nil {
-                state.finish(.failure(.connectionFailed))
-                return
-            }
-            self.receiveResponse(state, accumulated: Data())
-        })
+    private func send(_ frames: [Frame], state: ProbeState) {
+        do {
+            let wire = try frames.reduce(into: Data()) { $0.append(try FrameCodec.encode($1)) }
+            guard !wire.isEmpty else { receiveResponse(state); return }
+            state.connection.send(content: wire, completion: .contentProcessed { [weak self, weak state] error in
+                guard let self, let state else { return }
+                if error != nil { state.finish(.failure(.connectionFailed)); return }
+                self.receiveResponse(state)
+            })
+        } catch { state.finish(.failure(.unexpectedResponse)) }
     }
 
-    private func receiveResponse(_ state: ProbeState, accumulated: Data) {
-        state.connection.receive(minimumIncompleteLength: 1, maximumLength: 32) { [weak self, weak state] data, _, isComplete, error in
+    private func receiveResponse(_ state: ProbeState) {
+        state.connection.receive(minimumIncompleteLength: 1, maximumLength: 92) { [weak self, weak state] data, _, isComplete, error in
             guard let self, let state else { return }
-            if error != nil {
-                state.finish(.failure(.connectionFailed))
-                return
-            }
-
-            var response = accumulated
-            if let data { response.append(data) }
-            guard response.count <= Self.maximumResponseLength else {
-                state.finish(.failure(.responseTooLarge))
-                return
-            }
-            if response.contains(0x0a) || isComplete {
-                state.finish(response == Self.expectedResponse ? .success(()) : .failure(.unexpectedResponse))
-                return
-            }
-            self.receiveResponse(state, accumulated: response)
+            if error != nil { state.finish(.failure(.connectionFailed)); return }
+            do {
+                var replies: [Frame] = []
+                for frame in try state.decoder.append(data ?? Data()) {
+                    replies += try state.session.receive(frame)
+                }
+                if state.session.isComplete { state.finish(.success(())); return }
+                if isComplete { state.finish(.failure(.unexpectedResponse)); return }
+                self.send(replies, state: state)
+            } catch let error as TLSProbeError {
+                state.finish(.failure(error))
+            } catch { state.finish(.failure(.unexpectedResponse)) }
         }
     }
 }
-
 private final class ProbeState {
+    var session: AuthenticatedProbeSession
+    var decoder = ProbeFrameDecoder()
     let connection: NWConnection
     private let completion: TLSControllerClient.Completion
     private let lock = NSLock()
     private var finished = false
 
-    init(connection: NWConnection, completion: @escaping TLSControllerClient.Completion) {
+    init(connection: NWConnection, session: AuthenticatedProbeSession, completion: @escaping TLSControllerClient.Completion) {
+        self.session = session
         self.connection = connection
         self.completion = completion
     }

@@ -1,8 +1,15 @@
 param(
-    [ValidateRange(1024, 65535)][int]$Port = 47475
+    [ValidateRange(1024, 65535)][int]$Port = 47475,
+    [switch]$ShowPairing
 )
 
 $ErrorActionPreference = 'Stop'
+if ($ShowPairing) {
+    $project = Join-Path $PSScriptRoot '..\..\windows\RemoteAgent\tools\TlsProbeServer\TlsProbeServer.csproj'
+    dotnet run --project $project -c Release -- --show-pairing
+    if ($LASTEXITCODE -ne 0) { throw 'Pairing display failed.' }
+    return
+}
 $command = Get-Command tailscale.exe -ErrorAction SilentlyContinue
 $tailscale = if ($command) { $command.Source } else {
     Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'

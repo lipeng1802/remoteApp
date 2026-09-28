@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- P0 已完成。P1 认证门禁已在 Mac/Windows 通过 12 项测试，证书指纹/TOFU 决策又在两端通过累计 15 项测试。Mac 已新增 Keychain 指纹存储与实际 TLS 客户端，修复异步状态生命周期后累计 19 项测试通过；Windows 已新增自签名服务端证书、当前用户证书库存储、单次 TLS 服务和 2 项测试；Windows 私钥兼容问题已修复，Release 构建 0 警告/错误，17/17 测试通过；当前用户证书库的同一身份已在两个独立进程中复用并完成固定指纹回环 TLS，不同网络下两次真实 TLS 握手均已通过：首次人工核对批准，重启服务后 Mac 无需再次批准即 PASS；两轮均确认监听释放。应用挑战响应认证尚未接入 TLS，尚未传输真实 JPEG 屏幕数据。
+- P0 已完成；此前两次跨网络 TLS 与证书固定/Keychain 验收通过。现已将 HELLO / AUTH_CHALLENGE / AUTH_RESPONSE / AUTH_RESULT 与会话门禁接入 TLS，成功后仅测试 PING/PONG。Windows Release 构建 0 警告/错误、25/25 测试通过，包括真实 TLS 正负向路径及系统凭据持久化。Mac 新增配对与认证客户端代码、9 项测试，累计预期 28 项；本 Windows 无法编译 Swift/macOS Frameworks，Mac 本轮构建、Keychain 和跨网络应用认证尚待验证。尚未传输 JPEG 或输入。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -16,7 +16,7 @@
 - 当前 Xcode Swift：`5.9.2`
 - 开发目录：`/Users/lipeng/Documents/ChatGPT/远程软件开发`
 - Git 分支：`main`
-- 已安装并选中 Xcode 15.2（Build 15C500b），macOS SDK 14.2、Swift 5.9.2；Swift Debug 测试与 Release 构建均已通过。
+- 已安装并选中 Xcode 15.2（Build 15C500b），macOS SDK 14.2、Swift 5.9.2；历史版本 Swift Debug 测试与 Release 构建均已通过；本轮认证接入待重新验证。
 - Mac 不承担 Windows 实际构建；Windows 工程已在目标机使用 .NET 8 SDK 完成验证。
 - 用户已确认 Mac 和 Windows 均安装 Tailscale、登录同一账号并能看到两台设备；Mac 使用手机热点，与 Windows 不在同一物理网络。Windows 到 Mac 的 Tailscale ping 直连成功（71 ms），Mac 到 Windows 的反向 ping 也直连成功（最近一次约 5 ms），跨外网 Tailscale 层验证通过。
 
@@ -38,9 +38,9 @@
 
 ## 当前唯一目标
 
-将现有 HELLO / AUTH_CHALLENGE / AUTH_RESPONSE / AUTH_RESULT 与会话门禁接入已验证的 TLS 通道，完成只传测试数据的双机认证切片：正确密钥成功、错误密钥拒绝、认证前业务消息拒绝，并明确真实设备密钥的生成、配对与安全存储，禁止使用共享 golden vector 作为真实凭据。认证与 TLS 尚未串联，不应直接开始 JPEG。
+先在 Mac 运行本轮 28 项测试及 Release 构建，再按 [TLS 应用认证验收](TLS_AUTH_VALIDATION.md) 私下配对并完成跨网络三轮：正确密钥成功、错误密钥拒绝、认证前 PING 拒绝。必须结合双端输出记录结果；当前不能宣称跨语言实机认证已通过，不开始 JPEG。
 
-两次跨网络 TLS、真实 Keychain 首次批准及重连自动信任已验证，不必重复，除非相关代码改变。当前没有遗留监听；仍不开发屏幕采集、输入控制、H.264 或自建穿透/中继，不擅自修改防火墙或安装系统软件。
+历史两次跨网络 TLS、真实 Keychain 指纹首次批准及重连自动信任已验证。本轮传输代码改变，需随应用认证重新确认；本次仅运行回环自动测试，未启动 Tailscale 监听。仍不开发屏幕采集、输入控制、H.264 或自建穿透/中继，不擅自修改防火墙或安装系统软件。
 
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
@@ -50,7 +50,7 @@ Mac 验证命令：
 xcodebuild -version
 cd macos/RemoteController
 swift test
-swift build
+swift build -c release
 ```
 
 Windows 验证命令（PowerShell）：
@@ -62,18 +62,17 @@ dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProt
 .\packaging\windows\build-installer.ps1 -Version 0.1.0
 ```
 
-P0 历史预期为 `6/6 tests passed`。2026-09-28 修复后当前 Windows 已输出 `17/17 tests passed`。本轮未重新生成安装包，现有 0.1.0 安装包不包含本次 TLS 修复；后续发布验证时需要重建。
+P0 历史预期为 `6/6 tests passed`。2026-09-28 应用认证接入后当前 Windows 已输出 `25/25 tests passed`。本轮未重新生成安装包，现有 0.1.0 安装包不包含本次 TLS 修复；后续发布验证时需要重建。
 
 ## 可直接复制到新会话的提示词
 
 ```text
-请接续 Personal Remote Desktop MVP 的 TLS 内应用认证切片。
+请接续 Personal Remote Desktop MVP 的 TLS 内应用认证验收。
 
-先完整阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md 并检查 git status。P0 已完成。Windows Release 构建 0 警告/错误、17 项测试通过；Mac Release 构建和 19 项测试通过。两台设备在不同网络下已完成两轮 TLS：首次人工核对指纹批准写入 Keychain，Windows 重启服务后 Mac 不再询问并直接 PASS。Windows 证书持久化及临时端口清理已确认。
-
-下一唯一目标：将现有 HELLO、挑战响应认证和状态门禁接入 TLS，先只传测试数据。验证正确密钥成功、错误密钥拒绝、认证前业务消息拒绝。明确真实设备密钥的随机生成、配对及 OS 安全存储，不得把 golden vector 的公开测试密钥用于真实会话。未认证不得发送屏幕或接受输入。
-
-不开发 JPEG、鼠标键盘、H.264、自建穿透或中继，不擅自修改防火墙或安装软件。无预装 .NET 安装验收仍单独保留。现有安装包是旧版本，不能认为包含新的 TLS 修复。完成后更新 HANDOFF，清楚区分本机测试、双机验收和待验证部分。
+先阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md 和 docs/TLS_AUTH_VALIDATION.md，并检查 git status。
+Windows 已接入真实 TLS 内挑战响应、随机 nonce/challenge、应用门禁与 PING/PONG；Release 0 警告/错误，25/25 测试通过。Mac 对应实现和配对已编写，累计预期 28 项测试，当前 Windows 无法验证 Mac 构建。
+下一步先在 Mac 执行 swift test 与 swift build -c release，再由用户私下复制随机设备密钥到隐藏配对提示，完成不同网络下正确密钥、错误密钥、认证前 PING 三轮。每轮重启一次 Windows 临时监听。密钥不要粘贴到聊天或仓库；不自动删除已固定证书，不修改防火墙。
+不开始屏幕、鼠标键盘、H.264、自建穿透或中继。更新交接，严格区分本机通过和 Mac/双机待验证；Git 提交/推送按用户指示处理。
 ```
 
 ## 每轮结束时更新格式
@@ -486,3 +485,14 @@ Mac 首次显示的指纹必须与 Windows 的 `CERTIFICATE_SHA256` 完全相同
 - 结论：当前版本的真实跨网络 TLS 固定消息、首次人工 TOFU 批准、真实 Keychain 写入/跨客户端进程复用、Windows 服务端重启复用同一证书均通过。
 - 此结果不等于应用层挑战响应认证、JPEG 或输入可用；本次只传固定测试常量。实际证书更换后的端到端拒绝仍只具备策略单测证据，未通过替换真实证书重测。
 - 下一唯一目标：TLS 内应用挑战响应认证切片；无预装 .NET 安装验收继续保留。旧安装包未重建。本轮仅更新交接结果，git diff --check 通过，文档改动尚未提交。
+
+## TLS 内挑战响应接入（2026-09-28，Windows 开发）
+
+- 替换旧固定文本探针，TLS 后执行双方 HELLO、一次性挑战、HMAC-SHA256 响应、认证结果，仅成功才发送 8 字节 PING/PONG。保留证书 TOFU/固定指纹、Tailscale 单地址绑定和对端源地址限制。
+- Windows 新增有界帧读写（64 字节探针载荷、序号检查），TLS 后 20 秒总期限；错误密钥延迟 1 秒并关闭。会话认证前消息由现有门禁拒绝。恒定时间比较，新会话随机数由系统 CSPRNG 产生。
+- 新增 Windows Credential Manager 存储随机 key32 + identifier16，显式 `-ShowPairing` 只允许交互终端展示 Base64 密钥；测试用独立随机 credential target，finally 清理。没有展示或读取真实生产密钥到聊天/工具日志，没有更换现有 TLS 证书。
+- Mac 新增隐藏输入 `--pair` 和独立 Keychain 密钥 service；探针默认必须已配对，不降级到旧文本。新增 `--wrong-key`（内存翻转一位、不覆盖存储）、`--preauth` 供负向验收。
+- Windows 实测：Release solution 构建 0 警告/错误，25/25 tests passed。新增真实 TLS 正确密钥、错误密钥、认证前消息、跨会话旧响应、序号、超长头、半帧断开和期限覆盖；凭据存取复用及测试条目清理通过。原黄金向量继续通过，v1 线缆格式未变。
+- Mac：新增 9 项测试，预期累计 28 项；代码仅静态检查，未在本机编译/执行。历史 19 项成功不能替代本轮证据。准确命令、配对步骤及三轮双端预期见 [TLS_AUTH_VALIDATION.md](TLS_AUTH_VALIDATION.md)。
+- 限制：本轮仅命令行探针，WPF/SwiftUI 仍是骨架，未重建 Setup.exe/DMG。没有 Tailscale 实际监听、跨网络应用认证结果或实际 Mac 密钥 Keychain 结果；无预装 .NET 安装验收保留。未来常驻服务仍需跨连接失败计数和退避。
+- 下一步：同步代码到 Mac，完成测试/构建及不同网络下三轮认证验收；通过并记录前不开始 JPEG。PowerShell 脚本语法和 git diff --check 通过。本轮改动按用户要求纳入本地 Git 提交；远程由用户自行推送。

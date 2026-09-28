@@ -1,6 +1,19 @@
 using System.Net;
 using RemoteProtocol;
 
+if (args.Length == 1 && args[0] == "--show-pairing")
+{
+    if (Console.IsOutputRedirected || Console.IsInputRedirected)
+    {
+        Console.Error.WriteLine("Pairing key can only be displayed in an interactive local terminal.");
+        return 2;
+    }
+    using var pairing = AgentCredentialStore.LoadOrCreate();
+    Console.WriteLine("Copy this key privately into the Mac pairing prompt. Do not paste it into chat or logs.");
+    Console.WriteLine(Convert.ToBase64String(pairing.DeviceKey));
+    return 0;
+}
+
 if (args.Length is < 2 or > 3 ||
     !IPAddress.TryParse(args[0], out var bindAddress) ||
     !IPAddress.TryParse(args[1], out var expectedRemoteAddress) ||
@@ -22,11 +35,12 @@ if (port is < 1024 or > 65535)
     Console.Error.WriteLine("Port must be between 1024 and 65535.");
     return 2;
 }
+using var credentials = AgentCredentialStore.LoadOrCreate();
 using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
 using var certificate = AgentCertificateStore.LoadOrCreate();
 var fingerprint = CertificateFingerprint.FromCertificateDer(certificate.RawData);
 
-Console.WriteLine($"READY tls-only port={port} wait_seconds=300");
+Console.WriteLine($"READY tls-auth port={port} wait_seconds=300");
 Console.WriteLine($"CERTIFICATE_SHA256 {fingerprint.Hexadecimal}");
 try
 {
@@ -35,9 +49,16 @@ try
         expectedRemoteAddress,
         port,
         certificate,
+        credentials.DeviceKey,
+        credentials.AgentIdentifier,
         timeout.Token);
-    Console.WriteLine("PASS TLS request received; protected response sent");
+    Console.WriteLine("PASS TLS application authentication; protected PONG sent");
     return 0;
+}
+catch (ProtocolException exception)
+{
+    Console.Error.WriteLine($"FAIL TLS protocol rejected ({exception.Error})");
+    return 1;
 }
 catch (Exception exception)
 {

@@ -229,3 +229,9 @@ Vectors are stored as hexadecimal text so they remain reviewable in Git; tests
 decode the text to the exact wire bytes before parsing. Any framing or
 authentication change must update this document, both language implementations,
 and these vectors in the same change.
+
+## 当前 TLS 认证探针实现约束
+
+本探针复用 v1 消息格式及 auth-v1.json，不修改消息定义。TLS 后双方发送 HELLO（capabilities=0），Agent 发送一次性 AUTH_CHALLENGE，Controller 回 AUTH_RESPONSE，Agent 回 AUTH_RESULT。只有 Success 后 Controller 发送随机 8 字节 PING，Agent 原样返回 PONG 并结束本次探针。
+
+探针额外限制载荷最多 64 字节，接收端在完整帧头处验证，双向独立序号从 1 递增；这不是通用视频会话的限额变更。TLS 建立后握手及探针总时限为 20 秒，错误 HMAC 延迟 1 秒再发送 Rejected/retryDelayMilliseconds=1000 并关闭。暂不接受其他业务；常驻服务的跨连接退避留待后续实现。真实设备 key32 和 agentIdentifier16 使用系统随机数生成并安全持久化，nonce/challenge 每次连接重新生成。

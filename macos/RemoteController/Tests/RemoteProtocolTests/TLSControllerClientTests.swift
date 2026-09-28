@@ -14,6 +14,7 @@ final class TLSControllerClientTests: XCTestCase {
             host: "127.0.0.1",
             port: 9,
             deviceIdentifier: "loopback-test",
+            deviceKey: Data(repeating: 1, count: 32),
             timeout: 0.05,
             approveFirstUse: { _ in false },
             completion: { result in
