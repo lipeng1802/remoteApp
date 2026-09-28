@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- P0 已完成。P1 认证门禁已在 Mac/Windows 通过 12 项测试，证书指纹/TOFU 决策又在两端通过累计 15 项测试。Mac 已新增 Keychain 指纹存储与实际 TLS 客户端，累计 18 项测试通过；Windows 已新增自签名服务端证书、当前用户证书库存储、单次 TLS 服务和 2 项测试；Windows 私钥兼容问题已修复，Release 构建 0 警告/错误，17/17 测试通过；当前用户证书库的同一身份已在两个独立进程中复用并完成固定指纹回环 TLS，真实双机握手仍待完成。尚未传输真实 JPEG 屏幕数据。
+- P0 已完成。P1 认证门禁已在 Mac/Windows 通过 12 项测试，证书指纹/TOFU 决策又在两端通过累计 15 项测试。Mac 已新增 Keychain 指纹存储与实际 TLS 客户端，修复异步状态生命周期后累计 19 项测试通过；Windows 已新增自签名服务端证书、当前用户证书库存储、单次 TLS 服务和 2 项测试；Windows 私钥兼容问题已修复，Release 构建 0 警告/错误，17/17 测试通过；当前用户证书库的同一身份已在两个独立进程中复用并完成固定指纹回环 TLS，不同网络下两次真实 TLS 握手均已通过：首次人工核对批准，重启服务后 Mac 无需再次批准即 PASS；两轮均确认监听释放。应用挑战响应认证尚未接入 TLS，尚未传输真实 JPEG 屏幕数据。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -38,7 +38,9 @@
 
 ## 当前唯一目标
 
-Windows 已通过 17/17 测试及跨进程证书复用检查。联调前新增 Mac 客户端生命周期修正，必须先在 Mac 运行 swift test（预期 19 项）和 Release 构建；通过后运行单次 TLS 服务；Mac 连接时核对两端打印的 SHA-256 指纹并明确批准，随后重启服务再连接一次，确认 Keychain 固定指纹可自动放行。服务仅绑定 Windows Tailscale IPv4，并只接受当前唯一在线 Mac 的源地址。仍不传输屏幕；不得启动 JPEG、输入控制、H.264 或自建穿透/中继。
+将现有 HELLO / AUTH_CHALLENGE / AUTH_RESPONSE / AUTH_RESULT 与会话门禁接入已验证的 TLS 通道，完成只传测试数据的双机认证切片：正确密钥成功、错误密钥拒绝、认证前业务消息拒绝，并明确真实设备密钥的生成、配对与安全存储，禁止使用共享 golden vector 作为真实凭据。认证与 TLS 尚未串联，不应直接开始 JPEG。
+
+两次跨网络 TLS、真实 Keychain 首次批准及重连自动信任已验证，不必重复，除非相关代码改变。当前没有遗留监听；仍不开发屏幕采集、输入控制、H.264 或自建穿透/中继，不擅自修改防火墙或安装系统软件。
 
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
@@ -65,15 +67,13 @@ P0 历史预期为 `6/6 tests passed`。2026-09-28 修复后当前 Windows 已�
 ## 可直接复制到新会话的提示词
 
 ```text
-请接续 Personal Remote Desktop MVP 的 Windows TLS 验证。
+请接续 Personal Remote Desktop MVP 的 TLS 内应用认证切片。
 
-先完整阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md 并检查 git status。P0 已完成；认证门禁及证书指纹决策此前在 Windows 通过 15 项测试。Mac 已实现 Keychain 与 TLS 客户端，18 项测试通过。Windows TLS 私钥兼容问题已修复，目标机 Release 构建 0 警告/错误，17/17 tests passed；实际当前用户证书库已在两个独立进程复用同一指纹并完成回环 TLS。
+先完整阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md 并检查 git status。P0 已完成。Windows Release 构建 0 警告/错误、17 项测试通过；Mac Release 构建和 19 项测试通过。两台设备在不同网络下已完成两轮 TLS：首次人工核对指纹批准写入 Keychain，Windows 重启服务后 Mac 不再询问并直接 PASS。Windows 证书持久化及临时端口清理已确认。
 
-当前唯一目标是两次真实跨网络 TLS 探测。Windows 工厂现将证书在内存中重新导入当前用户私钥容器以兼容 Schannel；测试证书不永久保留，AgentCertificateStore 使用持久化私钥。不要降低 TLS 证书校验或把私钥写入仓库。
+下一唯一目标：将现有 HELLO、挑战响应认证和状态门禁接入 TLS，先只传测试数据。验证正确密钥成功、错误密钥拒绝、认证前业务消息拒绝。明确真实设备密钥的随机生成、配对及 OS 安全存储，不得把 golden vector 的公开测试密钥用于真实会话。未认证不得发送屏幕或接受输入。
 
-与 Mac 做两次跨网络 TLS 探测：首次人工核对指纹并批准写入 Keychain，重启服务后同一证书自动受信任。每次均确认固定消息响应及监听释放。Windows 本地持久化复用已验证，但不得将其当作双机 TLS 或真实 Mac Keychain 验收通过。
-
-不传输屏幕，不开发 JPEG、输入控制、H.264、自建穿透或中继，不擅自修改防火墙或安装系统软件。无预装 .NET 安装验收仍单独保留。完成后更新 HANDOFF 的修正、实际结果、阻塞和下一步。
+不开发 JPEG、鼠标键盘、H.264、自建穿透或中继，不擅自修改防火墙或安装软件。无预装 .NET 安装验收仍单独保留。现有安装包是旧版本，不能认为包含新的 TLS 修复。完成后更新 HANDOFF，清楚区分本机测试、双机验收和待验证部分。
 ```
 
 ## 每轮结束时更新格式
@@ -474,3 +474,15 @@ Mac 首次显示的指纹必须与 Windows 的 `CERTIFICATE_SHA256` 完全相同
 - TLSProbeClient 显式将请求期限设为 180 秒、命令总等待设为 185 秒，给首次人工核对 SHA-256 指纹留出时间；仍必须由用户输入 y，不自动批准。
 - 本机没有可用 Swift/macOS Frameworks，新增 Swift 修改尚未实际编译或测试。Mac 原有 18 项通过是历史结果，新增回归后预期 19 项，需要 Mac 运行 `swift test` 和 `swift build -c release` 再开始真实握手。git diff --check 通过。
 - 真实跨网络 TLS 的首轮与第二轮均未开始；Windows 17/17 和本地证书复用结果仍有效。本轮未修改防火墙或安装软件。
+
+## 双机跨网络 TLS 与 Keychain 验收通过（2026-09-28）
+
+- 联调开始前本地 main 与 origin/main 跟踪分支均已同步至 119fced（含 c4a85fc Windows 修复）。此前推送网络阻塞已不再阻止本次联调。
+- 用户提供 Mac 实际日志：Executed 19 tests, with 0 failures，Release Build complete；增量编译与 whole module optimization 的 remark 不是编译错误。
+- 用户明确确认 Mac 和 Windows 在不同网络。Windows Tailscale Running，两端在线。
+- 第一轮运行 scripts/p1/Start-TailscaleTlsProbe.ps1：READY，打印现有证书 SHA-256。只读核对 47475 确实仅绑定 Tailscale 地址；用户在 Mac 核对指纹并反馈匹配完成。Windows 输出 PASS TLS request received; protected response sent，随后 CLOSED，退出码 0；重启前确认端口释放。
+- 第二轮重新运行同一服务，证书指纹与第一轮完全相同；用户在 Mac 同一终端用同一 Windows 地址重跑 TLSProbeClient，提供完整输出：PASS TLS handshake, stored fingerprint policy, and fixed probe response，未再次出现批准提示。Windows 同样 PASS / CLOSED，退出码 0。
+- 两轮后再次通过 Get-NetTCPConnection 确认 47475 无监听。未修改防火墙或网络规则，没有常驻服务。真实地址、设备名、证书指纹和私钥未写入仓库。
+- 结论：当前版本的真实跨网络 TLS 固定消息、首次人工 TOFU 批准、真实 Keychain 写入/跨客户端进程复用、Windows 服务端重启复用同一证书均通过。
+- 此结果不等于应用层挑战响应认证、JPEG 或输入可用；本次只传固定测试常量。实际证书更换后的端到端拒绝仍只具备策略单测证据，未通过替换真实证书重测。
+- 下一唯一目标：TLS 内应用挑战响应认证切片；无预装 .NET 安装验收继续保留。旧安装包未重建。本轮仅更新交接结果，git diff --check 通过，文档改动尚未提交。
