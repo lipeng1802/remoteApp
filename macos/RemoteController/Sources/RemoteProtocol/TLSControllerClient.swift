@@ -103,8 +103,8 @@ public final class TLSControllerClient {
             }
         }
 
-        queue.asyncAfter(deadline: .now() + timeout) { [weak state] in
-            state?.finish(.failure(.timedOut))
+        queue.asyncAfter(deadline: .now() + timeout) { [state] in
+            state.finish(.failure(.timedOut))
         }
         connection.start(queue: queue)
     }

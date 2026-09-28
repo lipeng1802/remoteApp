@@ -38,7 +38,7 @@
 
 ## 当前唯一目标
 
-Windows 已通过 17/17 测试及跨进程证书复用检查。下一步运行单次 TLS 服务；Mac 连接时核对两端打印的 SHA-256 指纹并明确批准，随后重启服务再连接一次，确认 Keychain 固定指纹可自动放行。服务仅绑定 Windows Tailscale IPv4，并只接受当前唯一在线 Mac 的源地址。仍不传输屏幕；不得启动 JPEG、输入控制、H.264 或自建穿透/中继。
+Windows 已通过 17/17 测试及跨进程证书复用检查。联调前新增 Mac 客户端生命周期修正，必须先在 Mac 运行 swift test（预期 19 项）和 Release 构建；通过后运行单次 TLS 服务；Mac 连接时核对两端打印的 SHA-256 指纹并明确批准，随后重启服务再连接一次，确认 Keychain 固定指纹可自动放行。服务仅绑定 Windows Tailscale IPv4，并只接受当前唯一在线 Mac 的源地址。仍不传输屏幕；不得启动 JPEG、输入控制、H.264 或自建穿透/中继。
 
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
@@ -463,3 +463,14 @@ Mac 首次显示的指纹必须与 Windows 的 `CERTIFICATE_SHA256` 完全相同
 - git diff --check：通过。没有新开 Tailscale 监听、修改防火墙或安装系统软件。
 
 限制与下一步：本轮只完成 Windows 修复与本机验证；Mac 测试未重跑，Swift 代码未改。两次真实跨网络 TLS 握手及 Keychain 首次批准/重连仍待完成，应用认证尚未接入 TLS，不传输屏幕。现有 Setup.exe 未重建，不能视为包含新修复。无预装 .NET 环境安装验收继续保留。改动未提交 Git。
+
+## 跨网络 TLS 联调准备（2026-09-28）
+
+- 用户授权推送 Windows 修复并开始两次 TLS 联调。Windows 修复提交为 c4a85fc。
+- GitHub HTTPS 推送遇到连接重置和 443 连接超时，尚未确认成功；不能把本地 commit 视为远程已更新。
+- 准备检查时 Windows Tailscale 为 Running、本机在线，但在线 Mac 对端数量为 0；47475 无监听。未启动 TLS 服务，待 Mac 热点及 Tailscale 就绪后再开启 5 分钟窗口。
+- 静态检查发现 TLSControllerClient.runProbe 的 ProbeState 仅被回调弱引用捕获，函数返回后没有强引用维持异步状态，可能导致回调不执行、CLI 最终超时。修正为超时回调强持有 state，保留 finish 的单次完成和取消语义。
+- 新增 TLSControllerClientTests.testProbeCompletesAfterRunProbeReturns：先暂停回调队列，待 runProbe 返回后恢复，验证失败/超时回调仍会完成。使用回环和测试 store，不访问真实 Keychain。
+- TLSProbeClient 显式将请求期限设为 180 秒、命令总等待设为 185 秒，给首次人工核对 SHA-256 指纹留出时间；仍必须由用户输入 y，不自动批准。
+- 本机没有可用 Swift/macOS Frameworks，新增 Swift 修改尚未实际编译或测试。Mac 原有 18 项通过是历史结果，新增回归后预期 19 项，需要 Mac 运行 `swift test` 和 `swift build -c release` 再开始真实握手。git diff --check 通过。
+- 真实跨网络 TLS 的首轮与第二轮均未开始；Windows 17/17 和本地证书复用结果仍有效。本轮未修改防火墙或安装软件。

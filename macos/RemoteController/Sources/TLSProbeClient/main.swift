@@ -20,6 +20,7 @@ client.runProbe(
     host: host,
     port: port,
     deviceIdentifier: host,
+    timeout: 180,
     approveFirstUse: { fingerprint in
         print("First connection. Windows certificate SHA-256:")
         print(fingerprint.hexadecimal)
@@ -34,7 +35,7 @@ client.runProbe(
     }
 )
 
-guard completionSignal.wait(timeout: .now() + 15) == .success else {
+guard completionSignal.wait(timeout: .now() + 185) == .success else {
     print("FAIL TLS probe did not complete before the command timeout")
     exit(1)
 }
