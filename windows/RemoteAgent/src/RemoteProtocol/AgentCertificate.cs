@@ -10,7 +10,16 @@ public static class AgentCertificateFactory
 
     public static X509Certificate2 CreateSelfSigned(
         DateTimeOffset? notBefore = null,
-        DateTimeOffset? notAfter = null)
+        DateTimeOffset? notAfter = null) =>
+        CreateSelfSigned(notBefore, notAfter, persistPrivateKey: false);
+
+    internal static X509Certificate2 CreatePersistentSelfSigned() =>
+        CreateSelfSigned(null, null, persistPrivateKey: true);
+
+    private static X509Certificate2 CreateSelfSigned(
+        DateTimeOffset? notBefore,
+        DateTimeOffset? notAfter,
+        bool persistPrivateKey)
     {
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest(
@@ -29,7 +38,34 @@ public static class AgentCertificateFactory
 
         var start = notBefore ?? DateTimeOffset.UtcNow.AddMinutes(-5);
         var end = notAfter ?? start.AddYears(5);
-        return request.CreateSelfSigned(start, end);
+        var certificate = request.CreateSelfSigned(start, end);
+        if (!OperatingSystem.IsWindows())
+        {
+            return certificate;
+        }
+
+        // Schannel cannot use the ephemeral key returned by CreateSelfSigned.
+        // Reimport in memory into a current-user key container. Ordinary test
+        // certificates delete that container on disposal; stored identities must
+        // keep it across process exits. Never mark the imported key exportable.
+        using (certificate)
+        {
+            var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+            var pfx = certificate.Export(X509ContentType.Pfx, password);
+            try
+            {
+                var flags = X509KeyStorageFlags.UserKeySet;
+                if (persistPrivateKey)
+                {
+                    flags |= X509KeyStorageFlags.PersistKeySet;
+                }
+                return new X509Certificate2(pfx, password, flags);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(pfx);
+            }
+        }
     }
 }
 
@@ -54,7 +90,7 @@ public static class AgentCertificateStore
             return existing;
         }
 
-        var created = AgentCertificateFactory.CreateSelfSigned();
+        var created = AgentCertificateFactory.CreatePersistentSelfSigned();
         store.Add(created);
         return created;
     }

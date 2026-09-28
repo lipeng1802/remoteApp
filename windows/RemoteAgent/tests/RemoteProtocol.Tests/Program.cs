@@ -293,6 +293,19 @@ static void SelfSignedAgentCertificate()
     using var certificate = AgentCertificateFactory.CreateSelfSigned();
     Equal(true, certificate.HasPrivateKey, "certificate private key");
     Equal(AgentCertificateFactory.SubjectName, certificate.Subject, "certificate subject");
+    using var privateKey = certificate.GetRSAPrivateKey()
+        ?? throw new InvalidOperationException("Missing RSA private key.");
+    using var publicKey = certificate.GetRSAPublicKey()
+        ?? throw new InvalidOperationException("Missing RSA public key.");
+    var challenge = RandomNumberGenerator.GetBytes(32);
+    var signature = privateKey.SignData(challenge, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+    Equal(true, publicKey.VerifyData(challenge, signature, HashAlgorithmName.SHA256,
+        RSASignaturePadding.Pkcs1), "private key remains usable after factory returns");
+    if (OperatingSystem.IsWindows() && privateKey is RSACng cng)
+    {
+        Equal(false, cng.Key.IsEphemeral, "Schannel requires a named key");
+        Equal(CngExportPolicies.None, cng.Key.ExportPolicy, "imported key is not exportable");
+    }
 
     var basicConstraints = certificate.Extensions.OfType<X509BasicConstraintsExtension>().Single();
     Equal(false, basicConstraints.CertificateAuthority, "certificate is not a CA");

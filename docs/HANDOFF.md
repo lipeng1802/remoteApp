@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- P0 已完成。P1 认证门禁已在 Mac/Windows 通过 12 项测试，证书指纹/TOFU 决策又在两端通过累计 15 项测试。Mac 已新增 Keychain 指纹存储与实际 TLS 客户端，累计 18 项测试通过；Windows 已新增自签名服务端证书、当前用户证书库存储、单次 TLS 服务和 2 项测试，等待目标机执行累计 17 项测试及双机握手。尚未传输真实 JPEG 屏幕数据。
+- P0 已完成。P1 认证门禁已在 Mac/Windows 通过 12 项测试，证书指纹/TOFU 决策又在两端通过累计 15 项测试。Mac 已新增 Keychain 指纹存储与实际 TLS 客户端，累计 18 项测试通过；Windows 已新增自签名服务端证书、当前用户证书库存储、单次 TLS 服务和 2 项测试；Windows 私钥兼容问题已修复，Release 构建 0 警告/错误，17/17 测试通过；当前用户证书库的同一身份已在两个独立进程中复用并完成固定指纹回环 TLS，真实双机握手仍待完成。尚未传输真实 JPEG 屏幕数据。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -38,7 +38,7 @@
 
 ## 当前唯一目标
 
-在 Windows 目标机完成 17 项测试，然后运行单次 TLS 服务；Mac 连接时核对两端打印的 SHA-256 指纹并明确批准，随后重启服务再连接一次，确认 Keychain 固定指纹可自动放行。服务仅绑定 Windows Tailscale IPv4，并只接受当前唯一在线 Mac 的源地址。仍不传输屏幕；不得启动 JPEG、输入控制、H.264 或自建穿透/中继。
+Windows 已通过 17/17 测试及跨进程证书复用检查。下一步运行单次 TLS 服务；Mac 连接时核对两端打印的 SHA-256 指纹并明确批准，随后重启服务再连接一次，确认 Keychain 固定指纹可自动放行。服务仅绑定 Windows Tailscale IPv4，并只接受当前唯一在线 Mac 的源地址。仍不传输屏幕；不得启动 JPEG、输入控制、H.264 或自建穿透/中继。
 
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
@@ -60,18 +60,20 @@ dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProt
 .\packaging\windows\build-installer.ps1 -Version 0.1.0
 ```
 
-P0 历史预期为 `6/6 tests passed`。P1 当前代码在 Windows 复验时应输出 `12/12 tests passed`；本轮无需重新生成安装包，除非 Windows 构建修正影响发布内容。
+P0 历史预期为 `6/6 tests passed`。2026-09-28 修复后当前 Windows 已输出 `17/17 tests passed`。本轮未重新生成安装包，现有 0.1.0 安装包不包含本次 TLS 修复；后续发布验证时需要重建。
 
 ## 可直接复制到新会话的提示词
 
 ```text
-请继续开发当前仓库中的 Personal Remote Desktop MVP。
+请接续 Personal Remote Desktop MVP 的 Windows TLS 验证。
 
-先完整阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md 和 docs/HANDOFF.md，并检查 git status。P0 两端构建、各 6 项协议测试、DMG/Setup.exe 打包、Windows 本机安装/启动/重复打开/卸载、跨网络 Tailscale 双向直连以及 Mac 手机热点到 Windows 的 TCP 请求/响应已通过。一次性 TCP 监听已关闭，无需重复这些验证，除非相关代码改变。
+先完整阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md 并检查 git status。P0 已完成；认证门禁及证书指纹决策此前在 Windows 通过 15 项测试。Mac 已实现 Keychain 与 TLS 客户端，18 项测试通过。Windows TLS 私钥兼容问题已修复，目标机 Release 构建 0 警告/错误，17/17 tests passed；实际当前用户证书库已在两个独立进程复用同一指纹并完成回环 TLS。
 
-下一目标是确定并实现 P1 JPEG 只读链路的第一个可验证切片。先检查现有协议和认证状态机设计，明确最小交付与测试；真实屏幕帧只能在 TLS 与应用认证成功后发送。未认证时不能发送屏幕或接受输入，正式监听只绑定 Tailscale 地址。
+当前唯一目标是两次真实跨网络 TLS 探测。Windows 工厂现将证书在内存中重新导入当前用户私钥容器以兼容 Schannel；测试证书不永久保留，AgentCertificateStore 使用持久化私钥。不要降低 TLS 证书校验或把私钥写入仓库。
 
-不开发 H.264、鼠标键盘控制、自建穿透或中继；不擅自安装系统软件或修改防火墙。无预装 .NET 的 Windows 安装验收仍单独保留，不得标为完成。当前平台不能验证的部分给出另一端准确命令和预期结果。结束时更新 HANDOFF，记录改动、实际验证结果、阻塞及下一步。
+与 Mac 做两次跨网络 TLS 探测：首次人工核对指纹并批准写入 Keychain，重启服务后同一证书自动受信任。每次均确认固定消息响应及监听释放。Windows 本地持久化复用已验证，但不得将其当作双机 TLS 或真实 Mac Keychain 验收通过。
+
+不传输屏幕，不开发 JPEG、输入控制、H.264、自建穿透或中继，不擅自修改防火墙或安装系统软件。无预装 .NET 安装验收仍单独保留。完成后更新 HANDOFF 的修正、实际结果、阻塞和下一步。
 ```
 
 ## 每轮结束时更新格式
@@ -432,3 +434,32 @@ swift run TLSProbeClient <Windows-Tailscale-IPv4>
 Mac 首次显示的指纹必须与 Windows 的 `CERTIFICATE_SHA256` 完全相同；相同才输入 `y`。预期 Mac 和 Windows 均打印 `PASS`，Windows 随后打印 `CLOSED`。再在 Windows 重启同一脚本，并在 Mac 重跑同一命令；第二次不应询问批准，且两端仍应 `PASS`。这两次真实跨网络握手尚待用户执行，未完成前不得宣称 TLS 联调通过。
 
 下一轮唯一目标：完成 Windows 17 项测试和上述两次跨网络 TLS 握手；若发现编译或运行问题先修复。通过后才把应用认证帧接入 TLS 通道，屏幕帧仍继续禁止。
+
+## Windows 接收 TLS 交接与实际检查（2026-09-28，基于 5894910）
+
+- 接收时 main 与本地 origin/main 一致，工作区干净。已完整阅读四份项目文档，并检查新服务端、证书代码、测试及启动入口。
+- `dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release`：成功，0 警告、0 错误，包含新 TlsProbeServer 工具。
+- `dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release`：退出码 1，16/17 tests passed；前 16 项通过，loopback TLS probe 失败，客户端报告 Received an unexpected EOF or 0 bytes from the transport stream。
+- 为查看被客户端错误掩盖的服务端异常，在 Git 忽略的 artifacts/tls-diagnostics 中执行最小回环诊断：服务端 AuthenticationException 明确为 Authentication failed because the platform does not support ephemeral keys；内部 Win32Exception 为安全包中没有可用的凭证。诊断只使用临时证书及回环端口，未调用 AgentCertificateStore.LoadOrCreate、未向当前用户 My 证书库添加应用证书。
+- 当前阻塞是 Windows TLS 私钥兼容性，不是 Tailscale 或防火墙；新回环测试未通过前不启动双机探测。下一步应修复私钥创建/生命周期与 Schannel 兼容性，并验证证书跨进程重用后仍有可用私钥、指纹稳定。
+- 待回环通过后再执行两次真实跨网络 TLS：首次核对指纹并明确批准，第二次重启服务后自动使用 Keychain 固定指纹。仍需 Mac 端配合；本轮没有启动 Tailscale TLS 监听或真实 Keychain 验收。
+- 本轮未修改产品代码、未重建安装包、未修改防火墙；仅更新交接中的过期测试数量、续接提示和阻塞结论。git diff --check 通过。未提交 Git。
+
+## Windows 回环 TLS 私钥兼容问题修复（2026-09-28）
+
+主要改动：
+
+- AgentCertificateFactory 在 Windows 上将新自签名证书导出为带随机密码的内存 PFX，再以 UserKeySet 导入，让 Schannel 使用当前用户的私钥容器；未指定 Exportable。内存 PFX 用完立即 ZeroMemory，不写入文件。
+- 普通 CreateSelfSigned 用于测试，不使用 PersistKeySet，释放后由平台清理其临时容器；AgentCertificateStore 创建长期身份时使用 PersistKeySet，以便证书对象释放、进程退出后仍能使用私钥。非 Windows 创建路径保持原行为。
+- 在现有证书测试内补充私钥签名/公钥验签，以及 Windows CNG 非 ephemeral、不可导出的断言。测试总数保持 17。
+- 存储标志语义参考：https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.x509certificates.x509keystorageflags 。
+
+验证结果：
+
+- Release solution 构建：0 警告、0 错误。
+- 协议/认证/证书/TLS 测试：17/17 tests passed，退出码 0，原来失败的 loopback TLS probe 通过。
+- 额外在 artifacts/tls-diagnostics 的本地诊断工具中调用实际 AgentCertificateStore.LoadOrCreate，两次独立 dotnet 进程均成功使用同一证书、同一 SHA-256 指纹，完成固定指纹校验和回环 TLS 请求/响应。真实指纹仅在进程间捕获比较，未写入仓库。
+- 上述额外验证已在当前用户 My 证书库创建/复用本应用的持久化证书身份，供后续 TLS 服务继续使用；没有加入根信任库，不应为重测随意删除，否则 Mac 后续固定指纹会变化。
+- git diff --check：通过。没有新开 Tailscale 监听、修改防火墙或安装系统软件。
+
+限制与下一步：本轮只完成 Windows 修复与本机验证；Mac 测试未重跑，Swift 代码未改。两次真实跨网络 TLS 握手及 Keychain 首次批准/重连仍待完成，应用认证尚未接入 TLS，不传输屏幕。现有 Setup.exe 未重建，不能视为包含新修复。无预装 .NET 环境安装验收继续保留。改动未提交 Git。
