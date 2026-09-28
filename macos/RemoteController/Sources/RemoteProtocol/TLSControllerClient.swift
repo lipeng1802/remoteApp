@@ -1,8 +1,10 @@
 import Foundation
+import CoreGraphics
 import Network
 import Security
 
 public enum TLSProbeError: Error, Equatable {
+    case cancelled
     case authenticationRejected
     case invalidDeviceKey
     case invalidPort
@@ -31,6 +33,7 @@ public final class TLSControllerClient {
         self.queue = queue
     }
 
+    @discardableResult
     public func runProbe(
         host: String,
         port: UInt16,
@@ -38,17 +41,19 @@ public final class TLSControllerClient {
         deviceKey: Data,
         sendPreAuthenticationPing: Bool = false,
         timeout: TimeInterval = 10,
+        onJpegFrame: ((ScreenInfoPayload, CGImage) -> Void)? = nil,
+        onStatus: @escaping (String) -> Void = { _ in },
         approveFirstUse: @escaping FirstUseApproval,
         completion: @escaping Completion
-    ) {
+    ) -> () -> Void {
         guard let networkPort = NWEndpoint.Port(rawValue: port) else {
             completion(.failure(.invalidPort))
-            return
+            return {}
         }
 
         let session: AuthenticatedProbeSession
-        do { session = try AuthenticatedProbeSession(deviceKey: deviceKey) }
-        catch { completion(.failure(.invalidDeviceKey)); return }
+        do { session = try AuthenticatedProbeSession(deviceKey: deviceKey, streaming: onJpegFrame != nil) }
+        catch { completion(.failure(.invalidDeviceKey)); return {} }
         let tlsOptions = NWProtocolTLS.Options()
         sec_protocol_options_set_min_tls_protocol_version(
             tlsOptions.securityProtocolOptions,
@@ -90,12 +95,13 @@ public final class TLSControllerClient {
             port: networkPort,
             using: parameters
         )
-        let state = ProbeState(connection: connection, session: session, completion: completion)
+        let state = ProbeState(connection: connection, session: session, onJpegFrame: onJpegFrame, onStatus: onStatus, completion: completion)
 
         connection.stateUpdateHandler = { [weak self, weak state] newState in
             guard let self, let state else { return }
             switch newState {
             case .ready:
+                onStatus("正在验证应用密钥" )
                 do {
                     let first: Frame
                     if sendPreAuthenticationPing {
@@ -115,9 +121,11 @@ public final class TLSControllerClient {
         }
 
         queue.asyncAfter(deadline: .now() + timeout) { [state] in
-            state.finish(.failure(.timedOut))
+            if !state.session.streaming || !state.session.authenticated { state.finish(.failure(.timedOut)) }
         }
+        onStatus("正在连接 TLS" )
         connection.start(queue: queue)
+        return { [state, queue] in queue.async { state.finish(.failure(.cancelled)) } }
     }
 
     private func send(_ frames: [Frame], state: ProbeState) {
@@ -133,13 +141,24 @@ public final class TLSControllerClient {
     }
 
     private func receiveResponse(_ state: ProbeState) {
-        state.connection.receive(minimumIncompleteLength: 1, maximumLength: 92) { [weak self, weak state] data, _, isComplete, error in
+        state.readGeneration += 1
+        let generation = state.readGeneration
+        queue.asyncAfter(deadline: .now() + 15) { [weak state] in
+            guard let state, state.readGeneration == generation else { return }
+            state.finish(.failure(.timedOut))
+        }
+        state.connection.receive(minimumIncompleteLength: 1, maximumLength: state.session.streaming ? 65536 : 92) { [weak self, weak state] data, _, isComplete, error in
             guard let self, let state else { return }
             if error != nil { state.finish(.failure(.connectionFailed)); return }
             do {
                 var replies: [Frame] = []
                 for frame in try state.decoder.append(data ?? Data()) {
                     replies += try state.session.receive(frame)
+                    if frame.type == .authResult { state.onStatus("已认证，等待画面") }
+                    if frame.type == .videoFrameJPEG, let screen = state.session.screen {
+                        // Invalid images are dropped; the frame boundary and PING remain usable.
+                        if let image = JpegImageDecoder.decode(frame.payload) { state.onJpegFrame?(screen, image) }
+                    }
                 }
                 if state.session.isComplete { state.finish(.success(())); return }
                 if isComplete { state.finish(.failure(.unexpectedResponse)); return }
@@ -153,15 +172,21 @@ public final class TLSControllerClient {
 private final class ProbeState {
     var session: AuthenticatedProbeSession
     var decoder = ProbeFrameDecoder()
+    var readGeneration = 0
+    let onJpegFrame: ((ScreenInfoPayload, CGImage) -> Void)?
+    let onStatus: (String) -> Void
     let connection: NWConnection
     private let completion: TLSControllerClient.Completion
     private let lock = NSLock()
     private var finished = false
 
-    init(connection: NWConnection, session: AuthenticatedProbeSession, completion: @escaping TLSControllerClient.Completion) {
+    init(connection: NWConnection, session: AuthenticatedProbeSession, onJpegFrame: ((ScreenInfoPayload, CGImage) -> Void)?, onStatus: @escaping (String) -> Void, completion: @escaping TLSControllerClient.Completion) {
+        self.onJpegFrame = onJpegFrame
+        self.onStatus = onStatus
         self.session = session
         self.connection = connection
         self.completion = completion
+        self.decoder.allowJpeg = onJpegFrame != nil
     }
 
     func finish(_ result: Result<Void, TLSProbeError>) {

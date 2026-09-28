@@ -13,5 +13,6 @@
     <None Include="..\..\..\..\protocol\testdata\tls-v1.json"
           Link="testdata\tls-v1.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\..\protocol\testdata\jpeg-v1.json" Link="testdata\jpeg-v1.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -34,6 +34,11 @@ var tests = new (string Name, Action Run)[]
     ("TLS truncated frame rejected", AuthenticatedTlsTests.TruncatedFrame),
     ("TLS authentication deadline enforced", AuthenticatedTlsTests.Timeout),
     ("Windows credential persistence and cleanup", CredentialStoreTests.RoundTrip),
+    ("screen metadata golden vector and invalid values", JpegTests.ScreenVector),
+    ("TLS JPEG streaming, backpressure and resolution change", JpegTests.StreamAndBackpressure),
+    ("wrong key never creates capture source", JpegTests.NeverCaptureWithWrongKey),
+    ("local stop disposes capture and releases listener", JpegTests.CancelReleasesCapture),
+    ("Tailscale synthetic discovery and offline rejection", JpegTests.Discovery),
 };
 
 var failures = 0;

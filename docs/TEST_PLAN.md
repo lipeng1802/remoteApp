@@ -179,3 +179,6 @@ JPEG 阶段不以带宽作为最终验收项，但要记录数据作为 H.264 �
 ## 9. 当前 TLS 应用认证切片
 
 按 [TLS_AUTH_VALIDATION.md](TLS_AUTH_VALIDATION.md) 执行。2026-09-28 Windows 已实际通过 25 项测试；用户已确认 Mac 28 项测试、Release 探针构建及配对通过。正确密钥、错误密钥、认证前 PING 三轮双机结果均已由用户提供并核对，详见 HANDOFF.md 最新记录；第三轮后本机确认 47475 无监听。
+## 10. JPEG 只读切片
+
+详见 [JPEG_VALIDATION.md](JPEG_VALIDATION.md)。Windows 累计30项协议/会话测试通过，显式真实主屏内存采集31次通过；Mac 本轮预期37项测试待执行。需实机验证画面、双方停止与清屏、实际分辨率变化，并在不同网络达到720p/至少10FPS连续30分钟；通过前不标记P1完成。自动协议测试只用合成图，真实采集检查必须显式传 --capture-in-memory。

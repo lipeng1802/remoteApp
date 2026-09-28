@@ -21,8 +21,9 @@ P0“环境与协议基线”已经完成：
 - `macos/RemoteController` 是 SwiftPM 管理的 SwiftUI/协议骨架。
 - `windows/RemoteAgent` 是 .NET 8 WPF/协议骨架。
 
-P0 已完成。P1 已将 HELLO、HMAC-SHA256 挑战响应及会话门禁接入 TLS，认证成功后仅传 PING/PONG。Windows Release 构建及 25 项测试通过；用户已确认 Mac 28 项测试、Release 探针构建与真实配对通过；正确密钥、错误密钥和认证前 PING 三轮双机认证验收均已通过。配对密钥使用 Windows Credential Manager / Mac Keychain；详见 [TLS 应用认证验收](docs/TLS_AUTH_VALIDATION.md)。尚未传输真实屏幕或输入。
+P0 已完成，TLS 与应用认证的三轮双机验收通过。P1 JPEG 只读切片已实现：Windows 认证后采集主屏并缩放编码，Mac 显示最新图像，提供开始/停止与连接/断开界面。Windows Release 和 30 项测试通过，真实主屏内存采集检查通过；Mac 本轮预期 37 项测试及双机画面验收尚待执行，不能视为 P1 整阶段完成。
 
+配对步骤见 [TLS 应用认证验收](docs/TLS_AUTH_VALIDATION.md)，构建、启动和剩余验收见 [JPEG 只读画面验收](docs/JPEG_VALIDATION.md)。尚未实现输入控制或 H.264。
 网络监听、屏幕采集和输入注入在 P0 中均未启用。
 
 最终交付为两个平台各自的安装包：macOS 控制端 `.dmg` 和 Windows 被控端 `Setup.exe`。开发阶段从 P0 起持续验证打包，不等到功能全部完成后再处理安装问题。
@@ -55,7 +56,7 @@ dotnet publish .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c Relea
 生成 macOS 开发版 `.dmg`：
 
 ```bash
-./packaging/macos/build-dmg.zsh 0.1.0
+./packaging/macos/build-dmg.zsh 0.2.0
 ```
 
 默认使用 ad-hoc 签名，仅供本机和开发测试。正式对外分发需要 Developer ID 签名和 Apple 公证。
@@ -63,7 +64,7 @@ dotnet publish .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c Relea
 在仓库根目录执行以下命令，使用已安装的 .NET 8 SDK 与 Inno Setup 6 生成自带运行时的 `Setup.exe`：
 
 ```powershell
-.\packaging\windows\build-installer.ps1 -Version 0.1.0
+.\packaging\windows\build-installer.ps1 -Version 0.2.0
 ```
 
 产物统一写入被 Git 忽略的 `artifacts/` 目录。Tailscale 不捆绑进安装包，应用只负责检测并引导安装。

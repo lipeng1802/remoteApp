@@ -4,7 +4,9 @@
 
 ## 当前状态
 
-- P0 已完成；此前两次跨网络 TLS 与证书固定/Keychain 验收通过。现已将 HELLO / AUTH_CHALLENGE / AUTH_RESPONSE / AUTH_RESULT 与会话门禁接入 TLS，成功后仅测试 PING/PONG。Windows Release 构建 0 警告/错误、25/25 测试通过，包括真实 TLS 正负向路径及系统凭据持久化。用户已确认 Mac 本轮 28 项测试通过（含隔离 Keychain 密钥测试）；Windows 本机不能执行 Swift/macOS Frameworks。用户已提供 Mac Release Build complete 与 PAIRED 输出，实际设备密钥已写入 Keychain；用户已提供三轮双端结果：正确密钥成功、错误密钥拒绝、认证前 PING 被 AuthRequired 拒绝。认证切片双机验收通过，47475 当前无监听。尚未传输 JPEG 或输入。
+- 认证收口提交为 `344e0b4`；用户已授权将其与本轮 JPEG 提交一起推送远程。P0 与 TLS 内应用认证三轮双机验收已完成。
+- 本轮已实现 P1 JPEG 只读切片：Windows WPF 开始/停止共享，认证后 GDI 主屏采集、最高 1280×720/10 FPS、逐帧 PING/PONG 确认；Mac SwiftUI 查看器、尺寸校验、最新图像缓存及断开清屏。Windows Release 0 警告/错误、30/30 测试通过；真实主屏内存采集 31 次通过，未保存图像。
+- Mac 历史 28 项测试和认证探针通过仍有效；本轮新增 9 项，预期 37 项，当前 Windows 无法执行 Mac 构建/测试。真实双机 JPEG 显示与 30 分钟/10 FPS 性能验收待完成，不能宣称 P1 整阶段通过。没有输入控制或 H.264。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -38,9 +40,9 @@
 
 ## 当前唯一目标
 
-TLS 内应用认证切片已完成双机验收，结果见文末最新记录。用户已授权先提交认证收口，再开始 P1 JPEG 只读垂直切片：在已有 TLS 与应用认证后发送主屏 JPEG，Mac 显示最新帧。
+同步本轮 JPEG 代码到 Mac，先运行 37 项测试与 Release 构建，修复真实编译问题；随后按 [JPEG_VALIDATION.md](JPEG_VALIDATION.md) 启动两端图形应用，完成画面、停止/断开与不同网络 30 分钟验收。此目标已由用户授权，不需要再询问是否开始 JPEG。
 
-正确密钥成功、错误密钥拒绝、认证前 PING 拒绝均有用户提供的双端结果。没有认证验收阻塞，47475 无监听。暂不开发输入控制、H.264 或自建穿透/中继，不修改防火墙或安装系统软件。常驻会话的失败计数/退避、图形界面集成及安装包更新仍属后续工作。
+Windows 代码与采集已在本机验证，Mac 新代码目前仅静态检查。保留现有配对密钥和证书，GUI 复用同一 Tailscale 地址条目。旧 TLS 探针只验认证，不显示画面，不能与 GUI 同时占用 47475。不开发输入、H.264 或自建穿透，不修改防火墙或安装系统软件。
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
 Mac 验证命令：
@@ -61,17 +63,16 @@ dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProt
 .\packaging\windows\build-installer.ps1 -Version 0.1.0
 ```
 
-P0 历史预期为 `6/6 tests passed`。2026-09-28 应用认证接入后当前 Windows 已输出 `25/25 tests passed`。本轮未重新生成安装包，现有 0.1.0 安装包不包含本次 TLS 修复；后续发布验证时需要重建。
+P0 历史预期为 `6/6 tests passed`。2026-09-28 JPEG 接入后当前 Windows 已输出 `30/30 tests passed`。JPEG 本轮已生成 0.2.0 Windows 开发安装包；旧 0.1.0 包不包含本轮功能。0.2.0 安装/卸载和 Mac DMG 尚待验收。
 
 ## 可直接复制到新会话的提示词
 
 ```text
-请接收 Personal Remote Desktop MVP 的 TLS 应用认证交接。
+请接收 Personal Remote Desktop MVP 的 JPEG 只读切片交接。
 
-先阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md 和 docs/TLS_AUTH_VALIDATION.md，并检查 git status。
-Windows Release 0 警告/错误、25/25 测试通过；Mac 用户确认 28 项测试与 Release 探针构建通过，真实密钥配对成功。三轮双机结果已确认：正确密钥 PASS/PONG；错误密钥 authenticationRejected/AuthenticationException；认证前 PING 被 Windows AuthRequired 拒绝，Mac 失败。第三轮后本机确认 47475 无监听。
-Windows 启动脚本已修复显式 UTF-8 读取与离线错误提示，PowerShell 5.1/7 检查通过；修复及新验收文档尚未提交。按用户指示收口 Git，不自动推送。
-后续候选为 P1 JPEG 只读切片，等待用户明确开始。暂不开发输入、H.264 或自建穿透/中继，不修改防火墙，不重置既有证书或密钥。
+先阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md、docs/JPEG_VALIDATION.md，并检查 git status。认证收口已本地提交 344e0b4；JPEG 改动纳入本轮提交，用户已授权推送远程；同步时以实际 origin/main 为准。
+Windows Release 0 警告/错误、30/30 测试通过；真实 4K/150% DPI 主屏在内存采集 31 次通过，GDI 句柄无增长。Mac GUI 和 JPEG 协议代码已编写，预期37项测试，但本Windows不能编译macOS Frameworks。下一步先在Mac执行swift test、swift build -c release，修复问题，再启动RemoteController与Windows RemoteAgent图形应用验证只读画面。
+已有TLS证书和设备密钥不要重置；旧探针不显示画面，不与GUI同时运行。双机画面、断开/停止、真实分辨率变化和30分钟/10FPS验收仍待完成。允许继续JPEG，不开始鼠标键盘、H.264、自建穿透或中继，不修改防火墙。
 ```
 
 ## 每轮结束时更新格式
@@ -526,3 +527,26 @@ Mac 首次显示的指纹必须与 Windows 的 `CERTIFICATE_SHA256` 完全相同
 ## 认证收口提交与 JPEG 开发授权（2026-09-28）
 
 - 用户要求先提交认证收口，再开始 JPEG 只读画面传输。脚本修复及认证验收文档纳入本次本地提交；不推送远程。下一步实现 P1 JPEG 切片，不包含输入控制或 H.264。
+
+## JPEG 只读垂直切片开发（2026-09-28，Windows）
+
+- 先按用户要求提交认证验收与启动脚本修复，提交 `344e0b4`；未推送远程。
+- 新增 SCREEN_INFO 严格编解码与 jpeg-v1.json 合成图像向量，两端使用同一数据；既有认证格式不变。JPEG 模式双方声明能力位，认证成功才创建采集器，错误密钥不会触发采集。
+- Windows UI 提供开始与本地停止、共享状态及证书指纹；自动选择 Tailscale 本机地址和唯一在线 Mac。复用系统凭据与证书，单次会话。新增 GDI 主屏缩放采集，WPF JPEG 质量70，最高1280×720、10FPS，原生句柄每帧释放。
+- 单帧 JPEG 后发 PING，匹配 PONG 后才采集下一帧；10秒帧交换期限，防止发送队列积压。屏幕物理尺寸/DPI变化前发新元数据。客户端输入不受理。
+- Mac 新增图形只读查看器、显式首次指纹确认、Keychain密钥读取、取消入口、JPEG尺寸预检查/坏图丢弃、单个最新图像槽；UI定时取图，避免无限主线程任务队列。该代码本轮尚未在Mac编译。
+- Windows Release solution：0警告/错误；协议/认证/TLS/JPEG `30/30 tests passed`。新增真实回环TLS JPEG、无认证不采集、未确认只保留一帧、分辨率变化顺序、取消释放资源、地址选择测试；原25项继续通过。
+- 显式运行 ScreenCapture.Tests --capture-in-memory：31次真实主屏采集成功，3840×2160、DPI×100=14400，编码尺寸不超过1280×720，采集加解码循环约11.7FPS，GDI增长0；取消检查与共享合成JPEG解码通过。未保存或显示屏幕内容、未向网络发送真实屏幕。本结果不能代替双机FPS或耐久验收。
+- Mac新增9项测试，累计预期37项；Windows无法验证Swift/macOS Frameworks。准确运行和打包命令见 JPEG_VALIDATION.md。下一步需用户在Mac同步本轮代码并运行测试/Release，之后双机查看、停止/关闭窗口、分辨率变化与30分钟验收。
+- 当前JPEG实现尚未提交；未实现输入控制、H.264、DXGI优化、自动重连、常驻跨连接退避或并发忙响应。真实JPEG双机性能尚未验证；无预装.NET安装验收独立保留。
+### 本轮打包与收尾检查
+
+- `packaging/windows/build-installer.ps1 -Version 0.2.0` 实际成功，产物 `artifacts/windows/PersonalRemoteDesktopAgent-0.2.0-win-x64-Setup.exe`，49,244,077 字节；SHA-256 `36767344000ce7cc80bb0c6e155a8a73d545b5f7538b58672d843463aa756337`。
+- 自包含发布版 WPF 主窗口在隐藏启动检查中完成初始化，并通过向该测试进程的窗口发送正常关闭消息退出（exit 0）。未点击开始、未自动共享。这个检查不是安装/卸载验收。
+- 结束时本机 47475 无监听。`git diff --check` 通过，Swift 测试函数计数为37；未执行Mac编译、DMG或真实JPEG网络传输。
+- 认证收口提交344e0b4已完成；JPEG实现、测试和交接仍为未提交修改，不自动推送远程。下一步先让Mac同步这些新文件并完成37项测试及Release构建。
+
+## JPEG 提交与推送授权（2026-09-28）
+
+- 用户要求提交远程代码。本轮 JPEG 实现、测试、共享合成向量及交接文档纳入独立提交，并连同认证收口提交推送 origin/main。此记录不预先断言网络推送成功，以 Git 实际结果为准。
+- Windows 已完成的验证结果不变；Mac 37 项测试、Release 构建及双机 JPEG 验收仍待执行。安装包位于被忽略的 artifacts 目录，不纳入 Git。

@@ -235,3 +235,34 @@ and these vectors in the same change.
 本探针复用 v1 消息格式及 auth-v1.json，不修改消息定义。TLS 后双方发送 HELLO（capabilities=0），Agent 发送一次性 AUTH_CHALLENGE，Controller 回 AUTH_RESPONSE，Agent 回 AUTH_RESULT。只有 Success 后 Controller 发送随机 8 字节 PING，Agent 原样返回 PONG 并结束本次探针。
 
 探针额外限制载荷最多 64 字节，接收端在完整帧头处验证，双向独立序号从 1 递增；这不是通用视频会话的限额变更。TLS 建立后握手及探针总时限为 20 秒，错误 HMAC 延迟 1 秒再发送 Rejected/retryDelayMilliseconds=1000 并关闭。暂不接受其他业务；常驻服务的跨连接退避留待后续实现。真实设备 key32 和 agentIdentifier16 使用系统随机数生成并安全持久化，nonce/challenge 每次连接重新生成。
+## P1 JPEG read-only session profile
+
+A JPEG session advertises capability bit 0 in both HELLO messages and uses the
+same TLS/HMAC authentication. The agent refuses a controller without JPEG support
+before capture. The existing capabilities=0 probe remains supported by its
+separate command-line server; it does not capture screens.
+
+After AUTH_RESULT Success, the JPEG agent sends SCREEN_INFO, VIDEO_FRAME_JPEG,
+then PING with a fresh opaque 8-byte acknowledgement token. The controller
+validates/decodes (or discards) the image and echoes PONG. The agent captures no
+next frame until this matching PONG arrives. Each frame exchange has a 10-second
+deadline; target pacing is 10 FPS. Sequence numbers continue from authentication
+in each direction. Video timestamps are monotonic capture/send timestamps.
+
+SCREEN_INFO describes the physical primary display (maximum 16384 per dimension)
+and its DPI times 100 (4800...96000), BGRA8, index 0. It is resent before a frame
+when physical size or DPI changes. The encoded JPEG is scaled preserving aspect
+ratio, never enlarged, to fit 1280x720; JPEG dimensions come from the image itself.
+The client checks these encoded dimensions before decompression. Invalid JPEGs
+are discarded without breaking framing. No mouse/keyboard messages are handled.
+
+The sender has one unacknowledged image and no capture queue. The viewer retains
+one newest decoded image for display, replacing stale pending images. Closing
+or stopping either application cancels the connection; there is no automatic
+reconnect. Initial accept/TLS deadline is 5 minutes, application authentication
+20 seconds, and streaming reads have an inactivity timeout. The desktop app
+serves one session per explicit Start; a second controller cannot join it.
+
+`protocol/testdata/jpeg-v1.json` contains screen metadata bytes and a synthetic
+16x9 JPEG for both languages. It contains no captured desktop content. The
+existing v1 message layouts and authentication vectors remain unchanged.
