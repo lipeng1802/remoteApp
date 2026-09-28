@@ -21,7 +21,7 @@ swift test
 swift build -c release
 ```
 
-预期：`28 tests, 0 failures`、`Build complete!`。新增 9 项测试覆盖完整认证状态、错误认证结果、认证前 PONG、重复挑战、错误序号、拆包/粘包、超限头部、错误 PONG、隔离 Keychain 密钥增删改查。Keychain 测试使用随机 service/account，结束后删除。当前 Windows 无法执行这些 Swift/macOS 测试，28 是预期数量，不是已验证结果。
+预期：`28 tests, 0 failures`、`Build complete!`。新增 9 项测试覆盖完整认证状态、错误认证结果、认证前 PONG、重复挑战、错误序号、拆包/粘包、超限头部、错误 PONG、隔离 Keychain 密钥增删改查。Keychain 测试使用随机 service/account，结束后删除。2026-09-28 用户已确认 Mac 28 项测试通过；Release 探针构建及实际配对也已由用户提供输出确认。当前 Windows 无法自行执行这些 Swift/macOS 测试。
 
 ## 2. 首次配对（不需要开监听）
 
@@ -82,7 +82,10 @@ swift run -c release TLSProbeClient --preauth "$WIN_TS_IP"
 - TLS 成功后双方发 HELLO，Agent 发 AUTH_CHALLENGE，Controller 发 AUTH_RESPONSE，Agent 发 AUTH_RESULT。仅 Success 后 Controller 发随机 8 字节 PING，Agent 回同一载荷 PONG；不发真实屏幕或输入。
 - 探针额外限制每帧载荷最多 64 字节，在完整帧头到达时检查，独立方向序号从 1 开始。此限制只适用于探针，未改变协议的全局视频/控制消息限额。
 - 错误密钥延迟 1 秒后发 Rejected（retryDelayMilliseconds=1000）并关闭；每进程只接收一次连接，没有后台自动重连。未来常驻服务还需跨连接失败计数/退避，不能把当前延迟当成完整 P3 限速。
-- 本轮 Windows 自动测试已覆盖重放、半帧断开、超限头、序号、期限与密钥复用。真实 Mac Keychain、Swift 编译与上述三轮跨网络认证仍需实机验收。
+- 本轮 Windows 自动测试已覆盖重放、半帧断开、超限头、序号、期限与密钥复用。Mac 隔离 Keychain 测试随 28 项测试通过；Release 探针构建、真实设备配对与三轮双机认证验收均已有用户结果，详情见 HANDOFF.md 最新记录。
 - 旧 Setup.exe/DMG 未重建，不包含此命令行认证切片；无预装 .NET 的安装验收独立保留。
 
 Windows 存储使用 [CredWriteW](https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credwritew) 和 [CREDENTIALW 的本机持久化语义](https://learn.microsoft.com/en-us/windows/win32/api/wincred/ns-wincred-credentialw)。
+## 5. 最新实际结果（2026-09-28）
+
+三轮双端输出已核对：正确密钥 PASS/PONG；错误密钥 authenticationRejected/AuthenticationException；--preauth 最终 Windows 明确拒绝 AuthRequired，Mac 返回失败（用户提供的错误名截断）。此前重复的错误密钥结果不算第三轮证据。第三轮后本机确认 47475 无监听。实际输出与证据限制详见 HANDOFF.md 文末。

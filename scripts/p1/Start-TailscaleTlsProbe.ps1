@@ -14,9 +14,39 @@ $command = Get-Command tailscale.exe -ErrorAction SilentlyContinue
 $tailscale = if ($command) { $command.Source } else {
     Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'
 }
-$rawStatus = & $tailscale status --json
-if ($LASTEXITCODE -ne 0) { throw 'Tailscale status failed.' }
-$status = $rawStatus | ConvertFrom-Json
+# Tailscale emits UTF-8. Windows PowerShell 5.1 native command capture may
+# decode it using the console code page, corrupting non-ASCII JSON strings.
+$statusInfo = New-Object System.Diagnostics.ProcessStartInfo
+$statusInfo.FileName = $tailscale
+$statusInfo.Arguments = 'status --json'
+$statusInfo.UseShellExecute = $false
+$statusInfo.CreateNoWindow = $true
+$statusInfo.RedirectStandardOutput = $true
+$statusInfo.RedirectStandardError = $true
+$statusInfo.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false, $true)
+$statusInfo.StandardErrorEncoding = New-Object System.Text.UTF8Encoding($false, $true)
+$statusProcess = New-Object System.Diagnostics.Process
+$statusProcess.StartInfo = $statusInfo
+try {
+    $null = $statusProcess.Start()
+    $outputTask = $statusProcess.StandardOutput.ReadToEndAsync()
+    $errorTask = $statusProcess.StandardError.ReadToEndAsync()
+    if (!$statusProcess.WaitForExit(10000)) {
+        $statusProcess.Kill()
+        throw 'Tailscale status timed out.'
+    }
+    if ($statusProcess.ExitCode -ne 0) { throw 'Tailscale status failed.' }
+    try {
+        $rawStatus = $outputTask.GetAwaiter().GetResult()
+        $null = $errorTask.GetAwaiter().GetResult()
+        $status = ConvertFrom-Json -InputObject $rawStatus -ErrorAction Stop
+    } catch {
+        # Do not include the parser exception: it can contain the full status JSON.
+        throw 'Unable to parse Tailscale UTF-8 status JSON. No listener was started.'
+    }
+} finally {
+    $statusProcess.Dispose()
+}
 if ($status.BackendState -ne 'Running' -or !$status.Self.Online) {
     throw 'Tailscale must be running and online.'
 }
@@ -24,7 +54,12 @@ $localV4 = @($status.Self.TailscaleIPs | Where-Object { $_ -match '^100\.' })
 if ($localV4.Count -ne 1) { throw 'Expected exactly one local Tailscale IPv4 address.' }
 $macPeers = @($status.Peer.PSObject.Properties | ForEach-Object { $_.Value } |
     Where-Object { $_.OS -eq 'macOS' -and $_.Online })
-if ($macPeers.Count -ne 1) { throw 'Expected exactly one online Mac peer.' }
+if ($macPeers.Count -eq 0) {
+    throw 'No online Mac peer. Connect Tailscale on the Mac, check its network, then retry. No listener was started.'
+}
+if ($macPeers.Count -gt 1) {
+    throw 'Multiple online Mac peers. This probe requires exactly one online Mac peer. No listener was started.'
+}
 $remoteV4 = @($macPeers[0].TailscaleIPs | Where-Object { $_ -match '^100\.' })
 if ($remoteV4.Count -ne 1) { throw 'Expected exactly one Mac Tailscale IPv4 address.' }
 $bindAddress = [Net.IPAddress]::Parse($localV4[0])

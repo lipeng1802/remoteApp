@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- P0 已完成；此前两次跨网络 TLS 与证书固定/Keychain 验收通过。现已将 HELLO / AUTH_CHALLENGE / AUTH_RESPONSE / AUTH_RESULT 与会话门禁接入 TLS，成功后仅测试 PING/PONG。Windows Release 构建 0 警告/错误、25/25 测试通过，包括真实 TLS 正负向路径及系统凭据持久化。Mac 新增配对与认证客户端代码、9 项测试，累计预期 28 项；本 Windows 无法编译 Swift/macOS Frameworks，Mac 本轮构建、Keychain 和跨网络应用认证尚待验证。尚未传输 JPEG 或输入。
+- P0 已完成；此前两次跨网络 TLS 与证书固定/Keychain 验收通过。现已将 HELLO / AUTH_CHALLENGE / AUTH_RESPONSE / AUTH_RESULT 与会话门禁接入 TLS，成功后仅测试 PING/PONG。Windows Release 构建 0 警告/错误、25/25 测试通过，包括真实 TLS 正负向路径及系统凭据持久化。用户已确认 Mac 本轮 28 项测试通过（含隔离 Keychain 密钥测试）；Windows 本机不能执行 Swift/macOS Frameworks。用户已提供 Mac Release Build complete 与 PAIRED 输出，实际设备密钥已写入 Keychain；用户已提供三轮双端结果：正确密钥成功、错误密钥拒绝、认证前 PING 被 AuthRequired 拒绝。认证切片双机验收通过，47475 当前无监听。尚未传输 JPEG 或输入。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -16,7 +16,7 @@
 - 当前 Xcode Swift：`5.9.2`
 - 开发目录：`/Users/lipeng/Documents/ChatGPT/远程软件开发`
 - Git 分支：`main`
-- 已安装并选中 Xcode 15.2（Build 15C500b），macOS SDK 14.2、Swift 5.9.2；历史版本 Swift Debug 测试与 Release 构建均已通过；本轮认证接入待重新验证。
+- 已安装并选中 Xcode 15.2（Build 15C500b），macOS SDK 14.2、Swift 5.9.2；历史版本 Swift Debug 测试与 Release 构建均已通过；本轮 28 项测试已由用户确认通过，swift run -c release 的 Build complete 与实际探针结果也已确认。
 - Mac 不承担 Windows 实际构建；Windows 工程已在目标机使用 .NET 8 SDK 完成验证。
 - 用户已确认 Mac 和 Windows 均安装 Tailscale、登录同一账号并能看到两台设备；Mac 使用手机热点，与 Windows 不在同一物理网络。Windows 到 Mac 的 Tailscale ping 直连成功（71 ms），Mac 到 Windows 的反向 ping 也直连成功（最近一次约 5 ms），跨外网 Tailscale 层验证通过。
 
@@ -38,10 +38,9 @@
 
 ## 当前唯一目标
 
-先在 Mac 运行本轮 28 项测试及 Release 构建，再按 [TLS 应用认证验收](TLS_AUTH_VALIDATION.md) 私下配对并完成跨网络三轮：正确密钥成功、错误密钥拒绝、认证前 PING 拒绝。必须结合双端输出记录结果；当前不能宣称跨语言实机认证已通过，不开始 JPEG。
+TLS 内应用认证切片已完成双机验收，结果见文末最新记录。用户已授权先提交认证收口，再开始 P1 JPEG 只读垂直切片：在已有 TLS 与应用认证后发送主屏 JPEG，Mac 显示最新帧。
 
-历史两次跨网络 TLS、真实 Keychain 指纹首次批准及重连自动信任已验证。本轮传输代码改变，需随应用认证重新确认；本次仅运行回环自动测试，未启动 Tailscale 监听。仍不开发屏幕采集、输入控制、H.264 或自建穿透/中继，不擅自修改防火墙或安装系统软件。
-
+正确密钥成功、错误密钥拒绝、认证前 PING 拒绝均有用户提供的双端结果。没有认证验收阻塞，47475 无监听。暂不开发输入控制、H.264 或自建穿透/中继，不修改防火墙或安装系统软件。常驻会话的失败计数/退避、图形界面集成及安装包更新仍属后续工作。
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
 Mac 验证命令：
@@ -67,12 +66,12 @@ P0 历史预期为 `6/6 tests passed`。2026-09-28 应用认证接入后当前 W
 ## 可直接复制到新会话的提示词
 
 ```text
-请接续 Personal Remote Desktop MVP 的 TLS 内应用认证验收。
+请接收 Personal Remote Desktop MVP 的 TLS 应用认证交接。
 
 先阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md 和 docs/TLS_AUTH_VALIDATION.md，并检查 git status。
-Windows 已接入真实 TLS 内挑战响应、随机 nonce/challenge、应用门禁与 PING/PONG；Release 0 警告/错误，25/25 测试通过。Mac 对应实现和配对已编写，累计预期 28 项测试，当前 Windows 无法验证 Mac 构建。
-下一步先在 Mac 执行 swift test 与 swift build -c release，再由用户私下复制随机设备密钥到隐藏配对提示，完成不同网络下正确密钥、错误密钥、认证前 PING 三轮。每轮重启一次 Windows 临时监听。密钥不要粘贴到聊天或仓库；不自动删除已固定证书，不修改防火墙。
-不开始屏幕、鼠标键盘、H.264、自建穿透或中继。更新交接，严格区分本机通过和 Mac/双机待验证；Git 提交/推送按用户指示处理。
+Windows Release 0 警告/错误、25/25 测试通过；Mac 用户确认 28 项测试与 Release 探针构建通过，真实密钥配对成功。三轮双机结果已确认：正确密钥 PASS/PONG；错误密钥 authenticationRejected/AuthenticationException；认证前 PING 被 Windows AuthRequired 拒绝，Mac 失败。第三轮后本机确认 47475 无监听。
+Windows 启动脚本已修复显式 UTF-8 读取与离线错误提示，PowerShell 5.1/7 检查通过；修复及新验收文档尚未提交。按用户指示收口 Git，不自动推送。
+后续候选为 P1 JPEG 只读切片，等待用户明确开始。暂不开发输入、H.264 或自建穿透/中继，不修改防火墙，不重置既有证书或密钥。
 ```
 
 ## 每轮结束时更新格式
@@ -496,3 +495,34 @@ Mac 首次显示的指纹必须与 Windows 的 `CERTIFICATE_SHA256` 完全相同
 - Mac：新增 9 项测试，预期累计 28 项；代码仅静态检查，未在本机编译/执行。历史 19 项成功不能替代本轮证据。准确命令、配对步骤及三轮双端预期见 [TLS_AUTH_VALIDATION.md](TLS_AUTH_VALIDATION.md)。
 - 限制：本轮仅命令行探针，WPF/SwiftUI 仍是骨架，未重建 Setup.exe/DMG。没有 Tailscale 实际监听、跨网络应用认证结果或实际 Mac 密钥 Keychain 结果；无预装 .NET 安装验收保留。未来常驻服务仍需跨连接失败计数和退避。
 - 下一步：同步代码到 Mac，完成测试/构建及不同网络下三轮认证验收；通过并记录前不开始 JPEG。PowerShell 脚本语法和 git diff --check 通过。本轮改动按用户要求纳入本地 Git 提交；远程由用户自行推送。
+## Mac 应用认证测试通过（2026-09-28，用户反馈）
+
+- 用户确认代码已提交、Mac 本轮 28 项测试验证完成。按用户反馈记录测试通过，包含新增认证状态、帧边界及隔离 Keychain 测试；未将此结果扩大为真实设备配对或跨网络认证通过。
+- 本地 main 与 origin/main 跟踪分支一致。Windows 25/25 测试及 Release 通过结果沿用；此次仅更新验证记录。
+- 待确认：Mac Release 构建。下一步私下配对，然后按 TLS_AUTH_VALIDATION.md 完成正确密钥、错误密钥、认证前 PING 三轮双机验收，每轮重启一次 Windows 监听。
+- 本次未开启监听、读取或显示真实密钥、修改防火墙。文档更新尚未提交。
+## 配对完成与 Windows 状态 JSON 读取修复（2026-09-28）
+
+- 用户提供 Mac Release Build complete 与 PAIRED 输出，确认真实设备密钥配对成功；不再要求重新配对。尚无本轮跨网络应用认证 PASS。
+- 用户使用 Windows PowerShell 启动服务时 ConvertFrom-Json 报错，服务尚未启动。本机原生捕获未复现该错误，不能断言唯一根因；已消除对控制台默认编码的依赖，使用 ProcessStartInfo 显式 UTF-8 读取 stdout/stderr，并加 10 秒进程期限。
+- 解析失败只输出固定错误，不回显可能含个人设备信息的 JSON。未修改系统执行策略、防火墙、证书或配对密钥，未启动监听。
+- PowerShell 5.1 与 7 分别验证真实 Tailscale JSON、中文 JSON 往返、畸形 JSON 脱敏拒绝，全部通过；git diff --check 通过。
+- 下一步在更新后的仓库执行 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\p1\Start-TailscaleTlsProbe.ps1，看到 READY 后才在 Mac 执行正确密钥探针；如失败只反馈固定错误，不发送完整 status JSON 或密钥。修复及验证记录未提交。
+## 认证联调暂阻塞于 Mac 离线（2026-09-28）
+
+- 用户重试后已通过 JSON 解析，停在在线 Mac 数量检查。本机只读查询确认 Tailscale Running、Windows Online=True；唯一 Mac 对端 OS=macOS、Online=False，在线 Mac 数量为 0。不是系统标识筛选不匹配，尚未进入 TLS/应用认证。
+- 将脚本的零在线与多在线错误分开，零在线明确提示在 Mac 连接 Tailscale 并检查网络。保留在线及源地址限制，不绕过检查、不修改防火墙。脚本语法及 git diff --check 通过。
+- 下一步由用户恢复 Mac Tailscale 在线后重启 Windows 探针，出现 READY 再运行 Mac TLSProbeClient；无需重新配对。当前未启动监听，跨网络认证仍待验证。
+## 应用认证三轮双机验收通过（2026-09-28，用户提供双端输出）
+
+- Mac：28 项测试由用户确认通过；Release 探针构建输出 Build complete，配对输出 PAIRED，实际设备密钥已存入 Keychain。Windows 25/25 与 Release 结果沿用。
+- 正确密钥：Mac 输出 PASS TLS handshake, stored fingerprint policy, application authentication, and PING/PONG；Windows 输出 PASS TLS application authentication; protected PONG sent，随后 CLOSED temporary TLS listener。双方认证及测试数据链路通过。
+- 错误密钥：Mac authenticationRejected；Windows AuthenticationException，随后 CLOSED。脚本 TLS probe server failed 是预期非零退出的包装提示，不是新的缺陷。
+- 认证前 PING：用户先重复提供了错误密钥结果，随后说明 Mac 命令输入有误并重新执行 --preauth；最终 Mac 反馈 FAIL TLS probe: unexpectedRespon（原文截断），Windows 明确 FAIL TLS protocol rejected (AuthRequired)。以服务端 AuthRequired 为认证前业务拒绝的证据，不将前一次重复结果计为第三轮成功。
+- 第三轮用户未提供 CLOSED 行；本机随后只读查询确认 47475 Listen 数量为 0，临时监听已释放。
+- 按此前不同网络联调安排完成本次双机操作；结果来自用户提供的双方输出，本机未重新独立核验两端物理网络。TLS 内应用认证切片通过，不等于 JPEG、输入或完整远程桌面可用。
+- 本轮仅补充验收记录，无需重复构建未变更的应用代码。git diff --check 通过。脚本修复与文档尚未提交；下一步按用户指示提交，之后再安排 JPEG 只读切片。
+
+## 认证收口提交与 JPEG 开发授权（2026-09-28）
+
+- 用户要求先提交认证收口，再开始 JPEG 只读画面传输。脚本修复及认证验收文档纳入本次本地提交；不推送远程。下一步实现 P1 JPEG 切片，不包含输入控制或 H.264。

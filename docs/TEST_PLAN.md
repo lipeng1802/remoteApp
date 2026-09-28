@@ -178,4 +178,4 @@ JPEG 阶段不以带宽作为最终验收项，但要记录数据作为 H.264 �
 
 ## 9. 当前 TLS 应用认证切片
 
-按 [TLS_AUTH_VALIDATION.md](TLS_AUTH_VALIDATION.md) 执行。2026-09-28 Windows 已实际通过 25 项测试；Mac 累计预期 28 项（本轮待执行）。正确密钥、错误密钥、认证前 PING 三轮真实跨网络结果须同时核对两端；历史固定字符串 TLS 成功不能替代应用认证验收。
+按 [TLS_AUTH_VALIDATION.md](TLS_AUTH_VALIDATION.md) 执行。2026-09-28 Windows 已实际通过 25 项测试；用户已确认 Mac 28 项测试、Release 探针构建及配对通过。正确密钥、错误密钥、认证前 PING 三轮双机结果均已由用户提供并核对，详见 HANDOFF.md 最新记录；第三轮后本机确认 47475 无监听。
