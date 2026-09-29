@@ -74,16 +74,17 @@ final class JpegVideoTests: XCTestCase {
             payload: AuthResultPayload(status: .success, retryDelayMilliseconds: 0).encode())).isEmpty)
         return session
     }
-    func testStreamingMetadataVideoAndAcknowledgement() throws {
+    func testStreamingAcceptsContinuousVideoAndHeartbeat() throws {
         var session = try authenticated()
         let (metadata, jpeg) = try fixture()
         _ = try session.receive(Frame(type: .screenInfo, sequence: 4, payload: metadata))
         _ = try session.receive(Frame(type: .videoFrameJPEG, sequence: 5, payload: jpeg))
+        _ = try session.receive(Frame(type: .videoFrameJPEG, sequence: 6, payload: jpeg))
         let token = Data(repeating: 9, count: 8)
-        XCTAssertEqual(try session.receive(Frame(type: .ping, sequence: 6, payload: token)),
+        XCTAssertEqual(try session.receive(Frame(type: .ping, sequence: 7, payload: token)),
             [Frame(type: .pong, sequence: 3, payload: token)])
         XCTAssertFalse(session.isComplete)
-        _ = try session.receive(Frame(type: .screenInfo, sequence: 7, payload: metadata))
+        _ = try session.receive(Frame(type: .screenInfo, sequence: 8, payload: metadata))
     }
     func testVideoBeforeMetadataRejected() throws {
         var session = try authenticated()

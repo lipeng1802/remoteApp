@@ -39,7 +39,7 @@ var tests = new (string Name, Action Run)[]
     ("wrong key never creates capture source", JpegTests.NeverCaptureWithWrongKey),
     ("local stop disposes capture and releases listener", JpegTests.CancelReleasesCapture),
     ("Tailscale synthetic discovery and offline rejection", JpegTests.Discovery),
-    ("JPEG acknowledgement timeout reports stage and disposes capture", JpegTests.AcknowledgementTimeout),
+    ("JPEG network backpressure timeout reports stage and disposes capture", JpegTests.NetworkBackpressureTimeout),
     ("large JPEG TLS records preserve framing and metrics", JpegTests.LargeFrame),
 };
 

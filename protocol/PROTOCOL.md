@@ -242,12 +242,15 @@ same TLS/HMAC authentication. The agent refuses a controller without JPEG suppor
 before capture. The existing capabilities=0 probe remains supported by its
 separate command-line server; it does not capture screens.
 
-After AUTH_RESULT Success, the JPEG agent sends SCREEN_INFO, VIDEO_FRAME_JPEG,
-then PING with a fresh opaque 8-byte acknowledgement token. The controller
-validates/decodes (or discards) the image and echoes PONG. The agent captures no
-next frame until this matching PONG arrives. Each frame exchange has a 10-second
-deadline; target pacing is 10 FPS. Sequence numbers continue from authentication
-in each direction. Video timestamps are monotonic capture/send timestamps.
+After AUTH_RESULT Success, the JPEG agent sends SCREEN_INFO followed by serial
+VIDEO_FRAME_JPEG messages. It does not wait for a per-frame application PONG:
+that stop-and-wait profile makes throughput depend on network round-trip time.
+Writes are awaited one at a time, the TCP send buffer is bounded, and each frame
+write has a 10-second deadline, so a slow receiver applies transport backpressure
+without an unbounded application queue. Target pacing is 10 FPS. Sequence numbers
+continue from authentication in each direction. Video timestamps are monotonic
+capture/send timestamps. PING/PONG remains available for periodic session liveness,
+but is not a video-frame acknowledgement.
 
 SCREEN_INFO describes the physical primary display (maximum 16384 per dimension)
 and its DPI times 100 (4800...96000), BGRA8, index 0. It is resent before a frame
@@ -256,8 +259,8 @@ ratio, never enlarged, to fit 1280x720; JPEG dimensions come from the image itse
 The client checks these encoded dimensions before decompression. Invalid JPEGs
 are discarded without breaking framing. No mouse/keyboard messages are handled.
 
-The sender has one unacknowledged image and no capture queue. The viewer retains
-one newest decoded image for display, replacing stale pending images. Closing
+The sender has no capture queue and performs only one serial write at a time. The
+viewer retains one newest decoded image for display, replacing stale pending images. Closing
 or stopping either application cancels the connection; there is no automatic
 reconnect. Initial accept/TLS deadline is 5 minutes, application authentication
 20 seconds, and streaming reads have an inactivity timeout. The desktop app

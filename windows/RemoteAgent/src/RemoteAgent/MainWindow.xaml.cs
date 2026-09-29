@@ -29,14 +29,12 @@ public partial class MainWindow : Window
                 createJpegSource: () => new PrimaryScreenCapture(),
                 reportStatus: text => Dispatcher.Invoke(() => StatusText.Text = text),
                 reportMetrics: metrics => Dispatcher.Invoke(() => MetricsText.Text =
-                    $"采集+编码 {metrics.CaptureMilliseconds:F0} ms · 发送 {metrics.SendMilliseconds:F0} ms · 等待 Mac 确认 {metrics.AcknowledgementMilliseconds:F0} ms · 每帧 {metrics.JpegBytes / 1024.0:F1} KiB")), lifetime.Token);
+                    $"采集+编码 {metrics.CaptureMilliseconds:F0} ms · 网络写入 {metrics.SendMilliseconds:F0} ms · 本帧总耗时 {metrics.FrameMilliseconds:F0} ms · 每帧 {metrics.JpegBytes / 1024.0:F1} KiB")), lifetime.Token);
             StatusText.Text = "会话已结束；再次共享请点击开始";
         }
         catch (JpegTransferTimeoutException ex)
         {
-            StatusText.Text = ex.Stage == JpegTransferStage.Sending
-                ? "共享结束：发送画面超过 10 秒（网络发送超时）"
-                : "共享结束：等待 Mac 帧确认超过本帧 10 秒总期限";
+            StatusText.Text = "共享结束：发送画面超过 10 秒（网络发送超时）";
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { StatusText.Text = "共享已由本机停止"; }
         catch (OperationCanceledException) { StatusText.Text = "共享结束：等待连接或应用认证超时"; }

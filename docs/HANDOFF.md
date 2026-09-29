@@ -37,6 +37,22 @@ swift run -c release RemoteController
 
 > 接收 docs/HANDOFF.md 顶部“Mac 接收任务”的交接，先检查 git status 并安全同步 origin/main，阅读指定文档，执行本轮 40 项测试和 Release 构建，修正实际编译问题，再按清单验证地址输入、FPS 与 Windows 诊断版双机停止原因。当前 0.2 FPS 和自动停止尚未解决；保留现有配对与证书，不扩展输入/H.264 范围。完成后更新交接，区分实测结果和待验证事项。
 
+## Windows 接收任务（2026-09-29，最新）
+
+本节优先于上方已经完成的 Mac 接收任务。Mac 真实 Keychain 环境下 `40/40 tests passed`，Release 构建通过；用户确认地址键入、退格、粘贴、连接锁定及断开恢复全部合格。真实跨网画面持续显示，FPS 3.5；Windows 诊断为采集编码约 80 ms、发送约 0 ms、等待逐帧确认 106–800 ms、约 71 KiB/帧。未连接等待后停止属于初始监听期限，已连接会话本次未自动停止。
+
+上述数据证明逐帧 PING/PONG 停等是主要吞吐瓶颈。本轮已改为 JPEG 连续串行发送：无捕获队列、一次只等待一个网络写入、TCP 发送缓冲 256 KiB、每次写入 10 秒期限；Mac 仍只保留最新解码图。认证探针 PING/PONG不变。协议、两端状态机、测试、Windows 指标文案和 JPEG 验收文档已同步。
+
+Windows 下一步：
+
+```powershell
+dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
+dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
+dotnet publish .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\windows\jpeg-continuous
+```
+
+预期 Release 0 警告/错误、`32/32 tests passed`。重点确认连续发送、慢接收网络反压超时、512 KiB TLS 帧及取消释放资源测试。通过后关闭旧 Agent，运行 `artifacts/windows/jpeg-continuous/RemoteAgent.exe`，与同一 Mac/Keychain 配对地址复测；记录 Mac FPS 和 Windows“采集+编码 / 网络写入 / 本帧总耗时 / 每帧”整行。再验证双方主动停止和不同网络 30 分钟稳定性。不要删除证书/配对密钥，不开发输入、H.264 或自建中继。
+
 ## 当前状态
 
 - 认证收口提交为 `344e0b4`；用户已授权将其与本轮 JPEG 提交一起推送远程。P0 与 TLS 内应用认证三轮双机验收已完成。

@@ -45,6 +45,9 @@ public static class TlsProbeServer
             connectionDeadline.CancelAfter(TimeSpan.FromMinutes(5));
             using var client = await listener.AcceptTcpClientAsync(connectionDeadline.Token).ConfigureAwait(false);
             client.NoDelay = true;
+            // Keep kernel buffering bounded. Writes remain serial, so a slow receiver
+            // applies backpressure without an application-level frame queue.
+            client.SendBufferSize = 256 * 1024;
             var remoteEndPoint = client.Client.RemoteEndPoint as IPEndPoint;
             if (remoteEndPoint is null || !remoteEndPoint.Address.Equals(expectedRemoteAddress))
             {
@@ -129,20 +132,11 @@ public static class TlsProbeServer
                         previous = captured.Screen;
                     }
                     await wire.WriteAsync(MessageType.VideoFrameJpeg, captured.Jpeg, frameDeadline.Token);
-                    var token = RandomNumberGenerator.GetBytes(8);
-                    await wire.WriteAsync(MessageType.Ping, token, frameDeadline.Token);
                     var sendMs = System.Diagnostics.Stopwatch.GetElapsedTime(sendStarted).TotalMilliseconds;
-                    stage = JpegTransferStage.AwaitingAcknowledgement;
-                    var ackStarted = System.Diagnostics.Stopwatch.GetTimestamp();
-                    var ack = await wire.ReadAsync(frameDeadline.Token);
-                    gate.Receive(ack);
-                    if (ack.Type == MessageType.Disconnect) return;
-                    if (ack.Type != MessageType.Pong || !ack.Payload.AsSpan().SequenceEqual(token))
-                        throw new ProtocolException(ProtocolError.InvalidPayload, "Invalid frame acknowledgement.");
-                    var ackMs = System.Diagnostics.Stopwatch.GetElapsedTime(ackStarted).TotalMilliseconds;
                     if (lastReport == 0 || System.Diagnostics.Stopwatch.GetElapsedTime(lastReport) >= TimeSpan.FromSeconds(1))
                     {
-                        reportMetrics?.Invoke(new JpegTransferMetrics(captured.Jpeg.Length, captureMs, sendMs, ackMs));
+                        reportMetrics?.Invoke(new JpegTransferMetrics(captured.Jpeg.Length, captureMs, sendMs,
+                            System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
                         lastReport = System.Diagnostics.Stopwatch.GetTimestamp();
                     }
                 }

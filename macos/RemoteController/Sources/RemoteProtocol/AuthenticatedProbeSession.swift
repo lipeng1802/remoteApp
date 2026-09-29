@@ -56,7 +56,6 @@ struct AuthenticatedProbeSession {
     let streaming: Bool
     var authenticated: Bool { gate.phase == .authenticated }
     private(set) var screen: ScreenInfoPayload?
-    private var awaitingFramePing = false
     private var started = false
     private(set) var isComplete = false
 
@@ -95,16 +94,14 @@ struct AuthenticatedProbeSession {
             guard gate.phase == .authenticated else { throw TLSProbeError.authenticationRejected }
             return streaming ? [] : [outgoing(.ping, ping)]
         case .screenInfo:
-            guard streaming, !awaitingFramePing else { throw ProtocolError.invalidState }
+            guard streaming else { throw ProtocolError.invalidState }
             screen = try ScreenInfoPayload.decode(frame.payload)
             return []
         case .videoFrameJPEG:
-            guard streaming, screen != nil, !awaitingFramePing else { throw ProtocolError.invalidState }
-            awaitingFramePing = true
+            guard streaming, screen != nil else { throw ProtocolError.invalidState }
             return []
         case .ping:
-            guard streaming, awaitingFramePing, frame.payload.count == 8 else { throw ProtocolError.invalidState }
-            awaitingFramePing = false
+            guard streaming, frame.payload.count == 8 else { throw ProtocolError.invalidState }
             return [outgoing(.pong, frame.payload)]
         case .pong:
             guard !streaming else { throw ProtocolError.invalidState }

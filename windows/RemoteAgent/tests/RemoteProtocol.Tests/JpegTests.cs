@@ -29,7 +29,7 @@ internal static class JpegTests
     public static void StreamAndBackpressure() => Run(false, false);
     public static void NeverCaptureWithWrongKey() => Run(true, false);
     public static void CancelReleasesCapture() => Run(false, true);
-    public static void AcknowledgementTimeout() => RunAsync(false, false, true).GetAwaiter().GetResult();
+    public static void NetworkBackpressureTimeout() => RunAsync(false, false, true, true).GetAwaiter().GetResult();
     public static void LargeFrame() => RunAsync(false, false, false, true).GetAwaiter().GetResult();
     public static void Discovery()
     {
@@ -89,16 +89,14 @@ internal static class JpegTests
         Check((await Read()).Type == MessageType.ScreenInfo, "Screen metadata first");
         var frame = await Read();
         Check(frame.Type == MessageType.VideoFrameJpeg && frame.Payload.Length > 64 && frame.TimestampMicros != 0, "Bounded JPEG frame");
-        var ping = await Read();
-        Check(ping.Type == MessageType.Ping, "Frame acknowledgement request");
         await Task.Delay(230, timeout.Token);
-        Check(source.Count == 1, "Unacknowledged frame prevents further capture");
+        Check(source.Count >= 2, "Streaming continues without per-frame round trip");
         if (large) Check(frame.Payload.Length == 512 * 1024, "Large JPEG crosses TLS record boundaries");
         if (stall)
         {
             try { await server; throw new Exception("Expected frame deadline"); }
-            catch (JpegTransferTimeoutException ex) { Check(ex.Stage == JpegTransferStage.AwaitingAcknowledgement, "Timeout reports acknowledgement stage"); }
-            Check(source.Disposed && source.Count == 1, "Timeout closes without additional capture");
+            catch (JpegTransferTimeoutException ex) { Check(ex.Stage == JpegTransferStage.Sending, "Timeout reports network send stage"); }
+            Check(source.Disposed && source.Count >= 2, "Backpressure timeout closes and disposes capture");
             return;
         }
         if (cancel)
@@ -108,13 +106,11 @@ internal static class JpegTests
         }
         else
         {
-            await Send(MessageType.Pong, ping.Payload);
             Check((await Read()).Type == MessageType.ScreenInfo, "Resolution change metadata precedes frame");
             Check((await Read()).Type == MessageType.VideoFrameJpeg, "Second JPEG");
-            _ = await Read();
-            await Send(MessageType.Disconnect, [0, 0]);
-            await server;
-            Check(metrics.Count >= 1 && metrics[0].JpegBytes == frame.Payload.Length && metrics[0].CaptureMilliseconds >= 0 && metrics[0].SendMilliseconds >= 0 && metrics[0].AcknowledgementMilliseconds >= 150, "Metrics identify delayed receiver" );
+            stop.Cancel();
+            try { await server; throw new Exception("Expected local stop"); } catch (OperationCanceledException) { }
+            Check(metrics.Count >= 1 && metrics[0].JpegBytes == frame.Payload.Length && metrics[0].CaptureMilliseconds >= 0 && metrics[0].SendMilliseconds >= 0 && metrics[0].FrameMilliseconds >= 0, "Metrics report bounded streaming work");
         }
         Check(source.Disposed, "Capture disposed");
         var reuse = new TcpListener(IPAddress.Loopback, port);
