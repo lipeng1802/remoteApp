@@ -269,3 +269,50 @@ serves one session per explicit Start; a second controller cannot join it.
 `protocol/testdata/jpeg-v1.json` contains screen metadata bytes and a synthetic
 16x9 JPEG for both languages. It contains no captured desktop content. The
 existing v1 message layouts and authentication vectors remain unchanged.
+
+## P2 mouse foundation (not yet enabled in live sessions)
+
+The foundation adds strict codecs and shared mouse-v1.json payload/mapping vectors.
+Live JPEG applications still advertise JPEG only and do not instantiate an input sink.
+No OS input injection is included; the keyboard foundation is specified below.
+
+- MOUSE_MOVE is exactly 4 bytes: unsigned x/y normalized to 0...65535.
+- MOUSE_BUTTON is exactly 2 bytes with only button 1...3 and action 1...2 accepted.
+- MOUSE_WHEEL is exactly 8 bytes: two signed Int32 values in big-endian two's complement (an exception to the general unsigned convention). Units are Windows wheel units, 120 per detent; positive horizontal is right, positive vertical is up. Conversion from platform gesture units is future UI work.
+- Mapping uses aspect-fit with a top-left origin and centered letterboxing. Coordinates outside the displayed rectangle are rejected, including clicks in black bars. Exact rectangle edges are included; rounding is nearest with halfway away from zero. Non-finite/zero viewport dimensions and screen dimensions outside 1...16384 are rejected. AppKit callers must convert a bottom-left coordinate origin before mapping.
+- Normalized position maps to physical pixel index round(n * (dimension - 1) / 65535), without a second DPI multiplier. The final row/column is dimension-1, including on a 4K screen at 150% DPI.
+- The Windows dispatcher is isolated from TLS/GUI. It requires an Agent SessionGate in Authenticated phase, input capability negotiation, and explicit local grant; default is denied. A future integration must compute negotiation from both HELLO messages and invoke revocation on every connection end or local stop. Per-direction sequence validation remains the transport's responsibility.
+- Repeated button-down and unmatched button-up transitions do not generate duplicate sink events. Local revocation, DISCONNECT/ERROR, invalid input and disposal release tracked buttons. A future real sink must also implement failure-safe OS release; mock evidence does not certify SendInput.
+- Keyboard KEY_EVENT now has a foundation codec and mock release coverage, described below; native input remains unavailable. No capabilities or production protocol behavior are enabled by adding these codecs.
+
+## P2 keyboard foundation (not enabled in live sessions)
+
+KEY_EVENT is exactly four bytes: unsigned UInt16 scan code (big-endian), extended byte 0/1, action 1 down/2 up. This foundation accepts basic set-1 make codes 0x01...0x7f only. Do not embed E0 in the UInt16; extended=true represents E0. Zero, break-code bytes, E1/Pause sequences, invalid flags/actions, and extra/truncated bytes are rejected. This structural subset is not a complete platform key mapping or IME implementation.
+
+keyboard-v1.json supplies valid and invalid shared vectors. Key identity is (scanCode, extended), so left/right control remain distinct. Repeated key-down events are forwarded for typematic behavior while only one held identity is tracked; an unmatched key-up is ignored. At most 254 structural identities can be held. No text, IME, macOS key-code mapping, or native injection is implemented.
+
+InputDispatcher/IInputSink now unify the prior mouse dispatcher and keyboard foundation. Authenticated Agent role, both-peer input negotiation (provided by a future trusted transport integration), and local grant are required. Live JPEG HELLO still does not advertise input, and GUI/TLS does not instantiate this dispatcher.
+
+A stop, DISCONNECT/ERROR, malformed/unsupported input, sink error or Dispose revokes local permission and attempts cleanup for both held key and mouse-button groups. One cleanup failure does not skip the other group. Failed groups remain tracked for a later Dispose retry; new local grants are rejected until cleanup succeeds. Dispose is repeatable for this purpose. The future native sink must release only keys/buttons it injected, retain partial-failure state, and surface errors; this mock-based contract is not proof of OS-level release. All calls require serial ordering; a future lifecycle owner must dispose on EOF, cancellation and every exceptional transport exit. Sequence/rate validation belongs in that future transport layer.
+
+## P2 physical Mac mapping and loopback input simulation
+
+MacKeyboardMapper uses Carbon physical ANSI key-code constants for common typing, F1–F12, editing/navigation and keypad Enter. Control maps to Ctrl, Option to Alt, Command to Windows; left/right identities are preserved. This is not character or IME translation. Unsupported Caps Lock/Fn/media/ISO/JIS-specific keys produce no event. MacModifierTracker consumes an explicit side-aware modifier-key set, emits releases before presses, ignores unchanged snapshots, and releases all tracked modifiers on request; no AppKit event adapter is installed yet.
+
+mac-keymap-v1.json defines selected physical mapping and a Ctrl-C byte sequence shared by Swift tests and C# TLS simulation. The existing key payload format is unchanged. Windows tests replay the bytes over TLS but do not execute the Mac mapper.
+
+RunInputSimulationOnceAsync is a separate explicit library entry with fixed IPv4 loopback binding/peer and an injected sink factory. Its server HELLO advertises Input (no JPEG); controller HELLO must also include Input. The same TLS/HMAC handshake is used; only successful authentication plus trusted local permission creates the sink. Production RunOnceAsync has no simulation option and remains the JPEG/probe profile.
+
+Simulation receives one bounded control frame at a time, enforces sequence through ProbeFrameStream, and supports authenticated 8-byte PING/PONG as an ordering/liveness check. The default rate policy is a token bucket of 120 burst/240 frames per second (including heartbeats), and each read/reply has a 15-second deadline. Disconnect/Error bypass rate admission to end immediately. No input queue grows; exceeding the limit closes the session. Every normal/error/EOF/timeout/cancel exit disposes InputDispatcher. These tests use FakeSink only and do not certify native input release, cross-device performance or video+input multiplexing.
+
+### 控制端本地采集生命周期（P2 开发工具）
+
+ControllerInputCapture 生成类型/载荷，序号留给未来认证传输统一分配，不改变 v1 帧。controller-input-v1.json 为合成的双侧 Ctrl、A 重复 Down、鼠标点击/滚轮和失焦 Up 序列；Swift 状态机对照该序列，C# 回环 TLS 验证收到同序列且在断线前已释放。
+
+显式开始后才采集；普通重复 Down 必须已在本轮按下，按钮重复 Down/未匹配 Up 忽略。坐标先于按钮 Down/滚轮，黑边拒绝新 Down，但允许已按下按钮的 Up；停止释放普通键、修饰键和按钮并清空滚轮余量。该状态机不是认证门禁；生产传输仍需认证、能力与本机许可。InputPreview 只同步消费本地事件，不赋予远程控制权限，也不连接现有模拟 TLS。高频合并与有界发送队列留待下一切片。
+
+### 有界发送策略（P2 状态机切片）
+
+input-queue-v1.json 同时定义合成输入及合并后期望序列，不改变 v1 帧格式。只合并相邻未发送 MOUSE_MOVE，任何其他消息均为边界；出队时统一分配连续序号，不合并已写入帧。默认 64 个待发加 1 个写入中，控制载荷最多 64 字节，最多每 10ms 一帧且不补发停顿额度。
+
+认证且双方 Input 能力与本地许可满足才接受键鼠。正常结束保持先前输入、释放事件、DISCONNECT 顺序。溢出/失败清空待发并终止本会话；不能丢弃释放后继续。状态机包含 15 秒认证、5 秒写入/PONG/结束期限，依赖未来适配器持续以单调时钟 poll，失败必须取消 TLS 以触发 Agent 清理。当前未接入真实 Mac 网络，DISCONNECT 本地写完成不代表远端已确认。

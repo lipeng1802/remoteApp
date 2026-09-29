@@ -1,6 +1,188 @@
 # 下一次 Codex 会话交接
 
-最后整理：2026-09-29。请以顶部的当前状态、当前唯一目标和文末最新记录为准；中间按时间保留的失败、待确认及下一步描述均为历史记录。
+最后整理：2026-09-29。请以顶部「当前」小节为准；分隔线以下的目标、测试数量、失败及待确认描述均为历史记录。
+
+## 当前提交检查点（2026-09-29）
+
+用户要求先提交代码并等待后续验证。本次提交包含此前累积的 JPEG 三档画质、P2 协议/输入预览/队列/TLS 模拟适配及全部测试和交接文档。仅提交本地 Git，未推送远程；不继续开发新功能。Windows 最近 Release 0 警告/错误、59/59 已通过；Mac 累计预期 96 项仍待执行。下一步按 WORKFLOW_REVIEW.md 同步并验证；下文中尚未提交的描述是本次提交前的历史状态。
+
+## 当前：流程审查与 TLS 模拟适配（2026-09-29）
+
+审查结论：产品方向无偏离，但 Mac 验证积压，P1/P2 不能宣称整阶段完成。Mac 最后实际通过 40 项；本轮继续既定 TLS 模拟适配切片后，累计预期 96 项，均需 Mac 重新运行。以 [WORKFLOW_REVIEW.md](WORKFLOW_REVIEW.md) 为当前接收入口，包含模块证据表、准确命令和下一步顺序。
+
+新增 TLSInputSimulationClient / InputConnectionDriver：固定回环、显式证书指纹和本地许可、TLS/HMAC、同步有界输入入口、20ms 定时器、单读/单写和统一取消。新增 12 项 Swift 调度/替身测试，尚未在 Mac 编译执行；未接 GUI、未完成真实 Swift TLS 正负向握手，更不是跨网输入通过。Windows 本轮 Release 0 警告/错误，59/59 重新通过；git diff --check 通过。
+
+下一优先检查点：同步完整代码 → Swift 筛选测试（9/13/12）→ 全量 96 → Release → InputPreview 实机 → 真实 TLS mock → P1 采集/画质/30 分钟。完成当前 Mac 验证前不再扩展新的 P2 功能或启用真实 SendInput；Mac 不可用期间可继续 Windows 采集诊断和现有问题修复。这是本轮审查后的开发顺序，不是额外的用户许可要求。
+
+P1 StretchBlt 失败复验和约 9.4 FPS 的验收差距保留；GUI 仍只读，0.2.4 安装包未重打。现有累积修改尚未提交/推送，Mac 直接 pull 不能取得它们。未安装系统软件、改防火墙、开启跨网输入监听或开发中继。
+
+---
+
+以下为历史记录。
+
+## 当前：有界输入队列与认证发送状态机（2026-09-29）
+
+本轮完成传输无关的 InputSendQueue / AuthenticatedInputSender：默认 64 条待发 + 1 条写入中，相邻移动合并且不跨键鼠边界，唯一出口分配序号，最多 100 帧/秒；认证/能力/本地许可默认拒绝，心跳和认证/写入/结束期限、正常释放顺序及失败清空已实现。实际 TLS 适配器和调度器尚未接入，不能把状态机的失败标记称为真实 socket 已取消。
+
+Windows Release 0 警告/错误、59/59 测试通过；新增共享 input-queue-v1.json 的合并后序列经真实回环 TLS 顺序/释放验证。Mac 新增 22 项，累计预期 84；Mac 不可连接，本机无 Swift/macOS SDK，未编译执行，不代表 Swift 合并或实际双机输入已通过。
+
+Mac 同步后先运行 swift test --filter InputSendQueueTests（预期 9）、swift test --filter AuthenticatedInputSenderTests（预期 13），再 swift test（预期 84）和 swift build -c release；随后按 P2 清单验证本地 InputPreview。当前代码未提交/推送，直接 pull 不会取得新文件。准确步骤、接口约定与限制见 [INPUT_SENDER_HANDOFF.md](INPUT_SENDER_HANDOFF.md) 和 [P2_INPUT_HANDOFF.md](P2_INPUT_HANDOFF.md)。
+
+下一切片：真实 TLS mock 适配器，有界 UI 入口、单一串行所有者/唤醒、定时 poll、单次写完成/接收/取消调度。InputPreview 本轮仍是本地同步统计；生产 GUI/TLS 保持只读，不含真实 SendInput。Windows mock 仍固定 loopback，未开跨网输入监听。P1 GDI 采集失败复验、画质/跨网 30 分钟与约 9.4 FPS 的前置问题仍保留；独立体验最终目标不变，未开发中继。未重新打包，累积改动未提交。
+
+---
+
+以下均为历史记录。
+
+## 当前：独立产品目标与 Mac 输入预览（2026-09-29）
+
+用户确认最终目标为接近 AnyDesk 的独立安装/连接体验，已记录 [产品路线](PRODUCT_ROADMAP.md)，长期不要求最终用户安装 Tailscale 或配置 SSH。当前阶段继续借助 Tailscale 验证基础功能，未开始自建穿透/中继或服务部署。
+
+本轮新增 ControllerInputCapture 与独立 InputPreview：窗口内键鼠转换、左右修饰键快照、长按、黑边拒绝、边界外按钮释放、滚轮小数累积及停止/失焦统一释放；仅同步消费并显示计数，不存储原始输入，不连接网络、不注入桌面。产品查看器仍只读。
+
+验证：Windows Release 0 警告/错误，58/58 自动测试实际通过；新增共享 controller-input-v1.json 的真实回环 TLS 测试确认客户端释放在连接保持时已完成，不依赖断线清理。Mac 新增 10 项状态机测试，累计预期 62；本机无 Swift/macOS SDK、Mac 仍不可连接，未编译运行，不能称 Mac UI 或跨语言实机联调通过。
+
+Mac 接收后按 [P2_INPUT_HANDOFF.md](P2_INPUT_HANDOFF.md) 顺序：先同步完整代码 → swift test（预期 62）→ swift build -c release → swift run -c release InputPreview → 键鼠/修饰键/黑边/失焦/停止验收 → JPEG 画面前置验收。预览不需要 Windows 在线。具体命令和逐项复选清单已列出。
+
+阻塞：GDI StretchBlt 实际采集失败仍待复验；画质和跨网 30 分钟未收口，约 9.4 FPS 不代表原 10 FPS 目标已通过。AppKit 焦点/组合键/修饰键状态、滚轮方向速度需 Mac 实测。现有 Windows 模拟 TLS 仅 loopback，Mac 预览尚未连接模拟 TLS。
+
+下一开发切片：有界单写入输入发送、移动合并、释放顺序与拥塞退出，再接专用认证 TLS mock。真实 SendInput 留待画面前置验收后。没有开启共享、安装软件或修改网络设置。0.2.4 仍为旧只读画质安装包，本轮未重打。累积改动尚未提交/推送。
+
+---
+
+以下为历史记录；旧“当前唯一目标”和旧测试数量不覆盖上面的最新状态。
+
+## Mac键码映射与回环TLS模拟输入（当前最新）
+
+已按用户指示实现Mac物理ANSI键码映射、左右修饰键快照及失焦释放；Control→Ctrl、Option→Alt、Command→Windows，未自动交换Command/Ctrl，不支持Caps/Fn/媒体/额外布局键和IME。使用SDK Carbon常量，新增5项Swift测试，共预期52；Mac离线，未实际编译。
+
+Windows复用真实TLS/HMAC认证新增固定loopback的输入模拟入口，能力/本机许可默认拒绝，未认证不创建sink。连续控制读取、序号/长度验证、令牌桶限速和空闲期限完成，所有退出统一释放FakeSink键鼠。新增11项TLS测试，Release 0警告/错误、57/57全部通过；其中使用共享mac-keymap-v1.json快捷键字节，不声称执行了Swift或真实双机互操作。生产GUI/TLS仍只读，没有SendInput和全局事件监听，未修改Tailscale/防火墙。
+
+完整接收步骤及策略见 [P2_INPUT_HANDOFF.md](P2_INPUT_HANDOFF.md)。恢复Mac后先同步代码（当前尚未提交/推送），运行swift test预期52项、swift build -c release；此前47/44/40为历史记录。Windows测试预期57项。之后先完成GDI实际采集/画质/稳定性，再接Mac UI事件与模拟发送端，不直接启用原生桌面输入。0.2.4安装包仍为旧只读画质版本，本轮未重打。
+
+## P2继续：键盘协议及统一释放（当前最新）
+
+在已授权的P2基础范围内，新增Swift/C# KeyEventPayload及keyboard-v1.json：4字节扫描码/扩展标志/动作；基础set-1 make code 1...0x7f，严格拒绝0、前缀打包、非法标志/动作和错误长度。尚未做Mac键码映射、中文输入法、E1/Pause或真实注入。
+
+原鼠标分发器扩展并重命名为InputDispatcher，IInputSink统一鼠标/键盘。普通键和扩展键分别跟踪；长按重复Down照常转发，重复或未匹配Up忽略。停止、断开、ERROR、非法输入、输入接口异常及Dispose统一释放两组；一组失败仍尝试另一组，保留失败组供Dispose重试且禁止重新授权。GUI/TLS保持只读、未声明Input能力、没有SendInput调用。
+
+Windows Release 0警告/错误，新增7项键盘/混合释放测试，46/46通过（保留原39项）。Swift新增3项，累计预期47，Mac仍离线，本轮未编译/执行Swift。未重新打包；0.2.4仍是已有只读画质包，不含P2基础库增量。所有累积改动未提交。
+
+Mac恢复后先安全同步已提交代码，再在macos/RemoteController运行swift test（预期47项、0失败）和swift build -c release。重点验证mouse-v1.json与keyboard-v1.json、扫描码范围及扩展键身份。具体步骤见 [P2_INPUT_HANDOFF.md](P2_INPUT_HANDOFF.md)；此前44/40项为历史期望。
+
+下一可独立开发切片：控制端Mac键码/修饰键映射及纯函数测试，然后认证TLS控制消息读取/序号/限速与mock端到端，不直接接通OS输入。实际桌面控制前仍按JPEG_QUALITY_HANDOFF.md完成GDI采集复验、清晰度、停止重连和稳定性收尾，9.4FPS不记作原10FPS目标通过。
+
+## P2启动：鼠标协议与模拟测试（最新交接）
+
+用户要求记录下一阶段计划并开始后续开发，已授权P2基础模块。此前“不开始输入开发”的历史限制由本次指示更新为：可以开发协议/映射/模拟测试，真实输入接入仍须先收尾P1画面采集和稳定性。
+
+### 后续路线（记录用户确认的安排）
+
+1. 修复并复验 Windows GDI 真实屏幕采集失败。
+2. Mac恢复后按JPEG_QUALITY_HANDOFF.md完成画质、双方停止/重连和连续运行；约9.4FPS尚未达到原至少10FPS目标。
+3. 先做鼠标坐标、黑边、DPI映射，消息规范和Swift/C#共享向量、Windows模拟输入接口。
+4. 再开发键盘扫描码及按键释放；真实鼠标/键盘接入前落实认证、输入能力协商、本机显式授权、断开释放和立即停止。
+5. 最后双机验证点击、拖动、滚轮、文字与组合键，不开始H.264或自建中继。
+
+### 本轮已完成
+
+Swift/C#鼠标移动/按钮/滚轮严格编解码；aspect-fit黑边拒绝、边缘/中心归一化、Windows物理像素映射；mouse-v1.json共享向量（含有符号滚轮边界）。独立IMouseInputSink与MouseInputDispatcher只在mock测试调用，认证/输入能力/本机授权默认拒绝；停止、断开、异常、Dispose释放已跟踪鼠标按钮。产品GUI/TLS未接入，仍只读，未声明input能力，没有SendInput、键盘或真实桌面注入。
+
+Windows Release 0警告/错误；新增7项，39/39全部通过。Swift新增4项，当前预期44，Mac离线无法编译/运行，不沿用旧40项通过为本轮证据。现有0.2.4安装包仍是此前只读画质版，不包含本轮P2基础库增量；本轮不改变可安装产品行为。
+
+### Mac恢复后的顺序
+
+本轮代码尚未提交/推送，先完成同步再在Mac仓库根目录运行：
+
+~~~bash
+cd macos/RemoteController
+swift test
+swift build -c release
+~~~
+
+预期44 tests、0 failures和Build complete。重点检查mouse-v1.json解析、Int32滚轮边界、横/竖屏黑边和非法几何测试；遇到编译差异先修正再继续。JPEG_QUALITY_HANDOFF.md中的历史40项应以本轮44项为准。
+
+Windows复验命令：
+
+~~~powershell
+dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
+dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
+~~~
+
+预期39/39。然后继续P1真实采集、画质/性能验收；这些独立阻塞并未被鼠标模拟测试解决。后续接入TLS时还需持续读取控制消息、连接结束统一Dispose、限速与UI坐标方向适配，本轮不声称已能远程控制。所有累积改动未提交。
+
+## 2026-09-29 Mac离线期间：720p三档画质（最新，以本节为准）
+
+用户补充此前突发断开当时为Mac网络问题，恢复后低带宽/标准均约9.4FPS，但文字仍模糊；目前Mac不可连接，授权先完成Windows可验证工作。
+
+新增低带宽40/标准70（默认）/清晰85三档，仍最高720p/10FPS；结束后指标标记为最后成功发送。采集与编码分离，新增同一快照三档对比工具。Release 0警告/错误、32/32通过，GUI三档/默认/关闭通过；自包含0.2.4及Setup已生成，未安装。合成图各档10次编码解码通过，清晰档在该样本较标准增加约37%字节，不能推断网络FPS或真实清晰度。
+
+本轮真实采集在StretchBlt失败，原因未确认，不能标记回归通过。Mac源码未改，Mac测试/双机画面未执行。下一步严格按 [JPEG_QUALITY_HANDOFF.md](JPEG_QUALITY_HANDOFF.md)：1.Windows真实采集 → 2.Mac同步/40项测试 → 3.标准60秒 → 4.清晰60秒 → 5.双方停止重连 → 6.跨网30分钟及安装。9.4FPS未达到原至少10FPS目标，不标记P1完成。
+
+新程序 artifacts/windows/jpeg-quality/RemoteAgent.exe，安装包0.2.4。当前改动未提交，Mac直接pull无法取得新文档；下方均为历史记录，以本节和专用清单为准。
+
+## 2026-09-29 网线下真实共享仍发生突发超时（最新阻塞）
+
+用户重新连接后，只读 Windows UI 每 2 秒采样，未并行执行测速。初始帧 420，30.154 秒帧 700（约 9.3 FPS）；40.182 秒帧 790。42.192 秒读到帧 800 后持续不更新，52.248 秒状态变为“共享结束：发送画面超过 10 秒（网络发送超时）”，采样提前结束，不能记作 60 秒通过。
+
+成功帧诊断采样显示采集编码 59–89 ms、网络写入按整数显示 0 ms、每帧约 86–87.5 KiB；0 ms 是四舍五入显示，不代表绝对零耗时。停止期间界面保留最后成功帧 800 的 82/0/82 ms，因此不能用这些旧值排除正在写入的后续帧阻塞。包含冻结阶段的 7.27 FPS 汇总不作为正常传输帧率。
+
+网线改善了正常阶段吞吐，但不能宣称已解决突发超时。Mac FPS/观感已通过异步问题询问，尚待反馈。下一步仍需 Mac 接收间隔、解码耗时与断开原因观测，区分链路突发停顿和接收端阻塞；不继续用降低画质或扩大超时掩盖。日志仅诊断文字，临时采样文件在 Windows TEMP，不纳入 Git，不含图像/地址/凭据。
+
+## 2026-09-29 用户接入网线后的同方法复测（最新）
+
+用户反馈连接网线，按此前相同 SSH 方法复测 3 轮各 1 MiB 合成传输（Compression=no）。Windows→Mac 写入至收满确认分别为 0.179/0.368/0.182 秒，对应 46.87/22.81/46.02 Mbps；此前为 3.015/4.512/3.007 秒、2.78/1.86/2.79 Mbps。远端收满耗时 0.185/0.196/0.184 秒，反向读取耗时 0.156/0.621/0.856 秒。每轮完整收到 1048576 字节，全部正常退出。
+
+测试开始前 Windows Agent 已处于停止状态，仍保留旧帧 4 的发送超时指标；本轮未启动真实共享，旧帧指标不能作为接网线后的结果。当前短样本吞吐明显改善，支持先前网络条件是重要限制因素；未核验具体哪端网卡/路由切换，不宣称唯一根因，也不能将 SSH 短样本当成稳定带宽或 JPEG 验收。下一步重启一次共享并由 Mac 连接，重新采集 60 秒真实会话，再测双方停止与 30 分钟耐久。本轮只读诊断和文档更新，未修改应用代码或网络配置。
+
+## 2026-09-29 SSH 联调通道与链路基线（最新）
+
+用户确认 Mac 未合盖或休眠；Mac 同时显示连接结束 timeout。用户自行启用 Mac 远程登录、安装专用公钥并允许远程用户完全访问磁盘后，Windows 工具已能以 lipeng 独立 SSH 登录并读取项目目录。Mac 工作区干净、HEAD ce79973，RemoteController Release 进程存在。专用私钥仅存 Windows 用户 .ssh 目录，不提交地址、密钥或凭据；不需要使用用户终端窗口或传递密码。
+
+通过已认证 SSH（Compression=no），进行了 3 轮各 1 MiB Windows→Mac 随机合成字节传输，不读取/传输文件或屏幕、不新增监听端口。上传从开始写入到收到远端收满确认分别 3.015/4.512/3.007 秒，折算 2.78/1.86/2.79 Mbps；远端收满耗时 2.854/4.411/2.795 秒。每轮反向另传 1 MiB 合成零字节，Windows 读取耗时 1.991/1.644/0.648 秒；包含 SSH 缓冲影响，不视作严格方向对称带宽测量。
+
+结论：当前 SSH 路径吞吐偏低，与 JPEG 写入阻塞相符；100 KiB × 10 FPS 约需 8.2 Mbps，不含开销。此测试不是 TLS 流媒体或专用网络基准，不能证明具体为丢包、Tailscale、物理链路或接收端问题，也不能单独解释 10 秒停顿。未修改 Mac 代码、重启查看器或放宽超时。下一步对同一次 JPEG 会话观察 Mac 接收间隔和解码耗时，再结合链路对照定位；稳定性验收仍未通过。
+
+## 2026-09-29 发送超时已实测确认（当前阻塞）
+
+用户表示已连接后，Windows UI Automation 连续只读诊断文字 60 秒：采样开始时会话已经结束，状态为“共享结束：发送画面超过 10 秒（网络发送超时）”。末次成功帧 4：采集+编码 72 ms，网络写入 7064 ms，本帧总耗时 7136 ms，99.9 KiB。其后 60 秒均是保留的旧读数，不是连续传输样本；用户随后确认 Windows 又自动结束共享。不能将这一轮记作有效性能/耐久测试。
+
+Tailscale 脱敏状态快照：Running，Windows 与 Mac 均在线、Mac Active、有直接端点、无 PeerRelay。该快照不能证明链路吞吐或丢包正常，也不能排除接收端停顿。静态检查 Mac 接收回调会在同步 JPEG 解码后发起下一次读取，但尚无实测解码耗时，不能归因为某一端。当前没有放宽 10 秒超时或继续降低画质。
+
+已询问用户：Mac 结束时完整状态文字、当时是否保持唤醒且窗口正常打开。下一步结合 Mac 状态，安排同步的接收/解码耗时和网络诊断；先解决发送超时，再谈稳定 10 FPS/30 分钟。Windows 指标可由本机 UI Automation 按 AutomationId StatusText/MetricsText 直接读取，无需用户抄写；只读取这两个字段，不读取地址、证书、密钥或图像。
+
+## 2026-09-29 连续发送实测与低带宽对照版（最新）
+
+用户报告连续发送版 Mac FPS 在 0.6–10 之间波动，Windows 采集+编码约 80 ms、网络写入 200–900 ms、本帧总耗时 300–3000 ms、每帧约 180 KB。不同读数可能来自不同帧，不能直接相加；网络写入阶段存在明显阻塞，不能仅凭此区分链路吞吐、丢包、relay 或接收端处理。180 KB × 10 FPS 约 14.4 Mbps（不含协议开销），尚未达到稳定 10 FPS。当前场景是否视频/普通窗口及是否仍不同网络已询问，未收到答复。
+
+已增加 Windows 画质选择：默认低带宽 JPEG quality 40，可切回原标准 quality 70。两档均保持最高 1280×720、10 FPS，认证和连续发送协议不变；共享期间禁用切换，停止后可切换。不是自动码率控制，也不承诺低带宽链路一定达到 10 FPS。诊断行增加实际采集帧号，便于记录同帧耗时。
+
+验证：Release 构建 0 警告/错误，32/32 协议测试通过（含同帧指标与帧号校验）；31 次标准画质主屏内存采集通过，采集+解码约 13.5 FPS、GDI 增长 0；另一次 quality 40 内存采集/解码通过（118738 字节，只是当时画面样本，不可与此前 180 KB 作严格对照）。未保存或发送真实屏幕。self-contained 0.2.3 发布成功，路径 artifacts/windows/jpeg-low-bandwidth；未覆盖用户正在运行的旧目录，未自动共享。Setup 未重打，代码和记录尚未提交。
+
+下一步：关闭旧 Agent，在仓库根目录执行下面命令，选择默认低带宽后开始共享，现有 ce79973 Mac 可直接连接，无需改 Mac 或重置配对。
+
+```powershell
+& .\artifacts\windows\jpeg-low-bandwidth\RemoteAgent.exe
+```
+
+在相同普通窗口画面观察约 60 秒，记录 Mac FPS 范围及 Windows 同一帧整行；停止后切标准模式再比较相同场景。重点观察帧大小、写入耗时是否下降和文字是否可读。若仍长时间阻塞，再依据 direct/relay、链路状况和接收端耗时细分原因；不以平滑 FPS 数值、放宽超时或缩小验收分辨率代替修复。双方主动停止和不同网络 30 分钟稳定性仍待完成。
+
+## Windows 接收完成（2026-09-29，当前最新结果）
+
+本节优先于下方接收清单及历史记录。已从 4475b04 快进同步到 origin/main 的 ce79973，接收连续 JPEG 发送改动。Mac 40 项测试、Release、输入交互与原停等版本 3.5 FPS 的结果来自 Mac 交接，本机未重复执行 Mac 验证。
+
+- 实际 Windows 构建发现 MainWindow.xaml.cs 的 catch (JpegTransferTimeoutException ex) 存在未使用变量，因 warnings-as-errors 触发 CS0168。已移除未使用变量，不改变异常处理行为。
+- 修正后 dotnet build windows/RemoteAgent/RemoteAgent.sln -c Release：0 警告、0 错误。
+- dotnet run --project windows/RemoteAgent/tests/RemoteProtocol.Tests/RemoteProtocol.Tests.csproj -c Release：32/32 tests passed，含连续发送、分辨率变化顺序、512 KiB TLS 帧、慢接收写入超时和取消释放。
+- 已成功发布 self-contained win-x64 0.2.2 到 artifacts/windows/jpeg-continuous。未覆盖旧诊断目录、未安装软件或修改防火墙、未自动开始共享。Setup.exe 未重打，本次修正和记录尚未提交。
+
+下一步由双机操作完成：关闭旧 Windows Agent，在仓库根目录执行以下命令并点击开始只读共享；Mac 运行 ce79973 中的连续接收版本，使用原配对地址连接。
+
+```powershell
+& .\artifacts\windows\jpeg-continuous\RemoteAgent.exe
+```
+
+记录 Mac FPS 与 Windows“采集+编码 / 网络写入 / 本帧总耗时 / 每帧”整行；分别验证 Mac 断开、Windows 停止和再次连接，再进行不同网络 30 分钟验收。当前自动化结果不能代替真实 FPS、停止行为或耐久测试。保留整个发布目录，不单独移动 exe；原配对密钥及证书不变。
 
 ## Mac 接收任务（2026-09-29，本轮最新交接）
 
@@ -91,7 +273,7 @@ dotnet publish .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c Relea
 
 ## 当前唯一目标
 
-Mac 37 项测试与首轮真实 JPEG 画面更新已通过。当前优先排查 0.2 FPS 与自动停止（以文末诊断记录为准），并按 [JPEG_VALIDATION.md](JPEG_VALIDATION.md) 继续记录 FPS、停止/断开及不同网络 30 分钟验收。此目标已由用户授权，不需要再询问是否开始 JPEG。
+Mac 40 项测试、Release 和输入交互已通过；Windows 连续发送版本已完成构建、32 项测试和发布。当前进行连续发送版本双机 FPS、双方停止及 30 分钟复测，按 [JPEG_VALIDATION.md](JPEG_VALIDATION.md) 继续记录 FPS、停止/断开及不同网络 30 分钟验收。此目标已由用户授权，不需要再询问是否开始 JPEG。
 
 Windows 代码与采集已在本机验证，Mac 本轮自动测试已由用户日志确认通过，用户已确认 Release 图形应用显示 Windows 实时画面；余下交互及稳定性待验收。保留现有配对密钥和证书，GUI 复用同一 Tailscale 地址条目。旧 TLS 探针只验认证，不显示画面，不能与 GUI 同时占用 47475。不开发输入、H.264 或自建穿透，不修改防火墙或安装系统软件。
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。

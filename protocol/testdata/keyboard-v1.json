@@ -1,0 +1,72 @@
+{
+  "description": "Synthetic set-1 keyboard payloads only; no real keystrokes",
+  "valid": [
+    {
+      "name": "A down",
+      "scanCode": 30,
+      "extended": false,
+      "action": 1,
+      "hex": "001e0001"
+    },
+    {
+      "name": "A up",
+      "scanCode": 30,
+      "extended": false,
+      "action": 2,
+      "hex": "001e0002"
+    },
+    {
+      "name": "left control down",
+      "scanCode": 29,
+      "extended": false,
+      "action": 1,
+      "hex": "001d0001"
+    },
+    {
+      "name": "right control down",
+      "scanCode": 29,
+      "extended": true,
+      "action": 1,
+      "hex": "001d0101"
+    },
+    {
+      "name": "left shift up",
+      "scanCode": 42,
+      "extended": false,
+      "action": 2,
+      "hex": "002a0002"
+    },
+    {
+      "name": "right arrow down",
+      "scanCode": 77,
+      "extended": true,
+      "action": 1,
+      "hex": "004d0101"
+    },
+    {
+      "name": "lower accepted make-code boundary",
+      "scanCode": 1,
+      "extended": false,
+      "action": 1,
+      "hex": "00010001"
+    },
+    {
+      "name": "upper structural boundary (not a UI key mapping)",
+      "scanCode": 127,
+      "extended": false,
+      "action": 2,
+      "hex": "007f0002"
+    }
+  ],
+  "invalidHex": [
+    "",
+    "001e00",
+    "001e000100",
+    "00000001",
+    "00800001",
+    "e01d0001",
+    "001d0201",
+    "001d0000",
+    "001d0003"
+  ]
+}

@@ -8,4 +8,4 @@ public sealed class JpegTransferTimeoutException(JpegTransferStage stage)
 }
 // Durations and size only. No addresses, image content, or authentication data.
 public sealed record JpegTransferMetrics(int JpegBytes, double CaptureMilliseconds,
-    double SendMilliseconds, double FrameMilliseconds);
+    double SendMilliseconds, double FrameMilliseconds, long FrameNumber = 0);

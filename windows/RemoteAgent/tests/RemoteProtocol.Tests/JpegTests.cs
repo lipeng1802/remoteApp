@@ -110,7 +110,7 @@ internal static class JpegTests
             Check((await Read()).Type == MessageType.VideoFrameJpeg, "Second JPEG");
             stop.Cancel();
             try { await server; throw new Exception("Expected local stop"); } catch (OperationCanceledException) { }
-            Check(metrics.Count >= 1 && metrics[0].JpegBytes == frame.Payload.Length && metrics[0].CaptureMilliseconds >= 0 && metrics[0].SendMilliseconds >= 0 && metrics[0].FrameMilliseconds >= 0, "Metrics report bounded streaming work");
+            Check(metrics.Count >= 1 && metrics[0].JpegBytes == frame.Payload.Length && metrics[0].CaptureMilliseconds >= 0 && metrics[0].SendMilliseconds >= 0 && metrics[0].FrameMilliseconds >= metrics[0].CaptureMilliseconds + metrics[0].SendMilliseconds && metrics[0].FrameNumber == 1, "Metrics report bounded streaming work");
         }
         Check(source.Disposed, "Capture disposed");
         var reuse = new TcpListener(IPAddress.Loopback, port);

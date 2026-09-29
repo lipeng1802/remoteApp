@@ -14,5 +14,10 @@
           Link="testdata\tls-v1.json"
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\..\protocol\testdata\jpeg-v1.json" Link="testdata\jpeg-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\..\protocol\testdata\mouse-v1.json" Link="testdata\mouse-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\..\protocol\testdata\keyboard-v1.json" Link="testdata\keyboard-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\..\protocol\testdata\mac-keymap-v1.json" Link="testdata\mac-keymap-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\..\protocol\testdata\controller-input-v1.json" Link="testdata\controller-input-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\..\protocol\testdata\input-queue-v1.json" Link="testdata\input-queue-v1.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,76 @@
+{
+  "description": "Synthetic unsent move coalescing. Key/button events are barriers. Sequences assigned after coalescing, after HELLO and AUTH_RESPONSE.",
+  "capacity": 8,
+  "inputs": [
+    {
+      "type": "mouseMove",
+      "payloadHex": "00010000"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "00020000"
+    },
+    {
+      "type": "mouseButton",
+      "payloadHex": "0101"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "00030000"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "00040000"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001e0001"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001e0002"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "00050000"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "00060000"
+    },
+    {
+      "type": "mouseButton",
+      "payloadHex": "0102"
+    }
+  ],
+  "expected": [
+    {
+      "type": "mouseMove",
+      "payloadHex": "00020000"
+    },
+    {
+      "type": "mouseButton",
+      "payloadHex": "0101"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "00040000"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001e0001"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001e0002"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "00060000"
+    },
+    {
+      "type": "mouseButton",
+      "payloadHex": "0102"
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "description": "Synthetic mouse payload and aspect-fit vectors; no real input",
+  "move": [
+    {
+      "x": 0,
+      "y": 65535,
+      "hex": "0000ffff"
+    },
+    {
+      "x": 32768,
+      "y": 32768,
+      "hex": "80008000"
+    }
+  ],
+  "button": [
+    {
+      "button": 1,
+      "action": 1,
+      "hex": "0101"
+    },
+    {
+      "button": 3,
+      "action": 2,
+      "hex": "0302"
+    }
+  ],
+  "wheel": [
+    {
+      "horizontal": -120,
+      "vertical": 240,
+      "hex": "ffffff88000000f0"
+    },
+    {
+      "horizontal": -2147483648,
+      "vertical": 2147483647,
+      "hex": "800000007fffffff"
+    }
+  ],
+  "mapping": [
+    {
+      "x": 400,
+      "y": 400,
+      "viewWidth": 800,
+      "viewHeight": 800,
+      "screenWidth": 3840,
+      "screenHeight": 2160,
+      "hex": "80008000"
+    },
+    {
+      "x": 0,
+      "y": 175,
+      "viewWidth": 800,
+      "viewHeight": 800,
+      "screenWidth": 3840,
+      "screenHeight": 2160,
+      "hex": "00000000"
+    },
+    {
+      "x": 800,
+      "y": 625,
+      "viewWidth": 800,
+      "viewHeight": 800,
+      "screenWidth": 3840,
+      "screenHeight": 2160,
+      "hex": "ffffffff"
+    },
+    {
+      "x": 400,
+      "y": 174,
+      "viewWidth": 800,
+      "viewHeight": 800,
+      "screenWidth": 3840,
+      "screenHeight": 2160,
+      "hex": null
+    },
+    {
+      "x": 175,
+      "y": 0,
+      "viewWidth": 800,
+      "viewHeight": 800,
+      "screenWidth": 2160,
+      "screenHeight": 3840,
+      "hex": "00000000"
+    },
+    {
+      "x": -1,
+      "y": 400,
+      "viewWidth": 800,
+      "viewHeight": 800,
+      "screenWidth": 1920,
+      "screenHeight": 1080,
+      "hex": null
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-个人使用的最小远程桌面项目：在 macOS 控制端通过外网控制一台 Windows 电脑。
+从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前开发仍使用 Tailscale。
 
 ## MVP 边界
 
@@ -14,17 +14,9 @@
 
 ## 当前进度
 
-P0“环境与协议基线”已经完成：
+P0、TLS 和应用认证双机验收已通过；P1 JPEG 能显示 Windows 画面，画质/真实采集复验和跨网 30 分钟稳定性仍待完成。P2 已有键鼠协议、Mac 映射/本地预览及 Windows 模拟 TLS，产品仍只读，未注入真实输入。
 
-- `protocol/PROTOCOL.md` 定义 v1 二进制帧和认证状态机。
-- `protocol/testdata/v1.json` 保存 Swift/C# 共用的 golden vectors。
-- `macos/RemoteController` 是 SwiftPM 管理的 SwiftUI/协议骨架。
-- `windows/RemoteAgent` 是 .NET 8 WPF/协议骨架。
-
-P0 已完成，TLS 与应用认证的三轮双机验收通过。P1 JPEG 只读切片已实现：Windows 认证后采集主屏并缩放编码，Mac 显示最新图像，提供开始/停止与连接/断开界面。Windows 诊断版 Release 和 32 项测试通过，真实主屏内存采集检查通过；Mac 40 项测试、Release 构建、地址输入和真实画面已通过。实测 3.5 FPS 的主要瓶颈是逐帧确认的跨网往返，已改为有界串行连续发送，等待 Windows 复验及双机 FPS/30 分钟验收，尚不能视为 P1 整阶段完成。
-
-配对步骤见 [TLS 应用认证验收](docs/TLS_AUTH_VALIDATION.md)，构建、启动和剩余验收见 [JPEG 只读画面验收](docs/JPEG_VALIDATION.md)。尚未实现输入控制或 H.264。
-网络监听、屏幕采集和输入注入在 P0 中均未启用。
+Windows Release 和 59 项测试通过；Mac 新增代码累计预期 96 项测试，尚待 Mac 编译执行。按 [P2 输入交接](docs/P2_INPUT_HANDOFF.md) 验证本地预览，按 [画质清单](docs/JPEG_QUALITY_HANDOFF.md) 收尾 P1。最新状态以 [HANDOFF](docs/HANDOFF.md) 顶部为准。
 
 最终交付为两个平台各自的安装包：macOS 控制端 `.dmg` 和 Windows 被控端 `Setup.exe`。开发阶段从 P0 起持续验证打包，不等到功能全部完成后再处理安装问题。
 
@@ -85,3 +77,21 @@ docs/                       规划、测试与交接文档
 ```
 
 继续开发前先阅读 `docs/HANDOFF.md`，其中记录了实际验证结果和下一步。
+
+### 720p画质对照（0.2.4）
+
+Windows现提供低带宽、标准（默认）、清晰三档，仍最高1280×720/10FPS。自包含目录和Setup已生成；32项协议测试与合成画质对比通过，真实采集待复验、Mac当前离线。按 [画质交接清单](docs/JPEG_QUALITY_HANDOFF.md) 顺序验证，清晰档不保证跨网不卡顿。
+
+### Mac 本地输入预览（开发工具）
+
+同步本轮代码后，在 macos/RemoteController 运行：
+
+~~~bash
+swift run -c release InputPreview
+~~~
+
+点击开始后测试窗口内键鼠、黑边与失焦释放；只显示本地事件计数，不连接 Windows，不记录按键内容。Mac 尚未实机验证；逐项清单见 [P2 交接](docs/P2_INPUT_HANDOFF.md)。
+
+### 输入发送状态机
+
+有界队列、相邻移动合并、单写入序号、认证门禁、心跳与结束期限已加入。固定回环的 TLS 网络适配器已编写，Mac 新增代码仍待编译和实测；当前优先完成 [流程检查点](docs/WORKFLOW_REVIEW.md)，GUI 仍只读。

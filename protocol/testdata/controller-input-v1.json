@@ -1,0 +1,53 @@
+{
+  "description": "Synthetic Mac capture sequence: left/right Ctrl, A repeat, left click at center, wheel, focus loss releases. No real user input.",
+  "events": [
+    {
+      "type": "keyEvent",
+      "payloadHex": "001d0001"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001d0101"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001e0001"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001e0001"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "80008000"
+    },
+    {
+      "type": "mouseButton",
+      "payloadHex": "0101"
+    },
+    {
+      "type": "mouseMove",
+      "payloadHex": "80008000"
+    },
+    {
+      "type": "mouseWheel",
+      "payloadHex": "00000000ffffff88"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001e0002"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001d0002"
+    },
+    {
+      "type": "keyEvent",
+      "payloadHex": "001d0102"
+    },
+    {
+      "type": "mouseButton",
+      "payloadHex": "0102"
+    }
+  ]
+}

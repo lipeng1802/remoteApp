@@ -9,7 +9,27 @@ namespace RemoteProtocol;
 
 public static class TlsProbeServer
 {
-    public static async Task RunOnceAsync(
+    public static Task RunOnceAsync(
+        IPAddress bindAddress, IPAddress expectedRemoteAddress, int port, X509Certificate2 certificate,
+        byte[] deviceKey, byte[] agentIdentifier, CancellationToken cancellationToken = default,
+        TimeSpan? sessionTimeout = null, Func<IJpegFrameSource>? createJpegSource = null,
+        Action<string>? reportStatus = null, Action<JpegTransferMetrics>? reportMetrics = null,
+        TimeSpan? frameTimeout = null) =>
+        RunCoreAsync(bindAddress, expectedRemoteAddress, port, certificate, deviceKey, agentIdentifier,
+            cancellationToken, sessionTimeout, createJpegSource, reportStatus, reportMetrics, frameTimeout);
+
+    // Test-only profile: bind and peer are fixed to loopback, with no video/native sink.
+    public static Task RunInputSimulationOnceAsync(
+        int port, X509Certificate2 certificate, byte[] deviceKey, byte[] agentIdentifier,
+        InputSimulationOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
+        return RunCoreAsync(IPAddress.Loopback, IPAddress.Loopback, port, certificate, deviceKey,
+            agentIdentifier, cancellationToken, inputSimulation: options);
+    }
+
+    private static async Task RunCoreAsync(
         IPAddress bindAddress,
         IPAddress expectedRemoteAddress,
         int port,
@@ -21,7 +41,7 @@ public static class TlsProbeServer
         Func<IJpegFrameSource>? createJpegSource = null,
         Action<string>? reportStatus = null,
         Action<JpegTransferMetrics>? reportMetrics = null,
-        TimeSpan? frameTimeout = null)
+        TimeSpan? frameTimeout = null, InputSimulationOptions? inputSimulation = null)
     {
         if (deviceKey.Length != 32 || agentIdentifier.Length != 16)
             throw new ArgumentException("Invalid device credential length.");
@@ -65,7 +85,7 @@ public static class TlsProbeServer
 
             using var sessionDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             sessionDeadline.CancelAfter(sessionTimeout ?? TimeSpan.FromSeconds(20));
-            await AuthenticateAndProbeAsync(tls, deviceKey, agentIdentifier, sessionDeadline.Token, sessionDeadline, createJpegSource, reportStatus, reportMetrics, frameTimeout ?? TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            await AuthenticateAndProbeAsync(tls, deviceKey, agentIdentifier, sessionDeadline.Token, sessionDeadline, createJpegSource, reportStatus, reportMetrics, frameTimeout ?? TimeSpan.FromSeconds(10), inputSimulation).ConfigureAwait(false);
         }
         finally
         {
@@ -76,17 +96,19 @@ public static class TlsProbeServer
     private static async Task AuthenticateAndProbeAsync(
         SslStream tls, byte[] deviceKey, byte[] agentIdentifier, CancellationToken cancellationToken,
         CancellationTokenSource sessionDeadline, Func<IJpegFrameSource>? createJpegSource, Action<string>? reportStatus,
-        Action<JpegTransferMetrics>? reportMetrics, TimeSpan frameTimeout)
+        Action<JpegTransferMetrics>? reportMetrics, TimeSpan frameTimeout, InputSimulationOptions? inputSimulation)
     {
         var wire = new ProbeFrameStream(tls, createJpegSource is not null);
         var gate = new SessionGate(PeerRole.Agent);
         var agentNonce = RandomNumberGenerator.GetBytes(32);
         await wire.WriteAsync(MessageType.Hello,
-            new HelloPayload(PeerRole.Agent, 1, 1, createJpegSource is null ? Capabilities.None : Capabilities.Jpeg, agentNonce).Encode(), cancellationToken);
+            new HelloPayload(PeerRole.Agent, 1, 1, inputSimulation is not null ? Capabilities.Input : (createJpegSource is null ? Capabilities.None : Capabilities.Jpeg), agentNonce).Encode(), cancellationToken);
         var helloFrame = await Receive(MessageType.Hello);
         var controllerHello = HelloPayload.Decode(helloFrame.Payload);
         if (createJpegSource is not null && !controllerHello.Capabilities.HasFlag(Capabilities.Jpeg))
             throw new ProtocolException(ProtocolError.InvalidPayload, "Peer does not support JPEG.");
+        if (inputSimulation is not null && !controllerHello.Capabilities.HasFlag(Capabilities.Input))
+            throw new ProtocolException(ProtocolError.InvalidPayload, "Input capability required for simulation.");
         reportStatus?.Invoke("正在验证应用密钥");
         var challenge = new AuthChallengePayload(RandomNumberGenerator.GetBytes(32), agentIdentifier);
         await wire.WriteAsync(MessageType.AuthChallenge, challenge.Encode(), cancellationToken);
@@ -103,6 +125,12 @@ public static class TlsProbeServer
             new AuthResultPayload(accepted ? AuthResultStatus.Success : AuthResultStatus.Rejected,
                 accepted ? 0u : 1000u).Encode(), cancellationToken);
         if (!accepted) throw new AuthenticationException("Application authentication rejected.");
+        if (inputSimulation is not null)
+        {
+            sessionDeadline.CancelAfter(Timeout.InfiniteTimeSpan);
+            await InputSimulationSession.RunAsync(wire, gate, inputSimulation, cancellationToken).ConfigureAwait(false);
+            return;
+        }
         if (createJpegSource is not null)
         {
             sessionDeadline.CancelAfter(Timeout.InfiniteTimeSpan);
@@ -111,11 +139,13 @@ public static class TlsProbeServer
             using var source = createJpegSource();
             ScreenInfoPayload? previous = null;
             long lastReport = 0;
+            long frameNumber = 0;
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 var captured = source.Capture(cancellationToken);
+                frameNumber++;
                 if (captured.Jpeg.Length < 4 || captured.Jpeg[0] != 0xff || captured.Jpeg[1] != 0xd8 ||
                     captured.Jpeg[^2] != 0xff || captured.Jpeg[^1] != 0xd9)
                     throw new ProtocolException(ProtocolError.InvalidPayload, "Invalid captured JPEG.");
@@ -136,7 +166,7 @@ public static class TlsProbeServer
                     if (lastReport == 0 || System.Diagnostics.Stopwatch.GetElapsedTime(lastReport) >= TimeSpan.FromSeconds(1))
                     {
                         reportMetrics?.Invoke(new JpegTransferMetrics(captured.Jpeg.Length, captureMs, sendMs,
-                            System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+                            System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, frameNumber));
                         lastReport = System.Diagnostics.Stopwatch.GetTimestamp();
                     }
                 }

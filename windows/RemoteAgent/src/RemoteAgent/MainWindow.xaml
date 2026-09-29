@@ -1,12 +1,20 @@
 <Window x:Class="RemoteAgent.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Personal Remote Desktop · 只读共享" Height="415" Width="650"
+        Title="Personal Remote Desktop · 只读共享" Height="465" Width="650"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen" Closing="Window_Closing">
     <StackPanel Margin="28">
         <TextBlock FontSize="24" FontWeight="SemiBold" Text="共享 Windows 主屏" />
         <TextBlock Margin="0,12,0,0" Text="只读模式 · 最高 1280 × 720 · 10 FPS" Foreground="DimGray" />
         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="点击开始后等待已配对的 Mac。认证成功才采集画面；停止或关闭窗口会立即结束共享。" />
+        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+            <TextBlock Text="画质：" VerticalAlignment="Center" />
+            <ComboBox x:Name="QualitySelector" SelectedIndex="1" Width="390">
+                <ComboBoxItem Content="低带宽 · 720p，降低画质以减少传输量" />
+                <ComboBoxItem Content="标准 · 720p，平衡清晰度和传输量" />
+                <ComboBoxItem Content="清晰 · 720p，细节较好，需要更多带宽" />
+            </ComboBox>
+        </StackPanel>
         <TextBlock x:Name="StatusText" Margin="0,20,0,0" FontWeight="SemiBold" Text="未共享" TextWrapping="Wrap" />
         <TextBlock x:Name="MetricsText" Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Foreground="DimGray" />
         <StackPanel Orientation="Horizontal" Margin="0,18,0,0">

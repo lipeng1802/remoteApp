@@ -1,0 +1,187 @@
+{
+  "description": "Synthetic physical ANSI Mac key mapping; Command maps to Windows, not Ctrl",
+  "vectors": [
+    {
+      "name": "A",
+      "macKeyCode": 0,
+      "scanCode": 30,
+      "extended": false,
+      "downHex": "001e0001",
+      "upHex": "001e0002"
+    },
+    {
+      "name": "C",
+      "macKeyCode": 8,
+      "scanCode": 46,
+      "extended": false,
+      "downHex": "002e0001",
+      "upHex": "002e0002"
+    },
+    {
+      "name": "1",
+      "macKeyCode": 18,
+      "scanCode": 2,
+      "extended": false,
+      "downHex": "00020001",
+      "upHex": "00020002"
+    },
+    {
+      "name": "Return",
+      "macKeyCode": 36,
+      "scanCode": 28,
+      "extended": false,
+      "downHex": "001c0001",
+      "upHex": "001c0002"
+    },
+    {
+      "name": "Tab",
+      "macKeyCode": 48,
+      "scanCode": 15,
+      "extended": false,
+      "downHex": "000f0001",
+      "upHex": "000f0002"
+    },
+    {
+      "name": "Space",
+      "macKeyCode": 49,
+      "scanCode": 57,
+      "extended": false,
+      "downHex": "00390001",
+      "upHex": "00390002"
+    },
+    {
+      "name": "Backspace",
+      "macKeyCode": 51,
+      "scanCode": 14,
+      "extended": false,
+      "downHex": "000e0001",
+      "upHex": "000e0002"
+    },
+    {
+      "name": "Escape",
+      "macKeyCode": 53,
+      "scanCode": 1,
+      "extended": false,
+      "downHex": "00010001",
+      "upHex": "00010002"
+    },
+    {
+      "name": "LeftCommand",
+      "macKeyCode": 55,
+      "scanCode": 91,
+      "extended": true,
+      "downHex": "005b0101",
+      "upHex": "005b0102"
+    },
+    {
+      "name": "RightCommand",
+      "macKeyCode": 54,
+      "scanCode": 92,
+      "extended": true,
+      "downHex": "005c0101",
+      "upHex": "005c0102"
+    },
+    {
+      "name": "LeftControl",
+      "macKeyCode": 59,
+      "scanCode": 29,
+      "extended": false,
+      "downHex": "001d0001",
+      "upHex": "001d0002"
+    },
+    {
+      "name": "RightControl",
+      "macKeyCode": 62,
+      "scanCode": 29,
+      "extended": true,
+      "downHex": "001d0101",
+      "upHex": "001d0102"
+    },
+    {
+      "name": "LeftShift",
+      "macKeyCode": 56,
+      "scanCode": 42,
+      "extended": false,
+      "downHex": "002a0001",
+      "upHex": "002a0002"
+    },
+    {
+      "name": "RightShift",
+      "macKeyCode": 60,
+      "scanCode": 54,
+      "extended": false,
+      "downHex": "00360001",
+      "upHex": "00360002"
+    },
+    {
+      "name": "LeftOption",
+      "macKeyCode": 58,
+      "scanCode": 56,
+      "extended": false,
+      "downHex": "00380001",
+      "upHex": "00380002"
+    },
+    {
+      "name": "RightOption",
+      "macKeyCode": 61,
+      "scanCode": 56,
+      "extended": true,
+      "downHex": "00380101",
+      "upHex": "00380102"
+    },
+    {
+      "name": "RightArrow",
+      "macKeyCode": 124,
+      "scanCode": 77,
+      "extended": true,
+      "downHex": "004d0101",
+      "upHex": "004d0102"
+    },
+    {
+      "name": "ForwardDelete",
+      "macKeyCode": 117,
+      "scanCode": 83,
+      "extended": true,
+      "downHex": "00530101",
+      "upHex": "00530102"
+    },
+    {
+      "name": "KeypadEnter",
+      "macKeyCode": 76,
+      "scanCode": 28,
+      "extended": true,
+      "downHex": "001c0101",
+      "upHex": "001c0102"
+    },
+    {
+      "name": "F1",
+      "macKeyCode": 122,
+      "scanCode": 59,
+      "extended": false,
+      "downHex": "003b0001",
+      "upHex": "003b0002"
+    },
+    {
+      "name": "F12",
+      "macKeyCode": 111,
+      "scanCode": 88,
+      "extended": false,
+      "downHex": "00580001",
+      "upHex": "00580002"
+    }
+  ],
+  "unsupported": [
+    57,
+    63,
+    72,
+    10,
+    93,
+    65535
+  ],
+  "shortcut": [
+    "001d0001",
+    "002e0001",
+    "002e0002",
+    "001d0002"
+  ]
+}

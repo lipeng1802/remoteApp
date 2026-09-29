@@ -13,6 +13,8 @@ public partial class MainWindow : Window
         if (sharing is not null) return;
         using var lifetime = new CancellationTokenSource();
         sharing = lifetime;
+        var quality = QualitySelector.SelectedIndex switch { 0 => 40, 2 => 85, _ => 70 };
+        QualitySelector.IsEnabled = false;
         StartButton.IsEnabled = false;
         StopButton.IsEnabled = true;
         MetricsText.Text = "等待首帧统计";
@@ -26,13 +28,13 @@ public partial class MainWindow : Window
             StatusText.Text = "等待已配对的 Mac 连接 · 端口 47475";
             await Task.Run(() => TlsProbeServer.RunOnceAsync(endpoints.Local, endpoints.Peer, 47475,
                 certificate, credentials.DeviceKey, credentials.AgentIdentifier, lifetime.Token,
-                createJpegSource: () => new PrimaryScreenCapture(),
+                createJpegSource: () => new PrimaryScreenCapture(quality),
                 reportStatus: text => Dispatcher.Invoke(() => StatusText.Text = text),
                 reportMetrics: metrics => Dispatcher.Invoke(() => MetricsText.Text =
-                    $"采集+编码 {metrics.CaptureMilliseconds:F0} ms · 网络写入 {metrics.SendMilliseconds:F0} ms · 本帧总耗时 {metrics.FrameMilliseconds:F0} ms · 每帧 {metrics.JpegBytes / 1024.0:F1} KiB")), lifetime.Token);
+                    $"帧 {metrics.FrameNumber} · 采集+编码 {metrics.CaptureMilliseconds:F0} ms · 网络写入 {metrics.SendMilliseconds:F0} ms · 本帧总耗时 {metrics.FrameMilliseconds:F0} ms · 每帧 {metrics.JpegBytes / 1024.0:F1} KiB")), lifetime.Token);
             StatusText.Text = "会话已结束；再次共享请点击开始";
         }
-        catch (JpegTransferTimeoutException ex)
+        catch (JpegTransferTimeoutException)
         {
             StatusText.Text = "共享结束：发送画面超过 10 秒（网络发送超时）";
         }
@@ -46,7 +48,10 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (MetricsText.Text.StartsWith("帧 ", StringComparison.Ordinal))
+                MetricsText.Text = "最后成功发送：" + MetricsText.Text;
             sharing = null;
+            QualitySelector.IsEnabled = true;
             StartButton.IsEnabled = true;
             StopButton.IsEnabled = false;
         }

@@ -8,7 +8,8 @@ let package = Package(
     products: [
         .library(name: "RemoteProtocol", targets: ["RemoteProtocol"]),
         .executable(name: "RemoteController", targets: ["RemoteController"]),
-        .executable(name: "TLSProbeClient", targets: ["TLSProbeClient"])
+        .executable(name: "TLSProbeClient", targets: ["TLSProbeClient"]),
+        .executable(name: "InputPreview", targets: ["InputPreview"])
     ],
     targets: [
         .target(name: "RemoteProtocol"),
@@ -18,6 +19,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "TLSProbeClient",
+            dependencies: ["RemoteProtocol"]
+        ),
+        .executableTarget(
+            name: "InputPreview",
             dependencies: ["RemoteProtocol"]
         ),
         .testTarget(

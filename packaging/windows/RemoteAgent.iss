@@ -5,7 +5,9 @@
     #define AppVersion "0.1.0"
 #endif
 
+#ifndef PublishDir
 #define PublishDir RepoRoot + "\artifacts\windows\publish"
+#endif
 #define OutputDir RepoRoot + "\artifacts\windows"
 
 [Setup]

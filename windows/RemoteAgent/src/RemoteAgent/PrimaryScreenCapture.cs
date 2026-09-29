@@ -9,7 +9,33 @@ namespace RemoteAgent;
 
 public sealed class PrimaryScreenCapture : IJpegFrameSource
 {
+    private readonly int quality;
+    public PrimaryScreenCapture(int quality = 70)
+    {
+        if (quality is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(quality));
+        this.quality = quality;
+    }
     public CapturedJpeg Capture(CancellationToken cancellationToken)
+    {
+        var snapshot = CaptureImage(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var jpeg = EncodeImage(snapshot.Image, quality);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new CapturedJpeg(snapshot.Screen, jpeg);
+    }
+
+    // Shared with the opt-in quality comparison: encode the same pixels in each mode.
+    internal static byte[] EncodeImage(BitmapSource image, int quality)
+    {
+        if (quality is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(quality));
+        var encoder = new JpegBitmapEncoder { QualityLevel = quality };
+        encoder.Frames.Add(BitmapFrame.Create(image));
+        using var output = new MemoryStream();
+        encoder.Save(output);
+        return output.ToArray();
+    }
+
+    internal static (ScreenInfoPayload Screen, BitmapSource Image) CaptureImage(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var previousDpi = SetThreadDpiAwarenessContext(new IntPtr(-4));
@@ -33,7 +59,7 @@ public sealed class PrimaryScreenCapture : IJpegFrameSource
             _ = SetStretchBltMode(memory, 4); // HALFTONE
             _ = SetBrushOrgEx(memory, 0, 0, IntPtr.Zero);
             if (!StretchBlt(memory, 0, 0, targetWidth, targetHeight, screen, 0, 0, width, height, 0x40CC0020))
-                throw new Win32Exception(); // SRCCOPY | CAPTUREBLT
+                throw new Win32Exception("Primary screen capture failed (StretchBlt)."); // SRCCOPY | CAPTUREBLT
             _ = SelectObject(memory, old);
             old = IntPtr.Zero;
             var header = new BitmapInfo { Size = 40, Width = targetWidth, Height = -targetHeight, Planes = 1, BitCount = 32 };
@@ -43,11 +69,7 @@ public sealed class PrimaryScreenCapture : IJpegFrameSource
             cancellationToken.ThrowIfCancellationRequested();
             var image = BitmapSource.Create(targetWidth, targetHeight, 96, 96, PixelFormats.Bgr32, null, pixels, targetWidth * 4);
             image.Freeze();
-            var encoder = new JpegBitmapEncoder { QualityLevel = 70 };
-            encoder.Frames.Add(BitmapFrame.Create(image));
-            using var output = new MemoryStream();
-            encoder.Save(output);
-            return new CapturedJpeg(info, output.ToArray());
+            return (info, image);
         }
         finally
         {
