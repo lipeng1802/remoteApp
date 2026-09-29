@@ -5,9 +5,22 @@ import RemoteProtocol
 
 @main
 struct RemoteControllerApp: App {
+    @NSApplicationDelegateAdaptor(ViewerApplicationDelegate.self) private var applicationDelegate
     var body: some Scene {
         WindowGroup { ContentView() }
             .defaultSize(width: 1060, height: 720)
+    }
+}
+
+@MainActor
+private final class ViewerApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // A SwiftPM executable is launched without an .app bundle. Explicitly
+        // activate it so the visible window can receive keyboard input.
+        guard Bundle.main.bundleURL.pathExtension != "app" else { return }
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.windows.first(where: { $0.canBecomeKey })?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -28,8 +41,8 @@ private final class ViewerModel: ObservableObject {
     private var stopConnection: (() -> Void)?
     private var generation = UUID()
     private var latest = LatestValue<ReceivedImage>()
-    private var sampleTime = Date()
-    private var sampleCount = 0
+    private var frameRate = FrameRateMeter()
+
 
     func connect() {
         guard !connected else { return }
@@ -46,7 +59,7 @@ private final class ViewerModel: ObservableObject {
         connected = true
         image = nil
         detail = "只读模式 · 等待首帧"
-        sampleTime = Date(); sampleCount = 0
+        frameRate = FrameRateMeter()
         generation = UUID()
         let current = generation
         let slot = LatestValue<ReceivedImage>()
@@ -100,11 +113,9 @@ private final class ViewerModel: ObservableObject {
         guard connected, let next = latest.take() else { return }
         image = next.image
         status = "正在查看 Windows 主屏 · 只读"
-        let elapsed = Date().timeIntervalSince(sampleTime)
-        if elapsed >= 1 {
-            let fps = Double(next.count - sampleCount) / elapsed
+        if let fps = frameRate.update(totalFrames: next.count, now: ProcessInfo.processInfo.systemUptime) {
             detail = "\(next.image.width) × \(next.image.height) · \(String(format: "%.1f", fps)) FPS · 主屏 \(next.screen.width) × \(next.screen.height)"
-            sampleTime = Date(); sampleCount = next.count
+
         }
     }
 }
@@ -112,12 +123,14 @@ private final class ViewerModel: ObservableObject {
 @MainActor
 private struct ContentView: View {
     @StateObject private var model = ViewerModel()
+    @FocusState private var addressFocused: Bool
     private let refresh = Timer.publish(every: 1.0 / 30, on: .main, in: .common).autoconnect()
     var body: some View {
         VStack(spacing: 14) {
             HStack {
                 TextField("Windows Tailscale 地址", text: $model.host)
                     .textFieldStyle(.roundedBorder).disabled(model.connected)
+                    .focused($addressFocused)
                     .onSubmit { model.connect() }
                 Button("连接") { model.connect() }.disabled(model.connected)
                 Button("断开") { model.disconnect() }.disabled(!model.connected)
@@ -135,6 +148,13 @@ private struct ContentView: View {
         }
         .padding(18)
         .frame(minWidth: 760, minHeight: 520)
+        .task {
+            await Task.yield()
+            addressFocused = !model.connected
+        }
+        .onChange(of: model.connected) { connected in
+            addressFocused = !connected
+        }
         .onReceive(refresh) { _ in model.presentLatest() }
         .onDisappear { model.disconnect() }
     }

@@ -21,7 +21,7 @@ P0“环境与协议基线”已经完成：
 - `macos/RemoteController` 是 SwiftPM 管理的 SwiftUI/协议骨架。
 - `windows/RemoteAgent` 是 .NET 8 WPF/协议骨架。
 
-P0 已完成，TLS 与应用认证的三轮双机验收通过。P1 JPEG 只读切片已实现：Windows 认证后采集主屏并缩放编码，Mac 显示最新图像，提供开始/停止与连接/断开界面。Windows Release 和 30 项测试通过，真实主屏内存采集检查通过；Mac 本轮预期 37 项测试及双机画面验收尚待执行，不能视为 P1 整阶段完成。
+P0 已完成，TLS 与应用认证的三轮双机验收通过。P1 JPEG 只读切片已实现：Windows 认证后采集主屏并缩放编码，Mac 显示最新图像，提供开始/停止与连接/断开界面。Windows Release 和 30 项测试通过，真实主屏内存采集检查通过；用户已确认 Mac 本轮 37 项测试通过，Release 查看器已显示真实 Windows 画面并实时更新，地址键入问题及 FPS/30 分钟验收尚待完成，不能视为 P1 整阶段完成。
 
 配对步骤见 [TLS 应用认证验收](docs/TLS_AUTH_VALIDATION.md)，构建、启动和剩余验收见 [JPEG 只读画面验收](docs/JPEG_VALIDATION.md)。尚未实现输入控制或 H.264。
 网络监听、屏幕采集和输入注入在 P0 中均未启用。

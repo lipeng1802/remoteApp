@@ -88,7 +88,9 @@ public final class TLSControllerClient {
             queue
         )
 
-        let parameters = NWParameters(tls: tlsOptions)
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.noDelay = true
+        let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
         parameters.allowLocalEndpointReuse = false
         let connection = NWConnection(
             host: NWEndpoint.Host(host),

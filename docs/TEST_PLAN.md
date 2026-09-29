@@ -181,4 +181,19 @@ JPEG 阶段不以带宽作为最终验收项，但要记录数据作为 H.264 �
 按 [TLS_AUTH_VALIDATION.md](TLS_AUTH_VALIDATION.md) 执行。2026-09-28 Windows 已实际通过 25 项测试；用户已确认 Mac 28 项测试、Release 探针构建及配对通过。正确密钥、错误密钥、认证前 PING 三轮双机结果均已由用户提供并核对，详见 HANDOFF.md 最新记录；第三轮后本机确认 47475 无监听。
 ## 10. JPEG 只读切片
 
-详见 [JPEG_VALIDATION.md](JPEG_VALIDATION.md)。Windows 累计30项协议/会话测试通过，显式真实主屏内存采集31次通过；Mac 本轮预期37项测试待执行。需实机验证画面、双方停止与清屏、实际分辨率变化，并在不同网络达到720p/至少10FPS连续30分钟；通过前不标记P1完成。自动协议测试只用合成图，真实采集检查必须显式传 --capture-in-memory。
+详见 [JPEG_VALIDATION.md](JPEG_VALIDATION.md)。Windows 累计30项协议/会话测试通过，显式真实主屏内存采集31次通过；2026-09-29用户日志确认Mac本轮37项测试、0失败，Release与真实画面待验收。需实机验证画面、双方停止与清屏、实际分辨率变化，并在不同网络达到720p/至少10FPS连续30分钟；通过前不标记P1完成。自动协议测试只用合成图，真实采集检查必须显式传 --capture-in-memory。
+## 2026-09-29 低帧率和自动结束诊断：当前优先事项
+
+用户确认实际画面更新，但报告 FPS 0.2 和 Windows 自动结束共享。Mac 随之断开清空画面，两端窗口保留，并非程序退出；Mac 主动断开也会结束共享。自动停止时的完整状态与发生时间仍待采集，不能认定原因已解决，也不能标记稳定性通过。
+
+本轮修改：Mac 从首张有效画面起使用单调时钟计算 FPS，排除连接等待对首个读数的影响；持续低帧率仍如实显示。两端启用 TCP noDelay，尚无跨网络性能结论。Windows 新增采集+编码、发送、等待 Mac 确认耗时及每帧大小；区分本机停止、连接/认证超时、发送超时及帧确认超时。保留每帧发送+确认总期限 10 秒。
+
+Windows Release 构建通过，32/32 自动测试通过，新增帧确认超时分类/释放与 512 KiB 合成帧 TLS 传输测试。Mac 原有 37 项测试由用户确认通过；本轮新增 3 项 FPS 测试，预期共 40 项，尚待 Mac 验证，Windows 无法运行 Swift/macOS 测试。输入焦点修复也仍待 Mac 验证。
+
+已成功发布独立 self-contained 0.2.1 诊断版，未覆盖旧运行目录，无需安装 .NET；保留整个目录依赖文件。先关闭旧 Windows Agent，在仓库根目录运行：
+
+```powershell
+& .\artifacts\windows\jpeg-diagnostics\RemoteAgent.exe
+```
+
+开始共享，由 Mac 连接，记录 Windows 耗时整行、结束后的完整状态及持续时间。旧 Mac 可以先配合收集指标。两端代码当前尚未提交，仅在 Mac git pull 不会获得本轮修改；同步后运行 swift test（预期 40 项）、swift build -c release、swift run -c release RemoteController，复测输入、FPS 和停止。诊断版双机实测、30 分钟性能及稳定性验收尚待完成。0.2.0 Setup 不含本轮修改，本次未重打安装包。

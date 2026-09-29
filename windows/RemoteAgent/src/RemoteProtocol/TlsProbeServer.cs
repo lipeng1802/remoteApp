@@ -19,7 +19,9 @@ public static class TlsProbeServer
         CancellationToken cancellationToken = default,
         TimeSpan? sessionTimeout = null,
         Func<IJpegFrameSource>? createJpegSource = null,
-        Action<string>? reportStatus = null)
+        Action<string>? reportStatus = null,
+        Action<JpegTransferMetrics>? reportMetrics = null,
+        TimeSpan? frameTimeout = null)
     {
         if (deviceKey.Length != 32 || agentIdentifier.Length != 16)
             throw new ArgumentException("Invalid device credential length.");
@@ -42,6 +44,7 @@ public static class TlsProbeServer
             using var connectionDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             connectionDeadline.CancelAfter(TimeSpan.FromMinutes(5));
             using var client = await listener.AcceptTcpClientAsync(connectionDeadline.Token).ConfigureAwait(false);
+            client.NoDelay = true;
             var remoteEndPoint = client.Client.RemoteEndPoint as IPEndPoint;
             if (remoteEndPoint is null || !remoteEndPoint.Address.Equals(expectedRemoteAddress))
             {
@@ -59,7 +62,7 @@ public static class TlsProbeServer
 
             using var sessionDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             sessionDeadline.CancelAfter(sessionTimeout ?? TimeSpan.FromSeconds(20));
-            await AuthenticateAndProbeAsync(tls, deviceKey, agentIdentifier, sessionDeadline.Token, sessionDeadline, createJpegSource, reportStatus).ConfigureAwait(false);
+            await AuthenticateAndProbeAsync(tls, deviceKey, agentIdentifier, sessionDeadline.Token, sessionDeadline, createJpegSource, reportStatus, reportMetrics, frameTimeout ?? TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         }
         finally
         {
@@ -69,7 +72,8 @@ public static class TlsProbeServer
 
     private static async Task AuthenticateAndProbeAsync(
         SslStream tls, byte[] deviceKey, byte[] agentIdentifier, CancellationToken cancellationToken,
-        CancellationTokenSource sessionDeadline, Func<IJpegFrameSource>? createJpegSource, Action<string>? reportStatus)
+        CancellationTokenSource sessionDeadline, Func<IJpegFrameSource>? createJpegSource, Action<string>? reportStatus,
+        Action<JpegTransferMetrics>? reportMetrics, TimeSpan frameTimeout)
     {
         var wire = new ProbeFrameStream(tls, createJpegSource is not null);
         var gate = new SessionGate(PeerRole.Agent);
@@ -103,6 +107,7 @@ public static class TlsProbeServer
             // No capture object is constructed until TLS and HMAC authentication pass.
             using var source = createJpegSource();
             ScreenInfoPayload? previous = null;
+            long lastReport = 0;
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -112,20 +117,39 @@ public static class TlsProbeServer
                     captured.Jpeg[^2] != 0xff || captured.Jpeg[^1] != 0xd9)
                     throw new ProtocolException(ProtocolError.InvalidPayload, "Invalid captured JPEG.");
                 using var frameDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                frameDeadline.CancelAfter(TimeSpan.FromSeconds(10));
-                if (previous != captured.Screen)
+                frameDeadline.CancelAfter(frameTimeout);
+                var captureMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                var sendStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                var stage = JpegTransferStage.Sending;
+                try
                 {
-                    await wire.WriteAsync(MessageType.ScreenInfo, captured.Screen.Encode(), frameDeadline.Token);
-                    previous = captured.Screen;
+                    if (previous != captured.Screen)
+                    {
+                        await wire.WriteAsync(MessageType.ScreenInfo, captured.Screen.Encode(), frameDeadline.Token);
+                        previous = captured.Screen;
+                    }
+                    await wire.WriteAsync(MessageType.VideoFrameJpeg, captured.Jpeg, frameDeadline.Token);
+                    var token = RandomNumberGenerator.GetBytes(8);
+                    await wire.WriteAsync(MessageType.Ping, token, frameDeadline.Token);
+                    var sendMs = System.Diagnostics.Stopwatch.GetElapsedTime(sendStarted).TotalMilliseconds;
+                    stage = JpegTransferStage.AwaitingAcknowledgement;
+                    var ackStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                    var ack = await wire.ReadAsync(frameDeadline.Token);
+                    gate.Receive(ack);
+                    if (ack.Type == MessageType.Disconnect) return;
+                    if (ack.Type != MessageType.Pong || !ack.Payload.AsSpan().SequenceEqual(token))
+                        throw new ProtocolException(ProtocolError.InvalidPayload, "Invalid frame acknowledgement.");
+                    var ackMs = System.Diagnostics.Stopwatch.GetElapsedTime(ackStarted).TotalMilliseconds;
+                    if (lastReport == 0 || System.Diagnostics.Stopwatch.GetElapsedTime(lastReport) >= TimeSpan.FromSeconds(1))
+                    {
+                        reportMetrics?.Invoke(new JpegTransferMetrics(captured.Jpeg.Length, captureMs, sendMs, ackMs));
+                        lastReport = System.Diagnostics.Stopwatch.GetTimestamp();
+                    }
                 }
-                await wire.WriteAsync(MessageType.VideoFrameJpeg, captured.Jpeg, frameDeadline.Token);
-                var token = RandomNumberGenerator.GetBytes(8);
-                await wire.WriteAsync(MessageType.Ping, token, frameDeadline.Token);
-                var ack = await wire.ReadAsync(frameDeadline.Token);
-                gate.Receive(ack);
-                if (ack.Type == MessageType.Disconnect) return;
-                if (ack.Type != MessageType.Pong || !ack.Payload.AsSpan().SequenceEqual(token))
-                    throw new ProtocolException(ProtocolError.InvalidPayload, "Invalid frame acknowledgement.");
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && frameDeadline.IsCancellationRequested)
+                {
+                    throw new JpegTransferTimeoutException(stage);
+                }
                 var delay = TimeSpan.FromMilliseconds(100) - System.Diagnostics.Stopwatch.GetElapsedTime(started);
                 if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken);
             }

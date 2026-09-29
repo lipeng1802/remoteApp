@@ -15,6 +15,7 @@ public partial class MainWindow : Window
         sharing = lifetime;
         StartButton.IsEnabled = false;
         StopButton.IsEnabled = true;
+        MetricsText.Text = "等待首帧统计";
         try
         {
             StatusText.Text = "正在检查 Tailscale 和配对凭据";
@@ -26,10 +27,20 @@ public partial class MainWindow : Window
             await Task.Run(() => TlsProbeServer.RunOnceAsync(endpoints.Local, endpoints.Peer, 47475,
                 certificate, credentials.DeviceKey, credentials.AgentIdentifier, lifetime.Token,
                 createJpegSource: () => new PrimaryScreenCapture(),
-                reportStatus: text => Dispatcher.Invoke(() => StatusText.Text = text)), lifetime.Token);
+                reportStatus: text => Dispatcher.Invoke(() => StatusText.Text = text),
+                reportMetrics: metrics => Dispatcher.Invoke(() => MetricsText.Text =
+                    $"采集+编码 {metrics.CaptureMilliseconds:F0} ms · 发送 {metrics.SendMilliseconds:F0} ms · 等待 Mac 确认 {metrics.AcknowledgementMilliseconds:F0} ms · 每帧 {metrics.JpegBytes / 1024.0:F1} KiB")), lifetime.Token);
             StatusText.Text = "会话已结束；再次共享请点击开始";
         }
-        catch (OperationCanceledException) { StatusText.Text = "共享已停止或连接超时"; }
+        catch (JpegTransferTimeoutException ex)
+        {
+            StatusText.Text = ex.Stage == JpegTransferStage.Sending
+                ? "共享结束：发送画面超过 10 秒（网络发送超时）"
+                : "共享结束：等待 Mac 帧确认超过本帧 10 秒总期限";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { StatusText.Text = "共享已由本机停止"; }
+        catch (OperationCanceledException) { StatusText.Text = "共享结束：等待连接或应用认证超时"; }
+        catch (System.IO.EndOfStreamException) { StatusText.Text = "共享结束：Mac 已关闭连接"; }
         catch (Exception ex)
         {
             // Only fixed type labels: never echo raw remote data or credentials.

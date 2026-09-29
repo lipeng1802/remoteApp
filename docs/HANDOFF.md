@@ -1,12 +1,47 @@
 # 下一次 Codex 会话交接
 
-最后整理：2026-09-28。请以顶部的当前状态、当前唯一目标和文末最新记录为准；中间按时间保留的失败、待确认及下一步描述均为历史记录。
+最后整理：2026-09-29。请以顶部的当前状态、当前唯一目标和文末最新记录为准；中间按时间保留的失败、待确认及下一步描述均为历史记录。
+
+## Mac 接收任务（2026-09-29，本轮最新交接）
+
+本节优先于下方历史记录。当前目标是验证地址输入与 FPS 修正，并定位 0.2 FPS、Windows 自动停止共享；尚未通过性能或稳定性验收。Windows 已完成 Release 构建、32/32 测试、自包含 0.2.1 诊断版发布。Mac 此前 37 项测试通过，本轮增加 3 项，预期 40 项，尚未在 Mac 运行。用户已授权本轮代码提交并推送；接收时核对远程同步结果。
+
+1. 在 Mac 仓库根目录检查工作区并同步；如有本地修改先保留处理，不使用 reset --hard 或覆盖修改。
+
+```bash
+cd ~/Documents/ChatGPT/远程软件开发
+git status --short
+git pull --ff-only origin main
+git log -1 --oneline
+```
+
+2. 阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、本文件与 docs/JPEG_VALIDATION.md。检查本轮文件 FrameRateMeter.swift、FrameRateMeterTests.swift、RemoteControllerApp.swift、TLSControllerClient.swift 已同步。
+3. 退出旧 Mac 查看器，再执行：
+
+```bash
+cd macos/RemoteController
+swift test
+swift build -c release
+swift run -c release RemoteController
+```
+
+预期 40 tests、0 failures，Release 输出 Build complete，查看器正常打开。如果编译或测试失败，在 Mac 修正并记录真实结果，不用此前 37 项通过代替当前验证。
+
+4. 未连接时验证地址可直接键入、退格及粘贴；连接期间地址锁定，断开后重新可编辑。使用原来配对的完全相同地址，不重置 Keychain 密钥或 Windows 证书。输入焦点修改尚未实机确认；后续打包 .app 也需回归。
+5. Windows 侧关闭旧 Agent，运行 artifacts/windows/jpeg-diagnostics/RemoteAgent.exe，点击开始只读共享。旧 TLS 探针不能同时占用 47475。诊断产物仅在 Windows 本地 artifacts 中，不纳入 Git；0.2.0 Setup 不含本轮修改。
+6. Mac 连接后确认真实画面更新，记录稳定接收后的 FPS（首帧开始统计，不能用连接等待时间稀释）。同时记录 Windows “采集+编码 / 发送 / 等待 Mac 确认 / 每帧大小”整行。若再次自动断开，记录两端完整状态文字、持续时间和当时网络；不记录密钥或屏幕内容。TCP noDelay 只是待实测优化，不能预判其已解决低帧率。
+7. 分别验证 Mac 主动断开、Windows 主动停止：双方窗口保留、Mac 清屏，Windows 再次点击开始后可重连。用户已确认自动结束时两端窗口仍在，不应误判为程序崩溃。
+8. 自动停止和低帧率解决后，才进行不同网络 30 分钟性能/稳定性验收。把 Mac 编译、测试、交互、FPS、两端停止状态及阻塞项更新到本文件。不要开始输入控制、H.264、自建穿透或中继，不安装大型系统软件、不修改防火墙。
+
+可交给 Mac Codex：
+
+> 接收 docs/HANDOFF.md 顶部“Mac 接收任务”的交接，先检查 git status 并安全同步 origin/main，阅读指定文档，执行本轮 40 项测试和 Release 构建，修正实际编译问题，再按清单验证地址输入、FPS 与 Windows 诊断版双机停止原因。当前 0.2 FPS 和自动停止尚未解决；保留现有配对与证书，不扩展输入/H.264 范围。完成后更新交接，区分实测结果和待验证事项。
 
 ## 当前状态
 
 - 认证收口提交为 `344e0b4`；用户已授权将其与本轮 JPEG 提交一起推送远程。P0 与 TLS 内应用认证三轮双机验收已完成。
-- 本轮已实现 P1 JPEG 只读切片：Windows WPF 开始/停止共享，认证后 GDI 主屏采集、最高 1280×720/10 FPS、逐帧 PING/PONG 确认；Mac SwiftUI 查看器、尺寸校验、最新图像缓存及断开清屏。Windows Release 0 警告/错误、30/30 测试通过；真实主屏内存采集 31 次通过，未保存图像。
-- Mac 历史 28 项测试和认证探针通过仍有效；本轮新增 9 项，预期 37 项，当前 Windows 无法执行 Mac 构建/测试。真实双机 JPEG 显示与 30 分钟/10 FPS 性能验收待完成，不能宣称 P1 整阶段通过。没有输入控制或 H.264。
+- 本轮已实现 P1 JPEG 只读切片：Windows WPF 开始/停止共享，认证后 GDI 主屏采集、最高 1280×720/10 FPS、逐帧 PING/PONG 确认；Mac SwiftUI 查看器、尺寸校验、最新图像缓存及断开清屏。Windows Release 0 警告/错误、32/32 测试通过；真实主屏内存采集 31 次通过，未保存图像。
+- 用户提供 Mac 本轮日志：37 项测试、0 失败（0.187/0.193 秒），JPEG 自动测试已通过。用户已完成 Release 启动并确认 Mac 显示真实 Windows 画面、持续实时更新。实际 FPS、停止/清屏与 30 分钟性能验收待完成，不能宣称 P1 整阶段通过。没有输入控制或 H.264。
 - 产品范围已经锁定：macOS 控制端通过 Tailscale 外网控制 Windows 被控端。
 - 默认方向是单向控制，不开发 Windows 控制 Mac。
 - 第一条垂直链路使用 JPEG，完成控制和稳定性后再升级 H.264。
@@ -40,9 +75,9 @@
 
 ## 当前唯一目标
 
-同步本轮 JPEG 代码到 Mac，先运行 37 项测试与 Release 构建，修复真实编译问题；随后按 [JPEG_VALIDATION.md](JPEG_VALIDATION.md) 启动两端图形应用，完成画面、停止/断开与不同网络 30 分钟验收。此目标已由用户授权，不需要再询问是否开始 JPEG。
+Mac 37 项测试与首轮真实 JPEG 画面更新已通过。当前优先排查 0.2 FPS 与自动停止（以文末诊断记录为准），并按 [JPEG_VALIDATION.md](JPEG_VALIDATION.md) 继续记录 FPS、停止/断开及不同网络 30 分钟验收。此目标已由用户授权，不需要再询问是否开始 JPEG。
 
-Windows 代码与采集已在本机验证，Mac 新代码目前仅静态检查。保留现有配对密钥和证书，GUI 复用同一 Tailscale 地址条目。旧 TLS 探针只验认证，不显示画面，不能与 GUI 同时占用 47475。不开发输入、H.264 或自建穿透，不修改防火墙或安装系统软件。
+Windows 代码与采集已在本机验证，Mac 本轮自动测试已由用户日志确认通过，用户已确认 Release 图形应用显示 Windows 实时画面；余下交互及稳定性待验收。保留现有配对密钥和证书，GUI 复用同一 Tailscale 地址条目。旧 TLS 探针只验认证，不显示画面，不能与 GUI 同时占用 47475。不开发输入、H.264 或自建穿透，不修改防火墙或安装系统软件。
 独立保留的安装验收待办：在无预装 .NET 的 Windows 11 x64 环境确认 self-contained 安装、启动与卸载。当前开发机已安装 .NET，因此这项仍未完成，不影响已获得的 P0 网络验证结论。
 
 Mac 验证命令：
@@ -71,7 +106,7 @@ P0 历史预期为 `6/6 tests passed`。2026-09-28 JPEG 接入后当前 Windows 
 请接收 Personal Remote Desktop MVP 的 JPEG 只读切片交接。
 
 先阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/TEST_PLAN.md、docs/HANDOFF.md、docs/JPEG_VALIDATION.md，并检查 git status。认证收口已本地提交 344e0b4；JPEG 改动纳入本轮提交，用户已授权推送远程；同步时以实际 origin/main 为准。
-Windows Release 0 警告/错误、30/30 测试通过；真实 4K/150% DPI 主屏在内存采集 31 次通过，GDI 句柄无增长。Mac GUI 和 JPEG 协议代码已编写，预期37项测试，但本Windows不能编译macOS Frameworks。下一步先在Mac执行swift test、swift build -c release，修复问题，再启动RemoteController与Windows RemoteAgent图形应用验证只读画面。
+Windows Release 0 警告/错误、30/30 测试通过；真实 4K/150% DPI 主屏在内存采集 31 次通过，GDI 句柄无增长。Mac 已由用户确认37项测试、0失败。下一步在Mac运行swift run -c release RemoteController，并启动Windows RemoteAgent图形应用验证只读画面；Release构建与真实显示尚待确认。
 已有TLS证书和设备密钥不要重置；旧探针不显示画面，不与GUI同时运行。双机画面、断开/停止、真实分辨率变化和30分钟/10FPS验收仍待完成。允许继续JPEG，不开始鼠标键盘、H.264、自建穿透或中继，不修改防火墙。
 ```
 
@@ -550,3 +585,43 @@ Mac 首次显示的指纹必须与 Windows 的 `CERTIFICATE_SHA256` 完全相同
 
 - 用户要求提交远程代码。本轮 JPEG 实现、测试、共享合成向量及交接文档纳入独立提交，并连同认证收口提交推送 origin/main。此记录不预先断言网络推送成功，以 Git 实际结果为准。
 - Windows 已完成的验证结果不变；Mac 37 项测试、Release 构建及双机 JPEG 验收仍待执行。安装包位于被忽略的 artifacts 目录，不纳入 Git。
+
+## Mac JPEG 自动测试通过（2026-09-29）
+
+- 用户提供实际日志：Executed 37 tests, with 0 failures (0 unexpected) in 0.187 (0.193) seconds。记录为本轮 Mac JPEG 自动测试通过，不扩大为 Release 或真实双机画面通过。
+- JPEG 提交 e21e49d 与认证收口344e0b4已于此前成功推送并核对远程main；Git当时直接连接GitHub失败，临时使用现有系统代理127.0.0.1:10710后成功，未修改全局代理配置。
+- 下一步：Windows运行RemoteAgent并点击开始只读共享，Mac运行swift run -c release RemoteController，输入此前配对的相同Windows地址连接。确认实际画面、FPS、停止与清屏，再做不同网络30分钟验收。旧TLS探针不得同时占用47475。
+- 此次仅更新文档，未重复运行未变更的Windows代码测试，未启动监听。记录尚未提交。
+## Windows 启动提示 Desktop Runtime（2026-09-29）
+
+- 用户反馈 Windows 开发启动命令弹出需要 .NET 8 Desktop Runtime；Mac 已成功运行命令并打开查看器，显示等待已认证的 Windows 画面。Mac 窗口打开不等于网络认证或 JPEG 显示通过。
+- 本机检查 dotnet --list-runtimes 确认 Microsoft.WindowsDesktop.App 8.0.31 与 Microsoft.NETCore.App 8.0.31 已在 C:\Program Files\dotnet，SDK 8.0.425 可用，PresentationFramework.dll 存在。不能据提示直接认定运行时未安装；用户终端/apphost 运行时发现路径的具体原因尚未复现确认。
+- 已确认 artifacts/windows/publish/RemoteAgent.exe 自包含发布版和 0.2.0 Setup.exe 均存在。先直接启动发布版完成联调，不要求重装运行时、不修改注册表或全局环境。
+- Windows 显示等待连接后，Mac 使用同一配对地址重新连接；当前尚无真实画面结果。文档记录未提交。
+## 首轮真实 JPEG 画面通过与地址输入反馈（2026-09-29）
+
+- 用户反馈 Mac 地址框不能直接键入，粘贴地址后能够连接，出现真实 Windows 画面且实时更新。记录首轮认证后的 JPEG 实时显示通过；尚未收到 FPS、持续时间、停止清屏等结果，不标记 P1 整阶段完成。
+- 已检查 TextField 使用可写 host 绑定，仅在 connected=true 时禁用。尚需区分未连接时的键盘焦点问题与已连接后的预期锁定，已向用户询问。终端直接启动时缺少明确 AppKit 激活策略是候选原因，当前未在 Mac 复现。
+- 当前 Windows 会话不能编译或实际验证 Mac UI。已有 37 项测试通过是此前版本证据，后续焦点修改需 Mac 实机重测；无需重置配对或证书。
+### 地址输入焦点修正（待 Mac 实机验证）
+
+- 根据用户“粘贴后可连接”的描述，先按未连接时键盘焦点问题处理；询问尚未收到回复，仍保留连接后禁用输入为预期行为。
+- RemoteControllerApp 增加 AppKit delegate：仅 SwiftPM 非 .app 启动时设置 regular 激活策略、激活应用并将可接收键盘的窗口置为 key；地址 TextField 增加 FocusState，首次呈现和断开后获取焦点，连接期间继续锁定。
+- API 依据：https://developer.apple.com/documentation/appkit/nsapplication/activationpolicy-swift.enum 。当前 Windows 不能执行 Mac GUI 编译/键盘验证，不能宣称问题已修复；git diff --check 通过。不新增模拟 SwiftUI 焦点的无效单元测试。
+- Mac 同步后需 swift test（预期仍37项）、swift build -c release，退出旧查看器并运行 swift run -c release RemoteController。未连接时检查直接键入、退格、粘贴；连接后仍锁定，断开后可再编辑。也检查打包 .app 正常启动不受影响。
+- 修正与最新实测文档尚未提交或推送。当前不重启正在使用的查看器或 Windows 共享服务。
+## 2026-09-29 低帧率和自动结束诊断：当前优先事项
+
+用户确认实际画面更新，但报告 FPS 0.2 和 Windows 自动结束共享。Mac 随之断开清空画面，两端窗口保留，并非程序退出；Mac 主动断开也会结束共享。自动停止时的完整状态与发生时间仍待采集，不能认定原因已解决，也不能标记稳定性通过。
+
+本轮修改：Mac 从首张有效画面起使用单调时钟计算 FPS，排除连接等待对首个读数的影响；持续低帧率仍如实显示。两端启用 TCP noDelay，尚无跨网络性能结论。Windows 新增采集+编码、发送、等待 Mac 确认耗时及每帧大小；区分本机停止、连接/认证超时、发送超时及帧确认超时。保留每帧发送+确认总期限 10 秒。
+
+Windows Release 构建通过，32/32 自动测试通过，新增帧确认超时分类/释放与 512 KiB 合成帧 TLS 传输测试。Mac 原有 37 项测试由用户确认通过；本轮新增 3 项 FPS 测试，预期共 40 项，尚待 Mac 验证，Windows 无法运行 Swift/macOS 测试。输入焦点修复也仍待 Mac 验证。
+
+已成功发布独立 self-contained 0.2.1 诊断版，未覆盖旧运行目录，无需安装 .NET；保留整个目录依赖文件。先关闭旧 Windows Agent，在仓库根目录运行：
+
+```powershell
+& .\artifacts\windows\jpeg-diagnostics\RemoteAgent.exe
+```
+
+开始共享，由 Mac 连接，记录 Windows 耗时整行、结束后的完整状态及持续时间。旧 Mac 可以先配合收集指标。两端代码当前尚未提交，仅在 Mac git pull 不会获得本轮修改；同步后运行 swift test（预期 40 项）、swift build -c release、swift run -c release RemoteController，复测输入、FPS 和停止。诊断版双机实测、30 分钟性能及稳定性验收尚待完成。0.2.0 Setup 不含本轮修改，本次未重打安装包。

@@ -29,6 +29,8 @@ internal static class JpegTests
     public static void StreamAndBackpressure() => Run(false, false);
     public static void NeverCaptureWithWrongKey() => Run(true, false);
     public static void CancelReleasesCapture() => Run(false, true);
+    public static void AcknowledgementTimeout() => RunAsync(false, false, true).GetAwaiter().GetResult();
+    public static void LargeFrame() => RunAsync(false, false, false, true).GetAwaiter().GetResult();
     public static void Discovery()
     {
         const string json = """{"BackendState":"Running","Self":{"Online":true,"TailscaleIPs":["100.64.0.1"]},"Peer":{"fixture":{"OS":"macOS","Online":true,"TailscaleIPs":["100.64.0.2"]}}}""";
@@ -38,13 +40,14 @@ internal static class JpegTests
         catch (InvalidOperationException) { }
     }
     private static void Run(bool wrongKey, bool cancel) => RunAsync(wrongKey, cancel).GetAwaiter().GetResult();
-    private static async Task RunAsync(bool wrongKey, bool cancel)
+    private static async Task RunAsync(bool wrongKey, bool cancel, bool stall = false, bool large = false)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
         using var certificate = AgentCertificateFactory.CreateSelfSigned();
         var key = RandomNumberGenerator.GetBytes(32);
-        var source = new FakeSource();
+        var source = new FakeSource { Large = large };
+        var metrics = new List<JpegTransferMetrics>();
         var constructed = false;
         var reserve = new TcpListener(IPAddress.Loopback, 0);
         reserve.Start();
@@ -52,7 +55,9 @@ internal static class JpegTests
         reserve.Stop();
         var server = TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback, port,
             certificate, key, new byte[16], stop.Token,
-            createJpegSource: () => { constructed = true; return source; });
+            createJpegSource: () => { constructed = true; return source; },
+            reportMetrics: value => metrics.Add(value),
+            frameTimeout: stall ? TimeSpan.FromSeconds(1) : null);
         using var tcp = new TcpClient();
         await tcp.ConnectAsync(IPAddress.Loopback, port, timeout.Token);
         using var tls = new SslStream(tcp.GetStream(), false, (_, peer, _, _) =>
@@ -88,6 +93,14 @@ internal static class JpegTests
         Check(ping.Type == MessageType.Ping, "Frame acknowledgement request");
         await Task.Delay(230, timeout.Token);
         Check(source.Count == 1, "Unacknowledged frame prevents further capture");
+        if (large) Check(frame.Payload.Length == 512 * 1024, "Large JPEG crosses TLS record boundaries");
+        if (stall)
+        {
+            try { await server; throw new Exception("Expected frame deadline"); }
+            catch (JpegTransferTimeoutException ex) { Check(ex.Stage == JpegTransferStage.AwaitingAcknowledgement, "Timeout reports acknowledgement stage"); }
+            Check(source.Disposed && source.Count == 1, "Timeout closes without additional capture");
+            return;
+        }
         if (cancel)
         {
             stop.Cancel();
@@ -101,6 +114,7 @@ internal static class JpegTests
             _ = await Read();
             await Send(MessageType.Disconnect, [0, 0]);
             await server;
+            Check(metrics.Count >= 1 && metrics[0].JpegBytes == frame.Payload.Length && metrics[0].CaptureMilliseconds >= 0 && metrics[0].SendMilliseconds >= 0 && metrics[0].AcknowledgementMilliseconds >= 150, "Metrics identify delayed receiver" );
         }
         Check(source.Disposed, "Capture disposed");
         var reuse = new TcpListener(IPAddress.Loopback, port);
@@ -123,6 +137,7 @@ internal static class JpegTests
     private static void Check(bool condition, string description) { if (!condition) throw new Exception(description); }
     private sealed class FakeSource : IJpegFrameSource
     {
+        public bool Large;
         public int Count;
         public bool Disposed;
         public CapturedJpeg Capture(CancellationToken cancellationToken)
@@ -130,6 +145,11 @@ internal static class JpegTests
             var count = Interlocked.Increment(ref Count);
             using var vector = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "testdata", "jpeg-v1.json")));
             var jpeg = Convert.FromHexString(vector.RootElement.GetProperty("jpegHex").GetString()!);
+            if (Large)
+            {
+                jpeg = new byte[512 * 1024];
+                jpeg[0] = 0xff; jpeg[1] = 0xd8; jpeg[^2] = 0xff; jpeg[^1] = 0xd9;
+            }
             return new CapturedJpeg(new ScreenInfoPayload(count == 1 ? 3840u : 1920u, count == 1 ? 2160u : 1080u, 14400, 14400), jpeg);
         }
         public void Dispose() => Disposed = true;
