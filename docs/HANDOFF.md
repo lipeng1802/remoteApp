@@ -22,6 +22,12 @@
 
 本结果完成了跨网 TLS/HMAC 输入 mock 检查点，但 Windows 端仍是内存 sink；产品查看器没有输入接线，没有 `SendInput`，不能记为真实桌面控制通过。下一阶段应先设计产品 GUI 的明确授权、可见控制状态、停止/失焦/断线释放和 Windows 原生 sink 边界，再实现真实输入。
 
+## 历史验证：Windows c85d4bf 构建与测试（2026-09-30）
+
+按用户要求从 71ed896 安全快进至 origin/main 的 c85d4bf，接收 Mac 验证、修复和双机 Tailscale input mock。Windows 实际 Release 构建 0 警告/错误，包含新增 InputMockServer；协议测试 60/60 全部通过，无需编译修正。Mac 104/104、Release、InputPreview 和本机真实 TLS 结果来自已拉取的 Mac 交接记录，本机未重复执行。
+
+本轮未启动 Tailscale 监听或产品共享、未修改防火墙；双机 input mock 仍待按 TAILSCALE_INPUT_MOCK.md 进行。下一步启动一次性 mock 后让 Mac 发送合成序列，核对双端 PASS/12 项事件/释放，不启用真实输入。以上为 c85d4bf 时的验证及待办，后续进展以文档顶部最新交接为准；本次从暂存备份恢复并纳入提交。
+
 ## 当前：双机 Tailscale input mock 已实现，待 Windows/双机验收（2026-09-30，最新）
 
 新增 Windows `InputMockServer` 与 `scripts/p2/Start-TailscaleInputMock.ps1`：只绑定本机 Tailscale IPv4，只接受唯一在线 Mac Tailscale IPv4，脚本和工具双层要求显式本地 mock 许可；处理器仅使用内存 `IInputSink`，逐项校验 12 个合成事件和最终释放，没有 `SendInput`。Windows 协议测试新增 Tailscale 端点边界，预期由 59 增至 60；当前 Mac 没有 .NET SDK，尚未执行 Windows 编译/测试。
