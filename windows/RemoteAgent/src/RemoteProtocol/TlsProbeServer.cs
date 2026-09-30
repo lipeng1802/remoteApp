@@ -9,6 +9,33 @@ namespace RemoteProtocol;
 
 public static class TlsProbeServer
 {
+    public static async Task RunContinuousAsync(
+        IPAddress bindAddress, IPAddress expectedRemoteAddress, int port, X509Certificate2 certificate,
+        byte[] deviceKey, byte[] agentIdentifier, CancellationToken cancellationToken = default,
+        TimeSpan? sessionTimeout = null, Func<IJpegFrameSource>? createJpegSource = null,
+        Action<string>? reportStatus = null, Action<JpegTransferMetrics>? reportMetrics = null,
+        TimeSpan? frameTimeout = null, InputSimulationOptions? inputSession = null)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await RunCoreAsync(bindAddress, expectedRemoteAddress, port, certificate, deviceKey,
+                    agentIdentifier, cancellationToken, sessionTimeout, createJpegSource, reportStatus,
+                    reportMetrics, frameTimeout, inputSession).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { }
+            catch (JpegTransferTimeoutException) { }
+            catch (AuthenticationException) { }
+            catch (ProtocolException) { }
+            catch (InvalidDataException) { }
+            catch (IOException) { }
+
+            reportStatus?.Invoke("Mac 会话已结束 · 等待已配对的 Mac 重新连接");
+        }
+    }
+
     public static Task RunOnceAsync(
         IPAddress bindAddress, IPAddress expectedRemoteAddress, int port, X509Certificate2 certificate,
         byte[] deviceKey, byte[] agentIdentifier, CancellationToken cancellationToken = default,

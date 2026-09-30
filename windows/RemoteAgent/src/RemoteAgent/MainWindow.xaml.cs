@@ -99,14 +99,13 @@ public partial class MainWindow : Window
                         ControlText.Text = $"远程控制中 · 事件 {snapshot.Events} · 释放 {snapshot.Releases} · 持有 {snapshot.Held}")),
                     LocalControlAllowed: true)
                 : null;
-            await Task.Run(() => TlsProbeServer.RunOnceAsync(endpoints.Local, endpoints.Peer, 47475,
+            await Task.Run(() => TlsProbeServer.RunContinuousAsync(endpoints.Local, endpoints.Peer, 47475,
                 certificate, credentials.DeviceKey, credentials.AgentIdentifier, lifetime.Token,
                 createJpegSource: () => new PrimaryScreenCapture(quality),
                 reportStatus: text => Dispatcher.Invoke(() => StatusText.Text = text),
                 reportMetrics: metrics => Dispatcher.Invoke(() => MetricsText.Text =
                     $"帧 {metrics.FrameNumber} · 采集+编码 {metrics.CaptureMilliseconds:F0} ms · 网络写入 {metrics.SendMilliseconds:F0} ms · 本帧总耗时 {metrics.FrameMilliseconds:F0} ms · 每帧 {metrics.JpegBytes / 1024.0:F1} KiB"),
                 inputSession: inputSession), lifetime.Token);
-            StatusText.Text = "会话已结束；再次共享请点击开始";
         }
         catch (JpegTransferTimeoutException)
         {

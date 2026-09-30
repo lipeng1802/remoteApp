@@ -11,6 +11,77 @@ using RemoteProtocol;
 internal static class DuplexSessionTests
 {
     public static void VideoAndInputShareOneAuthenticatedConnection() => RunAsync().GetAwaiter().GetResult();
+    public static void DisconnectKeepsSharingAvailable() => RunContinuousAsync().GetAwaiter().GetResult();
+
+    private static async Task RunContinuousAsync()
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+        using var certificate = AgentCertificateFactory.CreateSelfSigned();
+        var key = RandomNumberGenerator.GetBytes(32);
+        var reservation = new TcpListener(IPAddress.Loopback, 0);
+        reservation.Start();
+        var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
+        reservation.Stop();
+        var ended = new SemaphoreSlim(0);
+        var sources = 0;
+        var sinks = 0;
+        var server = TlsProbeServer.RunContinuousAsync(IPAddress.Loopback, IPAddress.Loopback, port,
+            certificate, key, new byte[16], stop.Token,
+            createJpegSource: () => { Interlocked.Increment(ref sources); return new FakeSource(); },
+            reportStatus: status =>
+            {
+                if (status.StartsWith("Mac 会话已结束", StringComparison.Ordinal)) ended.Release();
+            },
+            inputSession: new InputSimulationOptions(
+                () => { Interlocked.Increment(ref sinks); return new FakeSink(); },
+                LocalControlAllowed: true, ReadTimeout: TimeSpan.FromSeconds(5)));
+
+        try
+        {
+            await ConnectAndDisconnect();
+            await ended.WaitAsync(deadline.Token);
+            await ConnectAndDisconnect();
+            await ended.WaitAsync(deadline.Token);
+            Check(sources == 2 && sinks == 2,
+                "A fresh protected source and sink were not created for each Mac session.");
+        }
+        finally
+        {
+            stop.Cancel();
+            try { await server; } catch (OperationCanceledException) { }
+        }
+
+        async Task ConnectAndDisconnect()
+        {
+            using var client = new TcpClient { NoDelay = true };
+            await client.ConnectAsync(IPAddress.Loopback, port, deadline.Token);
+            using var tls = new SslStream(client.GetStream(), false, (_, peer, _, _) =>
+                peer is not null && peer.GetRawCertData().AsSpan().SequenceEqual(certificate.RawData));
+            await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+            {
+                TargetHost = "localhost",
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+            }, deadline.Token);
+            var wire = new ProbeFrameStream(tls);
+            var hello = HelloPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            var nonce = RandomNumberGenerator.GetBytes(32);
+            await wire.WriteAsync(MessageType.Hello, new HelloPayload(PeerRole.Controller, 1, 1,
+                Capabilities.Jpeg | Capabilities.Input, nonce).Encode(), deadline.Token);
+            var challenge = AuthChallengePayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            await wire.WriteAsync(MessageType.AuthResponse, Authentication.CreateResponse(key, nonce,
+                hello.Nonce, challenge.Challenge, challenge.AgentIdentifier), deadline.Token);
+            var result = AuthResultPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            Check(result.Status == AuthResultStatus.Success, "Continuous session authentication failed.");
+
+            var sawVideo = false;
+            for (var count = 0; count < 10 && !sawVideo; count++)
+                sawVideo = (await wire.ReadAsync(deadline.Token)).Type == MessageType.VideoFrameJpeg;
+            Check(sawVideo, "Continuous session did not send video.");
+            await wire.WriteAsync(MessageType.Disconnect, [0, 0], deadline.Token);
+        }
+    }
 
     private static async Task RunAsync()
     {

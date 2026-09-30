@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：Mac 断开后 Windows 持续共享修复，待 Windows 验证（2026-09-30，最新）
+
+最终只读回归发现：Mac 主动断开后 Windows 同时结束了整个共享。产品此前调用单会话 `TlsProbeServer.RunOnceAsync`，客户端发送 DISCONNECT 后方法正常返回，WPF 因而进入共享结束清理；这不符合“Windows 持续等待、Mac 可重新连接”的产品行为。
+
+现新增 `TlsProbeServer.RunContinuousAsync` 并由 RemoteAgent 使用：正常 DISCONNECT、客户端 EOF、认证/协议错误、会话读写超时只结束并释放当前会话，然后重新监听同一端口；Windows“停止共享”、本机 `Ctrl + Alt + Esc`、关闭应用或其他共享级取消才退出持续监听并清空本次许可。新增双会话回归，验证第一次 Mac 断开后第二次仍可认证、收图，且每次使用独立并正确释放的采集源与输入 sink。协议测试预期由 **61** 增至 **62**。
+
+本机没有 .NET SDK，尚未编译。Windows 拉取后需运行 Release 构建和协议测试，再启动最新源码：Mac 主动断开后 Windows 应显示“Mac 会话已结束 · 等待已配对的 Mac 重新连接”，开始/停止按钮状态及本次控制许可保持；Mac 无需让 Windows 重新点击“开始共享”即可再次连接。Windows 主动停止和紧急停止仍必须真正结束共享并撤销许可。
+
 ## Mac 默认连接地址（2026-09-30，最新）
 
 Mac RemoteController 的 Windows 地址输入框默认填写 `100.73.4.118`，仍允许用户手动修改。该值是当前 Windows 设备的 Tailscale IP，仅用于减少双机复测时的重复输入，不改变 TLS 指纹、设备密钥、HMAC 认证或控制许可边界。
