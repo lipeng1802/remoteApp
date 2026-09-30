@@ -9,14 +9,15 @@ final class AuthenticatedInputSenderTests: XCTestCase {
     private let down = CapturedInput.button(MouseButtonPayload(button: .left, action: .down))
     private let up = CapturedInput.button(MouseButtonPayload(button: .left, action: .up))
 
-    private func challenged(capacity: Int = 64) throws -> AuthenticatedInputSender {
+    private func challenged(capacity: Int = 64, acceptsJpeg: Bool = false) throws -> AuthenticatedInputSender {
         var sender = try AuthenticatedInputSender(deviceKey: key, localControlAllowed: true,
-            capacity: capacity, nonce: nonce, now: 0)
+            acceptsJpeg: acceptsJpeg, capacity: capacity, nonce: nonce, now: 0)
         let hello = try XCTUnwrap(sender.poll(now: 0))
         XCTAssertEqual(hello.sequence, 1)
-        XCTAssertEqual(try HelloPayload.decode(hello.payload).capabilities, [.input])
+        let capabilities: Capabilities = acceptsJpeg ? [.jpeg, .input] : [.input]
+        XCTAssertEqual(try HelloPayload.decode(hello.payload).capabilities, capabilities)
         try sender.receive(Frame(type: .hello, sequence: 1,
-            payload: HelloPayload(role: .agent, capabilities: [.input], nonce: agentNonce).encode()), now: 0.001)
+            payload: HelloPayload(role: .agent, capabilities: capabilities, nonce: agentNonce).encode()), now: 0.001)
         let challenge = AuthChallengePayload(challenge: Data(repeating: 5, count: 32),
                                              agentIdentifier: Data(repeating: 6, count: 16))
         try sender.receive(Frame(type: .authChallenge, sequence: 2, payload: challenge.encode()), now: 0.002)
@@ -31,12 +32,40 @@ final class AuthenticatedInputSenderTests: XCTestCase {
         return sender
     }
 
-    private func authenticated(capacity: Int = 64) throws -> AuthenticatedInputSender {
-        var sender = try challenged(capacity: capacity)
+    private func authenticated(capacity: Int = 64, acceptsJpeg: Bool = false) throws -> AuthenticatedInputSender {
+        var sender = try challenged(capacity: capacity, acceptsJpeg: acceptsJpeg)
         try sender.receive(Frame(type: .authResult, sequence: 3,
             payload: AuthResultPayload(status: .success, retryDelayMilliseconds: 0).encode()), now: 0.03)
         XCTAssertEqual(sender.state, .active)
         return sender
+    }
+
+    func testDuplexNegotiatesJpegAndPreservesIndependentSequences() throws {
+        var sender = try authenticated(acceptsJpeg: true)
+        let screen = ScreenInfoPayload(width: 1280, height: 720, dpiX100: 9600, dpiY100: 9600)
+        XCTAssertNil(try sender.receive(Frame(type: .screenInfo, sequence: 4,
+            payload: screen.encode()), now: 0.04))
+        let jpeg = Data([0xff, 0xd8, 0xff, 0xd9])
+        XCTAssertEqual(try sender.receive(Frame(type: .videoFrameJPEG, sequence: 5,
+            payload: jpeg), now: 0.05), .init(screen: screen, jpeg: jpeg))
+        try sender.enqueue([down], now: 1)
+        let input = try XCTUnwrap(sender.poll(now: 1))
+        XCTAssertEqual(input.type, .mouseButton)
+        XCTAssertEqual(input.sequence, 3)
+    }
+
+    func testDuplexRejectsVideoBeforeMetadataAndMissingJpegCapability() throws {
+        var sender = try authenticated(acceptsJpeg: true)
+        XCTAssertThrowsError(try sender.receive(Frame(type: .videoFrameJPEG, sequence: 4,
+            payload: Data([0xff, 0xd8, 0xff, 0xd9])), now: 0.04))
+        XCTAssertEqual(sender.state, .failed)
+
+        sender = try AuthenticatedInputSender(deviceKey: key, localControlAllowed: true,
+            acceptsJpeg: true, nonce: nonce, now: 0)
+        _ = try sender.poll(now: 0)
+        XCTAssertThrowsError(try sender.receive(Frame(type: .hello, sequence: 1,
+            payload: HelloPayload(role: .agent, capabilities: [.input], nonce: agentNonce).encode()), now: 0.01))
+        XCTAssertEqual(sender.state, .failed)
     }
 
     func testDefaultPermissionAndPreauthInputRejected() throws {

@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 Mac 单连接双向调度器
+
+Windows 上一切片 Release、协议 61/61、输入边界 6/6 已由用户确认通过。Mac 认证输入发送器和连接调度器现可同时协商/接收 JPEG，保持独立双向序号、有界队列、一个写入中和统一失败关闭；真实 Network.framework TLS 测试验证同一连接收视频并发送按下/释放/DISCONNECT。新增 5 项后本机全量 109/109、Release 构建成功。产品 GUI 尚未接线，详见 [MAC_DUPLEX_HANDOFF.md](MAC_DUPLEX_HANDOFF.md)。
+
 ## 2026-09-30 JPEG + 输入单连接服务端
 
 用户确认上一切片 Windows Release、`WindowsInput.Tests` 6/6 和协议 60/60 全部通过。本轮把 JPEG 下行与输入上行合入同一认证会话，服务端仅一个写入者负责 JPEG/SCREEN_INFO/PONG 并维护连续序号，输入读取错误、断线或取消统一释放。新增真实 loopback TLS/HMAC 回归后协议预期 61/61，待 Windows 按 [DUPLEX_SESSION_HANDOFF.md](DUPLEX_SESSION_HANDOFF.md) 验证。GUI 仍只读，测试仍使用内存 sink。

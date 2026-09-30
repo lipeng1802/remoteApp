@@ -56,9 +56,11 @@ final class InputConnectionDriverTests: XCTestCase {
     }
 
     private func make(clock: Clock, transport: FakeTransport, authenticated: @escaping () -> Void = {},
+                      jpeg: ((AuthenticatedInputSender.ReceivedJpegFrame) -> Void)? = nil,
                       done: @escaping (Result<Void, InputSimulationError>) -> Void) throws -> InputConnectionDriver {
         try InputConnectionDriver(transport: transport, deviceKey: key, localControlAllowed: true,
-            automaticTimer: false, clock: { clock.now }, onAuthenticated: authenticated, completion: done)
+            automaticTimer: false, clock: { clock.now }, onJpegFrame: jpeg,
+            onAuthenticated: authenticated, completion: done)
     }
 
     private func authenticate(_ driver: InputConnectionDriver, _ transport: FakeTransport, _ clock: Clock) throws {
@@ -69,7 +71,8 @@ final class InputConnectionDriverTests: XCTestCase {
         let challenge = AuthChallengePayload(challenge: Data(repeating: 5, count: 32),
                                              agentIdentifier: Data(repeating: 6, count: 16))
         let hello = Frame(type: .hello, sequence: 1,
-            payload: try HelloPayload(role: .agent, capabilities: [.input], nonce: nonce).encode())
+            payload: try HelloPayload(role: .agent, capabilities: controllerHello.capabilities,
+                nonce: nonce).encode())
         let request = Frame(type: .authChallenge, sequence: 2, payload: try challenge.encode())
         transport.deliver(try FrameCodec.encode(hello) + FrameCodec.encode(request))
         XCTAssertEqual(try transport.frames().count, 1)
@@ -85,6 +88,47 @@ final class InputConnectionDriverTests: XCTestCase {
         let result = Frame(type: .authResult, sequence: 3,
             payload: try AuthResultPayload(status: .success, retryDelayMilliseconds: 0).encode())
         transport.deliver(try FrameCodec.encode(result))
+    }
+
+    func testDuplexReceivesSplitJpegWhileInputWriterStaysContinuous() throws {
+        let clock = Clock(), transport = FakeTransport()
+        let ended = expectation(description: "cancel")
+        var videos: [AuthenticatedInputSender.ReceivedJpegFrame] = []
+        let driver = try make(clock: clock, transport: transport, jpeg: { videos.append($0) }) { result in
+            if case .success = result { XCTFail("Expected cancellation") }
+            ended.fulfill()
+        }
+        try authenticate(driver, transport, clock)
+        let screen = ScreenInfoPayload(width: 1280, height: 720, dpiX100: 9600, dpiY100: 9600)
+        let jpeg = Data([0xff, 0xd8]) + Data(repeating: 0x55, count: 5_000) + Data([0xff, 0xd9])
+        let wire = try FrameCodec.encode(Frame(type: .screenInfo, sequence: 4, payload: screen.encode()))
+            + FrameCodec.encode(Frame(type: .videoFrameJPEG, sequence: 5, payload: jpeg))
+        for start in stride(from: 0, to: wire.count, by: 1_337) {
+            transport.deliver(wire.subdata(in: start..<min(start + 1_337, wire.count)))
+        }
+        XCTAssertEqual(videos, [.init(screen: screen, jpeg: jpeg)])
+        clock.now = 1
+        XCTAssertTrue(driver.submit([down]))
+        driver.tick()
+        XCTAssertEqual(try transport.frames().last?.sequence, 3)
+        XCTAssertEqual(try transport.frames().last?.type, .mouseButton)
+        driver.cancel()
+        wait(for: [ended], timeout: 2)
+    }
+
+    func testDuplexRejectsAdapterCallbackAboveBound() throws {
+        let clock = Clock(), transport = FakeTransport()
+        let ended = expectation(description: "oversized callback")
+        let driver = try make(clock: clock, transport: transport, jpeg: { _ in }) { result in
+            if case .failure(let error) = result { XCTAssertEqual(error, .protocolFailure) }
+            else { XCTFail("Expected protocol failure") }
+            ended.fulfill()
+        }
+        driver.start()
+        transport.ready()
+        transport.deliver(Data(count: 65_537))
+        XCTAssertTrue(driver.isEnded)
+        wait(for: [ended], timeout: 2)
     }
 
     func testSlowWriteKeepsOneFlightAndCoalescesIngress() throws {

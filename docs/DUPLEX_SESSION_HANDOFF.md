@@ -1,5 +1,9 @@
 # JPEG + 输入单连接双向会话验证
 
+## Windows 验证结果（2026-09-30）
+
+用户确认 Release 构建、协议 61/61 和原生输入边界 6/6 全部通过。服务端切片验收完成；后续 Mac 单连接双向调度器也已实现并在本机通过 109/109 与 Release，详见 [MAC_DUPLEX_HANDOFF.md](MAC_DUPLEX_HANDOFF.md)。
+
 ## 本切片完成内容
 
 Windows `TlsProbeServer.RunOnceAsync` 现在可以在调用方同时提供 JPEG source 和显式允许的 input session。缺少本机许可会在建立监听前拒绝；握手双方必须同时声明 `Jpeg | Input`，HMAC 认证成功前不会创建采集源或输入 sink。

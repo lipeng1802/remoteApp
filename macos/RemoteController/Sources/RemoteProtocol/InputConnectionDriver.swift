@@ -28,6 +28,8 @@ final class InputConnectionDriver {
     private var ended = false
     private var reading = false
     private var announcedAuthentication = false
+    private let receivesJpeg: Bool
+    private var onJpegFrame: ((AuthenticatedInputSender.ReceivedJpegFrame) -> Void)?
     private let connectDeadline: Double
     private var onAuthenticated: (() -> Void)?
     private var completion: ((Result<Void, InputSimulationError>) -> Void)?
@@ -37,6 +39,7 @@ final class InputConnectionDriver {
          callbackQueue: DispatchQueue = .main, automaticTimer: Bool = true,
          clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime },
          connectTimeout: Double = 15,
+         onJpegFrame: ((AuthenticatedInputSender.ReceivedJpegFrame) -> Void)? = nil,
          onAuthenticated: @escaping () -> Void,
          completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         guard connectTimeout.isFinite, connectTimeout > 0, connectTimeout <= 300 else {
@@ -47,11 +50,15 @@ final class InputConnectionDriver {
         self.clock = clock
         self.callbackQueue = callbackQueue
         self.automaticTimer = automaticTimer
+        let shouldReceiveJpeg = onJpegFrame != nil
+        receivesJpeg = shouldReceiveJpeg
+        self.onJpegFrame = onJpegFrame
         self.onAuthenticated = onAuthenticated
         self.completion = completion
         let now = clock()
         sender = try AuthenticatedInputSender(deviceKey: deviceKey,
-            localControlAllowed: localControlAllowed, now: now)
+            localControlAllowed: localControlAllowed, acceptsJpeg: shouldReceiveJpeg, now: now)
+        decoder.allowJpeg = shouldReceiveJpeg
         connectDeadline = now + connectTimeout
         queue.setSpecific(key: queueKey, value: 1)
     }
@@ -151,10 +158,15 @@ final class InputConnectionDriver {
                 self.reading = false
                 guard success else { self.end(.failure(.connectionFailed)); return }
                 do {
-                    // The NW adapter requests <=4096; reject a broken test adapter too.
-                    guard (data?.count ?? 0) <= 4096 else { throw ProtocolError.messageTooLarge(data?.count ?? 0) }
+                    // Bound each adapter callback even though a JPEG may span many callbacks.
+                    let callbackLimit = self.receivesJpeg ? 65_536 : 4_096
+                    guard (data?.count ?? 0) <= callbackLimit else {
+                        throw ProtocolError.messageTooLarge(data?.count ?? 0)
+                    }
                     for frame in try self.decoder.append(data ?? Data()) {
-                        try self.sender.receive(frame, now: self.clock())
+                        if let video = try self.sender.receive(frame, now: self.clock()) {
+                            self.onJpegFrame?(video)
+                        }
                         if self.sender.state == .failed { self.end(.failure(.protocolFailure)); return }
                     }
                     if self.sender.state == .active, !self.announcedAuthentication {
@@ -193,6 +205,7 @@ final class InputConnectionDriver {
         let callback = completion
         completion = nil
         onAuthenticated = nil
+        onJpegFrame = nil
         callbackQueue.async { callback?(result) }
     }
 }

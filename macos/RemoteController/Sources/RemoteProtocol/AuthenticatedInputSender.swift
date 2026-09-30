@@ -6,13 +6,19 @@ import Foundation
 /// abort AND cancel TLS; server-side cleanup remains essential after any failure.
 /// Never dispatch one unbounded async block per captured event ahead of this queue.
 struct AuthenticatedInputSender {
+    struct ReceivedJpegFrame: Equatable {
+        let screen: ScreenInfoPayload
+        let jpeg: Data
+    }
     enum State: Equatable { case authenticating, active, draining, finished, failed }
     private(set) var state: State = .authenticating
     private var gate = SessionGate(localRole: .controller)
     private var queue: InputSendQueue
     private let key: Data
     private let nonce: Data
+    private let acceptsJpeg: Bool
     private var agentNonce: Data?
+    private var screen: ScreenInfoPayload?
     private var incomingSequence: UInt32 = 1
     private var outgoingSequence: UInt32 = 1
     private var helloStarted = false
@@ -29,12 +35,13 @@ struct AuthenticatedInputSender {
     var pendingCount: Int { queue.count }
     var hasWriteInFlight: Bool { inFlight != nil }
 
-    init(deviceKey: Data, localControlAllowed: Bool = false, capacity: Int = 64,
+    init(deviceKey: Data, localControlAllowed: Bool = false, acceptsJpeg: Bool = false, capacity: Int = 64,
          nonce: Data? = nil, now: Double) throws {
         guard localControlAllowed, deviceKey.count == 32, now.isFinite, now >= 0 else {
             throw InputSendError.invalidConfiguration
         }
         self.key = deviceKey
+        self.acceptsJpeg = acceptsJpeg
         self.nonce = try nonce ?? SecureRandom.bytes(count: 32)
         guard self.nonce.count == 32 else { throw InputSendError.invalidConfiguration }
         queue = try InputSendQueue(capacity: capacity)
@@ -43,7 +50,8 @@ struct AuthenticatedInputSender {
         nextWrite = now
         lastTime = now
         try queue.append(QueuedInputMessage(type: .hello,
-            payload: HelloPayload(role: .controller, capabilities: [.input], nonce: self.nonce).encode()))
+            payload: HelloPayload(role: .controller,
+                capabilities: acceptsJpeg ? [.jpeg, .input] : [.input], nonce: self.nonce).encode()))
     }
 
     mutating func enqueue(_ inputs: [CapturedInput], now: Double) throws {
@@ -113,11 +121,15 @@ struct AuthenticatedInputSender {
         } catch { abort(); throw error }
     }
 
-    mutating func receive(_ frame: Frame, now: Double) throws {
+    @discardableResult
+    mutating func receive(_ frame: Frame, now: Double) throws -> ReceivedJpegFrame? {
         do {
             try checkTime(now)
+            let payloadLimit = acceptsJpeg && frame.type == .videoFrameJPEG
+                ? ProtocolConstants.maximumPayloadLength : 64
             guard state != .finished, state != .failed, helloStarted,
-                  frame.sequence == incomingSequence, frame.flags == 0, frame.payload.count <= 64 else {
+                  frame.sequence == incomingSequence, frame.flags == 0,
+                  frame.payload.count <= payloadLimit else {
                 throw InputSendError.invalidState
             }
             incomingSequence = incomingSequence == .max ? 1 : incomingSequence + 1
@@ -125,7 +137,10 @@ struct AuthenticatedInputSender {
             switch frame.type {
             case .hello:
                 let hello = try HelloPayload.decode(frame.payload)
-                guard hello.capabilities.contains(.input) else { throw ProtocolError.invalidPayload }
+                guard hello.capabilities.contains(.input),
+                      !acceptsJpeg || hello.capabilities.contains(.jpeg) else {
+                    throw ProtocolError.invalidPayload
+                }
                 agentNonce = hello.nonce
             case .authChallenge:
                 guard let agentNonce else { throw InputSendError.invalidState }
@@ -138,6 +153,12 @@ struct AuthenticatedInputSender {
                 guard gate.phase == .authenticated else { throw InputSendError.authenticationRejected }
                 state = .active
                 nextHeartbeat = now + 5
+            case .screenInfo:
+                guard acceptsJpeg else { throw ProtocolError.invalidState }
+                screen = try ScreenInfoPayload.decode(frame.payload)
+            case .videoFrameJPEG:
+                guard acceptsJpeg, let screen else { throw ProtocolError.invalidState }
+                return ReceivedJpegFrame(screen: screen, jpeg: frame.payload)
             case .pong:
                 guard let heartbeat, heartbeatDeadline != nil, frame.payload == heartbeat else {
                     throw ProtocolError.invalidPayload
@@ -151,6 +172,7 @@ struct AuthenticatedInputSender {
             default:
                 throw ProtocolError.invalidState
             }
+            return nil
         } catch { abort(); throw error }
     }
 

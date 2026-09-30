@@ -12,11 +12,13 @@ public final class TLSInputSimulationClient {
     public convenience init(port: UInt16, expectedFingerprint: CertificateFingerprint, deviceKey: Data,
                 localControlAllowed: Bool = false,
                 connectionTimeout: TimeInterval = 15,
+                onJpegFrame: ((ScreenInfoPayload, Data) -> Void)? = nil,
                 onAuthenticated: @escaping () -> Void,
                 completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         try self.init(host: "127.0.0.1", port: port, expectedFingerprint: expectedFingerprint,
             deviceKey: deviceKey, localControlAllowed: localControlAllowed,
-            connectionTimeout: connectionTimeout, onAuthenticated: onAuthenticated,
+            connectionTimeout: connectionTimeout, onJpegFrame: onJpegFrame,
+            onAuthenticated: onAuthenticated,
             completion: completion)
     }
 
@@ -24,6 +26,7 @@ public final class TLSInputSimulationClient {
                 expectedFingerprint: CertificateFingerprint, deviceKey: Data,
                 localControlAllowed: Bool = false,
                 connectionTimeout: TimeInterval = 15,
+                onJpegFrame: ((ScreenInfoPayload, Data) -> Void)? = nil,
                 onAuthenticated: @escaping () -> Void,
                 completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         guard InputSimulationEndpointPolicy.isTailscaleIPv4(host) else {
@@ -31,13 +34,15 @@ public final class TLSInputSimulationClient {
         }
         try self.init(host: host, port: port, expectedFingerprint: expectedFingerprint,
             deviceKey: deviceKey, localControlAllowed: localControlAllowed,
-            connectionTimeout: connectionTimeout, onAuthenticated: onAuthenticated,
+            connectionTimeout: connectionTimeout, onJpegFrame: onJpegFrame,
+            onAuthenticated: onAuthenticated,
             completion: completion)
     }
 
     private init(host: String, port: UInt16, expectedFingerprint: CertificateFingerprint,
                 deviceKey: Data, localControlAllowed: Bool,
                 connectionTimeout: TimeInterval,
+                onJpegFrame: ((ScreenInfoPayload, Data) -> Void)?,
                 onAuthenticated: @escaping () -> Void,
                 completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         let queue = DispatchQueue(label: "prd.input.tls-simulation")
@@ -45,6 +50,9 @@ public final class TLSInputSimulationClient {
             expectedFingerprint: expectedFingerprint, queue: queue)
         driver = try InputConnectionDriver(transport: transport, deviceKey: deviceKey,
             localControlAllowed: localControlAllowed, queue: queue, connectTimeout: connectionTimeout,
+            onJpegFrame: onJpegFrame.map { callback in
+                { frame in callback(frame.screen, frame.jpeg) }
+            },
             onAuthenticated: onAuthenticated, completion: completion)
     }
     deinit { driver.cancel() }
@@ -93,7 +101,7 @@ private final class NetworkInputTransport: InputTransport {
         connection.send(content: bytes, completion: .contentProcessed { completion($0 == nil) })
     }
     func receive(completion: @escaping (Data?, Bool, Bool) -> Void) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, eof, error in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { data, _, eof, error in
             completion(data, eof, error == nil)
         }
     }

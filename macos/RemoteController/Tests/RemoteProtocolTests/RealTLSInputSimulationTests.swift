@@ -38,6 +38,42 @@ final class RealTLSInputSimulationTests: XCTestCase {
         server.stop()
     }
 
+    func testRealTLSDuplexReceivesJpegAndDrainsInput() throws {
+        let server = try LoopbackInputTLSServer(deviceKey: key, sendVideo: true)
+        let received = expectation(description: "server received duplex input")
+        server.onFinished = { frames in
+            XCTAssertEqual(frames.map(\.type), [.mouseButton, .mouseButton, .disconnect])
+            received.fulfill()
+        }
+        let port = try server.start()
+        let authenticated = expectation(description: "duplex authenticated")
+        let video = expectation(description: "duplex JPEG")
+        let completed = expectation(description: "duplex completed")
+        var client: TLSInputSimulationClient!
+        client = try TLSInputSimulationClient(port: port, expectedFingerprint: server.fingerprint,
+            deviceKey: key, localControlAllowed: true,
+            onJpegFrame: { screen, jpeg in
+                XCTAssertEqual(screen, ScreenInfoPayload(width: 1280, height: 720,
+                    dpiX100: 9600, dpiY100: 9600))
+                XCTAssertEqual(jpeg, LoopbackInputTLSServer.videoData)
+                video.fulfill()
+            },
+            onAuthenticated: {
+                authenticated.fulfill()
+                let down = CapturedInput.button(MouseButtonPayload(button: .left, action: .down))
+                let up = CapturedInput.button(MouseButtonPayload(button: .left, action: .up))
+                XCTAssertTrue(client.submit([down]))
+                client.finish(releases: [up])
+            }) { result in
+                if case .failure(let error) = result { XCTFail("Unexpected duplex failure: \(error)") }
+                completed.fulfill()
+            }
+        client.start()
+        wait(for: [authenticated, video, received, completed], timeout: 5)
+        withExtendedLifetime(client) {}
+        server.stop()
+    }
+
     func testRealTLSRejectsWrongFingerprint() throws {
         let server = try LoopbackInputTLSServer(deviceKey: key)
         let port = try server.start()
@@ -118,6 +154,7 @@ private final class LoopbackInputTLSServer {
     private let certificateDER: Data
     private let deviceKey: Data
     private let closeWithPartialFrame: Bool
+    private let sendVideo: Bool
     private var listener: NWListener?
     private var connection: NWConnection?
     private var decoder = FrameDecoder()
@@ -130,9 +167,10 @@ private final class LoopbackInputTLSServer {
         get throws { try CertificateFingerprint.sha256(certificateDER: certificateDER) }
     }
 
-    init(deviceKey: Data, closeWithPartialFrame: Bool = false) throws {
+    init(deviceKey: Data, closeWithPartialFrame: Bool = false, sendVideo: Bool = false) throws {
         self.deviceKey = deviceKey
         self.closeWithPartialFrame = closeWithPartialFrame
+        self.sendVideo = sendVideo
         guard let archive = Data(base64Encoded: Self.legacyPKCS12Base64) else { throw ServerError.invalidFixture }
         var imported: CFArray?
         let options = [kSecImportExportPassphrase as String: "test-only"] as CFDictionary
@@ -201,7 +239,8 @@ private final class LoopbackInputTLSServer {
     }
 
     private func sendHandshake(on connection: NWConnection) throws {
-        let hello = HelloPayload(role: .agent, capabilities: [.input], nonce: Self.agentNonce)
+        let hello = HelloPayload(role: .agent,
+            capabilities: sendVideo ? [.jpeg, .input] : [.input], nonce: Self.agentNonce)
         let challenge = AuthChallengePayload(challenge: Self.challenge, agentIdentifier: Self.agentIdentifier)
         let bytes = try FrameCodec.encode(Frame(type: .hello, sequence: 1, payload: hello.encode()))
             + FrameCodec.encode(Frame(type: .authChallenge, sequence: 2, payload: challenge.encode()))
@@ -222,7 +261,8 @@ private final class LoopbackInputTLSServer {
         if controllerHello == nil {
             guard frame.type == .hello, frame.sequence == 1 else { throw ServerError.invalidProtocol }
             let hello = try HelloPayload.decode(frame.payload)
-            guard hello.role == .controller, hello.capabilities.contains(.input) else { throw ServerError.invalidProtocol }
+            guard hello.role == .controller, hello.capabilities.contains(.input),
+                  !sendVideo || hello.capabilities.contains(.jpeg) else { throw ServerError.invalidProtocol }
             controllerHello = hello
             return
         }
@@ -238,6 +278,12 @@ private final class LoopbackInputTLSServer {
             let result = AuthResultPayload(status: accepted ? .success : .rejected,
                 retryDelayMilliseconds: accepted ? 0 : 1_000)
             var bytes = try FrameCodec.encode(Frame(type: .authResult, sequence: 3, payload: result.encode()))
+            if accepted && sendVideo {
+                let screen = ScreenInfoPayload(width: 1280, height: 720, dpiX100: 9600, dpiY100: 9600)
+                bytes += try FrameCodec.encode(Frame(type: .screenInfo, sequence: 4, payload: screen.encode()))
+                bytes += try FrameCodec.encode(Frame(type: .videoFrameJPEG, sequence: 5,
+                    payload: Self.videoData))
+            }
             if accepted && closeWithPartialFrame { bytes.append(0x50) }
             send(bytes, on: connection) { [weak connection] in
                 if self.closeWithPartialFrame || !accepted { connection?.cancel() }
@@ -259,6 +305,8 @@ private final class LoopbackInputTLSServer {
     private static let agentNonce = Data(repeating: 0x11, count: 32)
     private static let challenge = Data(repeating: 0x22, count: 32)
     private static let agentIdentifier = Data(repeating: 0x33, count: 16)
+    fileprivate static let videoData = Data([0xff, 0xd8])
+        + Data(repeating: 0x55, count: 5_000) + Data([0xff, 0xd9])
 
     // Self-signed identity generated solely for loopback XCTest. It is not trusted,
     // loaded, or referenced by any production target. Password: "test-only".

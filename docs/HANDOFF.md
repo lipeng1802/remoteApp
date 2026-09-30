@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：Mac 单连接双向调度器完成（2026-09-30，最新）
+
+用户确认上一切片 Windows Release、协议 61/61、输入边界 6/6 全部通过。Mac 现可在同一 TLS/HMAC 连接中协商 `Jpeg | Input`、分片接收 SCREEN_INFO/JPEG，并继续使用有界输入队列、单写入、独立双向序号、心跳和释放后 DISCONNECT。开发用 Network.framework 客户端新增可选 JPEG 回调；input-only 行为保持兼容。
+
+新增 5 项测试后，本机受控沙箱外全量 **109/109**、0 failures；真实 TLS 双向用例同时验证 JPEG 接收与 input drain。Release `Build complete! (19.33s)`。第一次普通文件沙箱运行的 8 个 Keychain/PKCS#12 权限失败不作为代码失败，第二次完整运行全部通过。准确范围见 [MAC_DUPLEX_HANDOFF.md](MAC_DUPLEX_HANDOFF.md)。
+
+产品 RemoteController/RemoteAgent GUI 仍未接线，Windows 不会创建原生 sink，当前仍是只读。下一切片是产品级显式许可和生命周期接线；先以内存 sink 完成 GUI/双机验证，再单独开启真实 `SendInput` 人工验收。
+
 ## 当前：JPEG + 输入单连接双向服务端，待 Windows 验证（2026-09-30，最新）
 
 用户确认上一切片 Windows prescribed tests 全部通过：Release solution、原生输入边界 6/6、既有协议 60/60，记录为 Windows 原生 `SendInput` 边界编译与 fake API 回归通过；仍未执行真实桌面注入。
