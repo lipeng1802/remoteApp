@@ -16,7 +16,9 @@ Mac RemoteController 的 Windows 地址输入框默认填写 `100.73.4.118`，�
 
 Windows 本机紧急停止第 8 项已通过：真实控制期间从 Windows 物理键盘按 `Ctrl + Alt + Esc`，强制停止按预期生效，共享结束、最终“持有 0”且 Mac 连接终止，远程输入不再生效。
 
-下一步继续 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 9–10 项：Windows 主动停止与许可重置，最后进行默认只读回归。
+Windows 主动停止与许可重置第 9 项已通过：Windows 点击“停止共享”后输入立即停止、最终“持有 0”且 Mac 自动断开；再次开始共享时控制许可已自动取消，未重新授权不能控制 Windows。
+
+下一步只剩 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 10 项：双方均未授权的默认只读回归，以及 RemoteAgent 重启后全局紧急停止快捷键可再次正常注册。
 
 ## 当前：Windows 本机紧急停止切片，随真实输入一起验收（2026-09-30，最新）
 
