@@ -245,3 +245,5 @@ RemoteAgent/RemoteController 已接入默认关闭的双端控制许可、认证
 人工测试只允许在已保存工作、无敏感输入的测试窗口中按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 执行。必须验证鼠标移动/三键/拖动/滚轮、普通键、左右修饰键及快捷键，并逐项确认 Esc、Mac 停止、Mac 失焦、Mac 断开和 Windows 停止后不再产生输入、持有为 0；下一次共享必须重新授权。`SendInput` 不承诺控制 UAC 安全桌面、锁屏或更高完整性窗口。
 
 同批验收新增 Windows 物理键盘全局 `Ctrl + Alt + Esc`：真实控制期间按下必须立即取消共享并释放；热键注册失败时真实控制必须拒绝启动；关闭 RemoteAgent 后应注销。该路径不能用 Mac 远程组合键替代。自动检查数量不变，Windows WPF/PInvoke 仍待实机构建。
+
+首轮真实输入中触控板双指纵向滚动稳定触发 Mac `congested`，其余键鼠与持有清零通过。发送队列现合并连续未发送的 `move + wheel` 批次，Int32 饱和且不跨按键/按钮等屏障；新增一万批次及边界测试后队列 11/11、全量 111/111、Release 通过。双机需持续纵横滚动至少 10 秒确认不再断线，才能继续记录后续停止项。

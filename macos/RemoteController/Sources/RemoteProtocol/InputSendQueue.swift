@@ -12,7 +12,8 @@ struct QueuedInputMessage: Equatable {
 }
 
 /// Serial-owner only. Bound counts include controls, but exclude the one in-flight
-/// frame owned by AuthenticatedInputSender. Only adjacent unsent moves coalesce.
+/// frame owned by AuthenticatedInputSender. Adjacent unsent moves and consecutive
+/// touchpad move+wheel batches coalesce without crossing control barriers.
 struct InputSendQueue {
     let capacity: Int
     private var messages: [QueuedInputMessage] = []
@@ -26,6 +27,15 @@ struct InputSendQueue {
 
     mutating func append(_ inputs: [CapturedInput]) throws {
         guard !isStopped else { throw InputSendError.stopped }
+        if inputs.count == 2, case .move = inputs[0], case .wheel(let incoming) = inputs[1],
+           messages.last?.type == .mouseWheel {
+            let pending = try MouseWheelPayload.decode(messages[messages.count - 1].payload)
+            let combined = MouseWheelPayload(
+                horizontal: Self.saturatingAdd(pending.horizontal, incoming.horizontal),
+                vertical: Self.saturatingAdd(pending.vertical, incoming.vertical))
+            messages[messages.count - 1] = QueuedInputMessage(type: .mouseWheel, payload: combined.encode())
+            return
+        }
         for input in inputs {
             try append(QueuedInputMessage(type: input.messageType, payload: input.payload))
         }
@@ -57,5 +67,10 @@ struct InputSendQueue {
     mutating func stop() {
         messages.removeAll()
         isStopped = true
+    }
+
+    private static func saturatingAdd(_ left: Int32, _ right: Int32) -> Int32 {
+        let value = Int64(left) + Int64(right)
+        return Int32(min(Int64(Int32.max), max(Int64(Int32.min), value)))
     }
 }

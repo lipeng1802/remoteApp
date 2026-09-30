@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 触控板滚轮拥塞修复
+
+真实输入首轮除触控板滚轮外均通过；双指纵向滚动使 Mac 报 `congested`。连续未发送的 `move + wheel` 批次现合并滚轮增量且不跨控制屏障，新增 2 项后队列 11/11、全量 111/111、Release 通过。待双机复测纵横滚动不再断线，再继续释放与本机紧急停止清单。
+
 ## 2026-09-30 Windows 本机紧急停止
 
 RemoteAgent 新增全局 `Ctrl + Alt + Esc` 本机紧急停止；注册失败时禁止真实控制但保留只读共享，窗口关闭时注销。该 Windows 增量尚未编译，将与真实 `WindowsInputSink` 按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 一起验收，不单独声称通过。

@@ -4,6 +4,9 @@ import XCTest
 
 final class InputSendQueueTests: XCTestCase {
     private func move(_ x: UInt16) -> CapturedInput { .move(MouseMovePayload(x: x, y: 0)) }
+    private func wheel(_ y: Int32, horizontal x: Int32 = 0) -> CapturedInput {
+        .wheel(MouseWheelPayload(horizontal: x, vertical: y))
+    }
     private let down = CapturedInput.button(MouseButtonPayload(button: .left, action: .down))
     private let up = CapturedInput.button(MouseButtonPayload(button: .left, action: .up))
 
@@ -12,6 +15,33 @@ final class InputSendQueueTests: XCTestCase {
         for x in 0..<10000 { try queue.append([move(UInt16(x))]) }
         XCTAssertEqual(queue.count, 1)
         XCTAssertEqual(queue.take()?.payload, move(9999).payload)
+        XCTAssertNil(queue.take())
+    }
+
+    func testTenThousandTouchpadWheelBatchesStayBounded() throws {
+        var queue = try InputSendQueue()
+        for index in 0..<10_000 {
+            try queue.append([move(UInt16(index)), wheel(1)])
+        }
+        XCTAssertEqual(queue.count, 2)
+        XCTAssertEqual(queue.take()?.payload, move(0).payload)
+        let combined = try MouseWheelPayload.decode(XCTUnwrap(queue.take()).payload)
+        XCTAssertEqual(combined, MouseWheelPayload(horizontal: 0, vertical: 10_000))
+    }
+
+    func testWheelCoalescingSaturatesAndNeverCrossesControlBarrier() throws {
+        var queue = try InputSendQueue()
+        try queue.append([move(1), wheel(Int32.max)])
+        try queue.append([move(2), wheel(1)])
+        try queue.append([down])
+        try queue.append([move(3), wheel(-1)])
+        try queue.append([move(4), wheel(Int32.min)])
+
+        XCTAssertEqual(queue.take()?.payload, move(1).payload)
+        XCTAssertEqual(try MouseWheelPayload.decode(XCTUnwrap(queue.take()).payload).vertical, Int32.max)
+        XCTAssertEqual(queue.take()?.type, .mouseButton)
+        XCTAssertEqual(queue.take()?.payload, move(3).payload)
+        XCTAssertEqual(try MouseWheelPayload.decode(XCTUnwrap(queue.take()).payload).vertical, Int32.min)
         XCTAssertNil(queue.take())
     }
 

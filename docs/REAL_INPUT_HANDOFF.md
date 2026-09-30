@@ -36,7 +36,7 @@ dotnet run --project .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c
 1. 首先不勾选 Windows 许可，开始共享；Mac 不勾控制请求并连接，确认只读画面正常。结束后确认 Windows 复选框仍为未选中。
 2. Windows 勾选许可并点击开始。在本机警告框选择“否”，确认没有开始真实控制且复选框被清空。
 3. 再次勾选并在警告框选择“是”。Mac 勾选“请求远程控制”后连接；画面出现但尚未点击“开始控制”时，Mac 键鼠不得操作 Windows。
-4. Windows 打开一个空白记事本并确保没有未保存的重要内容。Mac 点击“开始控制”，先轻微移动鼠标，再测试左/右/中键、拖动、纵横滚轮；动作必须落在预期坐标，黑边操作不得注入。
+4. Windows 打开一个空白记事本并确保没有未保存的重要内容。Mac 点击“开始控制”，先轻微移动鼠标，再测试左/右/中键、拖动、纵横滚轮；动作必须落在预期坐标，黑边操作不得注入。触控板需连续双指纵向和横向滚动至少 10 秒，Mac 不得出现 `congested`，双方不得断开。
 5. 在空白记事本输入少量 ASCII 字母、数字、空格、退格和 Enter；再测试左右 Shift/Control/Option/Command。Command 映射 Windows 键、Option 映射 Alt、Control 映射 Ctrl，不测试输入法、Caps Lock、Fn、媒体键或 Pause。
 6. 分别测试 Control+A、Control+C、Control+V 等无破坏性组合；不要测试关机、删除文件、系统管理或安全桌面快捷键。
 7. 按住普通键、修饰键或鼠标按钮时分别执行：Mac Esc、Mac“停止控制”、切换 Mac 应用/窗口失焦、Mac 断开。每次 Windows 状态最终必须为“持有 0”，之后 Mac 输入不再影响 Windows；恢复时必须再次点击“开始控制”。
