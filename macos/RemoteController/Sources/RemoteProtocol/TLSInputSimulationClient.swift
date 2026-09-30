@@ -10,12 +10,13 @@ public final class TLSInputSimulationClient {
 
     public init(port: UInt16, expectedFingerprint: CertificateFingerprint, deviceKey: Data,
                 localControlAllowed: Bool = false,
+                connectionTimeout: TimeInterval = 15,
                 onAuthenticated: @escaping () -> Void,
                 completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         let queue = DispatchQueue(label: "prd.input.tls-simulation")
         let transport = try NetworkInputTransport(port: port, expectedFingerprint: expectedFingerprint, queue: queue)
         driver = try InputConnectionDriver(transport: transport, deviceKey: deviceKey,
-            localControlAllowed: localControlAllowed, queue: queue,
+            localControlAllowed: localControlAllowed, queue: queue, connectTimeout: connectionTimeout,
             onAuthenticated: onAuthenticated, completion: completion)
     }
     deinit { driver.cancel() }

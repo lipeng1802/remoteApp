@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：Mac 真实 NWConnection TLS 输入 mock 通过（2026-09-30，最新）
+
+新增 `RealTLSInputSimulationTests`，使用真实 Network.framework `NWListener` / `NWConnection` 和仅测试自签名身份，严格绑定 `127.0.0.1`。5/5 实际通过：正确指纹+密钥完成 HMAC 认证并按顺序排空按下/释放/断开；错误指纹、错误设备密钥、认证后半帧断线和客户端取消均失败关闭。慢写入/背压继续由确定性替身测试覆盖，避免本机 TCP 内核缓冲导致假通过。
+
+错误指纹在 Network.framework 上可能停留在建连阶段而不立即回调失败，因此 `TLSInputSimulationClient` 增加可配置连接期限，产品默认仍为 15 秒且只允许 `(0, 300]`。全量 Swift 实测 **103/103** 通过，Release `Build complete! (25.48s)`。测试身份只存在测试 target，不进入产品运行时。
+
+安全边界不变：客户端仍固定回环，Windows 模拟服务仍固定回环，没有跨网输入、产品 GUI 接线或 `SendInput`。下一任务是在不启用真实注入的前提下，设计并实现双机 Tailscale 一次性 input mock：Windows 只记录/校验收到的合成事件，严格限定 Tailscale 绑定地址、Mac 对端地址、证书指纹、设备密钥、显式本地许可和单次会话。
+
 最后整理：2026-09-29。请以顶部「当前」小节为准；分隔线以下的目标、测试数量、失败及待确认描述均为历史记录。
 
 ## 当前提交检查点（2026-09-29）

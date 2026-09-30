@@ -238,6 +238,9 @@ final class InputConnectionDriverTests: XCTestCase {
             deviceKey: key, localControlAllowed: true, onAuthenticated: {}, completion: { _ in }))
         XCTAssertThrowsError(try TLSInputSimulationClient(port: 9, expectedFingerprint: fingerprint,
             deviceKey: key, onAuthenticated: {}, completion: { _ in }))
+        XCTAssertThrowsError(try TLSInputSimulationClient(port: 9, expectedFingerprint: fingerprint,
+            deviceKey: key, localControlAllowed: true, connectionTimeout: 0,
+            onAuthenticated: {}, completion: { _ in }))
     }
 
     func testAutomaticTimerCancelsStalledConnection() throws {

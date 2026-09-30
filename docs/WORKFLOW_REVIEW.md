@@ -1,5 +1,9 @@
 # 当前流程审查与 Mac 接收检查点
 
+2026-09-30 更新：第 2 个网络检查点已在 Mac 本机收口。真实 NWListener/NWConnection TLS 专项 5/5，正确指纹+密钥可认证并排空输入，错误指纹/密钥、半帧断线、取消均失败关闭；慢写入保留确定性替身覆盖。全量 103/103，Release `Build complete! (25.48s)`。回环限制、无 GUI 接线、无 SendInput 的边界不变。
+
+下一检查点为双机 Tailscale input mock，只发送合成事件到 Windows 内存 sink，而不控制桌面。设计必须继续保留单 Tailscale 绑定地址、单对端地址、TLS 指纹、HMAC 密钥、显式许可、单次会话与停止释放；通过后才能评估产品查看器接线。
+
 ## 2026-09-30 Mac 自动检查结果
 
 用户实际运行结果：`InputSendQueueTests` 9/9、`AuthenticatedInputSenderTests` 13/13、`InputConnectionDriverTests` 12/12、全量 `swift test` 96/96 均通过；Release 构建成功，`Build complete! (18.76s)`。因此下文“尚未在 Mac 编译”的描述保留为执行前历史背景。当前应继续 InputPreview 本地人工清单；这些自动结果不能替代真实 AppKit 交互或 NWConnection TLS 正负向验证。

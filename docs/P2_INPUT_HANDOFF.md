@@ -1,5 +1,11 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 真实 Mac TLS mock 结果
+
+Network.framework 回环集成测试 5/5 通过：正确指纹/密钥认证及输入排空、错误指纹、错误密钥、半帧断线、取消。慢写入由 `InputConnectionDriverTests.testSlowWriteKeepsOneFlightAndCoalescesIngress` 的可控写完成继续覆盖。全量 103/103、Release 构建成功。测试 TLS 身份仅编译到 test target，监听强制 `127.0.0.1`。
+
+这些结果完成了本机真实 TLS 检查点，但不是双机验收。下一切片仅允许建立一次性、显式授权、Tailscale 单地址/单对端限定的双机 mock；Windows 继续使用内存 sink，禁止 `SendInput`。
+
 ## 2026-09-30 Mac 自动检查通过
 
 用户已实际完成三组筛选测试：输入队列 9/9、认证发送器 13/13、连接调度器 12/12；全量 Swift 96/96 通过，Release 构建 `Build complete! (18.76s)`。当前进入下方第 2 项 InputPreview 人工验收。尚未完成的项目包括 AppKit 键鼠/焦点/释放实测、真实 NWConnection TLS mock、P1 画质与稳定性，以及生产 GUI/SendInput；不得因自动测试通过而将这些项目标记完成。

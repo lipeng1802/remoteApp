@@ -36,8 +36,12 @@ final class InputConnectionDriver {
          queue: DispatchQueue = DispatchQueue(label: "prd.input.mock"),
          callbackQueue: DispatchQueue = .main, automaticTimer: Bool = true,
          clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime },
+         connectTimeout: Double = 15,
          onAuthenticated: @escaping () -> Void,
          completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
+        guard connectTimeout.isFinite, connectTimeout > 0, connectTimeout <= 300 else {
+            throw InputSendError.invalidConfiguration
+        }
         self.transport = transport
         self.queue = queue
         self.clock = clock
@@ -48,7 +52,7 @@ final class InputConnectionDriver {
         let now = clock()
         sender = try AuthenticatedInputSender(deviceKey: deviceKey,
             localControlAllowed: localControlAllowed, now: now)
-        connectDeadline = now + 15
+        connectDeadline = now + connectTimeout
         queue.setSpecific(key: queueKey, value: 1)
     }
 
