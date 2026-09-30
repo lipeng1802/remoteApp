@@ -45,22 +45,23 @@ internal static class DuplexSessionTests
                 CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
             }, deadline.Token);
             var wire = new ProbeFrameStream(tls);
-            var hello = HelloPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            var read = CreateVideoReader(tls, deadline.Token);
+            var hello = HelloPayload.Decode((await read()).Payload);
             Check(hello.Capabilities == (Capabilities.Jpeg | Capabilities.Input),
                 "Control-enabled agent did not advertise both capabilities.");
             var nonce = RandomNumberGenerator.GetBytes(32);
             await wire.WriteAsync(MessageType.Hello, new HelloPayload(PeerRole.Controller, 1, 1,
                 Capabilities.Jpeg, nonce).Encode(), deadline.Token);
-            var challenge = AuthChallengePayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            var challenge = AuthChallengePayload.Decode((await read()).Payload);
             await wire.WriteAsync(MessageType.AuthResponse, Authentication.CreateResponse(key, nonce,
                 hello.Nonce, challenge.Challenge, challenge.AgentIdentifier), deadline.Token);
-            var result = AuthResultPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            var result = AuthResultPayload.Decode((await read()).Payload);
             Check(result.Status == AuthResultStatus.Success,
                 "Control-enabled agent rejected a read-only controller.");
 
             var sawVideo = false;
             for (var count = 0; count < 10 && !sawVideo; count++)
-                sawVideo = (await wire.ReadAsync(deadline.Token)).Type == MessageType.VideoFrameJpeg;
+                sawVideo = (await read()).Type == MessageType.VideoFrameJpeg;
             Check(sawVideo && sourceConstructed, "Read-only controller did not receive video.");
             Check(!sinkConstructed, "Read-only controller constructed the protected input sink.");
             stop.Cancel();
@@ -124,19 +125,20 @@ internal static class DuplexSessionTests
                 CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
             }, deadline.Token);
             var wire = new ProbeFrameStream(tls);
-            var hello = HelloPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            var read = CreateVideoReader(tls, deadline.Token);
+            var hello = HelloPayload.Decode((await read()).Payload);
             var nonce = RandomNumberGenerator.GetBytes(32);
             await wire.WriteAsync(MessageType.Hello, new HelloPayload(PeerRole.Controller, 1, 1,
                 Capabilities.Jpeg | Capabilities.Input, nonce).Encode(), deadline.Token);
-            var challenge = AuthChallengePayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            var challenge = AuthChallengePayload.Decode((await read()).Payload);
             await wire.WriteAsync(MessageType.AuthResponse, Authentication.CreateResponse(key, nonce,
                 hello.Nonce, challenge.Challenge, challenge.AgentIdentifier), deadline.Token);
-            var result = AuthResultPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            var result = AuthResultPayload.Decode((await read()).Payload);
             Check(result.Status == AuthResultStatus.Success, "Continuous session authentication failed.");
 
             var sawVideo = false;
             for (var count = 0; count < 10 && !sawVideo; count++)
-                sawVideo = (await wire.ReadAsync(deadline.Token)).Type == MessageType.VideoFrameJpeg;
+                sawVideo = (await read()).Type == MessageType.VideoFrameJpeg;
             Check(sawVideo, "Continuous session did not send video.");
             await wire.WriteAsync(MessageType.Disconnect, [0, 0], deadline.Token);
         }
@@ -276,6 +278,32 @@ internal static class DuplexSessionTests
     private static void Check(bool value, string message)
     {
         if (!value) throw new Exception(message);
+    }
+
+    private static Func<Task<Frame>> CreateVideoReader(Stream stream, CancellationToken cancellationToken)
+    {
+        uint incomingSequence = 1;
+        return async () =>
+        {
+            var header = new byte[ProtocolConstants.HeaderLength];
+            await stream.ReadExactlyAsync(header, cancellationToken);
+            var length = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(12));
+            Check(length <= ProtocolConstants.MaximumPayloadLength,
+                "Video frame exceeded the protocol payload bound.");
+            var decoder = new FrameDecoder();
+            var frames = decoder.Append(header);
+            if (length != 0)
+            {
+                var payload = new byte[(int)length];
+                await stream.ReadExactlyAsync(payload, cancellationToken);
+                frames = decoder.Append(payload);
+            }
+            decoder.Finish();
+            var frame = frames.Single();
+            Check(frame.Sequence == incomingSequence, "Continuous outgoing sequence was not monotonic.");
+            incomingSequence = incomingSequence == uint.MaxValue ? 1 : incomingSequence + 1;
+            return frame;
+        };
     }
 
     private sealed class FakeSource : IJpegFrameSource

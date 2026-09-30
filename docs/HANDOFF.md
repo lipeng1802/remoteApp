@@ -8,6 +8,8 @@ Windows 拉取持续共享版本后反馈：Windows 勾选“允许远程控制�
 
 Windows 更新后执行 Release、协议 **63/63**、WindowsInput **6/6**，再勾选 Windows 控制许可并开始共享；Mac 不勾控制请求应能正常只读连接、显示画面且键鼠不影响 Windows。Mac 断开后 Windows 仍应继续等待，随后 Mac 勾选控制请求重新连接，应能手动“开始控制”。
 
+Windows 首次运行新增协议测试时，两项分别报 `Probe payload exceeds 64 bytes`。原因是测试客户端误用仅供握手/输入小帧的默认 `ProbeFrameStream.ReadAsync` 读取 JPEG；产品服务端及 Mac 客户端不受影响。两项测试现改用与既有双向视频测试相同的完整帧读取方式，仍校验最大协议载荷和连续序号。Windows 需拉取最新提交后重新执行协议测试，预期 **63/63**。
+
 ## 当前：Mac 断开后 Windows 持续共享修复，待 Windows 验证（2026-09-30，最新）
 
 最终只读回归发现：Mac 主动断开后 Windows 同时结束了整个共享。产品此前调用单会话 `TlsProbeServer.RunOnceAsync`，客户端发送 DISCONNECT 后方法正常返回，WPF 因而进入共享结束清理；这不符合“Windows 持续等待、Mac 可重新连接”的产品行为。
