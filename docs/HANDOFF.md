@@ -6,6 +6,8 @@ P2 源码验收完成后，安装包阶段已开始。首个切片统一使用�
 
 Mac 可在本机完成脚本实测；Windows 脚本涉及 .NET 8、Inno Setup 和 WPF，只能在 Windows 验证。开发包仍分别使用 ad-hoc 签名和未签名 Setup，不代表正式分发签名完成。
 
+macOS `0.3.0` 已从提交 `50b959147609` 实际生成：Release **111/111**、构建、`.app` 签名、DMG 校验及只读挂载内复核全部通过。产物大小 `478800` bytes，SHA-256 `09a4e02d954f8d5204b19d722c34f8873efaa009ea2f3e38b09948b78999833b`。下一步在 Windows 拉取后运行 `packaging\windows\build-installer.ps1`，预期协议 **63/63**、WindowsInput **6/6** 并生成 `0.3.0` Setup 与校验文件。
+
 ## P2 真实键鼠 MVP 验收完成（2026-10-01，最新）
 
 用户已完成最后的 RemoteAgent 关闭/重启检查，未出现“紧急停止快捷键不可用”提示。结合此前协议 **63/63 passed**、WindowsInput fake 边界 **6/6**、Mac 全量测试及 Release 构建，以及 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 1–10 项双机人工结果，P2 真实键鼠 MVP 现已全部验收通过。

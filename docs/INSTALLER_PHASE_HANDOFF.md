@@ -30,6 +30,25 @@ artifacts/macos/PersonalRemoteDesktop-0.3.0-macOS.dmg.sha256
 
 当前默认是 ad-hoc 签名，仅用于开发验证。正式分发仍需要 `MACOS_SIGNING_IDENTITY`、Developer ID、公证和 stapling。
 
+### macOS 实测结果
+
+已从提交 `50b959147609` 执行默认命令并通过：
+
+- Release 测试 **111/111 passed**，0 failures。
+- Release `RemoteController` 构建成功。
+- `.app` ad-hoc 签名通过 `codesign --verify --deep --strict`。
+- `hdiutil verify` 确认 DMG 有效；只读挂载后再次确认镜像内应用签名有效且 Applications 快捷方式存在。
+- 镜像内 `CFBundleShortVersionString` 和 `CFBundleVersion` 均为 `0.3.0`，`PRDSourceRevision` 为 `50b959147609`。
+- DMG 大小：`478800` bytes。
+- SHA-256：`09a4e02d954f8d5204b19d722c34f8873efaa009ea2f3e38b09948b78999833b`。
+
+校验文件使用相对文件名，请在产物目录执行：
+
+~~~bash
+cd artifacts/macos
+LC_ALL=C shasum -a 256 -c PersonalRemoteDesktop-0.3.0-macOS.dmg.sha256
+~~~
+
 ## Windows 构建与检查
 
 Windows 仓库根目录 PowerShell 执行：
@@ -48,6 +67,8 @@ artifacts\windows\PersonalRemoteDesktopAgent-0.3.0-win-x64-Setup.exe.sha256
 ~~~
 
 Windows 安装器当前未做 Authenticode 签名；SmartScreen 提示属于预期的开发包限制，不应误记为正式分发就绪。
+
+Windows `0.3.0` 尚未构建；需要拉取包含本切片的最新提交后执行上述单一脚本，并回传三组自动门禁、安装器大小、SHA-256 和包内文件版本。
 
 ## 后续验收
 
