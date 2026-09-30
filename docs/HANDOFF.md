@@ -12,6 +12,10 @@ Windows 首次运行新增协议测试时，两项分别报 `Probe payload excee
 
 用户已在 Windows 拉取测试修复并确认协议测试 **63/63 passed**。下一步只需启动最新 RemoteAgent，完成“Windows 已许可控制 + Mac 未请求控制”的只读双机连接，并继续验证 Mac 断开后 Windows 保持共享、同一共享可直接重新连接。
 
+用户随后确认本轮 6 项双机验证全部通过：Windows 已许可控制时，Mac 不请求控制可以正常只读连接并显示画面，Mac 键鼠不影响 Windows；Mac 主动断开后 Windows 继续共享；无需 Windows 操作即可再次只读连接；再次断开后，Mac 改为请求控制也可在同一 Windows 共享中重新连接并手动开始控制。能力降级与持续共享修复均已通过实机验证。
+
+原始第 10 项只剩最后一个独立检查：关闭 RemoteAgent 后重新启动，确认没有“紧急停止快捷键不可用”提示。通过后即可记录 P2 真实键鼠 MVP 全部验收完成。
+
 ## 当前：Mac 断开后 Windows 持续共享修复，待 Windows 验证（2026-09-30，最新）
 
 最终只读回归发现：Mac 主动断开后 Windows 同时结束了整个共享。产品此前调用单会话 `TlsProbeServer.RunOnceAsync`，客户端发送 DISCONNECT 后方法正常返回，WPF 因而进入共享结束清理；这不符合“Windows 持续等待、Mac 可重新连接”的产品行为。
