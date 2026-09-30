@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemoteProtocol", "src\Remot
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemoteAgent", "src\RemoteAgent\RemoteAgent.csproj", "{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsInput", "src\WindowsInput\WindowsInput.csproj", "{C0A19335-28E7-45F3-8C90-80E36D1B40EC}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemoteProtocol.Tests", "tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj", "{0F6EBA63-AE2F-405C-9E62-0D54913B127F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TlsProbeServer", "tools\TlsProbeServer\TlsProbeServer.csproj", "{F3E11356-A143-42DF-94B6-DB6CFD2B9D73}"
@@ -15,6 +17,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{274FF14D-87B7-48AE-8A97-81DBF517039C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenCapture.Tests", "tests\ScreenCapture.Tests\ScreenCapture.Tests.csproj", "{952C4AE7-A557-460A-ABDD-847B1D031D34}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsInput.Tests", "tests\WindowsInput.Tests\WindowsInput.Tests.csproj", "{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -30,6 +34,10 @@ Global
 		{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FD6B016B-ABBE-47F9-AB02-5BDC30FBDB2C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0A19335-28E7-45F3-8C90-80E36D1B40EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0A19335-28E7-45F3-8C90-80E36D1B40EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0A19335-28E7-45F3-8C90-80E36D1B40EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0A19335-28E7-45F3-8C90-80E36D1B40EC}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0F6EBA63-AE2F-405C-9E62-0D54913B127F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0F6EBA63-AE2F-405C-9E62-0D54913B127F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0F6EBA63-AE2F-405C-9E62-0D54913B127F}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -46,8 +54,13 @@ Global
 		{952C4AE7-A557-460A-ABDD-847B1D031D34}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{952C4AE7-A557-460A-ABDD-847B1D031D34}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{952C4AE7-A557-460A-ABDD-847B1D031D34}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{952C4AE7-A557-460A-ABDD-847B1D031D34} = {274FF14D-87B7-48AE-8A97-81DBF517039C}
+		{B0B17D50-C6C6-42E8-AEC5-61CF24B51326} = {274FF14D-87B7-48AE-8A97-81DBF517039C}
 	EndGlobalSection
 EndGlobal

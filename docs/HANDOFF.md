@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：Windows 原生输入边界已实现，待 Windows 验证（2026-09-30，最新）
+
+新增独立 `WindowsInput` 项目及 6 项无注入自动测试：协议绝对坐标到 Win32 `SendInput`、三键、横/纵滚轮、扫描码/扩展键/KeyUp、失败后尽力释放与重试，以及 win-x64 ABI 尺寸。原生调用逐事件检查返回值，sink 只在成功后更新持有状态。RemoteAgent 仅引用该模块但产品 GUI/TLS 尚未创建 sink，现有共享仍严格只读；自动测试使用 fake API，不会真实移动键鼠。
+
+本机没有 .NET SDK，尚未编译 C#。Windows 拉取本轮代码后按 [WINDOWS_NATIVE_INPUT_HANDOFF.md](WINDOWS_NATIVE_INPUT_HANDOFF.md) 运行 Release solution、`WindowsInput.Tests`（预期 6/6）和原协议测试（预期仍 60/60）。未通过前不接生产 GUI。
+
+下一切片是同一认证连接内的 JPEG 发送 + 输入接收双向会话；当前 `TlsProbeServer` 的视频和输入模拟仍为互斥分支，不能直接启用真实控制。完成双向传输后再接 Windows 本次会话许可和 Mac 查看器输入捕获，并验证所有停止/失焦/断线释放。
+
 ## 当前：双机 Tailscale input mock 验收通过（2026-09-30，最新）
 
 用户确认 Windows 和 Mac 端测试均全部通过。按 [TAILSCALE_INPUT_MOCK.md](TAILSCALE_INPUT_MOCK.md) 的验收口径，记录为：Windows 预期 60 项协议测试通过，Mac 合成客户端 PASS，Windows 内存 sink 对 12 个合成事件的顺序和最终释放校验 PASS。一次性监听结束后关闭。

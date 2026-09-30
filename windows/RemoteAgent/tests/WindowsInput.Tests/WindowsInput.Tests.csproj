@@ -1,12 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\RemoteProtocol\RemoteProtocol.csproj" />
-    <ProjectReference Include="..\WindowsInput\WindowsInput.csproj" />
+    <ProjectReference Include="..\..\src\RemoteProtocol\RemoteProtocol.csproj" />
+    <ProjectReference Include="..\..\src\WindowsInput\WindowsInput.csproj" />
   </ItemGroup>
 </Project>

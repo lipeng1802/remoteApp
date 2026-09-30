@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 Windows 原生 sink 边界
+
+独立 `WindowsInput` 模块已实现 `SendInput` 映射和自身持有状态/尽力释放，新增 6 项 fake API 与 win-x64 ABI 测试。生产 GUI/TLS 尚未接线，RemoteAgent 仍是只读；本机无 .NET SDK，待 Windows 按 [WINDOWS_NATIVE_INPUT_HANDOFF.md](WINDOWS_NATIVE_INPUT_HANDOFF.md) 完成 6/6、原协议 60/60 和 Release 构建。该结果不能记为真实桌面输入通过。
+
 ## 2026-09-30 双机 Tailscale mock 验收通过
 
 用户确认 Windows 和 Mac 端测试均全部通过：跨网 TLS/HMAC 建连、12 个共享合成事件顺序、显式释放和单次会话关闭检查点完成。Windows 仍为内存 sink，下一阶段才能进入产品 GUI 授权/停止状态与原生 sink 设计；尚不能称为真实 Windows 键鼠控制通过。

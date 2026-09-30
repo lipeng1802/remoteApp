@@ -1,6 +1,7 @@
 namespace RemoteProtocol;
 
-// No native implementation exists yet: production GUI/TLS remains read-only.
+// Native injection is isolated in the WindowsInput project. Production GUI/TLS
+// remains read-only until the authenticated duplex session explicitly wires it.
 public interface IMouseInputSink
 {
     void Move(MouseMovePayload point);
