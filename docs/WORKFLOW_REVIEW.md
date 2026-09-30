@@ -1,5 +1,7 @@
 # 当前流程审查与 Mac 接收检查点
 
+2026-09-30 验收更新：用户确认 Windows 和 Mac 端全部测试通过，双机 Tailscale input mock 检查点完成。已证明跨网 TLS/指纹固定/HMAC/有界发送/顺序和释放能与 Windows 内存 sink 协同工作。下一阶段仍需单独开发和验收产品 GUI 与原生 Windows 输入；当前无 `SendInput`。
+
 2026-09-30 最新：双机 Tailscale input mock 已实现，但尚未在 Windows 编译或双机运行。Windows 仅内存 sink，Mac 仅固定合成序列；两端限制 Tailscale IPv4，复用已批准指纹/配对密钥，要求显式本地许可且单次会话。Mac 104/104 和 Release 已通过；Windows 预期 60/60，待按 `TAILSCALE_INPUT_MOCK.md` 验收。产品 GUI 和 `SendInput` 仍未接入。
 
 2026-09-30 更新：第 2 个网络检查点已在 Mac 本机收口。真实 NWListener/NWConnection TLS 专项 5/5，正确指纹+密钥可认证并排空输入，错误指纹/密钥、半帧断线、取消均失败关闭；慢写入保留确定性替身覆盖。全量 103/103，Release `Build complete! (25.48s)`。回环限制、无 GUI 接线、无 SendInput 的边界不变。

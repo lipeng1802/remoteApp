@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 当前：双机 Tailscale input mock 验收通过（2026-09-30，最新）
+
+用户确认 Windows 和 Mac 端测试均全部通过。按 [TAILSCALE_INPUT_MOCK.md](TAILSCALE_INPUT_MOCK.md) 的验收口径，记录为：Windows 预期 60 项协议测试通过，Mac 合成客户端 PASS，Windows 内存 sink 对 12 个合成事件的顺序和最终释放校验 PASS。一次性监听结束后关闭。
+
+本结果完成了跨网 TLS/HMAC 输入 mock 检查点，但 Windows 端仍是内存 sink；产品查看器没有输入接线，没有 `SendInput`，不能记为真实桌面控制通过。下一阶段应先设计产品 GUI 的明确授权、可见控制状态、停止/失焦/断线释放和 Windows 原生 sink 边界，再实现真实输入。
+
 ## 当前：双机 Tailscale input mock 已实现，待 Windows/双机验收（2026-09-30，最新）
 
 新增 Windows `InputMockServer` 与 `scripts/p2/Start-TailscaleInputMock.ps1`：只绑定本机 Tailscale IPv4，只接受唯一在线 Mac Tailscale IPv4，脚本和工具双层要求显式本地 mock 许可；处理器仅使用内存 `IInputSink`，逐项校验 12 个合成事件和最终释放，没有 `SendInput`。Windows 协议测试新增 Tailscale 端点边界，预期由 59 增至 60；当前 Mac 没有 .NET SDK，尚未执行 Windows 编译/测试。

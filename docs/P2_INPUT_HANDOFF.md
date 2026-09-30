@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 双机 Tailscale mock 验收通过
+
+用户确认 Windows 和 Mac 端测试均全部通过：跨网 TLS/HMAC 建连、12 个共享合成事件顺序、显式释放和单次会话关闭检查点完成。Windows 仍为内存 sink，下一阶段才能进入产品 GUI 授权/停止状态与原生 sink 设计；尚不能称为真实 Windows 键鼠控制通过。
+
 ## 2026-09-30 双机 Tailscale mock 已实现
 
 Windows 一次性内存 sink 服务、双层显式许可脚本、Tailscale 单地址/单对端限制，以及 Mac 合成客户端已加入。Mac 全量 104/104 和 Release 通过；Windows 预期 60 项，待 Windows 实机构建、测试及双机验收。准确命令与 PASS 标准见 [TAILSCALE_INPUT_MOCK.md](TAILSCALE_INPUT_MOCK.md)。本切片没有 `SendInput`、产品 GUI 接线或真实用户输入。
