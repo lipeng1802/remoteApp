@@ -4,6 +4,10 @@
 
 用户实际运行结果：`InputSendQueueTests` 9/9、`AuthenticatedInputSenderTests` 13/13、`InputConnectionDriverTests` 12/12、全量 `swift test` 96/96 均通过；Release 构建成功，`Build complete! (18.76s)`。因此下文“尚未在 Mac 编译”的描述保留为执行前历史背景。当前应继续 InputPreview 本地人工清单；这些自动结果不能替代真实 AppKit 交互或 NWConnection TLS 正负向验证。
 
+后续 InputPreview 实机发现同类左右修饰键被聚合。修复物理 keyCode 事件状态并新增 2 项测试后，当前全量为 98/98，Release `Build complete! (18.30s)`；黑边、拖出、滚轮、失焦及既有键鼠/停止均已通过，只剩修饰键新版实机复测。端口 0 显式拒绝也在本轮全量重跑中修复。
+
+用户已确认修饰键新版实机复测通过，InputPreview 人工清单全部完成。当前流程进入第 2 个网络检查点：在受控 mock 环境验证真实 NWConnection TLS 的正确/错误指纹与密钥、慢写入、半帧断线及取消；现有回环限制继续保留，尚未授权跨网输入或真实 SendInput。
+
 日期：2026-09-29。用户要求检查是否偏离并继续下一步。
 
 ## 审查结论

@@ -9,7 +9,7 @@ final class InputPreviewCanvas: NSView {
     private var releaseCount: UInt64 = 0
     var onStatus: ((String) -> Void)?
     private var tracking: NSTrackingArea?
-    private let modifierCodes: [UInt16] = [54, 55, 56, 58, 59, 60, 61, 62]
+    private var modifierState = MacModifierEventState()
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -17,6 +17,7 @@ final class InputPreviewCanvas: NSView {
 
     func start() {
         guard window?.isKeyWindow == true, window?.makeFirstResponder(self) == true else { return }
+        modifierState.reset()
         capture.start()
         // Do not import keys held in another application on entry.
         publish([])
@@ -25,6 +26,7 @@ final class InputPreviewCanvas: NSView {
 
     func stop() {
         let releases = capture.stop()
+        modifierState.reset()
         publish(releases)
         needsDisplay = true
     }
@@ -65,28 +67,32 @@ final class InputPreviewCanvas: NSView {
             screenWidth: 1280, screenHeight: 720)
     }
 
-    private func updateModifiers() {
-        // Read only eight modifier states while this canvas is the active responder.
-        // No global event tap/monitor. Side-aware state avoids aggregate flag ambiguity.
-        let held = Set(modifierCodes.filter {
-            CGEventSource.keyState(.combinedSessionState, key: CGKeyCode($0))
-        })
-        publish(capture.modifierSnapshot(held))
+    private func aggregateFlag(for keyCode: UInt16) -> NSEvent.ModifierFlags? {
+        switch keyCode {
+        case 54, 55: return .command
+        case 56, 60: return .shift
+        case 58, 61: return .option
+        case 59, 62: return .control
+        default: return nil
+        }
     }
 
     override func flagsChanged(with event: NSEvent) {
         guard capture.isActive else { return }
-        updateModifiers()
+        guard let flag = aggregateFlag(for: event.keyCode) else { return }
+        let held = modifierState.update(
+            keyCode: event.keyCode,
+            aggregatePressed: event.modifierFlags.contains(flag)
+        )
+        publish(capture.modifierSnapshot(held))
     }
     override func keyDown(with event: NSEvent) {
         guard capture.isActive else { return }
         if event.keyCode == 53 { stop(); return } // Escape is always the local stop key.
-        updateModifiers()
         publish(capture.key(keyCode: event.keyCode, action: .down, isRepeat: event.isARepeat))
     }
     override func keyUp(with event: NSEvent) {
         guard capture.isActive else { return }
-        updateModifiers()
         publish(capture.key(keyCode: event.keyCode, action: .up))
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {

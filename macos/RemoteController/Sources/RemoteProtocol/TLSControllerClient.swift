@@ -46,7 +46,7 @@ public final class TLSControllerClient {
         approveFirstUse: @escaping FirstUseApproval,
         completion: @escaping Completion
     ) -> () -> Void {
-        guard let networkPort = NWEndpoint.Port(rawValue: port) else {
+        guard port != 0, let networkPort = NWEndpoint.Port(rawValue: port) else {
             completion(.failure(.invalidPort))
             return {}
         }

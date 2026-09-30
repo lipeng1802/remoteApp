@@ -114,3 +114,23 @@ public struct MacModifierTracker {
     }
     public mutating func releaseAll() -> [KeyEventPayload] { update(pressedKeyCodes: []) }
 }
+
+/// Builds a side-aware modifier snapshot from AppKit `flagsChanged` events.
+/// Aggregate modifier flags cannot distinguish two keys of the same kind, so
+/// the physical keyCode that generated each transition owns the state change.
+public struct MacModifierEventState {
+    public private(set) var pressedKeyCodes: Set<UInt16> = []
+    public init() {}
+
+    public mutating func update(keyCode: UInt16, aggregatePressed: Bool) -> Set<UInt16> {
+        guard MacKeyboardMapper.modifierKeyCodes.contains(keyCode) else {
+            return pressedKeyCodes
+        }
+        if pressedKeyCodes.remove(keyCode) == nil, aggregatePressed {
+            pressedKeyCodes.insert(keyCode)
+        }
+        return pressedKeyCodes
+    }
+
+    public mutating func reset() { pressedKeyCodes.removeAll() }
+}

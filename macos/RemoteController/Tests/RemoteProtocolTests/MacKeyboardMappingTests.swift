@@ -56,4 +56,21 @@ final class MacKeyboardMappingTests: XCTestCase {
         XCTAssertTrue(tracker.releaseAll().isEmpty)
         XCTAssertEqual(tracker.update(pressedKeyCodes: [55]).first?.scanCode, 0x5b)
     }
+
+    func testModifierEventsTrackBothSidesWhenAggregateFlagStaysSet() {
+        var state = MacModifierEventState()
+        XCTAssertEqual(state.update(keyCode: 56, aggregatePressed: true), [56])
+        XCTAssertEqual(state.update(keyCode: 60, aggregatePressed: true), [56, 60])
+        // Releasing one Shift still leaves the aggregate Shift flag set.
+        XCTAssertEqual(state.update(keyCode: 56, aggregatePressed: true), [60])
+        XCTAssertEqual(state.update(keyCode: 60, aggregatePressed: false), [])
+    }
+
+    func testModifierEventResetAndUntrackedRelease() {
+        var state = MacModifierEventState()
+        XCTAssertEqual(state.update(keyCode: 59, aggregatePressed: true), [59])
+        state.reset()
+        XCTAssertEqual(state.update(keyCode: 59, aggregatePressed: false), [])
+        XCTAssertEqual(state.update(keyCode: 0, aggregatePressed: true), [])
+    }
 }
