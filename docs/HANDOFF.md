@@ -6,6 +6,12 @@
 
 用户要求先提交代码并等待后续验证。本次提交包含此前累积的 JPEG 三档画质、P2 协议/输入预览/队列/TLS 模拟适配及全部测试和交接文档。仅提交本地 Git，未推送远程；不继续开发新功能。Windows 最近 Release 0 警告/错误、59/59 已通过；Mac 累计预期 96 项仍待执行。下一步按 WORKFLOW_REVIEW.md 同步并验证；下文中尚未提交的描述是本次提交前的历史状态。
 
+## 当前：Mac 自动验证完成（2026-09-30，最新）
+
+用户已在 Mac 实际完成本轮第一检查点：`InputSendQueueTests` 9 项、`AuthenticatedInputSenderTests` 13 项、`InputConnectionDriverTests` 12 项均全部通过；全量 `swift test` 为 96 项全部通过；`swift build -c release` 成功，输出 `Build complete! (18.76s)`。这确认了当前提交的 Swift 编译、共享向量、队列/认证发送状态及调度替身测试，但不等于 InputPreview 人工交互、真实 NWConnection TLS mock、真实 Windows 输入或 P1 画质稳定性已经通过。
+
+下一检查点：运行 `swift run -c release InputPreview`，逐项完成 [P2_INPUT_HANDOFF.md](P2_INPUT_HANDOFF.md) 中键鼠、左右修饰键、黑边、拖出边界、滚轮、失焦、Esc/停止及释放清单。完成前不扩展新的 P2 功能，不接生产 GUI 或真实 SendInput。
+
 ## 当前：流程审查与 TLS 模拟适配（2026-09-29）
 
 审查结论：产品方向无偏离，但 Mac 验证积压，P1/P2 不能宣称整阶段完成。Mac 最后实际通过 40 项；本轮继续既定 TLS 模拟适配切片后，累计预期 96 项，均需 Mac 重新运行。以 [WORKFLOW_REVIEW.md](WORKFLOW_REVIEW.md) 为当前接收入口，包含模块证据表、准确命令和下一步顺序。

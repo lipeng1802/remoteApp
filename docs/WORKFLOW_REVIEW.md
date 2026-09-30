@@ -1,5 +1,9 @@
 # 当前流程审查与 Mac 接收检查点
 
+## 2026-09-30 Mac 自动检查结果
+
+用户实际运行结果：`InputSendQueueTests` 9/9、`AuthenticatedInputSenderTests` 13/13、`InputConnectionDriverTests` 12/12、全量 `swift test` 96/96 均通过；Release 构建成功，`Build complete! (18.76s)`。因此下文“尚未在 Mac 编译”的描述保留为执行前历史背景。当前应继续 InputPreview 本地人工清单；这些自动结果不能替代真实 AppKit 交互或 NWConnection TLS 正负向验证。
+
 日期：2026-09-29。用户要求检查是否偏离并继续下一步。
 
 ## 审查结论
