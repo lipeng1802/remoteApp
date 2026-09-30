@@ -8,6 +8,29 @@
 
 本机没有 .NET SDK，尚未编译。Windows 拉取后需运行 Release 构建和协议测试，再启动最新源码：Mac 主动断开后 Windows 应显示“Mac 会话已结束 · 等待已配对的 Mac 重新连接”，开始/停止按钮状态及本次控制许可保持；Mac 无需让 Windows 重新点击“开始共享”即可再次连接。Windows 主动停止和紧急停止仍必须真正结束共享并撤销许可。
 
+### Windows 接手清单
+
+在仓库根目录 PowerShell 中执行：
+
+~~~powershell
+git pull --ff-only origin main
+git log -1 --oneline
+dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
+dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
+dotnet run --project .\windows\RemoteAgent\tests\WindowsInput.Tests\WindowsInput.Tests.csproj -c Release
+dotnet run --project .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c Release
+~~~
+
+预期 HEAD 至少包含 `afae283 fix: keep Windows sharing after Mac disconnect`，Release 0 错误，协议 **62/62**，WindowsInput **6/6**。随后执行：
+
+1. Windows 不授权控制并开始共享；Mac 以只读方式连接，确认画面正常。
+2. Mac 点击“断开”；确认 Windows 不退出共享，开始按钮仍禁用、停止按钮仍可用，状态变为等待 Mac 重新连接。
+3. Windows 不做任何操作，Mac 直接再次连接；确认画面恢复，键鼠仍不能操作 Windows。
+4. 再次从 Mac 断开，然后由 Windows 点击“停止共享”；确认这次才真正结束监听，开始按钮恢复，控制许可为未选中。
+5. 可选控制态回归：Windows 授权、Mac 控制后断开，确认“持有 0”且 Windows 继续等待；Mac 再连后需要重新点击“开始控制”，Windows 本次共享许可无需重复确认。最后用 Windows 停止或本机 `Ctrl + Alt + Esc`，确认共享结束并清空许可。
+
+回传 Release、协议、WindowsInput 三组结果，以及第 2–5 项是否通过；任何失败需同时记录 Windows 状态文字和按钮状态。
+
 ## Mac 默认连接地址（2026-09-30，最新）
 
 Mac RemoteController 的 Windows 地址输入框默认填写 `100.73.4.118`，仍允许用户手动修改。该值是当前 Windows 设备的 Tailscale IP，仅用于减少双机复测时的重复输入，不改变 TLS 指纹、设备密钥、HMAC 认证或控制许可边界。
