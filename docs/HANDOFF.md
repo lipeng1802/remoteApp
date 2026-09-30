@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：JPEG + 输入单连接双向服务端，待 Windows 验证（2026-09-30，最新）
+
+用户确认上一切片 Windows prescribed tests 全部通过：Release solution、原生输入边界 6/6、既有协议 60/60，记录为 Windows 原生 `SendInput` 边界编译与 fake API 回归通过；仍未执行真实桌面注入。
+
+本轮新增认证后的 JPEG + 输入双向服务端：输入读取与 JPEG/PONG 单写入分离，所有服务端出站帧共享连续序号；PONG 使用固定 16 项有界队列，视频帧期限、输入读取期限/限速和断线释放保持。新增真实 loopback TLS/HMAC 回归，预期协议测试由 60 增至 61。详见 [DUPLEX_SESSION_HANDOFF.md](DUPLEX_SESSION_HANDOFF.md)。
+
+当前 WPF GUI 仍未传入 input session，不会创建 `WindowsInputSink`，产品行为继续只读。本机没有 .NET SDK，本轮 C# 尚未编译；Windows 需验证 Release、61/61 和原生边界 6/6。通过后的下一切片是 Mac 单连接双向调度器及 Network.framework 回环测试，之后才接 GUI 授权和真实输入。
+
 ## 当前：Windows 原生输入边界已实现，待 Windows 验证（2026-09-30，最新）
 
 新增独立 `WindowsInput` 项目及 6 项无注入自动测试：协议绝对坐标到 Win32 `SendInput`、三键、横/纵滚轮、扫描码/扩展键/KeyUp、失败后尽力释放与重试，以及 win-x64 ABI 尺寸。原生调用逐事件检查返回值，sink 只在成功后更新持有状态。RemoteAgent 仅引用该模块但产品 GUI/TLS 尚未创建 sink，现有共享仍严格只读；自动测试使用 fake API，不会真实移动键鼠。

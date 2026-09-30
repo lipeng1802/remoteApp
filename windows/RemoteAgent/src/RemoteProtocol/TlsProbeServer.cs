@@ -14,9 +14,10 @@ public static class TlsProbeServer
         byte[] deviceKey, byte[] agentIdentifier, CancellationToken cancellationToken = default,
         TimeSpan? sessionTimeout = null, Func<IJpegFrameSource>? createJpegSource = null,
         Action<string>? reportStatus = null, Action<JpegTransferMetrics>? reportMetrics = null,
-        TimeSpan? frameTimeout = null) =>
+        TimeSpan? frameTimeout = null, InputSimulationOptions? inputSession = null) =>
         RunCoreAsync(bindAddress, expectedRemoteAddress, port, certificate, deviceKey, agentIdentifier,
-            cancellationToken, sessionTimeout, createJpegSource, reportStatus, reportMetrics, frameTimeout);
+            cancellationToken, sessionTimeout, createJpegSource, reportStatus, reportMetrics, frameTimeout,
+            inputSession);
 
     // Test-only profile: bind and peer are fixed to loopback, with no video/native sink.
     public static Task RunInputSimulationOnceAsync(
@@ -68,6 +69,9 @@ public static class TlsProbeServer
         ArgumentNullException.ThrowIfNull(bindAddress);
         ArgumentNullException.ThrowIfNull(expectedRemoteAddress);
         ArgumentNullException.ThrowIfNull(certificate);
+        inputSimulation?.Validate();
+        if (createJpegSource is not null && inputSimulation is { LocalControlAllowed: false })
+            throw new InvalidOperationException("Explicit local input consent is required before listening.");
         if (port is < IPEndPoint.MinPort or > IPEndPoint.MaxPort)
         {
             throw new ArgumentOutOfRangeException(nameof(port));
@@ -121,8 +125,10 @@ public static class TlsProbeServer
         var wire = new ProbeFrameStream(tls, createJpegSource is not null);
         var gate = new SessionGate(PeerRole.Agent);
         var agentNonce = RandomNumberGenerator.GetBytes(32);
+        var capabilities = (createJpegSource is null ? Capabilities.None : Capabilities.Jpeg) |
+            (inputSimulation is null ? Capabilities.None : Capabilities.Input);
         await wire.WriteAsync(MessageType.Hello,
-            new HelloPayload(PeerRole.Agent, 1, 1, inputSimulation is not null ? Capabilities.Input : (createJpegSource is null ? Capabilities.None : Capabilities.Jpeg), agentNonce).Encode(), cancellationToken);
+            new HelloPayload(PeerRole.Agent, 1, 1, capabilities, agentNonce).Encode(), cancellationToken);
         var helloFrame = await Receive(MessageType.Hello);
         var controllerHello = HelloPayload.Decode(helloFrame.Payload);
         if (createJpegSource is not null && !controllerHello.Capabilities.HasFlag(Capabilities.Jpeg))
@@ -145,6 +151,13 @@ public static class TlsProbeServer
             new AuthResultPayload(accepted ? AuthResultStatus.Success : AuthResultStatus.Rejected,
                 accepted ? 0u : 1000u).Encode(), cancellationToken);
         if (!accepted) throw new AuthenticationException("Application authentication rejected.");
+        if (inputSimulation is not null && createJpegSource is not null)
+        {
+            sessionDeadline.CancelAfter(Timeout.InfiniteTimeSpan);
+            await InteractiveJpegSession.RunAsync(wire, gate, createJpegSource, inputSimulation,
+                reportStatus, reportMetrics, frameTimeout, cancellationToken).ConfigureAwait(false);
+            return;
+        }
         if (inputSimulation is not null)
         {
             sessionDeadline.CancelAfter(Timeout.InfiniteTimeSpan);

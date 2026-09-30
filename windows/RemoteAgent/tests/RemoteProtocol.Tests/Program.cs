@@ -9,6 +9,7 @@ using RemoteProtocol;
 
 var tests = new (string Name, Action Run)[]
 {
+    ("TLS JPEG and input share one authenticated duplex session", DuplexSessionTests.VideoAndInputShareOneAuthenticatedConnection),
     ("TLS coalesced input queue preserves barriers and releases", InputTlsTests.CoalescedQueue),
     ("TLS input client focus-loss releases before disconnect", InputTlsTests.CaptureLifecycle),
     ("TLS input simulation shared shortcut and disconnect cleanup", InputTlsTests.Success),

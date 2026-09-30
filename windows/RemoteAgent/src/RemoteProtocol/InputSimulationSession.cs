@@ -2,7 +2,8 @@ using System.Diagnostics;
 
 namespace RemoteProtocol;
 
-// Used only by the explicit loopback simulation entry point. Never wired to the desktop UI.
+// Shared authenticated input policy. Production callers must still supply explicit
+// per-session local consent; the desktop UI does not wire this option yet.
 public sealed record InputSimulationOptions(
     Func<IInputSink> CreateSink,
     bool LocalControlAllowed = false,
@@ -23,6 +24,17 @@ internal static class InputSimulationSession
 {
     internal static async Task RunAsync(ProbeFrameStream wire, SessionGate gate,
         InputSimulationOptions options, CancellationToken cancellationToken)
+    {
+        await RunReadLoopAsync(wire, gate, options,
+            (payload, token) => wire.WriteAsync(MessageType.Pong, payload, token),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    // The duplex JPEG profile supplies a bounded callback so only its single
+    // writer touches ProbeFrameStream's outgoing sequence and TLS writes.
+    internal static async Task RunReadLoopAsync(ProbeFrameStream wire, SessionGate gate,
+        InputSimulationOptions options, Func<byte[], CancellationToken, Task> sendPong,
+        CancellationToken cancellationToken)
     {
         if (!options.LocalControlAllowed)
             throw new ProtocolException(ProtocolError.InvalidState, "Local input consent is required.");
@@ -51,7 +63,7 @@ internal static class InputSimulationSession
                 gate.Receive(frame);
                 if (frame.Payload.Length != 8)
                     throw new ProtocolException(ProtocolError.InvalidPayload, "Invalid heartbeat.");
-                await wire.WriteAsync(MessageType.Pong, frame.Payload, deadline.Token).ConfigureAwait(false);
+                await sendPong(frame.Payload, deadline.Token).ConfigureAwait(false);
             }
             else dispatcher.Apply(frame);
         }

@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 JPEG + 输入单连接服务端
+
+用户确认上一切片 Windows Release、`WindowsInput.Tests` 6/6 和协议 60/60 全部通过。本轮把 JPEG 下行与输入上行合入同一认证会话，服务端仅一个写入者负责 JPEG/SCREEN_INFO/PONG 并维护连续序号，输入读取错误、断线或取消统一释放。新增真实 loopback TLS/HMAC 回归后协议预期 61/61，待 Windows 按 [DUPLEX_SESSION_HANDOFF.md](DUPLEX_SESSION_HANDOFF.md) 验证。GUI 仍只读，测试仍使用内存 sink。
+
 ## 2026-09-30 Windows 原生 sink 边界
 
 独立 `WindowsInput` 模块已实现 `SendInput` 映射和自身持有状态/尽力释放，新增 6 项 fake API 与 win-x64 ABI 测试。生产 GUI/TLS 尚未接线，RemoteAgent 仍是只读；本机无 .NET SDK，待 Windows 按 [WINDOWS_NATIVE_INPUT_HANDOFF.md](WINDOWS_NATIVE_INPUT_HANDOFF.md) 完成 6/6、原协议 60/60 和 Release 构建。该结果不能记为真实桌面输入通过。
