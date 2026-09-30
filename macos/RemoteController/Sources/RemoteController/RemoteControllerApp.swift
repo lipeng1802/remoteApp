@@ -32,7 +32,7 @@ private struct ReceivedImage {
 
 @MainActor
 private final class ViewerModel: ObservableObject {
-    @Published var host = ""
+    @Published var host = "100.73.4.118"
     @Published var status = "输入已配对的 Windows Tailscale 地址"
     @Published var connected = false
     @Published var image: CGImage?

@@ -2,6 +2,8 @@
 
 日期：2026-09-30。本切片首次从产品 RemoteController 向产品 RemoteAgent 执行真实 Win32 `SendInput`。请先保存 Windows 上所有工作，关闭敏感或可能造成数据损失的应用，只在记事本和空白桌面中测试。
 
+Mac RemoteController 当前默认填写 Windows Tailscale IP `100.73.4.118`；地址框仍可编辑，若 Windows 的 Tailscale IP 变化，请以 Windows 客户端显示的地址为准。
+
 ## 实现边界
 
 - 默认只读；Windows 每次共享都要重新勾选“允许本次远程控制”，并在警告框再次确认。
