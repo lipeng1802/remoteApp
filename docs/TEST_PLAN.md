@@ -231,3 +231,9 @@ Windows Release 0 警告/错误，59/59 实际通过；新增 input-queue-v1.jso
 Windows Release 与 59/59 本轮重新通过。Mac 新增 InputConnectionDriverTests 12 项，累计预期 96，尚未执行：慢写入/一万个移动有界、正常释放排空、拥塞取消、迟到回调、连接/写入期限、半帧 EOF、取消抑制认证通知、认证前输入、批次上限、构造许可/端口、真实 Dispatch 定时器和客户端释放。
 
 这些使用传输替身，不是真实 NWConnection 握手。TLSInputSimulationClient 的正确/错误指纹、正确/错误密钥及实际 TLS 断线仍待受控环境验证。WORKFLOW_REVIEW.md 为当前准确命令与阶段检查点；旧测试数量仅保留历史证据。
+
+## 产品 GUI 控制 mock（2026-09-30 最新）
+
+RemoteAgent/RemoteController 已接入默认关闭的双端控制许可、认证后手动开始、同连接 JPEG + 输入和停止/失焦/断开释放。Windows 使用只统计数量的 `SessionInputAuditSink`，不得产生真实系统输入。Mac 全量 109/109、Release 通过；Windows 仍需 Release、协议 61/61、输入边界 6/6，并按 [GUI_CONTROL_MOCK_HANDOFF.md](GUI_CONTROL_MOCK_HANDOFF.md) 完成双机 GUI 验收。
+
+人工验收必须同时检查：未授权保持只读；双方授权后事件计数到达但 Windows 桌面不动作；黑边不建立持有；拖出、Esc、停止、失焦和断开均回到持有 0；暂停后视频继续且不会自动恢复；重新建立只读会话正常。完成前禁止把产品 GUI 改接真实 `WindowsInputSink`。

@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：产品 GUI 控制 mock 已接线，待 Windows/双机验收（2026-09-30，最新）
+
+上一切片 Windows Release、协议 61/61、输入边界 6/6 已由用户确认通过。现已把同一连接的 JPEG + 输入能力接入两端产品 GUI，但仍停留在安全 mock：Windows 新增默认关闭的“允许本次远程控制测试”，仅勾选后才创建会话级内存统计 sink；该 sink 不引用 `WindowsInputSink`，不调用 `SendInput`，也不记录坐标、扫描码或按键内容。未勾选时保持原只读链路。
+
+Mac 查看器新增默认关闭的控制请求、认证后“开始控制”二次操作，以及覆盖远程画面的输入画布。只有 Windows 本次许可、Mac 请求控制、TLS/HMAC 认证成功且用户再次点击开始后才捕获窗口内输入。Esc、停止、窗口/应用失焦会发送释放并暂停，恢复后必须手动再次开始；主动断开先排空释放再发送 DISCONNECT，异常断线由 Windows 服务端兜底释放。首次连接仍必须先走只读模式核对并保存证书指纹，控制模式不会自动信任新证书。
+
+Mac 最终全量 **109/109**、0 failures；Release `Build complete! (6.54s)`，最终重跑无 Swift 并发告警。Windows 代码已做静态检查，但本机没有 .NET/Windows 环境，尚未构建；双机 GUI 人工验收也尚未执行。准确 Windows 命令、操作顺序与 PASS 标准见 [GUI_CONTROL_MOCK_HANDOFF.md](GUI_CONTROL_MOCK_HANDOFF.md)。通过前不得启用真实 `SendInput`。
+
 ## 当前：Mac 单连接双向调度器完成（2026-09-30，最新）
 
 用户确认上一切片 Windows Release、协议 61/61、输入边界 6/6 全部通过。Mac 现可在同一 TLS/HMAC 连接中协商 `Jpeg | Input`、分片接收 SCREEN_INFO/JPEG，并继续使用有界输入队列、单写入、独立双向序号、心跳和释放后 DISCONNECT。开发用 Network.framework 客户端新增可选 JPEG 回调；input-only 行为保持兼容。

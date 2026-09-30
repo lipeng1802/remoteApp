@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 产品 GUI 控制 mock
+
+产品 RemoteAgent/RemoteController 已接入显式许可、认证后手动开始、失焦/停止释放及同连接 JPEG + 输入；Windows 本轮仍只使用不记录内容的会话级内存统计 sink，不调用 `SendInput`。Mac 全量 109/109、Release 构建通过；Windows 构建、61/61、6/6 和双机 GUI 操作待按 [GUI_CONTROL_MOCK_HANDOFF.md](GUI_CONTROL_MOCK_HANDOFF.md) 验收。只有该清单通过后，才进入真实原生 sink 的单独人工验收切片。
+
 ## 2026-09-30 Mac 单连接双向调度器
 
 Windows 上一切片 Release、协议 61/61、输入边界 6/6 已由用户确认通过。Mac 认证输入发送器和连接调度器现可同时协商/接收 JPEG，保持独立双向序号、有界队列、一个写入中和统一失败关闭；真实 Network.framework TLS 测试验证同一连接收视频并发送按下/释放/DISCONNECT。新增 5 项后本机全量 109/109、Release 构建成功。产品 GUI 尚未接线，详见 [MAC_DUPLEX_HANDOFF.md](MAC_DUPLEX_HANDOFF.md)。

@@ -14,7 +14,9 @@ public partial class MainWindow : Window
         using var lifetime = new CancellationTokenSource();
         sharing = lifetime;
         var quality = QualitySelector.SelectedIndex switch { 0 => 40, 2 => 85, _ => 70 };
+        var allowControl = ControlConsent.IsChecked == true;
         QualitySelector.IsEnabled = false;
+        ControlConsent.IsEnabled = false;
         StartButton.IsEnabled = false;
         StopButton.IsEnabled = true;
         MetricsText.Text = "等待首帧统计";
@@ -25,13 +27,23 @@ public partial class MainWindow : Window
             using var certificate = AgentCertificateStore.LoadOrCreate();
             using var credentials = AgentCredentialStore.LoadOrCreate();
             FingerprintText.Text = CertificateFingerprint.FromCertificateDer(certificate.RawData).Hexadecimal;
+            ControlText.Text = allowControl
+                ? "本次已允许控制测试 · 等待认证（内存统计，不注入 Windows）"
+                : "本次只读 · 不接受输入";
             StatusText.Text = "等待已配对的 Mac 连接 · 端口 47475";
+            InputSimulationOptions? inputSession = allowControl
+                ? new InputSimulationOptions(
+                    () => new SessionInputAuditSink(snapshot => Dispatcher.BeginInvoke(() =>
+                        ControlText.Text = $"控制测试已认证 · 事件 {snapshot.Events} · 释放 {snapshot.Releases} · 持有 {snapshot.Held}")),
+                    LocalControlAllowed: true)
+                : null;
             await Task.Run(() => TlsProbeServer.RunOnceAsync(endpoints.Local, endpoints.Peer, 47475,
                 certificate, credentials.DeviceKey, credentials.AgentIdentifier, lifetime.Token,
                 createJpegSource: () => new PrimaryScreenCapture(quality),
                 reportStatus: text => Dispatcher.Invoke(() => StatusText.Text = text),
                 reportMetrics: metrics => Dispatcher.Invoke(() => MetricsText.Text =
-                    $"帧 {metrics.FrameNumber} · 采集+编码 {metrics.CaptureMilliseconds:F0} ms · 网络写入 {metrics.SendMilliseconds:F0} ms · 本帧总耗时 {metrics.FrameMilliseconds:F0} ms · 每帧 {metrics.JpegBytes / 1024.0:F1} KiB")), lifetime.Token);
+                    $"帧 {metrics.FrameNumber} · 采集+编码 {metrics.CaptureMilliseconds:F0} ms · 网络写入 {metrics.SendMilliseconds:F0} ms · 本帧总耗时 {metrics.FrameMilliseconds:F0} ms · 每帧 {metrics.JpegBytes / 1024.0:F1} KiB"),
+                inputSession: inputSession), lifetime.Token);
             StatusText.Text = "会话已结束；再次共享请点击开始";
         }
         catch (JpegTransferTimeoutException)
@@ -52,9 +64,17 @@ public partial class MainWindow : Window
                 MetricsText.Text = "最后成功发送：" + MetricsText.Text;
             sharing = null;
             QualitySelector.IsEnabled = true;
+            ControlConsent.IsEnabled = true;
             StartButton.IsEnabled = true;
             StopButton.IsEnabled = false;
         }
+    }
+    private void ControlConsent_Click(object sender, RoutedEventArgs e)
+    {
+        if (sharing is null)
+            ControlText.Text = ControlConsent.IsChecked == true
+                ? "已选择：下一次共享接受控制测试（仍不会注入 Windows）"
+                : "未允许：本次共享只发送画面";
     }
     private void Stop_Click(object sender, RoutedEventArgs e) => sharing?.Cancel();
     private void Window_Closing(object? sender, CancelEventArgs e) => sharing?.Cancel();

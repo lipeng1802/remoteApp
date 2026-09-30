@@ -14,9 +14,9 @@
 
 ## 当前进度
 
-P0、TLS 和应用认证双机验收已通过；P1 JPEG 能显示 Windows 画面，画质/真实采集复验和跨网 30 分钟稳定性仍待完成。P2 已有键鼠协议、Mac 映射/本地预览及 Windows 模拟 TLS，产品仍只读，未注入真实输入。
+P0、TLS 和应用认证双机验收已通过；P1 JPEG 能显示 Windows 画面，画质/真实采集复验和跨网 30 分钟稳定性仍待完成。P2 已把键鼠捕获和同连接 JPEG + 输入接入产品 GUI，目前 Windows 只统计输入、不执行原生注入，待双机 GUI 验收。
 
-Windows Release 和 59 项测试通过；Mac 新增代码累计预期 96 项测试，尚待 Mac 编译执行。按 [P2 输入交接](docs/P2_INPUT_HANDOFF.md) 验证本地预览，按 [画质清单](docs/JPEG_QUALITY_HANDOFF.md) 收尾 P1。最新状态以 [HANDOFF](docs/HANDOFF.md) 顶部为准。
+上一切片 Windows Release、协议 61/61 和输入边界 6/6 已通过；本切片 Mac 109/109 和 Release 已通过，Windows 构建与双机产品 GUI 操作待验证。按 [GUI 控制 mock 交接](docs/GUI_CONTROL_MOCK_HANDOFF.md) 执行，最新状态以 [HANDOFF](docs/HANDOFF.md) 顶部为准。
 
 最终交付为两个平台各自的安装包：macOS 控制端 `.dmg` 和 Windows 被控端 `Setup.exe`。开发阶段从 P0 起持续验证打包，不等到功能全部完成后再处理安装问题。
 
@@ -90,7 +90,7 @@ Windows现提供低带宽、标准（默认）、清晰三档，仍最高1280×7
 swift run -c release InputPreview
 ~~~
 
-点击开始后测试窗口内键鼠、黑边与失焦释放；只显示本地事件计数，不连接 Windows，不记录按键内容。Mac 尚未实机验证；逐项清单见 [P2 交接](docs/P2_INPUT_HANDOFF.md)。
+点击开始后测试窗口内键鼠、黑边与失焦释放；只显示本地事件计数，不连接 Windows，不记录按键内容。该工具的人工清单已通过；产品 GUI 的跨机 mock 仍按 [GUI 控制 mock 交接](docs/GUI_CONTROL_MOCK_HANDOFF.md) 单独验收。
 
 ### 输入发送状态机
 

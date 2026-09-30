@@ -36,13 +36,19 @@ private final class ViewerModel: ObservableObject {
     @Published var status = "输入已配对的 Windows Tailscale 地址"
     @Published var connected = false
     @Published var image: CGImage?
-    @Published var detail = "只读模式"
-    private let client = TLSControllerClient(trustStore: KeychainTrustedFingerprintStore())
+    @Published var detail = "默认只读"
+    @Published var requestControl = false
+    @Published var controlReady = false
+    @Published var controlCapturing = false
+    @Published var screenInfo: ScreenInfoPayload?
+    private let fingerprintStore = KeychainTrustedFingerprintStore()
+    private lazy var readOnlyClient = TLSControllerClient(trustStore: fingerprintStore)
+    private var duplexClient: TLSInputSimulationClient?
     private var stopConnection: (() -> Void)?
     private var generation = UUID()
     private var latest = LatestValue<ReceivedImage>()
     private var frameRate = FrameRateMeter()
-
+    private weak var inputCanvas: RemoteInputCanvas?
 
     func connect() {
         guard !connected else { return }
@@ -56,16 +62,62 @@ private final class ViewerModel: ObservableObject {
             }
             key = stored
         } catch { status = "无法读取 Keychain 密钥"; return }
+        let fingerprint: CertificateFingerprint?
+        do { fingerprint = try fingerprintStore.loadFingerprint(for: address) }
+        catch { status = "无法读取已信任的证书指纹"; return }
+        if requestControl && fingerprint == nil {
+            status = "控制测试要求已有证书指纹；请先取消控制选项并完成一次只读连接"
+            return
+        }
         connected = true
         image = nil
-        detail = "只读模式 · 等待首帧"
+        screenInfo = nil
+        controlReady = false
+        controlCapturing = false
+        detail = requestControl ? "控制测试 · 等待认证" : "只读模式 · 等待首帧"
         frameRate = FrameRateMeter()
         generation = UUID()
         let current = generation
         let slot = LatestValue<ReceivedImage>()
         latest = slot
         var count = 0 // Only touched by the client's serial network queue.
-        stopConnection = client.runProbe(host: address, port: 47475, deviceIdentifier: address,
+        if requestControl, let fingerprint {
+            do {
+                let connection = try TLSInputSimulationClient(tailscaleHost: address, port: 47475,
+                    expectedFingerprint: fingerprint, deviceKey: key, localControlAllowed: true,
+                    connectionTimeout: 180,
+                    onJpegFrame: { screen, jpeg in
+                        guard let decoded = JpegImageDecoder.decode(jpeg) else { return }
+                        count += 1
+                        slot.replace(ReceivedImage(image: decoded, screen: screen, count: count))
+                    },
+                    onAuthenticated: { [weak self] in
+                        DispatchQueue.main.async {
+                            guard let self, self.generation == current, self.connected else { return }
+                            self.controlReady = true
+                            self.status = "已认证 · Windows 已允许控制测试；点击开始控制"
+                        }
+                    },
+                    completion: { [weak self] result in
+                        DispatchQueue.main.async {
+                            guard let self, self.generation == current else { return }
+                            switch result {
+                            case .success: self.complete(status: "控制会话已安全结束")
+                            case .failure(.cancelled): self.complete(status: "已断开")
+                            case let .failure(error): self.complete(status: "控制连接已结束（\(error)），可手动重试")
+                            }
+                        }
+                    })
+                duplexClient = connection
+                stopConnection = { connection.cancel() }
+                status = "正在连接 TLS 控制测试会话"
+                connection.start()
+            } catch {
+                complete(status: "无法启动控制测试连接（\(error)）")
+            }
+            return
+        }
+        stopConnection = readOnlyClient.runProbe(host: address, port: 47475, deviceIdentifier: address,
             deviceKey: key, timeout: 180,
             onJpegFrame: { screen, image in
                 count += 1
@@ -91,30 +143,82 @@ private final class ViewerModel: ObservableObject {
             completion: { [weak self] result in
                 DispatchQueue.main.async {
                     guard let self, self.generation == current else { return }
-                    self.connected = false
-                    self.image = nil
-                    self.latest.clear()
-                    self.stopConnection = nil
                     switch result {
-                    case .success: self.status = "会话已结束"
-                    case .failure(.cancelled): self.status = "已断开"
-                    case let .failure(error): self.status = "连接已结束（\(error)），可手动重试"
+                    case .success: self.complete(status: "会话已结束")
+                    case .failure(.cancelled): self.complete(status: "已断开")
+                    case let .failure(error): self.complete(status: "连接已结束（\(error)），可手动重试")
                     }
                 }
             })
     }
-    func disconnect() {
-        generation = UUID()
-        stopConnection?(); stopConnection = nil
-        latest.clear(); image = nil; connected = false
-        status = "已断开"; detail = "只读模式"
+
+    private func complete(status: String) {
+        inputCanvas?.abandon()
+        connected = false
+        image = nil
+        screenInfo = nil
+        latest.clear()
+        stopConnection = nil
+        duplexClient = nil
+        controlReady = false
+        controlCapturing = false
+        detail = requestControl ? "控制测试" : "只读模式"
+        self.status = status
     }
+
+    func disconnect() {
+        if let duplexClient, controlReady {
+            let releases = inputCanvas?.stopForDisconnect() ?? []
+            controlCapturing = false
+            controlReady = false
+            status = "正在释放输入并断开"
+            duplexClient.finish(releases: releases)
+            return
+        }
+        generation = UUID()
+        inputCanvas?.abandon()
+        stopConnection?(); stopConnection = nil
+        duplexClient = nil
+        latest.clear(); image = nil; screenInfo = nil; connected = false
+        controlReady = false; controlCapturing = false
+        status = "已断开"; detail = requestControl ? "控制测试" : "只读模式"
+    }
+
+    func registerInputCanvas(_ canvas: RemoteInputCanvas) { inputCanvas = canvas }
+
+    func startControl() {
+        guard connected, controlReady, screenInfo != nil else { return }
+        guard inputCanvas?.start() == true else {
+            status = "无法取得画面键盘焦点；请先激活此窗口后重试"
+            return
+        }
+        controlCapturing = true
+        status = "正在控制测试 · Windows 仅统计输入，不执行"
+    }
+
+    func stopControl() { inputCanvas?.pause() }
+
+    func submitInputs(_ inputs: [CapturedInput]) -> Bool {
+        guard connected, controlReady, let duplexClient else { return false }
+        return duplexClient.submit(inputs)
+    }
+
+    func inputPaused() {
+        guard controlCapturing else { return }
+        controlCapturing = false
+        if connected { status = "控制已暂停并释放；再次开始需手动点击" }
+    }
+
     func presentLatest() {
         guard connected, let next = latest.take() else { return }
         image = next.image
-        status = "正在查看 Windows 主屏 · 只读"
+        screenInfo = next.screen
+        if !controlCapturing {
+            status = controlReady ? "正在查看 Windows 主屏 · 控制测试已就绪" : "正在查看 Windows 主屏 · 只读"
+        }
         if let fps = frameRate.update(totalFrames: next.count, now: ProcessInfo.processInfo.systemUptime) {
-            detail = "\(next.image.width) × \(next.image.height) · \(String(format: "%.1f", fps)) FPS · 主屏 \(next.screen.width) × \(next.screen.height)"
+            let mode = controlReady ? "控制测试" : "只读"
+            detail = "\(mode) · \(next.image.width) × \(next.image.height) · \(String(format: "%.1f", fps)) FPS · 主屏 \(next.screen.width) × \(next.screen.height)"
 
         }
     }
@@ -135,6 +239,15 @@ private struct ContentView: View {
                 Button("连接") { model.connect() }.disabled(model.connected)
                 Button("断开") { model.disconnect() }.disabled(!model.connected)
             }
+            HStack {
+                Toggle("请求远程控制测试（Windows 仅统计，不注入）", isOn: $model.requestControl)
+                    .disabled(model.connected)
+                Spacer()
+                Button(model.controlCapturing ? "停止控制" : "开始控制") {
+                    if model.controlCapturing { model.stopControl() } else { model.startControl() }
+                }
+                .disabled(!model.controlReady || model.screenInfo == nil)
+            }
             HStack { Text(model.status); Spacer(); Text(model.detail).foregroundStyle(.secondary) }
                 .font(.callout)
             ZStack {
@@ -142,6 +255,10 @@ private struct ContentView: View {
                 if let image = model.image {
                     Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fit)
                 } else { Text("等待已认证的 Windows 画面").foregroundStyle(.gray) }
+                RemoteInputOverlay(screen: model.screenInfo, enabled: model.controlCapturing,
+                    register: model.registerInputCanvas,
+                    submit: model.submitInputs,
+                    paused: model.inputPaused)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
