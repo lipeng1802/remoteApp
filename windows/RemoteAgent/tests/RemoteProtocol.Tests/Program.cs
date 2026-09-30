@@ -10,6 +10,7 @@ using RemoteProtocol;
 var tests = new (string Name, Action Run)[]
 {
     ("TLS JPEG and input share one authenticated duplex session", DuplexSessionTests.VideoAndInputShareOneAuthenticatedConnection),
+    ("control-enabled agent accepts a read-only controller", DuplexSessionTests.ControlEnabledAgentAcceptsReadOnlyController),
     ("Mac disconnect keeps Windows sharing available", DuplexSessionTests.DisconnectKeepsSharingAvailable),
     ("TLS coalesced input queue preserves barriers and releases", InputTlsTests.CoalescedQueue),
     ("TLS input client focus-loss releases before disconnect", InputTlsTests.CaptureLifecycle),

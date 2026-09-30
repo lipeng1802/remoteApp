@@ -160,7 +160,9 @@ public static class TlsProbeServer
         var controllerHello = HelloPayload.Decode(helloFrame.Payload);
         if (createJpegSource is not null && !controllerHello.Capabilities.HasFlag(Capabilities.Jpeg))
             throw new ProtocolException(ProtocolError.InvalidPayload, "Peer does not support JPEG.");
-        if (inputSimulation is not null && !controllerHello.Capabilities.HasFlag(Capabilities.Input))
+        var inputNegotiated = inputSimulation is not null &&
+            controllerHello.Capabilities.HasFlag(Capabilities.Input);
+        if (createJpegSource is null && inputSimulation is not null && !inputNegotiated)
             throw new ProtocolException(ProtocolError.InvalidPayload, "Input capability required for simulation.");
         reportStatus?.Invoke("正在验证应用密钥");
         var challenge = new AuthChallengePayload(RandomNumberGenerator.GetBytes(32), agentIdentifier);
@@ -178,17 +180,17 @@ public static class TlsProbeServer
             new AuthResultPayload(accepted ? AuthResultStatus.Success : AuthResultStatus.Rejected,
                 accepted ? 0u : 1000u).Encode(), cancellationToken);
         if (!accepted) throw new AuthenticationException("Application authentication rejected.");
-        if (inputSimulation is not null && createJpegSource is not null)
+        if (inputNegotiated && createJpegSource is not null)
         {
             sessionDeadline.CancelAfter(Timeout.InfiniteTimeSpan);
-            await InteractiveJpegSession.RunAsync(wire, gate, createJpegSource, inputSimulation,
+            await InteractiveJpegSession.RunAsync(wire, gate, createJpegSource, inputSimulation!,
                 reportStatus, reportMetrics, frameTimeout, cancellationToken).ConfigureAwait(false);
             return;
         }
-        if (inputSimulation is not null)
+        if (inputNegotiated)
         {
             sessionDeadline.CancelAfter(Timeout.InfiniteTimeSpan);
-            await InputSimulationSession.RunAsync(wire, gate, inputSimulation, cancellationToken).ConfigureAwait(false);
+            await InputSimulationSession.RunAsync(wire, gate, inputSimulation!, cancellationToken).ConfigureAwait(false);
             return;
         }
         if (createJpegSource is not null)

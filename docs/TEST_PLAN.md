@@ -246,6 +246,8 @@ RemoteAgent/RemoteController 已接入默认关闭的双端控制许可、认证
 
 2026-09-30 最终只读回归发现 Mac 主动断开会错误结束 Windows 整体共享。RemoteAgent 已改用持续监听：每次 Mac 会话结束后释放会话资源并重新等待，同一次 Windows 共享许可保持；只有 Windows 停止、紧急停止或关闭应用才结束共享并撤销许可。新增协议回归后预期 62/62，待 Windows 构建及双机断开后直接重连验证。
 
+2026-10-01 Windows 允许控制、Mac 未请求控制时出现 `unexpectedResponse`。服务端已将本机许可改为能力上限：Controller 只声明 JPEG 时降级为只读且不创建输入 sink；双方都声明 Input 时才启用控制。新增真实 TLS/HMAC 回归后协议预期 63/63，待 Windows 构建及“Windows 许可 + Mac 只读”双机验证。
+
 同批验收新增 Windows 物理键盘全局 `Ctrl + Alt + Esc`：真实控制期间按下必须立即取消共享并释放；热键注册失败时真实控制必须拒绝启动；关闭 RemoteAgent 后应注销。该路径不能用 Mac 远程组合键替代。自动检查数量不变，Windows WPF/PInvoke 仍待实机构建。
 
 首轮真实输入中触控板双指纵向滚动稳定触发 Mac `congested`，其余键鼠与持有清零通过。发送队列现合并连续未发送的 `move + wheel` 批次，Int32 饱和且不跨按键/按钮等屏障；新增一万批次及边界测试后队列 11/11、全量 111/111、Release 通过。双机需持续纵横滚动至少 10 秒确认不再断线，才能继续记录后续停止项。

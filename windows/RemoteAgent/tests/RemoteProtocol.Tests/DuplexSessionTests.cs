@@ -11,7 +11,66 @@ using RemoteProtocol;
 internal static class DuplexSessionTests
 {
     public static void VideoAndInputShareOneAuthenticatedConnection() => RunAsync().GetAwaiter().GetResult();
+    public static void ControlEnabledAgentAcceptsReadOnlyController() => RunReadOnlyAsync().GetAwaiter().GetResult();
     public static void DisconnectKeepsSharingAvailable() => RunContinuousAsync().GetAwaiter().GetResult();
+
+    private static async Task RunReadOnlyAsync()
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+        using var certificate = AgentCertificateFactory.CreateSelfSigned();
+        var key = RandomNumberGenerator.GetBytes(32);
+        var reservation = new TcpListener(IPAddress.Loopback, 0);
+        reservation.Start();
+        var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
+        reservation.Stop();
+        var sourceConstructed = false;
+        var sinkConstructed = false;
+        var server = TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback, port,
+            certificate, key, new byte[16], stop.Token,
+            createJpegSource: () => { sourceConstructed = true; return new FakeSource(); },
+            inputSession: new InputSimulationOptions(
+                () => { sinkConstructed = true; return new FakeSink(); }, LocalControlAllowed: true));
+
+        try
+        {
+            using var client = new TcpClient { NoDelay = true };
+            await client.ConnectAsync(IPAddress.Loopback, port, deadline.Token);
+            using var tls = new SslStream(client.GetStream(), false, (_, peer, _, _) =>
+                peer is not null && peer.GetRawCertData().AsSpan().SequenceEqual(certificate.RawData));
+            await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+            {
+                TargetHost = "localhost",
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+            }, deadline.Token);
+            var wire = new ProbeFrameStream(tls);
+            var hello = HelloPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            Check(hello.Capabilities == (Capabilities.Jpeg | Capabilities.Input),
+                "Control-enabled agent did not advertise both capabilities.");
+            var nonce = RandomNumberGenerator.GetBytes(32);
+            await wire.WriteAsync(MessageType.Hello, new HelloPayload(PeerRole.Controller, 1, 1,
+                Capabilities.Jpeg, nonce).Encode(), deadline.Token);
+            var challenge = AuthChallengePayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            await wire.WriteAsync(MessageType.AuthResponse, Authentication.CreateResponse(key, nonce,
+                hello.Nonce, challenge.Challenge, challenge.AgentIdentifier), deadline.Token);
+            var result = AuthResultPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
+            Check(result.Status == AuthResultStatus.Success,
+                "Control-enabled agent rejected a read-only controller.");
+
+            var sawVideo = false;
+            for (var count = 0; count < 10 && !sawVideo; count++)
+                sawVideo = (await wire.ReadAsync(deadline.Token)).Type == MessageType.VideoFrameJpeg;
+            Check(sawVideo && sourceConstructed, "Read-only controller did not receive video.");
+            Check(!sinkConstructed, "Read-only controller constructed the protected input sink.");
+            stop.Cancel();
+        }
+        finally
+        {
+            stop.Cancel();
+            try { await server; } catch (OperationCanceledException) { }
+        }
+    }
 
     private static async Task RunContinuousAsync()
     {

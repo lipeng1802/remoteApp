@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：Windows 已许可时兼容 Mac 只读连接，待 Windows 验证（2026-10-01，最新）
+
+Windows 拉取持续共享版本后反馈：Windows 勾选“允许远程控制”，但 Mac 不勾选“请求远程控制”时连接失败，Mac 显示 `unexpectedResponse`。根因是 Agent 只要存在本机输入许可就强制要求 Controller 声明 Input 能力，把 Windows 的“最多允许控制”错误地当成双方必须控制。
+
+现改为能力协商降级：Agent 仍声明 `JPEG | Input`，但 Mac 只声明 `JPEG` 时认证成功并进入只读 JPEG 会话，不创建 `SessionNativeInputSink`/`WindowsInputSink`；只有 Mac 同时声明 Input 才进入双向控制会话。纯 input-only 开发服务器仍强制要求 Input，原有负向门禁不放宽。新增“control-enabled agent accepts a read-only controller”真实 TLS/HMAC 回归，协议测试预期由 **62** 增至 **63**。本机无 .NET SDK，待 Windows 编译验证。
+
+Windows 更新后执行 Release、协议 **63/63**、WindowsInput **6/6**，再勾选 Windows 控制许可并开始共享；Mac 不勾控制请求应能正常只读连接、显示画面且键鼠不影响 Windows。Mac 断开后 Windows 仍应继续等待，随后 Mac 勾选控制请求重新连接，应能手动“开始控制”。
+
 ## 当前：Mac 断开后 Windows 持续共享修复，待 Windows 验证（2026-09-30，最新）
 
 最终只读回归发现：Mac 主动断开后 Windows 同时结束了整个共享。产品此前调用单会话 `TlsProbeServer.RunOnceAsync`，客户端发送 DISCONNECT 后方法正常返回，WPF 因而进入共享结束清理；这不符合“Windows 持续等待、Mac 可重新连接”的产品行为。
@@ -21,7 +29,7 @@ dotnet run --project .\windows\RemoteAgent\tests\WindowsInput.Tests\WindowsInput
 dotnet run --project .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c Release
 ~~~
 
-预期 HEAD 至少包含 `afae283 fix: keep Windows sharing after Mac disconnect`，Release 0 错误，协议 **62/62**，WindowsInput **6/6**。随后执行：
+预期 HEAD 至少包含 `afae283 fix: keep Windows sharing after Mac disconnect`，Release 0 错误；加入只读协商回归后协议预期 **63/63**，WindowsInput **6/6**。随后执行：
 
 1. Windows 不授权控制并开始共享；Mac 以只读方式连接，确认画面正常。
 2. Mac 点击“断开”；确认 Windows 不退出共享，开始按钮仍禁用、停止按钮仍可用，状态变为等待 Mac 重新连接。

@@ -25,7 +25,7 @@ dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProt
 dotnet run --project .\windows\RemoteAgent\tests\WindowsInput.Tests\WindowsInput.Tests.csproj -c Release
 ~~~
 
-预期 Release 0 错误；协议 62/62；WindowsInput fake API 6/6。自动测试不会调用真实 `SendInput`。若数量因后续新增测试变化，以实际 0 failures 为准并记录数量。
+预期 Release 0 错误；协议 63/63；WindowsInput fake API 6/6。自动测试不会调用真实 `SendInput`。若数量因后续新增测试变化，以实际 0 failures 为准并记录数量。
 
 启动最新源码版，不要使用旧安装快捷方式或旧 artifacts：
 
@@ -44,7 +44,7 @@ dotnet run --project .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c
 7. **通过（2026-09-30）**。按住普通键、修饰键或鼠标按钮时分别执行 Mac Esc、Mac“停止控制”、切换 Mac 应用/窗口失焦、Mac 主动断开，四种路径最终均为“持有 0”，停止后 Mac 输入不再影响 Windows。Esc、停止和失焦只暂停控制并保持会话；返回后再次点击“开始控制”即可。主动断开才结束会话并要求重新连接。
 8. **通过（2026-09-30）**。再次控制并按住一个无破坏性的普通键或修饰键，从 Windows 的物理键盘按 `Ctrl + Alt + Esc`；本机强制停止按预期生效，共享结束、最终“持有 0”、Mac 断开，之后的 Mac 输入不再影响 Windows。
 9. **通过（2026-09-30）**。再次控制时由 Windows 点击“停止共享”，输入立即停止、最终“持有 0”且 Mac 自动断开。重新开始共享时控制许可已自动取消，未重新授权不能控制 Windows。
-10. 最后重新建立一次双方均未授权的只读会话，确认画面正常且 Mac 键鼠不影响 Windows。Mac 主动断开后，Windows 必须继续共享并显示等待 Mac 重新连接；Mac 应能直接再次连接，无需 Windows 重新点击“开始共享”。随后由 Windows 停止共享，确认监听结束。关闭 RemoteAgent 后重新启动，确认没有“紧急停止快捷键不可用”提示。
+10. 最后建立只读会话；即使 Windows 已勾选本次控制许可，只要 Mac 未勾选“请求远程控制”，也必须能正常连接并显示画面，且 Mac 键鼠不影响 Windows。Mac 主动断开后，Windows 必须继续共享并显示等待 Mac 重新连接；Mac 应能直接再次连接，无需 Windows 重新点击“开始共享”。随后由 Windows 停止共享，确认监听结束。关闭 RemoteAgent 后重新启动，确认没有“紧急停止快捷键不可用”提示。
 
 若出现鼠标持续移动、键或按钮未释放，立即在 Mac 按 Esc，并在 Windows 点击“停止共享”或关闭 RemoteAgent；记录双方状态文字和最后操作，不继续测试。若 `SendInput` 返回错误，会话应失败关闭并尝试释放，不能静默继续。
 
