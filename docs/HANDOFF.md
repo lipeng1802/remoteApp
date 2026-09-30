@@ -4,6 +4,8 @@
 
 用户已完成最后的 RemoteAgent 关闭/重启检查，未出现“紧急停止快捷键不可用”提示。结合此前协议 **63/63 passed**、WindowsInput fake 边界 **6/6**、Mac 全量测试及 Release 构建，以及 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 1–10 项双机人工结果，P2 真实键鼠 MVP 现已全部验收通过。
 
+P2 的开发进度、关键故障、根因、修复、最终证据和遗留边界已汇总到 [P2_PROGRESS_SUMMARY.md](P2_PROGRESS_SUMMARY.md)，后续阶段优先以该总结和本文件顶部状态为准。
+
 已验证默认只读、双方显式许可、真实鼠标/键盘/修饰键/快捷键、黑边拒绝、触控板纵横滚动、所有释放路径、Windows 本机 `Ctrl + Alt + Esc`、Windows 主动停止与许可重置、Mac 断开后 Windows 持续共享、同一共享重新连接、Windows 已许可时 Mac 只读能力降级，以及 RemoteAgent 重启后的快捷键重新注册。所有停止路径最终“持有 0”。
 
 当前仍是源码运行验证，旧安装包不包含这些最新改动。下一阶段应进入 Windows 与 macOS 各自安装包的重建、版本标识、安装/升级/卸载和干净环境验收；不要把源码验收结论直接视为安装包已通过。
