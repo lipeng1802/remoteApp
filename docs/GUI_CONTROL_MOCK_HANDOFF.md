@@ -35,7 +35,7 @@ swift build -c release --disable-sandbox
 git status --short
 dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
 dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
-dotnet test .\windows\RemoteAgent\tests\WindowsInput.Tests\WindowsInput.Tests.csproj -c Release
+dotnet run --project .\windows\RemoteAgent\tests\WindowsInput.Tests\WindowsInput.Tests.csproj -c Release
 ~~~
 
 预期：Release 构建 0 错误；协议 61/61；WindowsInput 6/6。若数量因后续提交变化，以 0 failures 和实际日志为准并记录新数量。本轮没有新增 Windows 自动测试，因为 GUI/WPF 和真实跨机事件必须人工覆盖。
@@ -57,3 +57,7 @@ PASS 必须同时满足：自动检查全部通过；控制需两端显式选择
 ## 下一切片
 
 只有上述双机验收通过后，才把 Windows 本次许可分支从内存统计 sink 切换到已有的 `WindowsInputSink`，并进行可立即停止的真实桌面人工验收。真实注入切片仍需保留默认只读、每次会话许可、可见控制状态、失焦/停止/断线释放和失败关闭；不得把本 mock 的“事件已到达”记录成桌面控制已通过。
+
+## Windows 实测启动入口（2026-09-30）
+
+Windows Release、61/61 协议及 6/6 fake 输入测试已实际通过。独立 self-contained 发布目录为 artifacts/windows/gui-control-mock-e91db1d，运行其中 RemoteAgent.exe（保留整个目录）。已通过 UI Automation 确认控制许可复选框可见、启用、默认未选中。更新 Git 不会更新旧安装快捷方式或旧 artifacts 可执行文件；请使用此目录的新版。当前尚未取得双机 GUI 验收结果。

@@ -8,6 +8,12 @@
 
 本机没有 Windows/.NET 环境，代码待 Windows 构建及双机复测。复测只需重点确认 Shift/Control/Command 按下立即显示正确持有，松开、Esc、停止、失焦和断开最终均显示 0；普通链路和默认只读仍做快速回归。通过前 GUI mock 保持未验收状态。
 
+## 历史验证：Windows GUI mock e91db1d 启动（2026-09-30）
+
+用户报告找不到控制许可选项。当前 HEAD e91db1d 源码已有 ControlConsent；检查时未发现运行中的 RemoteAgent，无法确认先前打开的二进制版本。已实际完成 Release（0 警告/错误）、协议 61/61、WindowsInput fake 测试 6/6，并发布独立自包含目录 artifacts/windows/gui-control-mock-e91db1d。
+
+已为用户打开该目录的 RemoteAgent.exe，UI Automation 确认控制许可复选框存在、可见、启用且默认 Off；未代为勾选或开始共享。旧 0.2.4 安装包不包含此 GUI 更新；双机 GUI 控制/释放验收仍待用户操作。本轮仅增加验证文档，按用户要求纳入本地提交；远程推送另行执行。
+
 ## 当前：产品 GUI 控制 mock 已接线，待 Windows/双机验收（2026-09-30，最新）
 
 上一切片 Windows Release、协议 61/61、输入边界 6/6 已由用户确认通过。现已把同一连接的 JPEG + 输入能力接入两端产品 GUI，但仍停留在安全 mock：Windows 新增默认关闭的“允许本次远程控制测试”，仅勾选后才创建会话级内存统计 sink；该 sink 不引用 `WindowsInputSink`，不调用 `SendInput`，也不记录坐标、扫描码或按键内容。未勾选时保持原只读链路。
