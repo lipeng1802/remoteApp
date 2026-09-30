@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 Windows 本机紧急停止
+
+RemoteAgent 新增全局 `Ctrl + Alt + Esc` 本机紧急停止；注册失败时禁止真实控制但保留只读共享，窗口关闭时注销。该 Windows 增量尚未编译，将与真实 `WindowsInputSink` 按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 一起验收，不单独声称通过。
+
 ## 2026-09-30 真实 Windows 输入接线
 
 产品 Windows 许可分支现创建 `SessionNativeInputSink` 并委托已有 `WindowsInputSink` 调用 Win32 `SendInput`。Windows 端要求复选框和警告框双重确认，Mac 端要求控制选项、认证成功后手动开始；会话结束自动撤销 Windows 许可。Mac 109/109 与 Release 已通过，Windows 构建和真实桌面人工验证待按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 执行。通过前不能宣称 P2 真实控制完成。

@@ -1,17 +1,68 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using RemoteProtocol;
 
 namespace RemoteAgent;
 
 public partial class MainWindow : Window
 {
+    private const int WmHotkey = 0x0312;
+    private const int EmergencyHotkeyId = 0x5052;
+    private const uint ModAlt = 0x0001;
+    private const uint ModControl = 0x0002;
+    private const uint ModNoRepeat = 0x4000;
+    private const uint VirtualKeyEscape = 0x1b;
     private CancellationTokenSource? sharing;
-    public MainWindow() { InitializeComponent(); }
+    private HwndSource? windowSource;
+    private bool emergencyHotkeyAvailable;
+    private bool emergencyStopRequested;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        SourceInitialized += Window_SourceInitialized;
+    }
+
+    private void Window_SourceInitialized(object? sender, EventArgs e)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        windowSource = HwndSource.FromHwnd(handle);
+        windowSource?.AddHook(WindowMessageHook);
+        emergencyHotkeyAvailable = RegisterHotKey(handle, EmergencyHotkeyId,
+            ModControl | ModAlt | ModNoRepeat, VirtualKeyEscape);
+        if (!emergencyHotkeyAvailable)
+            StatusText.Text = "未共享 · Ctrl + Alt + Esc 紧急停止快捷键不可用，真实控制已禁用";
+    }
+
+    private nint WindowMessageHook(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        if (message == WmHotkey && wParam == (nint)EmergencyHotkeyId)
+        {
+            handled = true;
+            if (sharing is not null)
+            {
+                emergencyStopRequested = true;
+                StatusText.Text = "已触发本机紧急停止，正在释放输入并结束共享";
+                sharing.Cancel();
+            }
+        }
+        return 0;
+    }
+
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
         if (sharing is not null) return;
         var allowControl = ControlConsent.IsChecked == true;
+        if (allowControl && !emergencyHotkeyAvailable)
+        {
+            MessageBox.Show(this, "无法注册 Ctrl + Alt + Esc 本机紧急停止快捷键，因此不会启用真实控制。\n\n仍可取消控制许可后开始只读共享。",
+                "真实控制已阻止", MessageBoxButton.OK, MessageBoxImage.Error);
+            ControlConsent.IsChecked = false;
+            ControlText.Text = "未允许：本次共享只发送画面";
+            return;
+        }
         if (allowControl && MessageBox.Show(this,
             "启用后，已认证的 Mac 可以真实移动鼠标、点击和输入按键。\n\n" +
             "许可仅限这一次共享；可随时点击“停止共享”立即结束。是否继续？",
@@ -24,6 +75,7 @@ public partial class MainWindow : Window
         }
         using var lifetime = new CancellationTokenSource();
         sharing = lifetime;
+        emergencyStopRequested = false;
         var quality = QualitySelector.SelectedIndex switch { 0 => 40, 2 => 85, _ => 70 };
         QualitySelector.IsEnabled = false;
         ControlConsent.IsEnabled = false;
@@ -60,7 +112,12 @@ public partial class MainWindow : Window
         {
             StatusText.Text = "共享结束：发送画面超过 10 秒（网络发送超时）";
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { StatusText.Text = "共享已由本机停止"; }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            StatusText.Text = emergencyStopRequested
+                ? "共享已由本机紧急停止（Ctrl + Alt + Esc）"
+                : "共享已由本机停止";
+        }
         catch (OperationCanceledException) { StatusText.Text = "共享结束：等待连接或应用认证超时"; }
         catch (System.IO.EndOfStreamException) { StatusText.Text = "共享结束：Mac 已关闭连接"; }
         catch (Exception ex)
@@ -73,6 +130,7 @@ public partial class MainWindow : Window
             if (MetricsText.Text.StartsWith("帧 ", StringComparison.Ordinal))
                 MetricsText.Text = "最后成功发送：" + MetricsText.Text;
             sharing = null;
+            emergencyStopRequested = false;
             QualitySelector.IsEnabled = true;
             ControlConsent.IsChecked = false;
             ControlConsent.IsEnabled = true;
@@ -89,5 +147,23 @@ public partial class MainWindow : Window
                 : "未允许：本次共享只发送画面";
     }
     private void Stop_Click(object sender, RoutedEventArgs e) => sharing?.Cancel();
-    private void Window_Closing(object? sender, CancelEventArgs e) => sharing?.Cancel();
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        sharing?.Cancel();
+        if (windowSource is not null)
+        {
+            windowSource.RemoveHook(WindowMessageHook);
+            if (emergencyHotkeyAvailable)
+                _ = UnregisterHotKey(windowSource.Handle, EmergencyHotkeyId);
+        }
+        emergencyHotkeyAvailable = false;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RegisterHotKey(nint window, int id, uint modifiers, uint virtualKey);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnregisterHotKey(nint window, int id);
 }

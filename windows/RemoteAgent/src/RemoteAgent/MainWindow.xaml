@@ -6,7 +6,7 @@
     <StackPanel Margin="28">
         <TextBlock FontSize="24" FontWeight="SemiBold" Text="共享 Windows 主屏" />
         <TextBlock Margin="0,12,0,0" Text="默认只读 · 最高 1280 × 720 · 10 FPS" Foreground="DimGray" />
-        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="点击开始后等待已配对的 Mac。认证成功才采集画面；停止或关闭窗口会立即结束共享。" />
+        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="点击开始后等待已配对的 Mac。认证成功才采集画面；停止或关闭窗口会立即结束共享。真实控制时可在 Windows 键盘按 Ctrl + Alt + Esc 紧急停止。" />
         <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
             <TextBlock Text="画质：" VerticalAlignment="Center" />
             <ComboBox x:Name="QualitySelector" SelectedIndex="1" Width="390">

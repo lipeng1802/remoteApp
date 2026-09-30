@@ -243,3 +243,5 @@ RemoteAgent/RemoteController 已接入默认关闭的双端控制许可、认证
 产品 GUI 的明确许可分支已从内存统计改接 `SessionNativeInputSink`/`WindowsInputSink`。默认只读、Windows 复选框加本机确认框、Mac 认证后手动开始、Esc/停止/失焦/断线释放、错误关闭和会话结束自动撤销许可均保留。Mac 109/109 与 Release 通过；Windows 构建、61/61、fake 原生边界 6/6 和真实桌面动作尚待验证。
 
 人工测试只允许在已保存工作、无敏感输入的测试窗口中按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 执行。必须验证鼠标移动/三键/拖动/滚轮、普通键、左右修饰键及快捷键，并逐项确认 Esc、Mac 停止、Mac 失焦、Mac 断开和 Windows 停止后不再产生输入、持有为 0；下一次共享必须重新授权。`SendInput` 不承诺控制 UAC 安全桌面、锁屏或更高完整性窗口。
+
+同批验收新增 Windows 物理键盘全局 `Ctrl + Alt + Esc`：真实控制期间按下必须立即取消共享并释放；热键注册失败时真实控制必须拒绝启动；关闭 RemoteAgent 后应注销。该路径不能用 Mac 远程组合键替代。自动检查数量不变，Windows WPF/PInvoke 仍待实机构建。

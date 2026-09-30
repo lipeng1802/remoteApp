@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 当前：Windows 本机紧急停止切片，随真实输入一起验收（2026-09-30，最新）
+
+为在首次真实 `SendInput` 验收前补齐独立于 Mac 焦点和远程鼠标的停止路径，RemoteAgent 现注册全局 `Ctrl + Alt + Esc`。收到快捷键后立即取消共享，沿既有会话清理释放键鼠，并显示“本机紧急停止”结果；关闭窗口时注销热键。若热键因冲突或系统错误无法注册，真实控制会被拒绝启动并提示原因，只读共享仍可用。
+
+该增量仅修改 Windows WPF/PInvoke，本机没有 Windows SDK，尚未编译。它与下方真实输入接线合并按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 验收：除原 1–9 项外，需要在持有远程输入时从 Windows 物理键盘按 `Ctrl + Alt + Esc`，确认共享结束、持有 0、Mac 断开且下一次仍需重新授权。不要使用 Mac 发送该组合来替代本机路径。
+
 ## 当前：真实 Windows 输入已接线，待 Windows/双机受控验收（2026-09-30，最新）
 
 在产品 GUI 内存 sink 双机检查点全部通过后，本轮将 Windows 已认证、双方显式许可的输入分支接入 `WindowsInputSink`。Windows 复选框已改为明确警告“会真实操作此 Windows”，点击开始后还必须在本机警告框再次确认；只有随后通过 TLS/HMAC 认证且 Mac 再点击“开始控制”，才创建会话级 `SessionNativeInputSink` 并调用 Win32 `SendInput`。默认未勾选仍为只读。
