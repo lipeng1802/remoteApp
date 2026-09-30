@@ -4,13 +4,15 @@
 
 Mac RemoteController 的 Windows 地址输入框默认填写 `100.73.4.118`，仍允许用户手动修改。该值是当前 Windows 设备的 Tailscale IP，仅用于减少双机复测时的重复输入，不改变 TLS 指纹、设备密钥、HMAC 认证或控制许可边界。
 
-## 当前：Mac 触控板滚轮拥塞修复，待双机复测（2026-09-30，最新）
+## 当前：Mac 触控板滚轮拥塞修复，双机复测通过（2026-09-30，最新）
 
 真实输入首轮人工测试中，鼠标移动/三键/拖动、黑边、文字/退格/Enter、四类修饰键、快捷键和最终持有 0 均通过；Mac 触控板双指纵向滚动稳定导致 Mac `congested` 并主动关闭，Windows 因此显示“Mac 已关闭连接”。这不是 `SendInput` 拒绝。
 
 根因是每个精细滚轮事件生成 `move + wheel` 两帧，高频输入超过 100 帧/秒发送节奏并填满 64 项安全队列。现对连续、尚未发送的触控板 `move + wheel` 批次合并滚轮增量，保留第一次位置；按键、按钮、心跳等仍是不可跨越的顺序屏障，Int32 累加使用饱和边界。新增一万批次有界及边界/屏障 2 项回归：`InputSendQueueTests` **11/11**，全量 **111/111**、0 failures，Release `Build complete! (37.60s)`。
 
-下一步只需重启最新 Mac RemoteController，用触控板持续纵向与横向滚动复测，确认不再断开且方向/速度可用；然后继续 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 的停止/失焦/断开和 Windows 本机 `Ctrl + Alt + Esc` 项。Windows 代码未变，无需因本修复重新构建。
+用户已用最新 Mac RemoteController 完成双机复测：触控板纵向滚动正常且不再断开；横向滚动正常且不再断开；停止滚动后连接保持，Windows 状态最终为“持有 0”。滚轮拥塞问题可以关闭。
+
+下一步继续 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 7–10 项：依次验证 Mac Esc、停止控制、失焦、断开释放，Windows 本机 `Ctrl + Alt + Esc` 紧急停止，Windows 主动停止与许可重置，最后进行默认只读回归。
 
 ## 当前：Windows 本机紧急停止切片，随真实输入一起验收（2026-09-30，最新）
 
