@@ -10,6 +10,8 @@ Windows 更新后执行 Release、协议 **63/63**、WindowsInput **6/6**，再�
 
 Windows 首次运行新增协议测试时，两项分别报 `Probe payload exceeds 64 bytes`。原因是测试客户端误用仅供握手/输入小帧的默认 `ProbeFrameStream.ReadAsync` 读取 JPEG；产品服务端及 Mac 客户端不受影响。两项测试现改用与既有双向视频测试相同的完整帧读取方式，仍校验最大协议载荷和连续序号。Windows 需拉取最新提交后重新执行协议测试，预期 **63/63**。
 
+用户已在 Windows 拉取测试修复并确认协议测试 **63/63 passed**。下一步只需启动最新 RemoteAgent，完成“Windows 已许可控制 + Mac 未请求控制”的只读双机连接，并继续验证 Mac 断开后 Windows 保持共享、同一共享可直接重新连接。
+
 ## 当前：Mac 断开后 Windows 持续共享修复，待 Windows 验证（2026-09-30，最新）
 
 最终只读回归发现：Mac 主动断开后 Windows 同时结束了整个共享。产品此前调用单会话 `TlsProbeServer.RunOnceAsync`，客户端发送 DISCONNECT 后方法正常返回，WPF 因而进入共享结束清理；这不符合“Windows 持续等待、Mac 可重新连接”的产品行为。
