@@ -234,6 +234,6 @@ Windows Release 与 59/59 本轮重新通过。Mac 新增 InputConnectionDriverT
 
 ## 产品 GUI 控制 mock（2026-09-30 最新）
 
-RemoteAgent/RemoteController 已接入默认关闭的双端控制许可、认证后手动开始、同连接 JPEG + 输入和停止/失焦/断开释放。Windows 使用只统计数量的 `SessionInputAuditSink`，不得产生真实系统输入。Mac 全量 109/109、Release 通过；Windows 仍需 Release、协议 61/61、输入边界 6/6，并按 [GUI_CONTROL_MOCK_HANDOFF.md](GUI_CONTROL_MOCK_HANDOFF.md) 完成双机 GUI 验收。
+RemoteAgent/RemoteController 已接入默认关闭的双端控制许可、认证后手动开始、同连接 JPEG + 输入和停止/失焦/断开释放。Windows 使用只统计数量的 `SessionInputAuditSink`，不得产生真实系统输入。Mac 全量 109/109、Release 通过；用户确认 Windows 自动检查与 [GUI_CONTROL_MOCK_HANDOFF.md](GUI_CONTROL_MOCK_HANDOFF.md) 双机 GUI 清单全部通过。
 
-人工验收必须同时检查：未授权保持只读；双方授权后事件计数到达但 Windows 桌面不动作；黑边不建立持有；拖出、Esc、停止、失焦和断开均回到持有 0；暂停后视频继续且不会自动恢复；重新建立只读会话正常。完成前禁止把产品 GUI 改接真实 `WindowsInputSink`。
+人工验收结果：未授权保持只读；双方授权后事件计数到达但 Windows 桌面不动作；黑边不建立持有；拖出、Esc、停止、失焦和断开均回到持有 0；暂停后视频继续且不会自动恢复；重新建立只读会话正常。该 mock 检查点完成，下一切片可单独接入真实 `WindowsInputSink` 并重新执行人工安全验收。
