@@ -16,9 +16,9 @@
             </ComboBox>
         </StackPanel>
         <CheckBox x:Name="ControlConsent" Margin="0,14,0,0"
-                  Content="允许本次远程控制测试（仅统计输入，不注入 Windows）"
+                  Content="允许本次远程控制（会真实操作此 Windows）"
                   Click="ControlConsent_Click" />
-        <TextBlock x:Name="ControlText" Margin="20,6,0,0" FontSize="12" Foreground="DimGray"
+        <TextBlock x:Name="ControlText" Margin="20,6,0,0" FontSize="12" Foreground="DarkRed"
                    Text="未允许：本次共享只发送画面" TextWrapping="Wrap" />
         <TextBlock x:Name="StatusText" Margin="0,20,0,0" FontWeight="SemiBold" Text="未共享" TextWrapping="Wrap" />
         <TextBlock x:Name="MetricsText" Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Foreground="DimGray" />

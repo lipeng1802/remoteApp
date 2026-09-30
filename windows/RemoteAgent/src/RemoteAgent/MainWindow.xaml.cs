@@ -11,10 +11,20 @@ public partial class MainWindow : Window
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
         if (sharing is not null) return;
+        var allowControl = ControlConsent.IsChecked == true;
+        if (allowControl && MessageBox.Show(this,
+            "启用后，已认证的 Mac 可以真实移动鼠标、点击和输入按键。\n\n" +
+            "许可仅限这一次共享；可随时点击“停止共享”立即结束。是否继续？",
+            "确认允许本次远程控制", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+            MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            ControlConsent.IsChecked = false;
+            ControlText.Text = "未允许：本次共享只发送画面";
+            return;
+        }
         using var lifetime = new CancellationTokenSource();
         sharing = lifetime;
         var quality = QualitySelector.SelectedIndex switch { 0 => 40, 2 => 85, _ => 70 };
-        var allowControl = ControlConsent.IsChecked == true;
         QualitySelector.IsEnabled = false;
         ControlConsent.IsEnabled = false;
         StartButton.IsEnabled = false;
@@ -28,13 +38,13 @@ public partial class MainWindow : Window
             using var credentials = AgentCredentialStore.LoadOrCreate();
             FingerprintText.Text = CertificateFingerprint.FromCertificateDer(certificate.RawData).Hexadecimal;
             ControlText.Text = allowControl
-                ? "本次已允许控制测试 · 等待认证（内存统计，不注入 Windows）"
+                ? "本次已允许真实控制 · 等待已认证的 Mac"
                 : "本次只读 · 不接受输入";
             StatusText.Text = "等待已配对的 Mac 连接 · 端口 47475";
             InputSimulationOptions? inputSession = allowControl
                 ? new InputSimulationOptions(
-                    () => new SessionInputAuditSink(snapshot => Dispatcher.BeginInvoke(() =>
-                        ControlText.Text = $"控制测试已认证 · 事件 {snapshot.Events} · 释放 {snapshot.Releases} · 持有 {snapshot.Held}")),
+                    () => new SessionNativeInputSink(snapshot => Dispatcher.BeginInvoke(() =>
+                        ControlText.Text = $"远程控制中 · 事件 {snapshot.Events} · 释放 {snapshot.Releases} · 持有 {snapshot.Held}")),
                     LocalControlAllowed: true)
                 : null;
             await Task.Run(() => TlsProbeServer.RunOnceAsync(endpoints.Local, endpoints.Peer, 47475,
@@ -64,7 +74,9 @@ public partial class MainWindow : Window
                 MetricsText.Text = "最后成功发送：" + MetricsText.Text;
             sharing = null;
             QualitySelector.IsEnabled = true;
+            ControlConsent.IsChecked = false;
             ControlConsent.IsEnabled = true;
+            ControlText.Text = "未允许：下一次共享默认为只读";
             StartButton.IsEnabled = true;
             StopButton.IsEnabled = false;
         }
@@ -73,7 +85,7 @@ public partial class MainWindow : Window
     {
         if (sharing is null)
             ControlText.Text = ControlConsent.IsChecked == true
-                ? "已选择：下一次共享接受控制测试（仍不会注入 Windows）"
+                ? "已选择：开始共享时还需确认，之后会真实操作 Windows"
                 : "未允许：本次共享只发送画面";
     }
     private void Stop_Click(object sender, RoutedEventArgs e) => sharing?.Cancel();

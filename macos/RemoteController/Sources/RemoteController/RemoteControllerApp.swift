@@ -66,7 +66,7 @@ private final class ViewerModel: ObservableObject {
         do { fingerprint = try fingerprintStore.loadFingerprint(for: address) }
         catch { status = "无法读取已信任的证书指纹"; return }
         if requestControl && fingerprint == nil {
-            status = "控制测试要求已有证书指纹；请先取消控制选项并完成一次只读连接"
+            status = "远程控制要求已有证书指纹；请先取消控制选项并完成一次只读连接"
             return
         }
         connected = true
@@ -74,7 +74,7 @@ private final class ViewerModel: ObservableObject {
         screenInfo = nil
         controlReady = false
         controlCapturing = false
-        detail = requestControl ? "控制测试 · 等待认证" : "只读模式 · 等待首帧"
+        detail = requestControl ? "远程控制 · 等待认证" : "只读模式 · 等待首帧"
         frameRate = FrameRateMeter()
         generation = UUID()
         let current = generation
@@ -95,25 +95,25 @@ private final class ViewerModel: ObservableObject {
                         DispatchQueue.main.async {
                             guard let self, self.generation == current, self.connected else { return }
                             self.controlReady = true
-                            self.status = "已认证 · Windows 已允许控制测试；点击开始控制"
+                            self.status = "已认证 · Windows 已允许远程控制；点击开始控制"
                         }
                     },
                     completion: { [weak self] result in
                         DispatchQueue.main.async {
                             guard let self, self.generation == current else { return }
                             switch result {
-                            case .success: self.complete(status: "控制会话已安全结束")
+                            case .success: self.complete(status: "远程控制会话已安全结束")
                             case .failure(.cancelled): self.complete(status: "已断开")
-                            case let .failure(error): self.complete(status: "控制连接已结束（\(error)），可手动重试")
+                            case let .failure(error): self.complete(status: "远程控制连接已结束（\(error)），可手动重试")
                             }
                         }
                     })
                 duplexClient = connection
                 stopConnection = { connection.cancel() }
-                status = "正在连接 TLS 控制测试会话"
+                status = "正在连接 TLS 远程控制会话"
                 connection.start()
             } catch {
-                complete(status: "无法启动控制测试连接（\(error)）")
+                complete(status: "无法启动远程控制连接（\(error)）")
             }
             return
         }
@@ -162,7 +162,7 @@ private final class ViewerModel: ObservableObject {
         duplexClient = nil
         controlReady = false
         controlCapturing = false
-        detail = requestControl ? "控制测试" : "只读模式"
+        detail = requestControl ? "远程控制" : "只读模式"
         self.status = status
     }
 
@@ -181,7 +181,7 @@ private final class ViewerModel: ObservableObject {
         duplexClient = nil
         latest.clear(); image = nil; screenInfo = nil; connected = false
         controlReady = false; controlCapturing = false
-        status = "已断开"; detail = requestControl ? "控制测试" : "只读模式"
+        status = "已断开"; detail = requestControl ? "远程控制" : "只读模式"
     }
 
     func registerInputCanvas(_ canvas: RemoteInputCanvas) { inputCanvas = canvas }
@@ -193,7 +193,7 @@ private final class ViewerModel: ObservableObject {
             return
         }
         controlCapturing = true
-        status = "正在控制测试 · Windows 仅统计输入，不执行"
+        status = "正在远程控制 Windows · Esc 可立即停止"
     }
 
     func stopControl() { inputCanvas?.pause() }
@@ -214,10 +214,10 @@ private final class ViewerModel: ObservableObject {
         image = next.image
         screenInfo = next.screen
         if !controlCapturing {
-            status = controlReady ? "正在查看 Windows 主屏 · 控制测试已就绪" : "正在查看 Windows 主屏 · 只读"
+            status = controlReady ? "正在查看 Windows 主屏 · 远程控制已就绪" : "正在查看 Windows 主屏 · 只读"
         }
         if let fps = frameRate.update(totalFrames: next.count, now: ProcessInfo.processInfo.systemUptime) {
-            let mode = controlReady ? "控制测试" : "只读"
+            let mode = controlReady ? "远程控制" : "只读"
             detail = "\(mode) · \(next.image.width) × \(next.image.height) · \(String(format: "%.1f", fps)) FPS · 主屏 \(next.screen.width) × \(next.screen.height)"
 
         }
@@ -240,7 +240,7 @@ private struct ContentView: View {
                 Button("断开") { model.disconnect() }.disabled(!model.connected)
             }
             HStack {
-                Toggle("请求远程控制测试（Windows 仅统计，不注入）", isOn: $model.requestControl)
+                Toggle("请求远程控制（会真实操作 Windows）", isOn: $model.requestControl)
                     .disabled(model.connected)
                 Spacer()
                 Button(model.controlCapturing ? "停止控制" : "开始控制") {

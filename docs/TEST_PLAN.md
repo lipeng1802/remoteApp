@@ -237,3 +237,9 @@ Windows Release 与 59/59 本轮重新通过。Mac 新增 InputConnectionDriverT
 RemoteAgent/RemoteController 已接入默认关闭的双端控制许可、认证后手动开始、同连接 JPEG + 输入和停止/失焦/断开释放。Windows 使用只统计数量的 `SessionInputAuditSink`，不得产生真实系统输入。Mac 全量 109/109、Release 通过；用户确认 Windows 自动检查与 [GUI_CONTROL_MOCK_HANDOFF.md](GUI_CONTROL_MOCK_HANDOFF.md) 双机 GUI 清单全部通过。
 
 人工验收结果：未授权保持只读；双方授权后事件计数到达但 Windows 桌面不动作；黑边不建立持有；拖出、Esc、停止、失焦和断开均回到持有 0；暂停后视频继续且不会自动恢复；重新建立只读会话正常。该 mock 检查点完成，下一切片可单独接入真实 `WindowsInputSink` 并重新执行人工安全验收。
+
+## 真实 Windows 输入接线（2026-09-30 最新）
+
+产品 GUI 的明确许可分支已从内存统计改接 `SessionNativeInputSink`/`WindowsInputSink`。默认只读、Windows 复选框加本机确认框、Mac 认证后手动开始、Esc/停止/失焦/断线释放、错误关闭和会话结束自动撤销许可均保留。Mac 109/109 与 Release 通过；Windows 构建、61/61、fake 原生边界 6/6 和真实桌面动作尚待验证。
+
+人工测试只允许在已保存工作、无敏感输入的测试窗口中按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 执行。必须验证鼠标移动/三键/拖动/滚轮、普通键、左右修饰键及快捷键，并逐项确认 Esc、Mac 停止、Mac 失焦、Mac 断开和 Windows 停止后不再产生输入、持有为 0；下一次共享必须重新授权。`SendInput` 不承诺控制 UAC 安全桌面、锁屏或更高完整性窗口。

@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 真实 Windows 输入接线
+
+产品 Windows 许可分支现创建 `SessionNativeInputSink` 并委托已有 `WindowsInputSink` 调用 Win32 `SendInput`。Windows 端要求复选框和警告框双重确认，Mac 端要求控制选项、认证成功后手动开始；会话结束自动撤销 Windows 许可。Mac 109/109 与 Release 已通过，Windows 构建和真实桌面人工验证待按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 执行。通过前不能宣称 P2 真实控制完成。
+
 ## 2026-09-30 产品 GUI 控制 mock
 
 产品 RemoteAgent/RemoteController 已接入显式许可、认证后手动开始、失焦/停止释放及同连接 JPEG + 输入；Windows 本轮仍只使用不记录内容的会话级内存统计 sink，不调用 `SendInput`。Mac 全量 109/109、Release 构建通过；用户确认 Windows 自动检查和 [GUI_CONTROL_MOCK_HANDOFF.md](GUI_CONTROL_MOCK_HANDOFF.md) 双机操作全部通过，所有释放路径最终持有 0，默认只读正常且 Windows 桌面没有真实动作。下一阶段进入真实原生 sink 的独立人工验收切片。

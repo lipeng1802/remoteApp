@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：真实 Windows 输入已接线，待 Windows/双机受控验收（2026-09-30，最新）
+
+在产品 GUI 内存 sink 双机检查点全部通过后，本轮将 Windows 已认证、双方显式许可的输入分支接入 `WindowsInputSink`。Windows 复选框已改为明确警告“会真实操作此 Windows”，点击开始后还必须在本机警告框再次确认；只有随后通过 TLS/HMAC 认证且 Mac 再点击“开始控制”，才创建会话级 `SessionNativeInputSink` 并调用 Win32 `SendInput`。默认未勾选仍为只读。
+
+新增会话状态包装器只记录事件/释放/持有数量，原生调用成功后才更新状态；停止、失焦、断线、协议/注入错误仍由现有双层持有状态尽力释放并失败关闭。每次共享结束都会自动清空 Windows 许可，下一次必须重新勾选并确认。Mac 文案已从 mock 改为真实控制警告，认证后仍需手动开始，Esc 仍立即暂停并释放。
+
+Mac 全量 **109/109**、0 failures，Release `Build complete! (36.51s)`。本机没有 Windows/.NET/Win32 环境，Windows 代码尚未编译，真实桌面动作尚未执行，不能标记 P2 真实控制通过。Windows 必须按 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 先完成 Release、协议 61/61 和 fake 原生边界 6/6，再在已保存工作的安全窗口中执行逐项人工验收。未重新打包，旧安装包不含本轮接线。
+
 ## 当前：产品 GUI 控制 mock 双机验收通过（2026-09-30，最新）
 
 用户已完成首轮双机 GUI 检查：自动构建/测试、连接、普通输入及默认只读回归通过；黑边以外操作正常。失败集中在 Windows 状态栏：Shift/Control 的持有变化不稳定，Esc、停止或断开后可能残留显示持有 1–2，Command 相对正常。
