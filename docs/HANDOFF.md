@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：GUI 控制 mock 修饰键统计修复，待复测（2026-09-30，最新）
+
+用户已完成首轮双机 GUI 检查：自动构建/测试、连接、普通输入及默认只读回归通过；黑边以外操作正常。失败集中在 Windows 状态栏：Shift/Control 的持有变化不稳定，Esc、停止或断开后可能残留显示持有 1–2，Command 相对正常。
+
+根因是 `SessionInputAuditSink` 对所有状态报告统一做一秒限流。短促的修饰键 Down/Up 已被服务端处理，但末尾 Up 状态可能没有再次刷新；显式 Up 已清空 `InputDispatcher` 持有集，断开清理便不会重复调用 ReleaseAll，界面因此保留旧快照。现改为键/按钮持有集合发生变化时立即发布，只有移动、滚轮和重复 Down 继续限流；Release 计数也只统计实际移除的持有项。本修复不改变协议、Mac 捕获或输入执行边界，Windows 仍只统计、不调用 `SendInput`。
+
+本机没有 Windows/.NET 环境，代码待 Windows 构建及双机复测。复测只需重点确认 Shift/Control/Command 按下立即显示正确持有，松开、Esc、停止、失焦和断开最终均显示 0；普通链路和默认只读仍做快速回归。通过前 GUI mock 保持未验收状态。
+
 ## 当前：产品 GUI 控制 mock 已接线，待 Windows/双机验收（2026-09-30，最新）
 
 上一切片 Windows Release、协议 61/61、输入边界 6/6 已由用户确认通过。现已把同一连接的 JPEG + 输入能力接入两端产品 GUI，但仍停留在安全 mock：Windows 新增默认关闭的“允许本次远程控制测试”，仅勾选后才创建会话级内存统计 sink；该 sink 不引用 `WindowsInputSink`，不调用 `SendInput`，也不记录坐标、扫描码或按键内容。未勾选时保持原只读链路。

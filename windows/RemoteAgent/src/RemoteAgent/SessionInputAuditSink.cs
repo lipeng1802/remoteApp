@@ -28,18 +28,24 @@ internal sealed class SessionInputAuditSink : IInputSink
     public void Button(MouseButtonPayload button)
     {
         events++;
-        if (button.Action == ButtonAction.Down) buttons.Add(button.Button);
-        else { buttons.Remove(button.Button); releases++; }
-        Publish();
+        var changed = button.Action == ButtonAction.Down
+            ? buttons.Add(button.Button)
+            : buttons.Remove(button.Button);
+        if (button.Action == ButtonAction.Up && changed) releases++;
+        // Held-state transitions are safety signals and must never be hidden by
+        // the one-second movement/scroll reporting throttle.
+        Publish(force: changed);
     }
 
     public void Key(KeyEventPayload key)
     {
         events++;
         var identity = (key.ScanCode, key.Extended);
-        if (key.Action == KeyAction.Down) keys.Add(identity);
-        else { keys.Remove(identity); releases++; }
-        Publish();
+        var changed = key.Action == KeyAction.Down
+            ? keys.Add(identity)
+            : keys.Remove(identity);
+        if (key.Action == KeyAction.Up && changed) releases++;
+        Publish(force: changed);
     }
 
     public void ReleaseAllKeys()
