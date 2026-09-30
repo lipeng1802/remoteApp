@@ -12,7 +12,9 @@ Mac RemoteController 的 Windows 地址输入框默认填写 `100.73.4.118`，�
 
 用户已用最新 Mac RemoteController 完成双机复测：触控板纵向滚动正常且不再断开；横向滚动正常且不再断开；停止滚动后连接保持，Windows 状态最终为“持有 0”。滚轮拥塞问题可以关闭。
 
-下一步继续 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 7–10 项：依次验证 Mac Esc、停止控制、失焦、断开释放，Windows 本机 `Ctrl + Alt + Esc` 紧急停止，Windows 主动停止与许可重置，最后进行默认只读回归。
+真实输入释放路径第 7 项也已通过：Mac Esc、“停止控制”、切换应用/窗口失焦以及主动断开四种路径最终均为“持有 0”，停止后输入不再影响 Windows。失焦只释放输入并暂停捕获，远程画面和认证连接保持；返回 RemoteController 后只需再次点击“开始控制”，无需重新连接。只有单独执行“断开”才结束会话。
+
+下一步继续 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 8–10 项：Windows 本机 `Ctrl + Alt + Esc` 紧急停止，Windows 主动停止与许可重置，最后进行默认只读回归。
 
 ## 当前：Windows 本机紧急停止切片，随真实输入一起验收（2026-09-30，最新）
 
