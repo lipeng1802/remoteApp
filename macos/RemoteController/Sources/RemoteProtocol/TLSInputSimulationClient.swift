@@ -2,19 +2,47 @@ import Foundation
 import Network
 import Security
 
-/// Development-only, loopback-only TLS input client. Requires an already approved
-/// SHA-256 certificate fingerprint; never automatically trusts or persists a cert.
-/// No production GUI integration, event monitoring, or OS input injection.
+/// Development-only TLS input client. The default initializer is loopback-only;
+/// the explicitly named cross-device initializer accepts only a literal Tailscale
+/// IPv4 address. Requires an already approved SHA-256 certificate fingerprint and
+/// never automatically trusts or persists a cert. No production GUI integration.
 public final class TLSInputSimulationClient {
     private let driver: InputConnectionDriver
 
-    public init(port: UInt16, expectedFingerprint: CertificateFingerprint, deviceKey: Data,
+    public convenience init(port: UInt16, expectedFingerprint: CertificateFingerprint, deviceKey: Data,
                 localControlAllowed: Bool = false,
                 connectionTimeout: TimeInterval = 15,
                 onAuthenticated: @escaping () -> Void,
                 completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
+        try self.init(host: "127.0.0.1", port: port, expectedFingerprint: expectedFingerprint,
+            deviceKey: deviceKey, localControlAllowed: localControlAllowed,
+            connectionTimeout: connectionTimeout, onAuthenticated: onAuthenticated,
+            completion: completion)
+    }
+
+    public convenience init(tailscaleHost host: String, port: UInt16,
+                expectedFingerprint: CertificateFingerprint, deviceKey: Data,
+                localControlAllowed: Bool = false,
+                connectionTimeout: TimeInterval = 15,
+                onAuthenticated: @escaping () -> Void,
+                completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
+        guard InputSimulationEndpointPolicy.isTailscaleIPv4(host) else {
+            throw TLSProbeError.invalidHost
+        }
+        try self.init(host: host, port: port, expectedFingerprint: expectedFingerprint,
+            deviceKey: deviceKey, localControlAllowed: localControlAllowed,
+            connectionTimeout: connectionTimeout, onAuthenticated: onAuthenticated,
+            completion: completion)
+    }
+
+    private init(host: String, port: UInt16, expectedFingerprint: CertificateFingerprint,
+                deviceKey: Data, localControlAllowed: Bool,
+                connectionTimeout: TimeInterval,
+                onAuthenticated: @escaping () -> Void,
+                completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         let queue = DispatchQueue(label: "prd.input.tls-simulation")
-        let transport = try NetworkInputTransport(port: port, expectedFingerprint: expectedFingerprint, queue: queue)
+        let transport = try NetworkInputTransport(host: host, port: port,
+            expectedFingerprint: expectedFingerprint, queue: queue)
         driver = try InputConnectionDriver(transport: transport, deviceKey: deviceKey,
             localControlAllowed: localControlAllowed, queue: queue, connectTimeout: connectionTimeout,
             onAuthenticated: onAuthenticated, completion: completion)
@@ -30,7 +58,7 @@ public final class TLSInputSimulationClient {
 private final class NetworkInputTransport: InputTransport {
     private let connection: NWConnection
 
-    init(port: UInt16, expectedFingerprint: CertificateFingerprint, queue: DispatchQueue) throws {
+    init(host: String, port: UInt16, expectedFingerprint: CertificateFingerprint, queue: DispatchQueue) throws {
         guard port != 0, let networkPort = NWEndpoint.Port(rawValue: port) else {
             throw TLSProbeError.invalidPort
         }
@@ -48,7 +76,7 @@ private final class NetworkInputTransport: InputTransport {
         tcp.noDelay = true
         let parameters = NWParameters(tls: tls, tcp: tcp)
         parameters.allowLocalEndpointReuse = false
-        connection = NWConnection(host: "127.0.0.1", port: networkPort, using: parameters)
+        connection = NWConnection(host: NWEndpoint.Host(host), port: networkPort, using: parameters)
     }
 
     func start(queue: DispatchQueue, state: @escaping (InputTransportState) -> Void) {
@@ -72,5 +100,18 @@ private final class NetworkInputTransport: InputTransport {
     func cancel() {
         connection.stateUpdateHandler = nil
         connection.cancel()
+    }
+}
+
+enum InputSimulationEndpointPolicy {
+    static func isTailscaleIPv4(_ host: String) -> Bool {
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        let octets = parts.compactMap { part -> UInt8? in
+            guard !part.isEmpty, part.allSatisfy(\.isNumber),
+                  let value = UInt8(part), String(value) == part else { return nil }
+            return value
+        }
+        return octets.count == 4 && octets[0] == 100 && (64...127).contains(octets[1])
     }
 }

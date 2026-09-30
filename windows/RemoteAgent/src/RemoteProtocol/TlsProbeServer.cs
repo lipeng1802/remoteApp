@@ -29,6 +29,26 @@ public static class TlsProbeServer
             agentIdentifier, cancellationToken, inputSimulation: options);
     }
 
+    // Development-only cross-device mock. The sink remains caller-provided and
+    // must not inject native input. Both endpoints are restricted to Tailscale CGNAT.
+    public static Task RunRestrictedInputSimulationOnceAsync(
+        IPAddress bindAddress, IPAddress expectedRemoteAddress, int port,
+        X509Certificate2 certificate, byte[] deviceKey, byte[] agentIdentifier,
+        InputSimulationOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(bindAddress);
+        ArgumentNullException.ThrowIfNull(expectedRemoteAddress);
+        ArgumentNullException.ThrowIfNull(options);
+        if (!TailscaleEndpoints.IsTailscaleIPv4(bindAddress) ||
+            !TailscaleEndpoints.IsTailscaleIPv4(expectedRemoteAddress))
+            throw new ArgumentException("Input mock endpoints must be Tailscale IPv4 addresses.");
+        options.Validate();
+        if (!options.LocalControlAllowed)
+            throw new InvalidOperationException("Explicit local input mock consent is required before listening.");
+        return RunCoreAsync(bindAddress, expectedRemoteAddress, port, certificate, deviceKey,
+            agentIdentifier, cancellationToken, inputSimulation: options);
+    }
+
     private static async Task RunCoreAsync(
         IPAddress bindAddress,
         IPAddress expectedRemoteAddress,

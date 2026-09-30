@@ -25,6 +25,33 @@ internal static class InputTlsTests
     public static void Idle() => Run("idle");
     public static void Rate() => Run("rate");
     public static void Error() => Run("error");
+    public static void RestrictedEndpoints()
+    {
+        Check(TailscaleEndpoints.IsTailscaleIPv4(IPAddress.Parse("100.64.0.1")), "Tailscale range start rejected.");
+        Check(TailscaleEndpoints.IsTailscaleIPv4(IPAddress.Parse("100.127.255.255")), "Tailscale range end rejected.");
+        foreach (var address in new[] { "100.63.255.255", "100.128.0.1", "127.0.0.1", "::1" })
+            Check(!TailscaleEndpoints.IsTailscaleIPv4(IPAddress.Parse(address)), "Non-Tailscale endpoint accepted.");
+
+        using var certificate = AgentCertificateFactory.CreateSelfSigned();
+        var options = new InputSimulationOptions(() => new FakeSink(), LocalControlAllowed: true);
+        try
+        {
+            _ = TlsProbeServer.RunRestrictedInputSimulationOnceAsync(IPAddress.Loopback,
+                IPAddress.Parse("100.64.0.2"), 47475, certificate, new byte[32],
+                new byte[16], options);
+            throw new Exception("Restricted input mock accepted a loopback bind address.");
+        }
+        catch (ArgumentException) { }
+
+        try
+        {
+            _ = TlsProbeServer.RunRestrictedInputSimulationOnceAsync(IPAddress.Parse("100.64.0.1"),
+                IPAddress.Parse("100.64.0.2"), 47475, certificate, new byte[32],
+                new byte[16], new InputSimulationOptions(() => new FakeSink()));
+            throw new Exception("Restricted input mock listened without explicit local consent.");
+        }
+        catch (InvalidOperationException) { }
+    }
     private static void Run(string mode) => RunAsync(mode).GetAwaiter().GetResult();
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
 

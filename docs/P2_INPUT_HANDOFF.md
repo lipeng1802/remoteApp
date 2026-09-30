@@ -1,5 +1,9 @@
 # P2 输入接收与 Mac 验证清单
 
+## 2026-09-30 双机 Tailscale mock 已实现
+
+Windows 一次性内存 sink 服务、双层显式许可脚本、Tailscale 单地址/单对端限制，以及 Mac 合成客户端已加入。Mac 全量 104/104 和 Release 通过；Windows 预期 60 项，待 Windows 实机构建、测试及双机验收。准确命令与 PASS 标准见 [TAILSCALE_INPUT_MOCK.md](TAILSCALE_INPUT_MOCK.md)。本切片没有 `SendInput`、产品 GUI 接线或真实用户输入。
+
 ## 2026-09-30 真实 Mac TLS mock 结果
 
 Network.framework 回环集成测试 5/5 通过：正确指纹/密钥认证及输入排空、错误指纹、错误密钥、半帧断线、取消。慢写入由 `InputConnectionDriverTests.testSlowWriteKeepsOneFlightAndCoalescesIngress` 的可控写完成继续覆盖。全量 103/103、Release 构建成功。测试 TLS 身份仅编译到 test target，监听强制 `127.0.0.1`。

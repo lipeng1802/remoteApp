@@ -243,6 +243,18 @@ final class InputConnectionDriverTests: XCTestCase {
             onAuthenticated: {}, completion: { _ in }))
     }
 
+    func testCrossDeviceClientOnlyAcceptsLiteralTailscaleIPv4() throws {
+        XCTAssertTrue(InputSimulationEndpointPolicy.isTailscaleIPv4("100.64.0.1"))
+        XCTAssertTrue(InputSimulationEndpointPolicy.isTailscaleIPv4("100.127.255.255"))
+        for host in ["100.63.255.255", "100.128.0.1", "127.0.0.1", "localhost",
+                     "100.064.0.1", "100.64.0.1.example", "fd7a:115c:a1e0::1"] {
+            XCTAssertFalse(InputSimulationEndpointPolicy.isTailscaleIPv4(host), host)
+            XCTAssertThrowsError(try TLSInputSimulationClient(tailscaleHost: host, port: 47475,
+                expectedFingerprint: CertificateFingerprint(bytes: Data(count: 32)), deviceKey: key,
+                localControlAllowed: true, onAuthenticated: {}, completion: { _ in }))
+        }
+    }
+
     func testAutomaticTimerCancelsStalledConnection() throws {
         let clock = Clock(), transport = FakeTransport()
         let ended = expectation(description: "automatic timeout")

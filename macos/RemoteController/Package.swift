@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "RemoteProtocol", targets: ["RemoteProtocol"]),
         .executable(name: "RemoteController", targets: ["RemoteController"]),
         .executable(name: "TLSProbeClient", targets: ["TLSProbeClient"]),
+        .executable(name: "TailscaleInputMockClient", targets: ["TailscaleInputMockClient"]),
         .executable(name: "InputPreview", targets: ["InputPreview"])
     ],
     targets: [
@@ -19,6 +20,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "TLSProbeClient",
+            dependencies: ["RemoteProtocol"]
+        ),
+        .executableTarget(
+            name: "TailscaleInputMockClient",
             dependencies: ["RemoteProtocol"]
         ),
         .executableTarget(

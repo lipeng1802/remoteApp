@@ -7,6 +7,13 @@ namespace RemoteProtocol;
 
 public static class TailscaleEndpoints
 {
+    public static bool IsTailscaleIPv4(IPAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        var bytes = address.GetAddressBytes();
+        return bytes.Length == 4 && bytes[0] == 100 && bytes[1] is >= 64 and <= 127;
+    }
+
     public static async Task<(IPAddress Local, IPAddress Peer)> DiscoverAsync(CancellationToken cancellationToken)
     {
         var executable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Tailscale", "tailscale.exe");
@@ -42,7 +49,7 @@ public static class TailscaleEndpoints
     private static IPAddress Address(JsonElement peer)
     {
         var addresses = peer.GetProperty("TailscaleIPs").EnumerateArray().Select(p => IPAddress.Parse(p.GetString()!))
-            .Where(p => { var b = p.GetAddressBytes(); return b.Length == 4 && b[0] == 100 && b[1] >= 64 && b[1] <= 127; }).ToArray();
+            .Where(IsTailscaleIPv4).ToArray();
         if (addresses.Length != 1) throw new InvalidOperationException("没有唯一的 Tailscale IPv4 地址");
         return addresses[0];
     }

@@ -146,6 +146,8 @@ final class ControllerInputCaptureTests: XCTestCase {
         }
         let manifest = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf:
             root.appendingPathComponent("protocol/testdata/controller-input-v1.json")))
+        let mock = try SyntheticInputMockVector.make()
+        XCTAssertEqual(mock.inputs + mock.releases, commands)
         XCTAssertEqual(commands.count, manifest.events.count)
         for (command, expected) in zip(commands, manifest.events) {
             XCTAssertEqual(String(describing: command.messageType), expected.type)

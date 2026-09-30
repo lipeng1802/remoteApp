@@ -22,6 +22,7 @@ var tests = new (string Name, Action Run)[]
     ("TLS input idle deadline releases held input", InputTlsTests.Idle),
     ("TLS input flood is bounded and releases held input", InputTlsTests.Rate),
     ("TLS input ERROR releases held input", InputTlsTests.Error),
+    ("cross-device input mock only accepts Tailscale endpoints", InputTlsTests.RestrictedEndpoints),
     ("keyboard cross-language payload vectors", KeyboardTests.Golden),
     ("keyboard malformed and unsupported make codes rejected", KeyboardTests.Malformed),
     ("keyboard authentication capability and local consent gates", KeyboardTests.Gates),

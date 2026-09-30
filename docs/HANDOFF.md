@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 当前：双机 Tailscale input mock 已实现，待 Windows/双机验收（2026-09-30，最新）
+
+新增 Windows `InputMockServer` 与 `scripts/p2/Start-TailscaleInputMock.ps1`：只绑定本机 Tailscale IPv4，只接受唯一在线 Mac Tailscale IPv4，脚本和工具双层要求显式本地 mock 许可；处理器仅使用内存 `IInputSink`，逐项校验 12 个合成事件和最终释放，没有 `SendInput`。Windows 协议测试新增 Tailscale 端点边界，预期由 59 增至 60；当前 Mac 没有 .NET SDK，尚未执行 Windows 编译/测试。
+
+新增 Mac `TailscaleInputMockClient`：只接受字面量 `100.64.0.0/10` IPv4，只读取该地址已有的 Keychain 设备密钥和已批准证书指纹，不能首次配对或自动信任。两端均以现有 `controller-input-v1.json` 约束同一串左/右 Ctrl、A 重复按下、鼠标、滚轮和释放序列。Mac 全量 **104/104** 通过，最终 Release `Build complete! (0.65s)`。
+
+下一步在 Windows 拉取后严格按 [TAILSCALE_INPUT_MOCK.md](TAILSCALE_INPUT_MOCK.md) 执行：Windows Release + 60 项测试 → 带 `-AllowLocalMock` 启动一次性监听 → Mac 运行合成客户端 → 双端 PASS，且 Windows 桌面必须没有真实键鼠动作。完成前不接产品 GUI，不实现 `SendInput`。
+
 ## 当前：Mac 真实 NWConnection TLS 输入 mock 通过（2026-09-30，最新）
 
 新增 `RealTLSInputSimulationTests`，使用真实 Network.framework `NWListener` / `NWConnection` 和仅测试自签名身份，严格绑定 `127.0.0.1`。5/5 实际通过：正确指纹+密钥完成 HMAC 认证并按顺序排空按下/释放/断开；错误指纹、错误设备密钥、认证后半帧断线和客户端取消均失败关闭。慢写入/背压继续由确定性替身测试覆盖，避免本机 TCP 内核缓冲导致假通过。

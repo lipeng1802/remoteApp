@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemoteProtocol.Tests", "tes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TlsProbeServer", "tools\TlsProbeServer\TlsProbeServer.csproj", "{F3E11356-A143-42DF-94B6-DB6CFD2B9D73}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputMockServer", "tools\InputMockServer\InputMockServer.csproj", "{A6E0F6CF-99B9-44D8-A3EF-37FC6FE62697}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{274FF14D-87B7-48AE-8A97-81DBF517039C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenCapture.Tests", "tests\ScreenCapture.Tests\ScreenCapture.Tests.csproj", "{952C4AE7-A557-460A-ABDD-847B1D031D34}"
@@ -36,6 +38,10 @@ Global
 		{F3E11356-A143-42DF-94B6-DB6CFD2B9D73}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F3E11356-A143-42DF-94B6-DB6CFD2B9D73}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F3E11356-A143-42DF-94B6-DB6CFD2B9D73}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6E0F6CF-99B9-44D8-A3EF-37FC6FE62697}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6E0F6CF-99B9-44D8-A3EF-37FC6FE62697}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6E0F6CF-99B9-44D8-A3EF-37FC6FE62697}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6E0F6CF-99B9-44D8-A3EF-37FC6FE62697}.Release|Any CPU.Build.0 = Release|Any CPU
 		{952C4AE7-A557-460A-ABDD-847B1D031D34}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{952C4AE7-A557-460A-ABDD-847B1D031D34}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{952C4AE7-A557-460A-ABDD-847B1D031D34}.Release|Any CPU.ActiveCfg = Release|Any CPU

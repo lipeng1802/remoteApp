@@ -7,6 +7,7 @@ public enum TLSProbeError: Error, Equatable {
     case cancelled
     case authenticationRejected
     case invalidDeviceKey
+    case invalidHost
     case invalidPort
     case missingPeerCertificate
     case firstUseRejected

@@ -226,6 +226,8 @@ Windows Release 0 警告/错误，59/59 实际通过；新增 input-queue-v1.jso
 
 ## TLS 模拟适配与流程检查点（最新）
 
+2026-09-30 更新：Mac 真实 NWConnection 回环 TLS 5/5、全量 103/103 已通过。随后加入 Tailscale 单地址/单对端的双机合成 input mock，Mac 当前 104/104 及 Release 通过，Windows 新预期 60/60 待实机执行。详见 `TAILSCALE_INPUT_MOCK.md`；仍无产品 GUI 输入或 SendInput。
+
 Windows Release 与 59/59 本轮重新通过。Mac 新增 InputConnectionDriverTests 12 项，累计预期 96，尚未执行：慢写入/一万个移动有界、正常释放排空、拥塞取消、迟到回调、连接/写入期限、半帧 EOF、取消抑制认证通知、认证前输入、批次上限、构造许可/端口、真实 Dispatch 定时器和客户端释放。
 
 这些使用传输替身，不是真实 NWConnection 握手。TLSInputSimulationClient 的正确/错误指纹、正确/错误密钥及实际 TLS 断线仍待受控环境验证。WORKFLOW_REVIEW.md 为当前准确命令与阶段检查点；旧测试数量仅保留历史证据。
