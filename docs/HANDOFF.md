@@ -14,7 +14,9 @@ Mac RemoteController 的 Windows 地址输入框默认填写 `100.73.4.118`，�
 
 真实输入释放路径第 7 项也已通过：Mac Esc、“停止控制”、切换应用/窗口失焦以及主动断开四种路径最终均为“持有 0”，停止后输入不再影响 Windows。失焦只释放输入并暂停捕获，远程画面和认证连接保持；返回 RemoteController 后只需再次点击“开始控制”，无需重新连接。只有单独执行“断开”才结束会话。
 
-下一步继续 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 8–10 项：Windows 本机 `Ctrl + Alt + Esc` 紧急停止，Windows 主动停止与许可重置，最后进行默认只读回归。
+Windows 本机紧急停止第 8 项已通过：真实控制期间从 Windows 物理键盘按 `Ctrl + Alt + Esc`，强制停止按预期生效，共享结束、最终“持有 0”且 Mac 连接终止，远程输入不再生效。
+
+下一步继续 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 9–10 项：Windows 主动停止与许可重置，最后进行默认只读回归。
 
 ## 当前：Windows 本机紧急停止切片，随真实输入一起验收（2026-09-30，最新）
 

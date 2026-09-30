@@ -42,7 +42,7 @@ dotnet run --project .\windows\RemoteAgent\src\RemoteAgent\RemoteAgent.csproj -c
 5. 在空白记事本输入少量 ASCII 字母、数字、空格、退格和 Enter；再测试左右 Shift/Control/Option/Command。Command 映射 Windows 键、Option 映射 Alt、Control 映射 Ctrl，不测试输入法、Caps Lock、Fn、媒体键或 Pause。
 6. 分别测试 Control+A、Control+C、Control+V 等无破坏性组合；不要测试关机、删除文件、系统管理或安全桌面快捷键。
 7. **通过（2026-09-30）**。按住普通键、修饰键或鼠标按钮时分别执行 Mac Esc、Mac“停止控制”、切换 Mac 应用/窗口失焦、Mac 主动断开，四种路径最终均为“持有 0”，停止后 Mac 输入不再影响 Windows。Esc、停止和失焦只暂停控制并保持会话；返回后再次点击“开始控制”即可。主动断开才结束会话并要求重新连接。
-8. 再次控制并按住一个无破坏性的普通键或修饰键，从 Windows 的物理键盘按 `Ctrl + Alt + Esc`。确认共享立即以“本机紧急停止”结束、最终持有 0、Mac 断开，且之后的 Mac 输入不再影响 Windows。不要从 Mac 模拟此组合代替本机测试。
+8. **通过（2026-09-30）**。再次控制并按住一个无破坏性的普通键或修饰键，从 Windows 的物理键盘按 `Ctrl + Alt + Esc`；本机强制停止按预期生效，共享结束、最终“持有 0”、Mac 断开，之后的 Mac 输入不再影响 Windows。
 9. 再次控制时由 Windows 点击“停止共享”，确认输入立即停止且最终持有为 0。重新点击开始共享时，控制许可必须已自动取消，未重新勾选不得接受输入。
 10. 最后重新建立一次双方均未授权的只读会话，确认画面和停止/重连正常。关闭 RemoteAgent 后重新启动，确认没有“紧急停止快捷键不可用”提示。
 
