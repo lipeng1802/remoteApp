@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 当前：0.3.0 双平台安装包基线（2026-10-01，最新）
+
+P2 源码验收完成后，安装包阶段已开始。首个切片统一使用根目录 `VERSION`（当前 `0.3.0`），并加固 macOS DMG 与 Windows Setup 构建：打包前自动测试、产物版本与 Git 修订标识、产物存在性校验及 SHA-256 文件。详细命令、产物和后续安装验收见 [INSTALLER_PHASE_HANDOFF.md](INSTALLER_PHASE_HANDOFF.md)。
+
+Mac 可在本机完成脚本实测；Windows 脚本涉及 .NET 8、Inno Setup 和 WPF，只能在 Windows 验证。开发包仍分别使用 ad-hoc 签名和未签名 Setup，不代表正式分发签名完成。
+
 ## P2 真实键鼠 MVP 验收完成（2026-10-01，最新）
 
 用户已完成最后的 RemoteAgent 关闭/重启检查，未出现“紧急停止快捷键不可用”提示。结合此前协议 **63/63 passed**、WindowsInput fake 边界 **6/6**、Mac 全量测试及 Release 构建，以及 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 1–10 项双机人工结果，P2 真实键鼠 MVP 现已全部验收通过。
