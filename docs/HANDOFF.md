@@ -1,6 +1,14 @@
 # 下一次 Codex 会话交接
 
-## 当前：Windows 已许可时兼容 Mac 只读连接，待 Windows 验证（2026-10-01，最新）
+## P2 真实键鼠 MVP 验收完成（2026-10-01，最新）
+
+用户已完成最后的 RemoteAgent 关闭/重启检查，未出现“紧急停止快捷键不可用”提示。结合此前协议 **63/63 passed**、WindowsInput fake 边界 **6/6**、Mac 全量测试及 Release 构建，以及 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 1–10 项双机人工结果，P2 真实键鼠 MVP 现已全部验收通过。
+
+已验证默认只读、双方显式许可、真实鼠标/键盘/修饰键/快捷键、黑边拒绝、触控板纵横滚动、所有释放路径、Windows 本机 `Ctrl + Alt + Esc`、Windows 主动停止与许可重置、Mac 断开后 Windows 持续共享、同一共享重新连接、Windows 已许可时 Mac 只读能力降级，以及 RemoteAgent 重启后的快捷键重新注册。所有停止路径最终“持有 0”。
+
+当前仍是源码运行验证，旧安装包不包含这些最新改动。下一阶段应进入 Windows 与 macOS 各自安装包的重建、版本标识、安装/升级/卸载和干净环境验收；不要把源码验收结论直接视为安装包已通过。
+
+## 已完成：Windows 已许可时兼容 Mac 只读连接（2026-10-01）
 
 Windows 拉取持续共享版本后反馈：Windows 勾选“允许远程控制”，但 Mac 不勾选“请求远程控制”时连接失败，Mac 显示 `unexpectedResponse`。根因是 Agent 只要存在本机输入许可就强制要求 Controller 声明 Input 能力，把 Windows 的“最多允许控制”错误地当成双方必须控制。
 
@@ -14,9 +22,9 @@ Windows 首次运行新增协议测试时，两项分别报 `Probe payload excee
 
 用户随后确认本轮 6 项双机验证全部通过：Windows 已许可控制时，Mac 不请求控制可以正常只读连接并显示画面，Mac 键鼠不影响 Windows；Mac 主动断开后 Windows 继续共享；无需 Windows 操作即可再次只读连接；再次断开后，Mac 改为请求控制也可在同一 Windows 共享中重新连接并手动开始控制。能力降级与持续共享修复均已通过实机验证。
 
-原始第 10 项只剩最后一个独立检查：关闭 RemoteAgent 后重新启动，确认没有“紧急停止快捷键不可用”提示。通过后即可记录 P2 真实键鼠 MVP 全部验收完成。
+最后的 RemoteAgent 关闭/重启检查已通过，没有出现“紧急停止快捷键不可用”提示。本节及持续共享修复现已完成。
 
-## 当前：Mac 断开后 Windows 持续共享修复，待 Windows 验证（2026-09-30，最新）
+## 已完成：Mac 断开后 Windows 持续共享修复（2026-10-01）
 
 最终只读回归发现：Mac 主动断开后 Windows 同时结束了整个共享。产品此前调用单会话 `TlsProbeServer.RunOnceAsync`，客户端发送 DISCONNECT 后方法正常返回，WPF 因而进入共享结束清理；这不符合“Windows 持续等待、Mac 可重新连接”的产品行为。
 
