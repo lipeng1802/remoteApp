@@ -108,3 +108,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\buil
 4. 用安装版完成一次只读连接、一次授权控制、Mac 断开后 Windows 持续等待，以及 Windows `Ctrl + Alt + Esc` 停止。
 5. 不先卸载，重复运行同一个 Setup 做覆盖安装；确认版本不变、程序仍可启动、已有证书和设备配对未被破坏。
 6. 从“已安装的应用”卸载；确认程序、开始菜单/桌面快捷方式和安装目录移除。凭据是否保留需单独记录，本切片不擅自删除 Windows Credential Manager 中的配对材料。
+
+## 当前 Windows 安装阻塞
+
+用户将 0.3.0 安装到自定义 D 盘。默认 C 盘路径检查按预期失败，但随后通过卸载注册项自动读取 `InstallLocation` 的命令仍报错，第二次错误详情尚未取得。当前不能据此判断安装失败；也不能确认安装器是否正确记录了自定义安装目录。
+
+详细只读诊断命令和回传项见 [HANDOFF.md](HANDOFF.md) 顶部“Windows 接手：0.3.0 自定义 D 盘安装路径定位失败”。在 Windows 完成进程路径、三类卸载注册表和 D 盘实际文件定位前，不重复安装、不卸载、不修改注册表。
