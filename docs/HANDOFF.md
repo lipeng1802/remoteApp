@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 当前：Windows 安装版紧急停止兜底修复，待 Windows 构建复测（2026-10-01，最新）
+
+两端 0.3.0 安装版核心回归中，默认只读、Mac 断开后 Windows 持续共享、授权真实控制三项通过；Windows 物理键盘 `Ctrl + Alt + Esc` 未结束共享。已排除多实例和远程修饰键：只有 1 个 D 盘安装版进程，且在不连接 Mac 的只读等待阶段按键仍无任何反应，窗口继续显示“等待已配对的 Mac 连接”。
+
+当前安装版注册 `RegisterHotKey` 时未显示失败，但 WPF 没有收到可观察的 `WM_HOTKEY`。具体系统消息丢失原因尚未证明，不能继续把“注册成功”当作紧急停止可用的充分条件。现保留 `RegisterHotKey` 主路径，并增加 `WH_KEYBOARD_LL` 物理键盘 Hook 兜底；两条路径统一调用幂等停止函数。兜底明确拒绝 `LLKHF_INJECTED` 和低完整性注入事件，因此 Mac 经 `SendInput` 发送相同组合不能触发本机紧急停止。
+
+新增纯逻辑测试覆盖物理 `Ctrl + Alt + Esc` 命中，以及注入标志、缺少修饰键和其他键拒绝。WindowsInput 预期由 **6/6** 增至 **7/7**，RemoteProtocol 仍为 **63/63**。本机没有 .NET SDK，C# 尚未编译；当前已安装的 `d7697772f98d` 候选包已被本修复取代，不能继续作为最终候选。
+
+Windows 拉取后先运行默认打包脚本；它会完成 Release、协议 63/63、WindowsInput 7/7 和版本门禁，并生成带新源码修订的新 0.3.0 Setup。不要先卸载现有 D 盘版本，直接用相同 AppId 覆盖安装，以同时验证升级路径与安装目录保留。覆盖后先在不连接 Mac 的只读共享中按物理左 Ctrl + 左 Alt + Esc，确认共享结束；再在真实控制中复测，确认 Mac 断开且最终“持有 0”。
+
 ## Windows 安装路径问题已定位，安装版启动通过（2026-10-01，最新）
 
 本机已完成只读排查并启动已安装的 0.3.0。自定义 D 盘安装正常，无需重装或修改注册表。此前精确筛选 `DisplayName = Personal Remote Desktop Agent` 得到 **0 项**，实际显示名称为 `Personal Remote Desktop Agent version 0.3.0`，宽松筛选得到 **1 项**，且 `InstallLocation` 正确。第二次原始错误全文仍未取得，但旧查询未命中的问题已实机复现。

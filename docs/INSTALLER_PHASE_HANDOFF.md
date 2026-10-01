@@ -58,7 +58,7 @@ git pull --ff-only origin main
 .\packaging\windows\build-installer.ps1
 ~~~
 
-预期自动门禁：Release 0 错误、RemoteProtocol `63/63`、WindowsInput `6/6`。预期产物：
+预期自动门禁：Release 0 错误、RemoteProtocol `63/63`、WindowsInput `7/7`。预期产物：
 
 ~~~text
 artifacts\windows\publish\RemoteAgent.exe
@@ -115,4 +115,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\buil
 
 已验证安装目录 `D:\Program Files\Personal Remote Desktop Agent`，安装 exe 版本为 `0.3.0.0` / `0.3.0+d7697772f98d`，其 SHA-256 与 publish exe 完全一致，Setup 哈希与校验文件一致。开始菜单、桌面快捷方式目标正确。实际启动安装版后窗口响应正常，默认未共享、控制许可未勾选，开始按钮可用、停止按钮禁用，无紧急停止快捷键不可用提示。
 
-仍待验收：安装版双机四条核心回归、Tailscale/已有配对可用性、覆盖安装后配对保留、卸载残留、无 .NET 开发环境的干净 Windows 启动。未执行自动共享、输入注入、覆盖安装或卸载；这些不能由本机启动结果代替。
+安装版双机回归结果：默认只读、Mac 断开后 Windows 持续等待、双方授权真实控制三项通过；物理 `Ctrl + Alt + Esc` 紧急停止失败。单实例、无 Mac 连接的只读共享下同样无反应，已排除多实例和远程输入状态。
+
+已增加低级物理键盘 Hook 作为 `RegisterHotKey/WM_HOTKEY` 的兜底，并拒绝所有注入标志；WindowsInput 自动测试预期增至 7/7。此前 `d7697772f98d` Setup 被取代。Windows 应拉取后运行默认打包脚本，并直接覆盖安装到现有 D 盘目录；覆盖后验证安装目录与配对保留，再分别测试只读共享和真实控制中的物理紧急停止。
+
+仍待验收：兜底紧急停止、覆盖安装后配对保留、卸载残留、无 .NET 开发环境的干净 Windows 启动。前三条已通过的安装版核心路径无需在旧包重复测试，但新包覆盖后至少做一次连接与真实控制冒烟。

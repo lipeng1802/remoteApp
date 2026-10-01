@@ -9,6 +9,7 @@ var tests = new (string Name, Action Run)[]
     ("scan-code keyboard flags include extended and key-up", Keyboard),
     ("release attempts every held input and can retry failures", CleanupRetry),
     ("win-x64 SendInput ABI layout is stable", NativeLayout),
+    ("physical emergency hotkey rejects injected and incomplete chords", EmergencyHotkey),
 };
 
 var failures = 0;
@@ -117,6 +118,22 @@ static void NativeLayout()
     Equal((ushort)0x1d, keyboard.ScanCode);
     Equal((uint)(WindowsKeyboardFlags.ScanCode | WindowsKeyboardFlags.ExtendedKey |
         WindowsKeyboardFlags.KeyUp), keyboard.KeyboardFlags);
+}
+
+static void EmergencyHotkey()
+{
+    Equal(true, PhysicalEmergencyHotkey.Matches(
+        PhysicalEmergencyHotkey.EscapeVirtualKey, 0, controlDown: true, altDown: true));
+    Equal(false, PhysicalEmergencyHotkey.Matches(
+        PhysicalEmergencyHotkey.EscapeVirtualKey, PhysicalEmergencyHotkey.InjectedFlag,
+        controlDown: true, altDown: true));
+    Equal(false, PhysicalEmergencyHotkey.Matches(
+        PhysicalEmergencyHotkey.EscapeVirtualKey, PhysicalEmergencyHotkey.LowerIntegrityInjectedFlag,
+        controlDown: true, altDown: true));
+    Equal(false, PhysicalEmergencyHotkey.Matches(
+        PhysicalEmergencyHotkey.EscapeVirtualKey, 0, controlDown: false, altDown: true));
+    Equal(false, PhysicalEmergencyHotkey.Matches(
+        0x70, 0, controlDown: true, altDown: true));
 }
 
 static void Equal<T>(T expected, T actual)

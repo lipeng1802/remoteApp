@@ -9,13 +9,21 @@ namespace RemoteAgent;
 public partial class MainWindow : Window
 {
     private const int WmHotkey = 0x0312;
+    private const int WmKeyDown = 0x0100;
+    private const int WmSystemKeyDown = 0x0104;
+    private const int WhKeyboardLowLevel = 13;
     private const int EmergencyHotkeyId = 0x5052;
     private const uint ModAlt = 0x0001;
     private const uint ModControl = 0x0002;
     private const uint ModNoRepeat = 0x4000;
     private const uint VirtualKeyEscape = 0x1b;
+    private const int VirtualKeyControl = 0x11;
+    private const int VirtualKeyAlt = 0x12;
     private CancellationTokenSource? sharing;
     private HwndSource? windowSource;
+    private LowLevelKeyboardProcedure? keyboardProcedure;
+    private nint keyboardHook;
+    private bool registeredWindowHotkey;
     private bool emergencyHotkeyAvailable;
     private bool emergencyStopRequested;
 
@@ -30,8 +38,11 @@ public partial class MainWindow : Window
         var handle = new WindowInteropHelper(this).Handle;
         windowSource = HwndSource.FromHwnd(handle);
         windowSource?.AddHook(WindowMessageHook);
-        emergencyHotkeyAvailable = RegisterHotKey(handle, EmergencyHotkeyId,
+        registeredWindowHotkey = windowSource is not null && RegisterHotKey(handle, EmergencyHotkeyId,
             ModControl | ModAlt | ModNoRepeat, VirtualKeyEscape);
+        keyboardProcedure = KeyboardHookCallback;
+        keyboardHook = SetWindowsHookEx(WhKeyboardLowLevel, keyboardProcedure, GetModuleHandle(null), 0);
+        emergencyHotkeyAvailable = registeredWindowHotkey || keyboardHook != 0;
         if (!emergencyHotkeyAvailable)
             StatusText.Text = "未共享 · Ctrl + Alt + Esc 紧急停止快捷键不可用，真实控制已禁用";
     }
@@ -41,14 +52,30 @@ public partial class MainWindow : Window
         if (message == WmHotkey && wParam == (nint)EmergencyHotkeyId)
         {
             handled = true;
-            if (sharing is not null)
-            {
-                emergencyStopRequested = true;
-                StatusText.Text = "已触发本机紧急停止，正在释放输入并结束共享";
-                sharing.Cancel();
-            }
+            RequestEmergencyStop();
         }
         return 0;
+    }
+
+    private nint KeyboardHookCallback(int code, nint message, nint dataPointer)
+    {
+        if (code >= 0 && (message == (nint)WmKeyDown || message == (nint)WmSystemKeyDown))
+        {
+            var data = Marshal.PtrToStructure<LowLevelKeyboardData>(dataPointer);
+            var controlDown = (GetAsyncKeyState(VirtualKeyControl) & 0x8000) != 0;
+            var altDown = (GetAsyncKeyState(VirtualKeyAlt) & 0x8000) != 0;
+            if (PhysicalEmergencyHotkey.Matches(data.VirtualKey, data.Flags, controlDown, altDown))
+                _ = Dispatcher.BeginInvoke(new Action(RequestEmergencyStop));
+        }
+        return CallNextHookEx(keyboardHook, code, message, dataPointer);
+    }
+
+    private void RequestEmergencyStop()
+    {
+        if (sharing is null || emergencyStopRequested) return;
+        emergencyStopRequested = true;
+        StatusText.Text = "已触发本机紧急停止，正在释放输入并结束共享";
+        sharing.Cancel();
     }
 
     private async void Start_Click(object sender, RoutedEventArgs e)
@@ -152,11 +179,30 @@ public partial class MainWindow : Window
         if (windowSource is not null)
         {
             windowSource.RemoveHook(WindowMessageHook);
-            if (emergencyHotkeyAvailable)
+            if (registeredWindowHotkey)
                 _ = UnregisterHotKey(windowSource.Handle, EmergencyHotkeyId);
         }
+        registeredWindowHotkey = false;
+        if (keyboardHook != 0)
+        {
+            _ = UnhookWindowsHookEx(keyboardHook);
+            keyboardHook = 0;
+        }
+        keyboardProcedure = null;
         emergencyHotkeyAvailable = false;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct LowLevelKeyboardData
+    {
+        public readonly uint VirtualKey;
+        public readonly uint ScanCode;
+        public readonly uint Flags;
+        public readonly uint Time;
+        public readonly nuint ExtraInformation;
+    }
+
+    private delegate nint LowLevelKeyboardProcedure(int code, nint message, nint dataPointer);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -165,4 +211,21 @@ public partial class MainWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UnregisterHotKey(nint window, int id);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nint SetWindowsHookEx(int hookId, LowLevelKeyboardProcedure procedure,
+        nint module, uint threadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWindowsHookEx(nint hook);
+
+    [DllImport("user32.dll")]
+    private static extern nint CallNextHookEx(nint hook, int code, nint message, nint dataPointer);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandle(string? moduleName);
 }
