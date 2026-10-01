@@ -10,6 +10,8 @@ macOS `0.3.0` 已从提交 `50b959147609` 实际生成：Release **111/111**、�
 
 Windows 首次生成的 Setup 为 `49277853` bytes，FileVersion 正确，但 ProductVersion 因 .NET SDK 自动追加修订而重复为“短哈希 + 完整哈希”。现已关闭重复追加并加入严格版本自检；首次包不作为最终候选。Windows 需拉取最新提交后重新运行脚本，ProductVersion 必须精确为 `0.3.0+<当前 12 位提交>`，随后再进入安装/卸载验收。
 
+Windows 已从 `d7697772f98d` 重建最终候选：`49280682` bytes，SHA-256 `ae9be3f93e2a182d8bd1bb224dae634e9ac32cfb11f5b41c07465f0df41313d7`，FileVersion `0.3.0.0`，ProductVersion `0.3.0+d7697772f98d`，全部符合预期。下一步按 [INSTALLER_PHASE_HANDOFF.md](INSTALLER_PHASE_HANDOFF.md) 执行安装、安装版核心双机、覆盖安装和卸载验收。
+
 ## P2 真实键鼠 MVP 验收完成（2026-10-01，最新）
 
 用户已完成最后的 RemoteAgent 关闭/重启检查，未出现“紧急停止快捷键不可用”提示。结合此前协议 **63/63 passed**、WindowsInput fake 边界 **6/6**、Mac 全量测试及 Release 构建，以及 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 1–10 项双机人工结果，P2 真实键鼠 MVP 现已全部验收通过。

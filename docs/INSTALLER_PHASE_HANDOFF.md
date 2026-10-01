@@ -76,6 +76,16 @@ Windows 首次构建完成，安装器大小为 `49277853` bytes，FileVersion �
 
 脚本现显式关闭 SDK 的第二次追加，并在发布后强制检查：FileVersion 必须等于 `0.3.0.0`，ProductVersion 必须严格等于 `0.3.0+<12 位当前提交>`；不符合就停止，不再继续生成安装器。Windows 拉取后需要重建，旧 Setup 与校验文件会被同名最终候选包替换。
 
+Windows 已从修复提交 `d7697772f98d` 完成重建，最终候选包元数据通过：
+
+- 安装器：`PersonalRemoteDesktopAgent-0.3.0-win-x64-Setup.exe`
+- 大小：`49280682` bytes。
+- SHA-256：`ae9be3f93e2a182d8bd1bb224dae634e9ac32cfb11f5b41c07465f0df41313d7`。
+- `RemoteAgent.exe` FileVersion：`0.3.0.0`。
+- `RemoteAgent.exe` ProductVersion：`0.3.0+d7697772f98d`。
+
+该文件现进入安装候选验收；未经安装、启动、覆盖安装和卸载验证前，仍不能标记 Windows 安装包完成。
+
 若 PowerShell 执行策略阻止 `.ps1`，使用仅对本次进程生效的命令，不永久放宽系统策略：
 
 ~~~powershell
@@ -89,3 +99,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\buil
 3. 在干净 Windows 11 x64 与干净 macOS 用户环境验证无需开发工具即可启动；Tailscale 仍单独安装和登录。
 4. 用安装版重复默认只读、授权控制、Mac 断开后 Windows 持续共享、Windows 紧急停止四条核心回归。
 5. 正式外发前补齐 Apple Developer ID/公证和 Windows Authenticode 签名；本切片不伪造或绕过签名信任。
+
+## Windows 安装候选验收顺序
+
+1. 关闭所有源码版或发布目录版 RemoteAgent，复算 Setup SHA-256 并与 `.sha256` 文件比较。
+2. 运行 Setup，保留默认安装目录；未签名开发包出现 Windows/SmartScreen 提示属于已知限制，必须确认文件哈希正确后再继续。
+3. 安装完成后从开始菜单启动，核对安装目录 exe 的 FileVersion/ProductVersion，确认窗口、Tailscale 检测和紧急停止快捷键正常。
+4. 用安装版完成一次只读连接、一次授权控制、Mac 断开后 Windows 持续等待，以及 Windows `Ctrl + Alt + Esc` 停止。
+5. 不先卸载，重复运行同一个 Setup 做覆盖安装；确认版本不变、程序仍可启动、已有证书和设备配对未被破坏。
+6. 从“已安装的应用”卸载；确认程序、开始菜单/桌面快捷方式和安装目录移除。凭据是否保留需单独记录，本切片不擅自删除 Windows Credential Manager 中的配对材料。
