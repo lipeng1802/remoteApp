@@ -8,6 +8,8 @@ Mac 可在本机完成脚本实测；Windows 脚本涉及 .NET 8、Inno Setup �
 
 macOS `0.3.0` 已从提交 `50b959147609` 实际生成：Release **111/111**、构建、`.app` 签名、DMG 校验及只读挂载内复核全部通过。产物大小 `478800` bytes，SHA-256 `09a4e02d954f8d5204b19d722c34f8873efaa009ea2f3e38b09948b78999833b`。下一步在 Windows 拉取后运行 `packaging\windows\build-installer.ps1`，预期协议 **63/63**、WindowsInput **6/6** 并生成 `0.3.0` Setup 与校验文件。
 
+Windows 首次生成的 Setup 为 `49277853` bytes，FileVersion 正确，但 ProductVersion 因 .NET SDK 自动追加修订而重复为“短哈希 + 完整哈希”。现已关闭重复追加并加入严格版本自检；首次包不作为最终候选。Windows 需拉取最新提交后重新运行脚本，ProductVersion 必须精确为 `0.3.0+<当前 12 位提交>`，随后再进入安装/卸载验收。
+
 ## P2 真实键鼠 MVP 验收完成（2026-10-01，最新）
 
 用户已完成最后的 RemoteAgent 关闭/重启检查，未出现“紧急停止快捷键不可用”提示。结合此前协议 **63/63 passed**、WindowsInput fake 边界 **6/6**、Mac 全量测试及 Release 构建，以及 [REAL_INPUT_HANDOFF.md](REAL_INPUT_HANDOFF.md) 第 1–10 项双机人工结果，P2 真实键鼠 MVP 现已全部验收通过。

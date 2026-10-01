@@ -68,7 +68,19 @@ artifacts\windows\PersonalRemoteDesktopAgent-0.3.0-win-x64-Setup.exe.sha256
 
 Windows 安装器当前未做 Authenticode 签名；SmartScreen 提示属于预期的开发包限制，不应误记为正式分发就绪。
 
-Windows `0.3.0` 尚未构建；需要拉取包含本切片的最新提交后执行上述单一脚本，并回传三组自动门禁、安装器大小、SHA-256 和包内文件版本。
+Windows `0.3.0` 最终候选包尚未完成；需要拉取包含最新修正的提交后执行上述单一脚本，并回传三组自动门禁、安装器大小、SHA-256 和包内文件版本。
+
+### Windows 首次构建反馈与修正
+
+Windows 首次构建完成，安装器大小为 `49277853` bytes，FileVersion 为 `0.3.0.0`。ProductVersion 显示为 `0.3.0+490df3be3388.490df3be3388c47e86abc2a4d49d2ef5127e76c6`：脚本显式加入短修订后，.NET SDK 又自动追加了一次完整修订。功能未受影响，但该包不作为最终候选包。
+
+脚本现显式关闭 SDK 的第二次追加，并在发布后强制检查：FileVersion 必须等于 `0.3.0.0`，ProductVersion 必须严格等于 `0.3.0+<12 位当前提交>`；不符合就停止，不再继续生成安装器。Windows 拉取后需要重建，旧 Setup 与校验文件会被同名最终候选包替换。
+
+若 PowerShell 执行策略阻止 `.ps1`，使用仅对本次进程生效的命令，不永久放宽系统策略：
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\build-installer.ps1
+~~~
 
 ## 后续验收
 

@@ -52,10 +52,25 @@ dotnet publish $Project `
     --output $PublishDirectory `
     -p:PublishSingleFile=true `
     -p:Version=$Version `
-    -p:InformationalVersion="$Version+$SourceRevision"
+    -p:InformationalVersion="$Version+$SourceRevision" `
+    -p:IncludeSourceRevisionInInformationalVersion=false
 
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE."
+}
+
+$PublishedExecutable = Join-Path $PublishDirectory "RemoteAgent.exe"
+if (!(Test-Path -LiteralPath $PublishedExecutable)) {
+    throw "Published executable was not produced at $PublishedExecutable."
+}
+$PublishedVersion = (Get-Item -LiteralPath $PublishedExecutable).VersionInfo
+$ExpectedFileVersion = "$Version.0"
+$ExpectedProductVersion = "$Version+$SourceRevision"
+if ($PublishedVersion.FileVersion -ne $ExpectedFileVersion) {
+    throw "Unexpected RemoteAgent.exe FileVersion: $($PublishedVersion.FileVersion); expected $ExpectedFileVersion."
+}
+if ($PublishedVersion.ProductVersion -ne $ExpectedProductVersion) {
+    throw "Unexpected RemoteAgent.exe ProductVersion: $($PublishedVersion.ProductVersion); expected $ExpectedProductVersion."
 }
 
 $Compiler = Get-Command ISCC.exe -ErrorAction SilentlyContinue
