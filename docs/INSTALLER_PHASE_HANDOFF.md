@@ -68,7 +68,7 @@ artifacts\windows\PersonalRemoteDesktopAgent-0.3.0-win-x64-Setup.exe.sha256
 
 Windows 安装器当前未做 Authenticode 签名；SmartScreen 提示属于预期的开发包限制，不应误记为正式分发就绪。
 
-Windows `0.3.0` 最终候选包尚未完成；需要拉取包含最新修正的提交后执行上述单一脚本，并回传三组自动门禁、安装器大小、SHA-256 和包内文件版本。
+Windows `0.3.0` 最终候选已从 `d7697772f98d` 生成；版本与哈希结果见下文。无需因文档更新重复构建。
 
 ### Windows 首次构建反馈与修正
 
@@ -103,14 +103,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\buil
 ## Windows 安装候选验收顺序
 
 1. 关闭所有源码版或发布目录版 RemoteAgent，复算 Setup SHA-256 并与 `.sha256` 文件比较。
-2. 运行 Setup，保留默认安装目录；未签名开发包出现 Windows/SmartScreen 提示属于已知限制，必须确认文件哈希正确后再继续。
+2. 运行 Setup，可使用默认或自定义安装目录；未签名开发包出现 Windows/SmartScreen 提示属于已知限制，必须确认文件哈希正确后再继续。
 3. 安装完成后从开始菜单启动，核对安装目录 exe 的 FileVersion/ProductVersion，确认窗口、Tailscale 检测和紧急停止快捷键正常。
 4. 用安装版完成一次只读连接、一次授权控制、Mac 断开后 Windows 持续等待，以及 Windows `Ctrl + Alt + Esc` 停止。
 5. 不先卸载，重复运行同一个 Setup 做覆盖安装；确认版本不变、程序仍可启动、已有证书和设备配对未被破坏。
 6. 从“已安装的应用”卸载；确认程序、开始菜单/桌面快捷方式和安装目录移除。凭据是否保留需单独记录，本切片不擅自删除 Windows Credential Manager 中的配对材料。
 
-## 当前 Windows 安装阻塞
+## Windows 本机验收进展（2026-10-01）
 
-用户将 0.3.0 安装到自定义 D 盘。默认 C 盘路径检查按预期失败，但随后通过卸载注册项自动读取 `InstallLocation` 的命令仍报错，第二次错误详情尚未取得。当前不能据此判断安装失败；也不能确认安装器是否正确记录了自定义安装目录。
+自定义 D 盘安装路径问题已解决：卸载项 DisplayName 实际带有 `version 0.3.0`，旧命令的精确名称匹配返回 0 项；InstallLocation 正确，无需修改安装器。稳定定位命令见 [HANDOFF.md](HANDOFF.md) 顶部。
 
-详细只读诊断命令和回传项见 [HANDOFF.md](HANDOFF.md) 顶部“Windows 接手：0.3.0 自定义 D 盘安装路径定位失败”。在 Windows 完成进程路径、三类卸载注册表和 D 盘实际文件定位前，不重复安装、不卸载、不修改注册表。
+已验证安装目录 `D:\Program Files\Personal Remote Desktop Agent`，安装 exe 版本为 `0.3.0.0` / `0.3.0+d7697772f98d`，其 SHA-256 与 publish exe 完全一致，Setup 哈希与校验文件一致。开始菜单、桌面快捷方式目标正确。实际启动安装版后窗口响应正常，默认未共享、控制许可未勾选，开始按钮可用、停止按钮禁用，无紧急停止快捷键不可用提示。
+
+仍待验收：安装版双机四条核心回归、Tailscale/已有配对可用性、覆盖安装后配对保留、卸载残留、无 .NET 开发环境的干净 Windows 启动。未执行自动共享、输入注入、覆盖安装或卸载；这些不能由本机启动结果代替。

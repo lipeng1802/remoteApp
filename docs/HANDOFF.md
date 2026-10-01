@@ -1,38 +1,46 @@
 # 下一次 Codex 会话交接
 
-## Windows 接手：0.3.0 自定义 D 盘安装路径定位失败（2026-10-01，最新）
+## Windows 安装路径问题已定位，安装版启动通过（2026-10-01，最新）
 
-Windows `0.3.0` 最终候选 Setup 已生成并完成哈希/版本核对。用户安装时选择了 D 盘，因此按默认 `C:\Program Files\Personal Remote Desktop Agent\RemoteAgent.exe` 检查报 `PathNotFound`，这本身不是安装失败。随后尝试按卸载注册项 `DisplayName = Personal Remote Desktop Agent` 读取 `InstallLocation` 并拼接 `RemoteAgent.exe`，用户反馈仍报错，但尚未提供第二次错误全文，不能判断是卸载项未命中、`InstallLocation` 为空，还是实际目录结构不同。
+本机已完成只读排查并启动已安装的 0.3.0。自定义 D 盘安装正常，无需重装或修改注册表。此前精确筛选 `DisplayName = Personal Remote Desktop Agent` 得到 **0 项**，实际显示名称为 `Personal Remote Desktop Agent version 0.3.0`，宽松筛选得到 **1 项**，且 `InstallLocation` 正确。第二次原始错误全文仍未取得，但旧查询未命中的问题已实机复现。
 
-Windows 端接手后不要先卸载或重复安装。按以下顺序只读定位：
+实测结果：
+
+- 安装位置：`D:\Program Files\Personal Remote Desktop Agent\RemoteAgent.exe`。
+- FileVersion：`0.3.0.0`；ProductVersion：`0.3.0+d7697772f98d`。
+- 安装 exe 与最终候选 publish exe 的 SHA-256 一致：`4763efc01680517bca5ae6747d03d2892c850057896c206e9e8684656be429ae`。
+- Setup SHA-256 与校验文件一致：`ae9be3f93e2a182d8bd1bb224dae634e9ac32cfb11f5b41c07465f0df41313d7`。
+- 开始菜单和公共桌面快捷方式均指向上述 D 盘 exe，目标存在。
+- 已实际启动安装版，窗口响应正常；状态“未共享”，控制许可 Off，开始按钮可用、停止按钮禁用，无紧急停止快捷键不可用提示。应用保持打开，未启动共享、未授权或注入输入。
+
+本机以后启动安装版使用：
 
 ~~~powershell
-Get-Process RemoteAgent -ErrorAction SilentlyContinue |
-    Select-Object Id, Path, MainWindowTitle
+& 'D:\Program Files\Personal Remote Desktop Agent\RemoteAgent.exe'
+~~~
 
-$roots = @(
-    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+跨机器定位应使用固定 Inno Setup AppId，避免依赖包含版本的显示名称：
+
+~~~powershell
+$keys = @(
+    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{756FE82F-3D9F-4AB1-9652-3532142CB7A7}_is1',
+    'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{756FE82F-3D9F-4AB1-9652-3532142CB7A7}_is1',
+    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{756FE82F-3D9F-4AB1-9652-3532142CB7A7}_is1'
 )
-$entries = Get-ItemProperty $roots -ErrorAction SilentlyContinue |
-    Where-Object { $_.DisplayName -like '*Personal Remote Desktop*' }
-$entries | Format-List DisplayName, DisplayVersion, InstallLocation, UninstallString, PSPath
-
-Get-ChildItem 'D:\' -Filter RemoteAgent.exe -File -Recurse -ErrorAction SilentlyContinue |
-    Select-Object -First 20 FullName, Length
+$entries = @(Get-ItemProperty -LiteralPath $keys -ErrorAction SilentlyContinue)
+if ($entries.Count -ne 1 -or [string]::IsNullOrWhiteSpace($entries[0].InstallLocation)) {
+    throw 'Expected one installed Agent with a valid InstallLocation.'
+}
+$installed = Join-Path $entries[0].InstallLocation 'RemoteAgent.exe'
+if (-not (Test-Path -LiteralPath $installed -PathType Leaf)) {
+    throw 'Installed RemoteAgent.exe was not found.'
+}
+(Get-Item -LiteralPath $installed).VersionInfo | Select-Object FileVersion, ProductVersion
+# 确认旧窗口已关闭后再启动：
+# & $installed
 ~~~
 
-若进程正在运行，以 `Get-Process ... Path` 为准；若卸载项存在但 `InstallLocation` 为空，需要检查 Inno Setup 是否应显式写入该值并补自动回归；若只能由 D 盘搜索找到，记录完整路径并核对是否位于用户选择的安装目录。找到后执行：
-
-~~~powershell
-$installed = '<上一步得到的完整 RemoteAgent.exe 路径>'
-Test-Path -LiteralPath $installed
-(Get-Item -LiteralPath $installed).VersionInfo |
-    Select-Object FileVersion, ProductVersion
-~~~
-
-预期 FileVersion `0.3.0.0`、ProductVersion `0.3.0+d7697772f98d`。回传第二次报错全文、上述三组定位输出和最终路径；完成前不要标记安装候选通过。
+本次仅修正文档中的定位方法与验收状态，没有修改产品或重新打包；未重跑未变更的源码测试。下一步按 [INSTALLER_PHASE_HANDOFF.md](INSTALLER_PHASE_HANDOFF.md) 使用两端安装版验证默认只读、双方授权控制、Mac 断开后 Windows 持续等待、Windows 紧急停止。随后验证覆盖安装与卸载、干净环境启动；这些尚未完成，不能标记安装包整体验收通过。Tailscale 连接、配对保留和紧急停止实际效果需要后续双机验证，不能由启动冒烟替代。
 
 ## 当前：0.3.0 双平台安装包基线（2026-10-01，最新）
 
