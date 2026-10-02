@@ -1,5 +1,20 @@
 # 下一次 Codex 会话交接
 
+## 当前：macOS 0.3.0 覆盖安装与可恢复卸载已验收（2026-10-02，最新）
+
+Windows 实体键盘 `Ctrl + Alt + Esc` 仍为**待验收**：用户当前无法使用 Windows 实体键盘，本项因验证环境不可用而延期，不记为通过或失败。RDP 不能代替该证据。下方 `d1b536b` 的 Windows 自动测试、注入拒绝和安装证据保留，待可接触实体键盘时按原清单继续。
+
+在不阻塞其他独立验收的前提下，macOS 安装包切片已继续并完成：
+
+- 从当时 HEAD `91ecda122bd4` 重建 `0.3.0` DMG；正常 macOS 权限下 Release **111/111** 测试通过，Release 应用构建、ad-hoc 签名校验和 `hdiutil verify` 通过。首次在受限执行沙箱中的 Keychain/系统 TLS 失败仅是环境拒绝；切换到正常本机权限后同一套门禁全部通过。
+- DMG：`artifacts/macos/PersonalRemoteDesktop-0.3.0-macOS.dmg`，**478945 bytes**，SHA-256 `8bc46d0c73a8ed4e426d0fb1b3978ed71247409d2ac5468289c863278043b758`，与 `.sha256` 文件一致。
+- 从已校验 DMG 覆盖安装到 `/Applications/RemoteController.app`；安装后版本 `0.3.0`、源码修订 `91ecda122bd4`，二进制 SHA-256 `b42b2b0452cc44f56f476f6aa569de24241aea494f10794b891e902d881c4399`，与包内一致，签名校验和启动通过。
+- 覆盖安装前后 Keychain 设备密钥和证书指纹条目均存在，没有读取或输出密钥内容。
+- 可恢复卸载检查已完成：退出应用后将 bundle 暂时移出 `/Applications`，确认应用本体移除，Keychain 配对仍保留；随后从候选产物恢复，哈希/签名一致并再次启动成功。
+- 静态依赖仅为 macOS 系统库/框架与系统 Swift 运行库，Mach-O 为 `x86_64`，`LC_BUILD_VERSION` 最低 macOS `13.0`、SDK `14.2`。这是干净环境前置检查，不代替新 macOS 用户/无 Xcode 机器的实际启动。
+
+本轮不删除 Keychain 配对材料，不将 ad-hoc 签名冒充 Developer ID/公证。剩余安装包验收为：Windows 实体键盘与真实控制释放、Windows 卸载残留、无 .NET 干净 Windows 启动，以及新 macOS 用户/无开发工具环境启动。
+
 ## 当前：Windows 紧急停止诊断与注入隔离修复已安装，实体键盘验收待完成（2026-10-02，最新）
 
 Windows 本轮已定位复现条件、修复独立的注入隔离漏洞、完成自动门禁及 D 盘覆盖安装。**尚未证明实体键盘紧急停止通过，不得沿用历史“P2 全部通过”的结论关闭本项。**
