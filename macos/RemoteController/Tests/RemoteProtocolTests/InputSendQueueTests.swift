@@ -107,6 +107,17 @@ final class InputSendQueueTests: XCTestCase {
         XCTAssertEqual(queue.count, 0)
     }
 
+    func testClipboardSetUsesBoundedTextPayloadLimit() throws {
+        var queue = try InputSendQueue()
+        let maximum = ClipboardTextPayload(status: .success,
+            text: String(repeating: "a", count: ClipboardTextPayload.maximumTextBytes))
+        try queue.append([.clipboardSet(maximum)])
+        XCTAssertEqual(queue.take()?.payload.count, ClipboardTextPayload.maximumTextBytes + 1)
+        XCTAssertThrowsError(try queue.append(QueuedInputMessage(type: .clipboardSetText,
+            payload: Data(count: ClipboardTextPayload.maximumTextBytes + 2))))
+        XCTAssertTrue(queue.isStopped)
+    }
+
     func testStopIsTerminalAndIdempotent() throws {
         var queue = try InputSendQueue()
         try queue.append([down])

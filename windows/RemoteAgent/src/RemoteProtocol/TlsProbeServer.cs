@@ -149,8 +149,10 @@ public static class TlsProbeServer
         CancellationTokenSource sessionDeadline, Func<IJpegFrameSource>? createJpegSource, Action<string>? reportStatus,
         Action<JpegTransferMetrics>? reportMetrics, TimeSpan frameTimeout, InputSimulationOptions? inputSimulation)
     {
-        var clipboardAvailable = inputSimulation?.ReadClipboardText is not null;
-        var wire = new ProbeFrameStream(tls, createJpegSource is not null, clipboardAvailable);
+        var clipboardAvailable = inputSimulation?.ReadClipboardText is not null ||
+            inputSimulation?.WriteClipboardText is not null;
+        var wire = new ProbeFrameStream(tls, createJpegSource is not null, clipboardAvailable,
+            allowIncomingClipboardText: clipboardAvailable);
         var gate = new SessionGate(PeerRole.Agent);
         var agentNonce = RandomNumberGenerator.GetBytes(32);
         var capabilities = (createJpegSource is null ? Capabilities.None : Capabilities.Jpeg) |
@@ -167,7 +169,7 @@ public static class TlsProbeServer
         var clipboardNegotiated = clipboardAvailable &&
             controllerHello.Capabilities.HasFlag(Capabilities.ClipboardText);
         if (inputSimulation is not null && clipboardAvailable && !clipboardNegotiated)
-            inputSimulation = inputSimulation with { ReadClipboardText = null };
+            inputSimulation = inputSimulation with { ReadClipboardText = null, WriteClipboardText = null };
         if (createJpegSource is null && inputSimulation is not null && !inputNegotiated)
             throw new ProtocolException(ProtocolError.InvalidPayload, "Input capability required for simulation.");
         reportStatus?.Invoke("正在验证应用密钥");

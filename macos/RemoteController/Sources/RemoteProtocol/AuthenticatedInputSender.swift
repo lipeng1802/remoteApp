@@ -13,7 +13,9 @@ struct AuthenticatedInputSender {
     enum ReceivedMessage: Equatable {
         case jpeg(ReceivedJpegFrame)
         case clipboard(ClipboardTextPayload)
+        case clipboardSetResult(ClipboardTextPayload)
     }
+    private enum ClipboardOperation: Equatable { case read, write }
     enum State: Equatable { case authenticating, active, draining, finished, failed }
     private(set) var state: State = .authenticating
     private var gate = SessionGate(localRole: .controller)
@@ -37,7 +39,7 @@ struct AuthenticatedInputSender {
     private var nextHeartbeat: Double
     private var nextWrite: Double
     private var lastTime: Double
-    private var clipboardRequestPending = false
+    private var clipboardOperationPending: ClipboardOperation?
     private var clipboardDeadline: Double?
     var pendingCount: Int { queue.count }
     var hasWriteInFlight: Bool { inFlight != nil }
@@ -69,15 +71,22 @@ struct AuthenticatedInputSender {
         do {
             try checkTime(now)
             guard state == .active else { throw InputSendError.invalidState }
-            let clipboardRequests = inputs.filter { $0.messageType == .clipboardRequest }.count
-            guard clipboardRequests <= 1, clipboardRequests == 0 || acceptsClipboard else {
+            let clipboardOperations = inputs.compactMap { input -> ClipboardOperation? in
+                switch input.messageType {
+                case .clipboardRequest: return .read
+                case .clipboardSetText: return .write
+                default: return nil
+                }
+            }
+            guard clipboardOperations.count <= 1,
+                  clipboardOperations.isEmpty || acceptsClipboard else {
                 throw InputSendError.invalidState
             }
-            // A fast repeated Command+C must not tear down the whole control
-            // session. Keep at most one explicit clipboard read in flight.
-            if clipboardRequests == 1, clipboardRequestPending { return }
+            // A fast repeated Command+C/Command+V must not tear down the whole
+            // control session. Keep at most one clipboard operation in flight.
+            if !clipboardOperations.isEmpty, clipboardOperationPending != nil { return }
             try queue.append(inputs)
-            if clipboardRequests == 1 { clipboardRequestPending = true }
+            if let operation = clipboardOperations.first { clipboardOperationPending = operation }
         } catch { abort(); throw error }
     }
 
@@ -137,7 +146,9 @@ struct AuthenticatedInputSender {
                 state = .finished
                 queue.stop()
             }
-            if frame.type == .clipboardRequest { clipboardDeadline = now + 5 }
+            if frame.type == .clipboardRequest || frame.type == .clipboardSetText {
+                clipboardDeadline = now + 5
+            }
         } catch { abort(); throw error }
     }
 
@@ -148,7 +159,7 @@ struct AuthenticatedInputSender {
             let payloadLimit: Int
             if acceptsJpeg && frame.type == .videoFrameJPEG {
                 payloadLimit = ProtocolConstants.maximumPayloadLength
-            } else if acceptsClipboard && frame.type == .clipboardText {
+            } else if acceptsClipboard && (frame.type == .clipboardText || frame.type == .clipboardSetResult) {
                 payloadLimit = ClipboardTextPayload.maximumTextBytes + 1
             } else {
                 payloadLimit = 64
@@ -187,12 +198,21 @@ struct AuthenticatedInputSender {
                 guard acceptsJpeg, let screen else { throw ProtocolError.invalidState }
                 return .jpeg(ReceivedJpegFrame(screen: screen, jpeg: frame.payload))
             case .clipboardText:
-                guard acceptsClipboard, clipboardRequestPending, clipboardDeadline != nil else {
+                guard acceptsClipboard, clipboardOperationPending == .read, clipboardDeadline != nil else {
                     throw ProtocolError.invalidState
                 }
-                clipboardRequestPending = false
+                clipboardOperationPending = nil
                 clipboardDeadline = nil
                 return .clipboard(try ClipboardTextPayload.decode(frame.payload))
+            case .clipboardSetResult:
+                guard acceptsClipboard, clipboardOperationPending == .write, clipboardDeadline != nil else {
+                    throw ProtocolError.invalidState
+                }
+                let result = try ClipboardTextPayload.decode(frame.payload)
+                guard result.text.isEmpty else { throw ProtocolError.invalidPayload }
+                clipboardOperationPending = nil
+                clipboardDeadline = nil
+                return .clipboardSetResult(result)
             case .pong:
                 guard let heartbeat, heartbeatDeadline != nil, frame.payload == heartbeat else {
                     throw ProtocolError.invalidPayload
@@ -218,7 +238,7 @@ struct AuthenticatedInputSender {
         heartbeat = nil
         heartbeatDeadline = nil
         closeDeadline = nil
-        clipboardRequestPending = false
+        clipboardOperationPending = nil
         clipboardDeadline = nil
     }
 

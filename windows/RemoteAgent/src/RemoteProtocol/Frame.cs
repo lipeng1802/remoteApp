@@ -30,6 +30,8 @@ public enum MessageType : ushort
     Error = 0x000f,
     ClipboardRequest = 0x0010,
     ClipboardText = 0x0011,
+    ClipboardSetText = 0x0012,
+    ClipboardSetResult = 0x0013,
 }
 
 public sealed record Frame(

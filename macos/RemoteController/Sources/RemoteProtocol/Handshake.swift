@@ -258,7 +258,7 @@ public extension MessageType {
         case .screenInfo, .videoFrameJPEG, .videoFrameH264,
              .mouseMove, .mouseButton, .mouseWheel, .keyEvent, .ping, .pong:
             return true
-        case .clipboardRequest, .clipboardText:
+        case .clipboardRequest, .clipboardText, .clipboardSetText, .clipboardSetResult:
             return true
         default:
             return false

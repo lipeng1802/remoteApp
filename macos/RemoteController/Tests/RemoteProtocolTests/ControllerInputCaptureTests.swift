@@ -63,6 +63,33 @@ final class ControllerInputCaptureTests: XCTestCase {
         XCTAssertTrue(capture.clipboardCopyShortcut().isEmpty)
     }
 
+    func testCommandVPutsClipboardBetweenHeldInputReleaseAndRestore() throws {
+        var capture = ControllerInputCapture()
+        capture.start()
+        _ = capture.modifierSnapshot([55, 56])
+        _ = capture.key(keyCode: 0, action: .down)
+        let commands = capture.clipboardPasteShortcut(text: "Mac → Windows")
+        XCTAssertEqual(commands.map(\.messageType), [
+            .keyEvent, .keyEvent, .keyEvent,
+            .clipboardSetText,
+            .keyEvent, .keyEvent, .keyEvent,
+        ])
+        guard case .clipboardSet(let payload) = commands[3] else {
+            return XCTFail("Expected clipboard set")
+        }
+        XCTAssertEqual(payload, ClipboardTextPayload(status: .success, text: "Mac → Windows"))
+        let keys = try commands.compactMap { command -> KeyEventPayload? in
+            guard case .key = command else { return nil }
+            return try KeyEventPayload.decode(command.payload)
+        }
+        XCTAssertEqual(keys.map(\.action), [.up, .up, .up, .down, .down, .down])
+        XCTAssertEqual(capture.heldCount, 3)
+        XCTAssertTrue(capture.clipboardPasteShortcut(
+            text: String(repeating: "a", count: ClipboardTextPayload.maximumTextBytes + 1)).isEmpty)
+        _ = capture.modifierSnapshot([])
+        XCTAssertTrue(capture.clipboardPasteShortcut(text: "ignored").isEmpty)
+    }
+
     func testBlackBarsRejectDownButAllowTrackedRelease() {
         var capture = ControllerInputCapture()
         capture.start()

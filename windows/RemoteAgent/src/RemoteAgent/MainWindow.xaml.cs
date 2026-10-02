@@ -147,7 +147,8 @@ public partial class MainWindow : Window
                     () => new SessionNativeInputSink(snapshot => Dispatcher.BeginInvoke(() =>
                         ControlText.Text = $"远程控制中 · 事件 {snapshot.Events} · 释放 {snapshot.Releases} · 持有 {snapshot.Held}")),
                     LocalControlAllowed: true,
-                    ReadClipboardText: ReadClipboardTextAsync)
+                    ReadClipboardText: ReadClipboardTextAsync,
+                    WriteClipboardText: WriteClipboardTextAsync)
                 : null;
             await Task.Run(() => TlsProbeServer.RunContinuousAsync(endpoints.Local, endpoints.Peer, 47475,
                 certificate, credentials.DeviceKey, credentials.AgentIdentifier, lifetime.Token,
@@ -229,6 +230,25 @@ public partial class MainWindow : Window
             await Task.Delay(40, cancellationToken).ConfigureAwait(false);
         }
         return new ClipboardTextPayload(ClipboardTextStatus.Unavailable, string.Empty);
+    }
+
+    private async Task<ClipboardTextStatus> WriteClipboardTextAsync(
+        string text, CancellationToken cancellationToken)
+    {
+        if (Encoding.UTF8.GetByteCount(text) > ClipboardTextPayload.MaximumTextBytes)
+            return ClipboardTextStatus.TooLarge;
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var written = await Dispatcher.InvokeAsync(() =>
+            {
+                try { Clipboard.SetText(text, TextDataFormat.UnicodeText); return true; }
+                catch (ExternalException) { return false; }
+            });
+            if (written) return ClipboardTextStatus.Success;
+            await Task.Delay(40, cancellationToken).ConfigureAwait(false);
+        }
+        return ClipboardTextStatus.Unavailable;
     }
 
     private void PairingKey_Click(object sender, RoutedEventArgs e)

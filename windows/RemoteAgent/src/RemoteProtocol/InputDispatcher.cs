@@ -1,7 +1,7 @@
 namespace RemoteProtocol;
 
-// Native injection is isolated in the WindowsInput project. Production GUI/TLS
-// remains read-only until the authenticated duplex session explicitly wires it.
+// Native injection is isolated in the WindowsInput project. The authenticated
+// duplex session wires it only after explicit per-session local consent.
 public interface IMouseInputSink
 {
     void Move(MouseMovePayload point);
@@ -62,19 +62,7 @@ public sealed class InputDispatcher(SessionGate gate, IInputSink sink, bool inpu
                     sink.Wheel(MouseWheelPayload.Decode(frame.Payload));
                     break;
                 case MessageType.KeyEvent:
-                    var key = KeyEventPayload.Decode(frame.Payload);
-                    var identity = (key.ScanCode, key.Extended);
-                    if (key.Action == KeyAction.Down)
-                    {
-                        // Repeated downs preserve typematic behavior, but track one held key.
-                        pressedKeys.Add(identity);
-                        sink.Key(key);
-                    }
-                    else if (pressedKeys.Contains(identity))
-                    {
-                        sink.Key(key);
-                        pressedKeys.Remove(identity);
-                    }
+                    ApplyKey(KeyEventPayload.Decode(frame.Payload));
                     break;
                 default:
                     throw new ProtocolException(ProtocolError.InvalidState, "Unsupported input.");
@@ -85,6 +73,41 @@ public sealed class InputDispatcher(SessionGate gate, IInputSink sink, bool inpu
             try { RevokeControl(); }
             catch (Exception cleanupError) { throw new AggregateException(inputError, cleanupError); }
             throw;
+        }
+    }
+
+    public void PasteClipboardText()
+    {
+        if (disposed || !locallyAllowed || !inputNegotiated)
+            throw new ProtocolException(ProtocolError.InvalidState, "Control is not available.");
+        try
+        {
+            ApplyKey(new KeyEventPayload(0x1d, false, KeyAction.Down));
+            ApplyKey(new KeyEventPayload(0x2f, false, KeyAction.Down));
+            ApplyKey(new KeyEventPayload(0x2f, false, KeyAction.Up));
+            ApplyKey(new KeyEventPayload(0x1d, false, KeyAction.Up));
+        }
+        catch (Exception inputError)
+        {
+            try { RevokeControl(); }
+            catch (Exception cleanupError) { throw new AggregateException(inputError, cleanupError); }
+            throw;
+        }
+    }
+
+    private void ApplyKey(KeyEventPayload key)
+    {
+        var identity = (key.ScanCode, key.Extended);
+        if (key.Action == KeyAction.Down)
+        {
+            // Repeated downs preserve typematic behavior, but track one held key.
+            pressedKeys.Add(identity);
+            sink.Key(key);
+        }
+        else if (pressedKeys.Contains(identity))
+        {
+            sink.Key(key);
+            pressedKeys.Remove(identity);
         }
     }
 

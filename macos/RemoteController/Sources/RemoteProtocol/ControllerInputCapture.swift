@@ -8,6 +8,7 @@ public enum CapturedInput: Equatable {
     case wheel(MouseWheelPayload)
     case key(KeyEventPayload)
     case clipboardRequest
+    case clipboardSet(ClipboardTextPayload)
 
     public var messageType: MessageType {
         switch self {
@@ -16,6 +17,7 @@ public enum CapturedInput: Equatable {
         case .wheel: return .mouseWheel
         case .key: return .keyEvent
         case .clipboardRequest: return .clipboardRequest
+        case .clipboardSet: return .clipboardSetText
         }
     }
     public var payload: Data {
@@ -25,6 +27,7 @@ public enum CapturedInput: Equatable {
         case .wheel(let value): return value.encode()
         case .key(let value): return value.encode()
         case .clipboardRequest: return Data()
+        case .clipboardSet(let value): return (try? value.encode()) ?? Data()
         }
     }
 }
@@ -87,15 +90,12 @@ public struct ControllerInputCapture {
     }
 
     /// User-initiated Command+C convenience for a Windows target. Temporarily
-    /// release every physical modifier already mirrored to Windows, perform an
-    /// isolated Ctrl+C, request clipboard text, then restore held modifiers.
+    /// release every tracked key already mirrored to Windows, perform an
+    /// isolated Ctrl+C, request clipboard text, then restore held keys.
     public func clipboardCopyShortcut() -> [CapturedInput] {
         let commandCodes: Set<UInt16> = [54, 55]
         guard isActive, !modifierKeys.isDisjoint(with: commandCodes) else { return [] }
-        let held = modifierKeys.sorted()
-        var result = held.compactMap {
-            MacKeyboardMapper.event(keyCode: $0, action: .up).map(CapturedInput.key)
-        }
+        var result = heldKeyEvents(action: .up)
         guard let controlDown = try? KeyEventPayload(scanCode: 0x1d, extended: false, action: .down),
               let cDown = try? KeyEventPayload(scanCode: 0x2e, extended: false, action: .down),
               let cUp = try? KeyEventPayload(scanCode: 0x2e, extended: false, action: .up),
@@ -103,10 +103,27 @@ public struct ControllerInputCapture {
             return []
         }
         result += [.key(controlDown), .key(cDown), .key(cUp), .key(controlUp), .clipboardRequest]
-        result += held.compactMap {
-            MacKeyboardMapper.event(keyCode: $0, action: .down).map(CapturedInput.key)
-        }
+        result += heldKeyEvents(action: .down)
         return result
+    }
+
+    public func clipboardPasteShortcut(text: String) -> [CapturedInput] {
+        let commandCodes: Set<UInt16> = [54, 55]
+        guard isActive, !modifierKeys.isDisjoint(with: commandCodes),
+              Data(text.utf8).count <= ClipboardTextPayload.maximumTextBytes else { return [] }
+        return heldKeyEvents(action: .up)
+            + [.clipboardSet(ClipboardTextPayload(status: .success, text: text))]
+            + heldKeyEvents(action: .down)
+    }
+
+    private func heldKeyEvents(action: KeyAction) -> [CapturedInput] {
+        let ordinary = keys.sorted().compactMap {
+            MacKeyboardMapper.event(keyCode: $0, action: action).map(CapturedInput.key)
+        }
+        let modifierEvents = modifierKeys.sorted().compactMap {
+            MacKeyboardMapper.event(keyCode: $0, action: action).map(CapturedInput.key)
+        }
+        return ordinary + modifierEvents
     }
 
     public func move(to point: MouseMovePayload?) -> [CapturedInput] {

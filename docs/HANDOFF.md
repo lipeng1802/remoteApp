@@ -1,5 +1,37 @@
 # 下一次 Codex 会话交接
 
+## 当前：Mac → Windows 文本剪贴板切片（2026-10-02，最新）
+
+在上一切片 Windows → Mac 显式复制的基础上，已补齐反向文本粘贴：RemoteController 正在真实控制且远程画面持有焦点时，用户按 Mac `Command+V`，应用读取一次本机剪贴板纯文本，通过既有认证 TLS 会话发送给 Windows；Windows 在 WPF STA 线程写入系统剪贴板，成功后才注入一次隔离的 `Ctrl+V`，并返回明确结果。它不是后台剪贴板同步，不监控历史，也不传文件、图片或富文本。
+
+安全与状态边界：
+
+- 新增认证后消息 `ClipboardSetText` / `ClipboardSetResult`，继续复用双方 `ClipboardText` 能力协商。未协商、未认证、非真实控制会话、未请求响应、错误方向响应、非 `Success` 请求载荷和超限载荷均拒绝。
+- 仍只允许 UTF-8 纯文本，最大 **32 KiB**。Mac 无文本或过大时不发送并显示原因；Windows 剪贴板忙时有限重试，失败时不注入 `Ctrl+V`。
+- Mac 在发送前临时释放本会话已跟踪的普通键与修饰键，Windows 写入成功后注入隔离 `Ctrl+V`，随后恢复物理仍按住的键；快速重复 `Command+C` / `Command+V` 只保留一个剪贴板事务，不堆积，也不因此断开控制。
+- Windows 回归同时验证写入成功才产生 `Ctrl+V`、四个注入事件顺序正确、结束后无持有键，以及写入失败不会注入。
+
+本机已完成 Mac `swift test`：**123/123 passed**；`swift build -c release`：**Build complete**。本机没有 .NET SDK，Windows 源码尚未编译；Windows 预期 RemoteProtocol 仍为 **65/65**（扩展既有 clipboard TLS 测试，不增加测试入口），WindowsInput 仍为 **10/10**。
+
+Windows 接手后先运行：
+
+~~~powershell
+git pull --ff-only origin main
+dotnet build .\windows\RemoteAgent\RemoteAgent.sln -c Release
+dotnet run --project .\windows\RemoteAgent\tests\RemoteProtocol.Tests\RemoteProtocol.Tests.csproj -c Release
+dotnet run --project .\windows\RemoteAgent\tests\WindowsInput.Tests\WindowsInput.Tests.csproj -c Release
+~~~
+
+预期 Release 0 错误、RemoteProtocol **65/65**、WindowsInput **10/10**。随后构建并覆盖安装双方匹配的新包，再进行双机验收：
+
+1. Windows 授权远程控制，Mac 连接并点击“开始控制”；在 Mac 本地复制英文、中文和多行文本，在远程 Windows 记事本中按 Mac `Command+V`，逐字核对内容与换行，RemoteController 应提示已粘贴。
+2. Mac 剪贴板无纯文本、超过 32 KiB、快速连续两次 `Command+V` 时，会话仍连接；过大内容不应改变 Windows 剪贴板或产生粘贴。
+3. 分别按住 Shift、Control、Option、Command 再执行粘贴，之后继续键鼠操作；停止控制、失焦、断开后 Windows“持有”必须为 0。
+4. 回归 Windows → Mac：在 Windows 选择文本后从远程画面按 Mac `Command+C`，再切换 Mac 本地应用粘贴；确认双向功能可在同一连接内交替使用。
+5. 回归只读模式：Mac 未请求控制时不能触发任一方向的剪贴板传输，也不能改变 Windows。
+
+双机通过前不要把本切片标记为安装包验收完成。现有已安装 0.3.0 不包含新协议，必须使用同一提交构建的两端版本，避免能力或消息不匹配。
+
 ## 当前：Mac 失焦自动恢复与 Windows → Mac 文本剪贴板切片（2026-10-02，最新）
 
 用户实测发现 Mac 切换到其他应用时会安全释放输入，但返回 RemoteController 后仍需再次点击“开始控制”。随后澄清第二项不是 Windows 配对密钥复制：实际是在 Mac RemoteController 中操作 Windows，复制 Windows 应用里的内容后，无法粘贴到 Mac。

@@ -105,6 +105,9 @@ private final class ViewerModel: ObservableObject {
                     onClipboardText: { [weak self] payload in
                         self?.receiveClipboardText(payload)
                     },
+                    onClipboardSetResult: { [weak self] payload in
+                        self?.receiveClipboardSetResult(payload)
+                    },
                     onAuthenticated: { [weak self] in
                         DispatchQueue.main.async {
                             guard let self, self.generation == current, self.connected else { return }
@@ -272,6 +275,24 @@ private final class ViewerModel: ObservableObject {
         }
     }
 
+    func localClipboardIssue(_ issue: ClipboardTextStatus) {
+        guard connected, controlReady else { return }
+        switch issue {
+        case .success: break
+        case .unavailable: status = "Mac 剪贴板当前没有可粘贴的文本"
+        case .tooLarge: status = "Mac 剪贴板文本超过 32 KiB，未发送"
+        }
+    }
+
+    private func receiveClipboardSetResult(_ payload: ClipboardTextPayload) {
+        guard connected, controlReady else { return }
+        switch payload.status {
+        case .success: status = "已将 Mac 剪贴板文本粘贴到 Windows"
+        case .unavailable: status = "Windows 剪贴板暂时不可写，未粘贴"
+        case .tooLarge: status = "剪贴板文本超过 Windows 接收上限，未粘贴"
+        }
+    }
+
     func presentLatest() {
         guard connected, let next = latest.take() else { return }
         image = next.image
@@ -335,7 +356,8 @@ private struct ContentView: View {
                     submit: model.submitInputs,
                     paused: model.inputPaused,
                     focusSuspended: model.inputFocusSuspended,
-                    focusResumed: model.inputFocusResumed)
+                    focusResumed: model.inputFocusResumed,
+                    localClipboardIssue: model.localClipboardIssue)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()

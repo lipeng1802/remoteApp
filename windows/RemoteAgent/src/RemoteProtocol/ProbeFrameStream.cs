@@ -4,7 +4,7 @@ namespace RemoteProtocol;
 
 // This bounded transport is for the authentication probe, not the future video session.
 public sealed class ProbeFrameStream(Stream stream, bool allowOutgoingJpeg = false,
-    bool allowOutgoingClipboardText = false)
+    bool allowOutgoingClipboardText = false, bool allowIncomingClipboardText = false)
 {
     public const int MaximumPayloadLength = 64;
     private uint incomingSequence = 1;
@@ -17,8 +17,12 @@ public sealed class ProbeFrameStream(Stream stream, bool allowOutgoingJpeg = fal
         var decoder = new FrameDecoder();
         var frames = decoder.Append(header); // Validate header before allocating a body.
         var length = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(12));
-        if (length > MaximumPayloadLength)
-            throw new ProtocolException(ProtocolError.MessageTooLarge, "Probe payload exceeds 64 bytes.");
+        var type = (MessageType)BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(8));
+        var limit = allowIncomingClipboardText && type == MessageType.ClipboardSetText
+            ? ClipboardTextPayload.MaximumTextBytes + 1
+            : MaximumPayloadLength;
+        if (length > limit)
+            throw new ProtocolException(ProtocolError.MessageTooLarge, "Probe payload exceeds its allowed size.");
         if (length != 0)
         {
             var payload = new byte[(int)length];

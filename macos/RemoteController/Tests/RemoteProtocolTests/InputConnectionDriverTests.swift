@@ -58,10 +58,12 @@ final class InputConnectionDriverTests: XCTestCase {
     private func make(clock: Clock, transport: FakeTransport, authenticated: @escaping () -> Void = {},
                       jpeg: ((AuthenticatedInputSender.ReceivedJpegFrame) -> Void)? = nil,
                       clipboard: ((ClipboardTextPayload) -> Void)? = nil,
+                      clipboardSet: ((ClipboardTextPayload) -> Void)? = nil,
                       done: @escaping (Result<Void, InputSimulationError>) -> Void) throws -> InputConnectionDriver {
         try InputConnectionDriver(transport: transport, deviceKey: key, localControlAllowed: true,
             automaticTimer: false, clock: { clock.now }, onJpegFrame: jpeg,
             onClipboardText: clipboard,
+            onClipboardSetResult: clipboardSet,
             onAuthenticated: authenticated, completion: done)
     }
 
@@ -135,6 +137,29 @@ final class InputConnectionDriverTests: XCTestCase {
         transport.ack(2)
         transport.deliver(try FrameCodec.encode(Frame(type: .clipboardText, sequence: 4,
             payload: expected.encode())))
+        wait(for: [received], timeout: 2)
+        driver.cancel()
+        wait(for: [ended], timeout: 2)
+    }
+
+    func testClipboardSetResultReachesCallback() throws {
+        let clock = Clock(), transport = FakeTransport()
+        let received = expectation(description: "clipboard set")
+        let ended = expectation(description: "cancel")
+        let outgoing = ClipboardTextPayload(status: .success, text: "Mac → Windows")
+        let result = ClipboardTextPayload(status: .success, text: "")
+        let driver = try make(clock: clock, transport: transport, clipboardSet: { payload in
+            XCTAssertEqual(payload, result)
+            received.fulfill()
+        }) { _ in ended.fulfill() }
+        try authenticate(driver, transport, clock)
+        clock.now = 1
+        XCTAssertTrue(driver.submit([.clipboardSet(outgoing)]))
+        driver.tick()
+        XCTAssertEqual(try transport.frames().last?.type, .clipboardSetText)
+        transport.ack(2)
+        transport.deliver(try FrameCodec.encode(Frame(type: .clipboardSetResult, sequence: 4,
+            payload: result.encode())))
         wait(for: [received], timeout: 2)
         driver.cancel()
         wait(for: [ended], timeout: 2)

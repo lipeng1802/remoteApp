@@ -43,7 +43,9 @@ struct InputSendQueue {
 
     mutating func append(_ message: QueuedInputMessage) throws {
         guard !isStopped else { throw InputSendError.stopped }
-        guard message.payload.count <= 64 else {
+        let limit = message.type == .clipboardSetText
+            ? ClipboardTextPayload.maximumTextBytes + 1 : 64
+        guard message.payload.count <= limit else {
             stop()
             throw ProtocolError.messageTooLarge(message.payload.count)
         }

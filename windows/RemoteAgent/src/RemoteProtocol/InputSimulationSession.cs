@@ -2,15 +2,16 @@ using System.Diagnostics;
 
 namespace RemoteProtocol;
 
-// Shared authenticated input policy. Production callers must still supply explicit
-// per-session local consent; the desktop UI does not wire this option yet.
+// Shared authenticated input policy. Production callers must supply explicit
+// per-session local consent before constructing an input session.
 public sealed record InputSimulationOptions(
     Func<IInputSink> CreateSink,
     bool LocalControlAllowed = false,
     int BurstLimit = 120,
     int EventsPerSecond = 240,
     TimeSpan? ReadTimeout = null,
-    Func<CancellationToken, Task<ClipboardTextPayload>>? ReadClipboardText = null)
+    Func<CancellationToken, Task<ClipboardTextPayload>>? ReadClipboardText = null,
+    Func<string, CancellationToken, Task<ClipboardTextStatus>>? WriteClipboardText = null)
 {
     internal void Validate()
     {
@@ -28,7 +29,7 @@ internal static class InputSimulationSession
     {
         await RunReadLoopAsync(wire, gate, options,
             (type, payload, token) => wire.WriteAsync(type, payload, token),
-            clipboardNegotiated: options.ReadClipboardText is not null,
+            clipboardNegotiated: options.ReadClipboardText is not null || options.WriteClipboardText is not null,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -75,6 +76,19 @@ internal static class InputSimulationSession
                     throw new ProtocolException(ProtocolError.InvalidState, "Clipboard text is not negotiated.");
                 var clipboard = await options.ReadClipboardText(deadline.Token).ConfigureAwait(false);
                 await sendResponse(MessageType.ClipboardText, clipboard.Encode(), deadline.Token).ConfigureAwait(false);
+            }
+            else if (frame.Type == MessageType.ClipboardSetText)
+            {
+                gate.Receive(frame);
+                if (!clipboardNegotiated || options.WriteClipboardText is null)
+                    throw new ProtocolException(ProtocolError.InvalidState, "Clipboard text is not negotiated.");
+                var clipboard = ClipboardTextPayload.Decode(frame.Payload);
+                if (clipboard.Status != ClipboardTextStatus.Success)
+                    throw new ProtocolException(ProtocolError.InvalidPayload, "Clipboard set requires text.");
+                var status = await options.WriteClipboardText(clipboard.Text, deadline.Token).ConfigureAwait(false);
+                if (status == ClipboardTextStatus.Success) dispatcher.PasteClipboardText();
+                var result = new ClipboardTextPayload(status, string.Empty).Encode();
+                await sendResponse(MessageType.ClipboardSetResult, result, deadline.Token).ConfigureAwait(false);
             }
             else dispatcher.Apply(frame);
         }

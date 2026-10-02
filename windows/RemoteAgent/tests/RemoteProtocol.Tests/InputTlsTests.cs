@@ -64,6 +64,8 @@ internal static class InputTlsTests
         var key = RandomNumberGenerator.GetBytes(32);
         var sink = new FakeSink();
         var constructed = false;
+        string? writtenClipboard = null;
+        var clipboardWrites = 0;
         var reservation = new TcpListener(IPAddress.Loopback, 0);
         reservation.Start();
         var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
@@ -74,6 +76,14 @@ internal static class InputTlsTests
             ReadTimeout: mode == "idle" ? TimeSpan.FromSeconds(1) : TimeSpan.FromSeconds(5),
             ReadClipboardText: mode == "clipboard"
                 ? _ => Task.FromResult(new ClipboardTextPayload(ClipboardTextStatus.Success, "跨设备 clipboard"))
+                : null,
+            WriteClipboardText: mode == "clipboard"
+                ? (text, _) => {
+                    clipboardWrites++;
+                    if (clipboardWrites == 1) writtenClipboard = text;
+                    return Task.FromResult(clipboardWrites == 1
+                        ? ClipboardTextStatus.Success : ClipboardTextStatus.Unavailable);
+                }
                 : null);
         var server = TlsProbeServer.RunInputSimulationOnceAsync(port, certificate, key, new byte[16], options, stop.Token);
         using var client = new TcpClient { NoDelay = true };
@@ -137,6 +147,31 @@ internal static class InputTlsTests
                 Check(ClipboardTextPayload.Decode(response.Payload) ==
                     new ClipboardTextPayload(ClipboardTextStatus.Success, "跨设备 clipboard"),
                     "Clipboard response content changed.");
+                await Send(MessageType.ClipboardSetText,
+                    new ClipboardTextPayload(ClipboardTextStatus.Success, "Mac → Windows").Encode());
+                response = await wire.ReadAsync(deadline.Token);
+                Check(response.Type == MessageType.ClipboardSetResult &&
+                    ClipboardTextPayload.Decode(response.Payload) ==
+                        new ClipboardTextPayload(ClipboardTextStatus.Success, string.Empty),
+                    "Clipboard set result changed.");
+                Check(writtenClipboard == "Mac → Windows", "Clipboard text was not delivered to provider.");
+                var paste = new[] {
+                    new KeyEventPayload(0x1d, false, KeyAction.Down),
+                    new KeyEventPayload(0x2f, false, KeyAction.Down),
+                    new KeyEventPayload(0x2f, false, KeyAction.Up),
+                    new KeyEventPayload(0x1d, false, KeyAction.Up)
+                }.Select(value => (MessageType.KeyEvent, Convert.ToHexString(value.Encode()))).ToArray();
+                Check(sink.Commands.SequenceEqual(paste) && sink.HeldKeys.Count == 0,
+                    "Successful clipboard write did not inject isolated Ctrl+V.");
+
+                await Send(MessageType.ClipboardSetText,
+                    new ClipboardTextPayload(ClipboardTextStatus.Success, "busy").Encode());
+                response = await wire.ReadAsync(deadline.Token);
+                Check(response.Type == MessageType.ClipboardSetResult &&
+                    ClipboardTextPayload.Decode(response.Payload).Status == ClipboardTextStatus.Unavailable,
+                    "Unavailable clipboard set status changed.");
+                Check(sink.Commands.Count == paste.Length,
+                    "Failed clipboard write must not inject Ctrl+V.");
                 await Send(MessageType.Disconnect, [0, 0]);
                 await server;
                 return;

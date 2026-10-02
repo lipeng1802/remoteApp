@@ -14,12 +14,14 @@ public final class TLSInputSimulationClient {
                 connectionTimeout: TimeInterval = 15,
                 onJpegFrame: ((ScreenInfoPayload, Data) -> Void)? = nil,
                 onClipboardText: ((ClipboardTextPayload) -> Void)? = nil,
+                onClipboardSetResult: ((ClipboardTextPayload) -> Void)? = nil,
                 onAuthenticated: @escaping () -> Void,
                 completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         try self.init(host: "127.0.0.1", port: port, expectedFingerprint: expectedFingerprint,
             deviceKey: deviceKey, localControlAllowed: localControlAllowed,
             connectionTimeout: connectionTimeout, onJpegFrame: onJpegFrame,
             onClipboardText: onClipboardText,
+            onClipboardSetResult: onClipboardSetResult,
             onAuthenticated: onAuthenticated,
             completion: completion)
     }
@@ -30,6 +32,7 @@ public final class TLSInputSimulationClient {
                 connectionTimeout: TimeInterval = 15,
                 onJpegFrame: ((ScreenInfoPayload, Data) -> Void)? = nil,
                 onClipboardText: ((ClipboardTextPayload) -> Void)? = nil,
+                onClipboardSetResult: ((ClipboardTextPayload) -> Void)? = nil,
                 onAuthenticated: @escaping () -> Void,
                 completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         guard InputSimulationEndpointPolicy.isTailscaleIPv4(host) else {
@@ -39,6 +42,7 @@ public final class TLSInputSimulationClient {
             deviceKey: deviceKey, localControlAllowed: localControlAllowed,
             connectionTimeout: connectionTimeout, onJpegFrame: onJpegFrame,
             onClipboardText: onClipboardText,
+            onClipboardSetResult: onClipboardSetResult,
             onAuthenticated: onAuthenticated,
             completion: completion)
     }
@@ -48,6 +52,7 @@ public final class TLSInputSimulationClient {
                 connectionTimeout: TimeInterval,
                 onJpegFrame: ((ScreenInfoPayload, Data) -> Void)?,
                 onClipboardText: ((ClipboardTextPayload) -> Void)?,
+                onClipboardSetResult: ((ClipboardTextPayload) -> Void)?,
                 onAuthenticated: @escaping () -> Void,
                 completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         let queue = DispatchQueue(label: "prd.input.tls-simulation")
@@ -59,6 +64,7 @@ public final class TLSInputSimulationClient {
                 { frame in callback(frame.screen, frame.jpeg) }
             },
             onClipboardText: onClipboardText,
+            onClipboardSetResult: onClipboardSetResult,
             onAuthenticated: onAuthenticated, completion: completion)
     }
     deinit { driver.cancel() }

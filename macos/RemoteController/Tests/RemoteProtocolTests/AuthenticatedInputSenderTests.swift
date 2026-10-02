@@ -82,6 +82,35 @@ final class AuthenticatedInputSenderTests: XCTestCase {
             payload: text.encode()), now: 1.01), .clipboard(text))
     }
 
+    func testClipboardSetRequiresMatchingResponseAndDropsFastRepeat() throws {
+        let outgoing = ClipboardTextPayload(status: .success, text: "Mac → Windows")
+        let result = ClipboardTextPayload(status: .success, text: "")
+        var sender = try authenticated(acceptsClipboard: true)
+        try sender.enqueue([.clipboardSet(outgoing)], now: 1)
+        let pending = sender.pendingCount
+        try sender.enqueue([.clipboardSet(outgoing)], now: 1.001)
+        XCTAssertEqual(sender.pendingCount, pending)
+        XCTAssertEqual(sender.state, .active)
+
+        let request = try XCTUnwrap(sender.poll(now: 1.01))
+        XCTAssertEqual(request.type, .clipboardSetText)
+        XCTAssertEqual(try ClipboardTextPayload.decode(request.payload), outgoing)
+        try sender.didWrite(sequence: request.sequence, now: 1.011)
+        XCTAssertEqual(try sender.receive(Frame(type: .clipboardSetResult, sequence: 4,
+            payload: result.encode()), now: 1.02), .clipboardSetResult(result))
+
+        sender = try authenticated(acceptsClipboard: true)
+        XCTAssertThrowsError(try sender.receive(Frame(type: .clipboardSetResult, sequence: 4,
+            payload: result.encode()), now: 0.04))
+        sender = try authenticated(acceptsClipboard: true)
+        try sender.enqueue([.clipboardSet(outgoing)], now: 1)
+        let written = try XCTUnwrap(sender.poll(now: 1))
+        try sender.didWrite(sequence: written.sequence, now: 1.001)
+        let invalid = ClipboardTextPayload(status: .success, text: "must be empty")
+        XCTAssertThrowsError(try sender.receive(Frame(type: .clipboardSetResult, sequence: 4,
+            payload: invalid.encode()), now: 1.01))
+    }
+
     func testDuplexRejectsVideoBeforeMetadataAndMissingJpegCapability() throws {
         var sender = try authenticated(acceptsJpeg: true)
         XCTAssertThrowsError(try sender.receive(Frame(type: .videoFrameJPEG, sequence: 4,

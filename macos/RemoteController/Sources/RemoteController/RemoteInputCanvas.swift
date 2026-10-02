@@ -8,6 +8,7 @@ final class RemoteInputCanvas: NSView {
     var onPaused: (@MainActor () -> Void)?
     var onFocusSuspended: (@MainActor () -> Void)?
     var onFocusResumed: (@MainActor () -> Void)?
+    var onLocalClipboardIssue: (@MainActor (ClipboardTextStatus) -> Void)?
     private var capture = ControllerInputCapture()
     private var modifiers = MacModifierEventState()
     private var tracking: NSTrackingArea?
@@ -15,6 +16,7 @@ final class RemoteInputCanvas: NSView {
     private var enabled = false
     private var resumeWhenFocused = false
     private var clipboardShortcutKeyDown = false
+    private var clipboardPasteKeyDown = false
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -64,6 +66,7 @@ final class RemoteInputCanvas: NSView {
         resumeWhenFocused = false
         modifiers.reset()
         clipboardShortcutKeyDown = false
+        clipboardPasteKeyDown = false
         capture.start()
         return true
     }
@@ -74,6 +77,7 @@ final class RemoteInputCanvas: NSView {
         let releases = capture.stop()
         modifiers.reset()
         clipboardShortcutKeyDown = false
+        clipboardPasteKeyDown = false
         if !releases.isEmpty { _ = onInputs?(releases) }
         onPaused?()
         return releases
@@ -84,6 +88,7 @@ final class RemoteInputCanvas: NSView {
         let releases = capture.stop()
         modifiers.reset()
         clipboardShortcutKeyDown = false
+        clipboardPasteKeyDown = false
         onPaused?()
         return releases
     }
@@ -93,6 +98,7 @@ final class RemoteInputCanvas: NSView {
         _ = capture.stop()
         modifiers.reset()
         clipboardShortcutKeyDown = false
+        clipboardPasteKeyDown = false
         onPaused?()
     }
 
@@ -107,6 +113,7 @@ final class RemoteInputCanvas: NSView {
         let releases = capture.stop()
         modifiers.reset()
         clipboardShortcutKeyDown = false
+        clipboardPasteKeyDown = false
         if !releases.isEmpty { _ = onInputs?(releases) }
         if resumeWhenFocused { onFocusSuspended?() }
     }
@@ -118,6 +125,7 @@ final class RemoteInputCanvas: NSView {
         resumeWhenFocused = false
         modifiers.reset()
         clipboardShortcutKeyDown = false
+        clipboardPasteKeyDown = false
         capture.start()
         onFocusResumed?()
     }
@@ -137,6 +145,8 @@ final class RemoteInputCanvas: NSView {
             resumeWhenFocused = false
             _ = capture.stop()
             modifiers.reset()
+            clipboardShortcutKeyDown = false
+            clipboardPasteKeyDown = false
             onPaused?()
         }
     }
@@ -175,6 +185,20 @@ final class RemoteInputCanvas: NSView {
             send(capture.clipboardCopyShortcut())
             return
         }
+        if event.keyCode == 9, event.modifierFlags.contains(.command) {
+            guard !event.isARepeat, !clipboardPasteKeyDown else { return }
+            guard let text = NSPasteboard.general.string(forType: .string) else {
+                onLocalClipboardIssue?(.unavailable)
+                return
+            }
+            guard Data(text.utf8).count <= ClipboardTextPayload.maximumTextBytes else {
+                onLocalClipboardIssue?(.tooLarge)
+                return
+            }
+            clipboardPasteKeyDown = true
+            send(capture.clipboardPasteShortcut(text: text))
+            return
+        }
         send(capture.key(keyCode: event.keyCode, action: .down, isRepeat: event.isARepeat))
     }
 
@@ -182,6 +206,10 @@ final class RemoteInputCanvas: NSView {
         guard capture.isActive else { return }
         if event.keyCode == 8, clipboardShortcutKeyDown {
             clipboardShortcutKeyDown = false
+            return
+        }
+        if event.keyCode == 9, clipboardPasteKeyDown {
+            clipboardPasteKeyDown = false
             return
         }
         send(capture.key(keyCode: event.keyCode, action: .up))
@@ -231,6 +259,7 @@ struct RemoteInputOverlay: NSViewRepresentable {
     let paused: @MainActor () -> Void
     let focusSuspended: @MainActor () -> Void
     let focusResumed: @MainActor () -> Void
+    let localClipboardIssue: @MainActor (ClipboardTextStatus) -> Void
 
     func makeNSView(context: Context) -> RemoteInputCanvas {
         let view = RemoteInputCanvas()
@@ -238,6 +267,7 @@ struct RemoteInputOverlay: NSViewRepresentable {
         view.onPaused = paused
         view.onFocusSuspended = focusSuspended
         view.onFocusResumed = focusResumed
+        view.onLocalClipboardIssue = localClipboardIssue
         register(view)
         return view
     }
@@ -247,6 +277,7 @@ struct RemoteInputOverlay: NSViewRepresentable {
         view.onPaused = paused
         view.onFocusSuspended = focusSuspended
         view.onFocusResumed = focusResumed
+        view.onLocalClipboardIssue = localClipboardIssue
         view.update(screen: screen, enabled: enabled)
     }
 }

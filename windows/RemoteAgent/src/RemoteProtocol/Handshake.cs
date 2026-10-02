@@ -287,7 +287,8 @@ public static class MessageTypeExtensions
         MessageType.ScreenInfo or MessageType.VideoFrameJpeg or MessageType.VideoFrameH264 or
         MessageType.MouseMove or MessageType.MouseButton or MessageType.MouseWheel or
         MessageType.KeyEvent or MessageType.Ping or MessageType.Pong or
-        MessageType.ClipboardRequest or MessageType.ClipboardText;
+        MessageType.ClipboardRequest or MessageType.ClipboardText or
+        MessageType.ClipboardSetText or MessageType.ClipboardSetResult;
 
     public static bool IsHandshake(this MessageType type) => type is
         MessageType.Hello or MessageType.AuthChallenge or MessageType.AuthResponse or MessageType.AuthResult;

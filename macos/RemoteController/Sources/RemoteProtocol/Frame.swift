@@ -26,6 +26,8 @@ public enum MessageType: UInt16, Codable, CaseIterable {
     case error = 0x000f
     case clipboardRequest = 0x0010
     case clipboardText = 0x0011
+    case clipboardSetText = 0x0012
+    case clipboardSetResult = 0x0013
 
     var isVideo: Bool {
         self == .videoFrameJPEG || self == .videoFrameH264
