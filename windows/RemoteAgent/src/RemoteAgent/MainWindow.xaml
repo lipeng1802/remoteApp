@@ -1,7 +1,7 @@
 <Window x:Class="RemoteAgent.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Personal Remote Desktop · 屏幕共享" Height="535" Width="650"
+        Title="Personal Remote Desktop · 屏幕共享" Height="595" Width="650"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen" Closing="Window_Closing">
     <StackPanel Margin="28">
         <TextBlock FontSize="24" FontWeight="SemiBold" Text="共享 Windows 主屏" />
@@ -26,6 +26,7 @@
             <Button x:Name="StartButton" Content="开始共享" Padding="18,8" Click="Start_Click" />
             <Button x:Name="StopButton" Content="停止共享" Margin="12,0,0,0" Padding="18,8" IsEnabled="False" Click="Stop_Click" />
         </StackPanel>
+        <TextBlock x:Name="SessionWarning" Margin="0,10,0,0" Foreground="DarkRed" TextWrapping="Wrap" />
         <TextBlock Margin="0,16,0,4" Text="首次连接请在 Mac 核对此证书 SHA-256：" FontSize="12" />
         <TextBox x:Name="FingerprintText" IsReadOnly="True" BorderThickness="0" FontSize="11" TextWrapping="Wrap" />
     </StackPanel>

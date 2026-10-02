@@ -10,6 +10,9 @@ var tests = new (string Name, Action Run)[]
     ("release attempts every held input and can retry failures", CleanupRetry),
     ("win-x64 SendInput ABI layout is stable", NativeLayout),
     ("physical emergency hotkey rejects injected and incomplete chords", EmergencyHotkey),
+    ("physical chord tracks transitions and rejects repeat", PhysicalChordTransitions),
+    ("injected modifiers and Escape cannot authorize emergency stop", InjectedChord),
+    ("physical modifier sides and releases remain independent", PhysicalChordRelease),
 };
 
 var failures = 0;
@@ -134,6 +137,49 @@ static void EmergencyHotkey()
         PhysicalEmergencyHotkey.EscapeVirtualKey, 0, controlDown: false, altDown: true));
     Equal(false, PhysicalEmergencyHotkey.Matches(
         0x70, 0, controlDown: true, altDown: true));
+}
+
+
+static void PhysicalChordTransitions()
+{
+    var chord = new PhysicalEmergencyChord();
+    Equal(false, chord.Process(0xa2, 0, true));
+    Equal(false, chord.Process(0xa5, 0, true));
+    Equal(true, chord.Process(0x1b, 0, true));
+    Equal(false, chord.Process(0x1b, 0, true));
+    Equal(false, chord.Process(0x1b, 0, false));
+    Equal(false, chord.Process(0xa2, 0, false));
+    Equal(false, chord.Process(0x1b, 0, true));
+}
+static void InjectedChord()
+{
+    foreach (var flags in new uint[] { 0x10, 0x02, 0x12 })
+    {
+        var chord = new PhysicalEmergencyChord();
+        Equal(false, chord.Process(0xa2, flags, true));
+        Equal(false, chord.Process(0xa4, flags, true));
+        Equal(false, chord.Process(0x1b, 0, true)); // physical Esc cannot use injected modifiers
+        chord.Process(0x1b, 0, false);
+        chord.Process(0xa2, 0, true);
+        chord.Process(0xa4, 0, true);
+        Equal(false, chord.Process(0x1b, flags, true));
+        Equal(true, chord.Process(0x1b, 0, true));
+    }
+}
+static void PhysicalChordRelease()
+{
+    var chord = new PhysicalEmergencyChord();
+    chord.Process(0xa2, 0, true);
+    chord.Process(0xa3, 0, true);
+    chord.Process(0xa4, 0, true);
+    chord.Process(0xa2, 0, false);
+    Equal(true, chord.ControlDown);
+    chord.Process(0xa3, 0x10, false); // remote release cannot erase physical state
+    Equal(true, chord.ControlDown);
+    Equal(true, chord.Process(0x1b, 0, true));
+    chord.Process(0x1b, 0, false);
+    chord.Process(0xa3, 0, false);
+    Equal(false, chord.Process(0x1b, 0, true));
 }
 
 static void Equal<T>(T expected, T actual)

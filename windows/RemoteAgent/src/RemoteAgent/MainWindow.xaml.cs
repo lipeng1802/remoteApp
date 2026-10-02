@@ -17,8 +17,9 @@ public partial class MainWindow : Window
     private const uint ModControl = 0x0002;
     private const uint ModNoRepeat = 0x4000;
     private const uint VirtualKeyEscape = 0x1b;
-    private const int VirtualKeyControl = 0x11;
-    private const int VirtualKeyAlt = 0x12;
+    private const int WmKeyUp = 0x0101;
+    private const int WmSystemKeyUp = 0x0105;
+    private readonly PhysicalEmergencyChord physicalChord = new();
     private CancellationTokenSource? sharing;
     private HwndSource? windowSource;
     private LowLevelKeyboardProcedure? keyboardProcedure;
@@ -26,23 +27,34 @@ public partial class MainWindow : Window
     private bool registeredWindowHotkey;
     private bool emergencyHotkeyAvailable;
     private bool emergencyStopRequested;
+    private bool observedKeyboardCallback;
 
     public MainWindow()
     {
+        EmergencyDiagnostics.Write("constructor before InitializeComponent");
         InitializeComponent();
+        EmergencyDiagnostics.Write($"constructor after InitializeComponent source={PresentationSource.FromVisual(this) is not null}");
         SourceInitialized += Window_SourceInitialized;
+        var remoteSession = GetSystemMetrics(0x1000) != 0; // SM_REMOTESESSION
+        EmergencyDiagnostics.Write($"Session remote={remoteSession}");
+        if (remoteSession)
+            SessionWarning.Text = "当前通过 Windows 远程桌面运行：Ctrl + Alt + Esc 可能被远程桌面截获。请使用“停止共享”；本机紧急停止需在 Windows 实体键盘验证。";
     }
 
     private void Window_SourceInitialized(object? sender, EventArgs e)
     {
+        EmergencyDiagnostics.Write("SourceInitialized");
         var handle = new WindowInteropHelper(this).Handle;
         windowSource = HwndSource.FromHwnd(handle);
         windowSource?.AddHook(WindowMessageHook);
         registeredWindowHotkey = windowSource is not null && RegisterHotKey(handle, EmergencyHotkeyId,
             ModControl | ModAlt | ModNoRepeat, VirtualKeyEscape);
+        EmergencyDiagnostics.Write($"RegisterHotKey success={registeredWindowHotkey} error={(registeredWindowHotkey ? 0 : Marshal.GetLastWin32Error())}");
         keyboardProcedure = KeyboardHookCallback;
         keyboardHook = SetWindowsHookEx(WhKeyboardLowLevel, keyboardProcedure, GetModuleHandle(null), 0);
-        emergencyHotkeyAvailable = registeredWindowHotkey || keyboardHook != 0;
+        EmergencyDiagnostics.Write($"SetWindowsHookEx success={keyboardHook != 0} error={(keyboardHook != 0 ? 0 : Marshal.GetLastWin32Error())}");
+        // WM_HOTKEY has no injection provenance; only the physical hook authorizes stopping.
+        emergencyHotkeyAvailable = keyboardHook != 0;
         if (!emergencyHotkeyAvailable)
             StatusText.Text = "未共享 · Ctrl + Alt + Esc 紧急停止快捷键不可用，真实控制已禁用";
     }
@@ -51,20 +63,25 @@ public partial class MainWindow : Window
     {
         if (message == WmHotkey && wParam == (nint)EmergencyHotkeyId)
         {
+            EmergencyDiagnostics.Write("WM_HOTKEY received");
             handled = true;
-            RequestEmergencyStop();
+            // Diagnostic only: SendInput can also generate WM_HOTKEY.
         }
         return 0;
     }
 
     private nint KeyboardHookCallback(int code, nint message, nint dataPointer)
     {
-        if (code >= 0 && (message == (nint)WmKeyDown || message == (nint)WmSystemKeyDown))
+        if (!observedKeyboardCallback) { observedKeyboardCallback = true; EmergencyDiagnostics.Write("First keyboard callback received"); }
+        if (code >= 0 && (message == (nint)WmKeyDown || message == (nint)WmSystemKeyDown ||
+            message == (nint)WmKeyUp || message == (nint)WmSystemKeyUp))
         {
             var data = Marshal.PtrToStructure<LowLevelKeyboardData>(dataPointer);
-            var controlDown = (GetAsyncKeyState(VirtualKeyControl) & 0x8000) != 0;
-            var altDown = (GetAsyncKeyState(VirtualKeyAlt) & 0x8000) != 0;
-            if (PhysicalEmergencyHotkey.Matches(data.VirtualKey, data.Flags, controlDown, altDown))
+            var down = message == (nint)WmKeyDown || message == (nint)WmSystemKeyDown;
+            var matched = physicalChord.Process(data.VirtualKey, data.Flags, down);
+            if (data.VirtualKey == VirtualKeyEscape)
+                EmergencyDiagnostics.Write($"Escape down={down} injected={(data.Flags & 0x12) != 0} ctrl={physicalChord.ControlDown} alt={physicalChord.AltDown} matched={matched}");
+            if (matched)
                 _ = Dispatcher.BeginInvoke(new Action(RequestEmergencyStop));
         }
         return CallNextHookEx(keyboardHook, code, message, dataPointer);
@@ -72,10 +89,12 @@ public partial class MainWindow : Window
 
     private void RequestEmergencyStop()
     {
+        EmergencyDiagnostics.Write($"RequestEmergencyStop sharing={sharing is not null} alreadyRequested={emergencyStopRequested}");
         if (sharing is null || emergencyStopRequested) return;
         emergencyStopRequested = true;
         StatusText.Text = "已触发本机紧急停止，正在释放输入并结束共享";
         sharing.Cancel();
+        EmergencyDiagnostics.Write("Emergency cancellation requested");
     }
 
     private async void Start_Click(object sender, RoutedEventArgs e)
@@ -155,6 +174,7 @@ public partial class MainWindow : Window
         {
             if (MetricsText.Text.StartsWith("帧 ", StringComparison.Ordinal))
                 MetricsText.Text = "最后成功发送：" + MetricsText.Text;
+            EmergencyDiagnostics.Write($"Sharing cleanup complete emergency={emergencyStopRequested}");
             sharing = null;
             emergencyStopRequested = false;
             QualitySelector.IsEnabled = true;
@@ -224,7 +244,7 @@ public partial class MainWindow : Window
     private static extern nint CallNextHookEx(nint hook, int code, nint message, nint dataPointer);
 
     [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int virtualKey);
+    private static extern int GetSystemMetrics(int index);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern nint GetModuleHandle(string? moduleName);
