@@ -19,10 +19,17 @@
             <Button x:Name="PairingKeyButton" Content="显示配对密钥" Padding="12,6"
                     HorizontalAlignment="Left" Click="PairingKey_Click" />
             <TextBox x:Name="PairingKeyText" Margin="0,6,0,0" IsReadOnly="True"
-                     Visibility="Collapsed" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" />
+                     IsReadOnlyCaretVisible="True" Visibility="Collapsed"
+                     FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" />
+            <StackPanel x:Name="PairingKeyActions" Orientation="Horizontal" Margin="0,6,0,0"
+                        Visibility="Collapsed">
+                <Button Content="复制配对密钥" Padding="10,4" Click="CopyPairingKey_Click" />
+                <TextBlock x:Name="PairingKeyCopyStatus" Margin="10,0,0,0"
+                           VerticalAlignment="Center" FontSize="11" Foreground="DimGray" />
+            </StackPanel>
             <TextBlock x:Name="PairingKeyWarning" Margin="0,4,0,0" Visibility="Collapsed"
                        Foreground="DarkRed" FontSize="11" TextWrapping="Wrap"
-                       Text="这是敏感配对密钥。仅输入到你的 Mac RemoteController，不要发送到聊天、邮件或日志。" />
+                       Text="这是敏感配对密钥。仅输入到你的 Mac RemoteController，不要发送到聊天、邮件或日志。通过 RDP 粘贴不到 Mac 时，请检查 RDP 客户端是否启用了剪贴板重定向。" />
         </StackPanel>
         <CheckBox x:Name="ControlConsent" Margin="0,14,0,0"
                   Content="允许本次远程控制（会真实操作此 Windows）"

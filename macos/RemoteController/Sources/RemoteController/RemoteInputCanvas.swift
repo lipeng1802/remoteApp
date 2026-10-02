@@ -6,10 +6,14 @@ import RemoteProtocol
 final class RemoteInputCanvas: NSView {
     var onInputs: (@MainActor ([CapturedInput]) -> Bool)?
     var onPaused: (@MainActor () -> Void)?
+    var onFocusSuspended: (@MainActor () -> Void)?
+    var onFocusResumed: (@MainActor () -> Void)?
     private var capture = ControllerInputCapture()
     private var modifiers = MacModifierEventState()
     private var tracking: NSTrackingArea?
     private var screen: ScreenInfoPayload?
+    private var enabled = false
+    private var resumeWhenFocused = false
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -20,6 +24,8 @@ final class RemoteInputCanvas: NSView {
         super.init(frame: frameRect)
         NotificationCenter.default.addObserver(self, selector: #selector(focusLost(_:)),
             name: NSApplication.didResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(focusRegained(_:)),
+            name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -31,17 +37,22 @@ final class RemoteInputCanvas: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
         window?.acceptsMouseMovedEvents = true
         if let window {
             NotificationCenter.default.addObserver(self, selector: #selector(focusLost(_:)),
                 name: NSWindow.didResignKeyNotification, object: window)
+            NotificationCenter.default.addObserver(self, selector: #selector(focusRegained(_:)),
+                name: NSWindow.didBecomeKeyNotification, object: window)
         }
     }
 
-    @objc private func focusLost(_ notification: Notification) { pause() }
+    @objc private func focusLost(_ notification: Notification) { suspendForFocusLoss() }
+    @objc private func focusRegained(_ notification: Notification) { resumeAfterFocusLoss() }
 
     func update(screen: ScreenInfoPayload?, enabled: Bool) {
         self.screen = screen
+        self.enabled = enabled
         if !enabled, capture.isActive { pause() }
     }
 
@@ -49,6 +60,7 @@ final class RemoteInputCanvas: NSView {
     func start() -> Bool {
         guard screen != nil, window?.isKeyWindow == true,
               window?.makeFirstResponder(self) == true else { return false }
+        resumeWhenFocused = false
         modifiers.reset()
         capture.start()
         return true
@@ -56,6 +68,7 @@ final class RemoteInputCanvas: NSView {
 
     @discardableResult
     func pause() -> [CapturedInput] {
+        resumeWhenFocused = false
         let releases = capture.stop()
         modifiers.reset()
         if !releases.isEmpty { _ = onInputs?(releases) }
@@ -64,6 +77,7 @@ final class RemoteInputCanvas: NSView {
     }
 
     func stopForDisconnect() -> [CapturedInput] {
+        resumeWhenFocused = false
         let releases = capture.stop()
         modifiers.reset()
         onPaused?()
@@ -71,14 +85,34 @@ final class RemoteInputCanvas: NSView {
     }
 
     func abandon() {
+        resumeWhenFocused = false
         _ = capture.stop()
         modifiers.reset()
         onPaused?()
     }
 
     override func resignFirstResponder() -> Bool {
-        pause()
+        suspendForFocusLoss()
         return true
+    }
+
+    private func suspendForFocusLoss() {
+        guard capture.isActive else { return }
+        resumeWhenFocused = enabled
+        let releases = capture.stop()
+        modifiers.reset()
+        if !releases.isEmpty { _ = onInputs?(releases) }
+        if resumeWhenFocused { onFocusSuspended?() }
+    }
+
+    private func resumeAfterFocusLoss() {
+        guard enabled, resumeWhenFocused, screen != nil,
+              window?.isKeyWindow == true,
+              window?.makeFirstResponder(self) == true else { return }
+        resumeWhenFocused = false
+        modifiers.reset()
+        capture.start()
+        onFocusResumed?()
     }
 
     override func updateTrackingAreas() {
@@ -93,6 +127,7 @@ final class RemoteInputCanvas: NSView {
     private func send(_ inputs: [CapturedInput]) {
         guard !inputs.isEmpty else { return }
         if onInputs?(inputs) != true {
+            resumeWhenFocused = false
             _ = capture.stop()
             modifiers.reset()
             onPaused?()
@@ -177,11 +212,15 @@ struct RemoteInputOverlay: NSViewRepresentable {
     let register: @MainActor (RemoteInputCanvas) -> Void
     let submit: @MainActor ([CapturedInput]) -> Bool
     let paused: @MainActor () -> Void
+    let focusSuspended: @MainActor () -> Void
+    let focusResumed: @MainActor () -> Void
 
     func makeNSView(context: Context) -> RemoteInputCanvas {
         let view = RemoteInputCanvas()
         view.onInputs = submit
         view.onPaused = paused
+        view.onFocusSuspended = focusSuspended
+        view.onFocusResumed = focusResumed
         register(view)
         return view
     }
@@ -189,6 +228,8 @@ struct RemoteInputOverlay: NSViewRepresentable {
     func updateNSView(_ view: RemoteInputCanvas, context: Context) {
         view.onInputs = submit
         view.onPaused = paused
+        view.onFocusSuspended = focusSuspended
+        view.onFocusResumed = focusResumed
         view.update(screen: screen, enabled: enabled)
     }
 }

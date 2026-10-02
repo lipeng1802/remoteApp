@@ -241,6 +241,16 @@ private final class ViewerModel: ObservableObject {
         if connected { status = "控制已暂停并释放；再次开始需手动点击" }
     }
 
+    func inputFocusSuspended() {
+        guard connected, controlReady, controlCapturing else { return }
+        status = "窗口已失焦 · 输入已安全释放，返回窗口后自动恢复控制"
+    }
+
+    func inputFocusResumed() {
+        guard connected, controlReady, controlCapturing else { return }
+        status = "正在远程控制 Windows · Esc 可立即停止"
+    }
+
     func presentLatest() {
         guard connected, let next = latest.take() else { return }
         image = next.image
@@ -302,7 +312,9 @@ private struct ContentView: View {
                 RemoteInputOverlay(screen: model.screenInfo, enabled: model.controlCapturing,
                     register: model.registerInputCanvas,
                     submit: model.submitInputs,
-                    paused: model.inputPaused)
+                    paused: model.inputPaused,
+                    focusSuspended: model.inputFocusSuspended,
+                    focusResumed: model.inputFocusResumed)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
