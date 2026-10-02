@@ -206,33 +206,14 @@ public partial class MainWindow : Window
         using var credentials = AgentCredentialStore.LoadOrCreate();
         PairingKeyText.Text = Convert.ToBase64String(credentials.DeviceKey);
         PairingKeyText.Visibility = Visibility.Visible;
-        PairingKeyActions.Visibility = Visibility.Visible;
-        PairingKeyCopyStatus.Text = string.Empty;
         PairingKeyWarning.Visibility = Visibility.Visible;
         PairingKeyButton.Content = "隐藏配对密钥";
-    }
-
-    private void CopyPairingKey_Click(object sender, RoutedEventArgs e)
-    {
-        if (PairingKeyText.Visibility != Visibility.Visible || string.IsNullOrEmpty(PairingKeyText.Text))
-            return;
-        try
-        {
-            Clipboard.SetText(PairingKeyText.Text);
-            PairingKeyCopyStatus.Text = "已复制到 Windows 剪贴板";
-        }
-        catch (COMException)
-        {
-            PairingKeyCopyStatus.Text = "复制失败；请检查 RDP 剪贴板重定向";
-        }
     }
 
     private void HidePairingKey()
     {
         PairingKeyText.Text = string.Empty;
         PairingKeyText.Visibility = Visibility.Collapsed;
-        PairingKeyActions.Visibility = Visibility.Collapsed;
-        PairingKeyCopyStatus.Text = string.Empty;
         PairingKeyWarning.Visibility = Visibility.Collapsed;
         PairingKeyButton.Content = "显示配对密钥";
     }
