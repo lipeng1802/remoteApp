@@ -17,6 +17,9 @@ final class RemoteInputCanvas: NSView {
     private var resumeWhenFocused = false
     private var clipboardShortcutKeyDown = false
     private var clipboardPasteKeyDown = false
+    private let commandKeyCodes: Set<UInt16> = [54, 55]
+    private var pendingCommandKeyCodes: Set<UInt16> = []
+    private var consumedCommandKeyCodes: Set<UInt16> = []
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -67,6 +70,8 @@ final class RemoteInputCanvas: NSView {
         modifiers.reset()
         clipboardShortcutKeyDown = false
         clipboardPasteKeyDown = false
+        pendingCommandKeyCodes.removeAll()
+        consumedCommandKeyCodes.removeAll()
         capture.start()
         return true
     }
@@ -78,6 +83,8 @@ final class RemoteInputCanvas: NSView {
         modifiers.reset()
         clipboardShortcutKeyDown = false
         clipboardPasteKeyDown = false
+        pendingCommandKeyCodes.removeAll()
+        consumedCommandKeyCodes.removeAll()
         if !releases.isEmpty { _ = onInputs?(releases) }
         onPaused?()
         return releases
@@ -89,6 +96,8 @@ final class RemoteInputCanvas: NSView {
         modifiers.reset()
         clipboardShortcutKeyDown = false
         clipboardPasteKeyDown = false
+        pendingCommandKeyCodes.removeAll()
+        consumedCommandKeyCodes.removeAll()
         onPaused?()
         return releases
     }
@@ -99,6 +108,8 @@ final class RemoteInputCanvas: NSView {
         modifiers.reset()
         clipboardShortcutKeyDown = false
         clipboardPasteKeyDown = false
+        pendingCommandKeyCodes.removeAll()
+        consumedCommandKeyCodes.removeAll()
         onPaused?()
     }
 
@@ -114,6 +125,8 @@ final class RemoteInputCanvas: NSView {
         modifiers.reset()
         clipboardShortcutKeyDown = false
         clipboardPasteKeyDown = false
+        pendingCommandKeyCodes.removeAll()
+        consumedCommandKeyCodes.removeAll()
         if !releases.isEmpty { _ = onInputs?(releases) }
         if resumeWhenFocused { onFocusSuspended?() }
     }
@@ -126,6 +139,8 @@ final class RemoteInputCanvas: NSView {
         modifiers.reset()
         clipboardShortcutKeyDown = false
         clipboardPasteKeyDown = false
+        pendingCommandKeyCodes.removeAll()
+        consumedCommandKeyCodes.removeAll()
         capture.start()
         onFocusResumed?()
     }
@@ -147,6 +162,8 @@ final class RemoteInputCanvas: NSView {
             modifiers.reset()
             clipboardShortcutKeyDown = false
             clipboardPasteKeyDown = false
+            pendingCommandKeyCodes.removeAll()
+            consumedCommandKeyCodes.removeAll()
             onPaused?()
         }
     }
@@ -171,9 +188,38 @@ final class RemoteInputCanvas: NSView {
 
     override func flagsChanged(with event: NSEvent) {
         guard capture.isActive, let flag = aggregateFlag(for: event.keyCode) else { return }
+        let previous = modifiers.pressedKeyCodes
         let held = modifiers.update(keyCode: event.keyCode,
             aggregatePressed: event.modifierFlags.contains(flag))
-        send(capture.modifierSnapshot(held))
+        if commandKeyCodes.contains(event.keyCode) {
+            if held.contains(event.keyCode) {
+                pendingCommandKeyCodes.insert(event.keyCode)
+            } else {
+                if pendingCommandKeyCodes.contains(event.keyCode),
+                   !consumedCommandKeyCodes.contains(event.keyCode) {
+                    flushPendingCommands(snapshot: previous)
+                }
+                pendingCommandKeyCodes.remove(event.keyCode)
+                consumedCommandKeyCodes.remove(event.keyCode)
+            }
+        }
+        send(capture.modifierSnapshot(held,
+            suppressing: pendingCommandKeyCodes.union(consumedCommandKeyCodes)))
+    }
+
+    private func flushPendingCommands(snapshot: Set<UInt16>? = nil) {
+        let commands = pendingCommandKeyCodes.subtracting(consumedCommandKeyCodes)
+        guard !commands.isEmpty else { return }
+        pendingCommandKeyCodes.subtract(commands)
+        send(capture.modifierSnapshot(snapshot ?? modifiers.pressedKeyCodes,
+            suppressing: pendingCommandKeyCodes.union(consumedCommandKeyCodes)))
+    }
+
+    private func consumeClipboardCommand() {
+        let commands = pendingCommandKeyCodes.intersection(commandKeyCodes)
+        consumedCommandKeyCodes.formUnion(commands)
+        send(capture.modifierSnapshot(modifiers.pressedKeyCodes,
+            suppressing: pendingCommandKeyCodes.union(consumedCommandKeyCodes)))
     }
 
     override func keyDown(with event: NSEvent) {
@@ -182,11 +228,13 @@ final class RemoteInputCanvas: NSView {
         if event.keyCode == 8, event.modifierFlags.contains(.command) {
             guard !event.isARepeat, !clipboardShortcutKeyDown else { return }
             clipboardShortcutKeyDown = true
+            consumeClipboardCommand()
             send(capture.clipboardCopyShortcut())
             return
         }
         if event.keyCode == 9, event.modifierFlags.contains(.command) {
             guard !event.isARepeat, !clipboardPasteKeyDown else { return }
+            consumeClipboardCommand()
             guard let text = NSPasteboard.general.string(forType: .string) else {
                 onLocalClipboardIssue?(.unavailable)
                 return
@@ -199,6 +247,7 @@ final class RemoteInputCanvas: NSView {
             send(capture.clipboardPasteShortcut(text: text))
             return
         }
+        flushPendingCommands()
         send(capture.key(keyCode: event.keyCode, action: .down, isRepeat: event.isARepeat))
     }
 
@@ -232,12 +281,12 @@ final class RemoteInputCanvas: NSView {
     private func button(_ event: NSEvent, _ button: MouseButton, _ action: ButtonAction) {
         send(capture.button(button, action: action, at: point(event)))
     }
-    override func mouseDown(with event: NSEvent) { button(event, .left, .down) }
+    override func mouseDown(with event: NSEvent) { flushPendingCommands(); button(event, .left, .down) }
     override func mouseUp(with event: NSEvent) { button(event, .left, .up) }
-    override func rightMouseDown(with event: NSEvent) { button(event, .right, .down) }
+    override func rightMouseDown(with event: NSEvent) { flushPendingCommands(); button(event, .right, .down) }
     override func rightMouseUp(with event: NSEvent) { button(event, .right, .up) }
     override func otherMouseDown(with event: NSEvent) {
-        if event.buttonNumber == 2 { button(event, .middle, .down) }
+        if event.buttonNumber == 2 { flushPendingCommands(); button(event, .middle, .down) }
     }
     override func otherMouseUp(with event: NSEvent) {
         if event.buttonNumber == 2 { button(event, .middle, .up) }

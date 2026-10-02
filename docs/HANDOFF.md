@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 当前：Mac Command+C/V 弹出 Windows 开始菜单修复（2026-10-02，最新）
+
+双机首次验证发现，在远程画面按 Mac `Command+C/V` 会弹出 Windows 开始菜单；`Control+C/V` 仅能操作 Windows 自己的剪贴板，不能替代跨设备同步，因此该轮结果判定不通过。根因是 AppKit 先发出 Command 的 `flagsChanged`，旧实现立即将其映射为 Windows 键按下，随后即使 C/V 被特殊处理，Windows 键的按下/释放仍会打开开始菜单。
+
+Mac 现改为延迟 Command：Command 刚按下时只在本地跟踪，不立即镜像到 Windows；若下一键是 C/V，则消费该 Command 并执行跨设备剪贴板，整个序列不产生任何 Windows 键事件；若下一键是其他键或鼠标按下，则先补发 Windows 键，再保持原有 Windows 快捷键行为。单独按下并释放 Command 仍补发完整 Windows 键按下/释放。失焦、停止、断开与发送失败会清空所有延迟/消费状态，不留下远程持有键。Mac 全量测试现为 **125/125 passed**，新增“剪贴板快捷键绝不镜像 Windows 键”和“其他快捷键仍可补发 Command”两项回归；Windows 源码与协议未改变，无需重装 Windows。
+
+Mac 重新安装本提交生成的包后复测：
+
+1. 在远程画面按 `Command+C` 和 `Command+V`，Windows 开始菜单不得出现。
+2. Mac 本地复制唯一文本，再在 Windows 记事本按 `Command+V`，内容必须来自 Mac，且 RemoteController 显示粘贴成功。
+3. Windows 选择唯一文本，在远程画面按 `Command+C`，切到 Mac 本地应用粘贴，内容必须来自 Windows。
+4. 验证 `Command+R` 等非 C/V 组合仍作为 Windows 键组合发送；单独点击 Command 仍可打开开始菜单。
+5. 最后停止控制并确认 Windows“持有 0”。
+
 ## 当前：Mac → Windows 文本剪贴板切片（2026-10-02，最新）
 
 在上一切片 Windows → Mac 显式复制的基础上，已补齐反向文本粘贴：RemoteController 正在真实控制且远程画面持有焦点时，用户按 Mac `Command+V`，应用读取一次本机剪贴板纯文本，通过既有认证 TLS 会话发送给 Windows；Windows 在 WPF STA 线程写入系统剪贴板，成功后才注入一次隔离的 `Ctrl+V`，并返回明确结果。它不是后台剪贴板同步，不监控历史，也不传文件、图片或富文本。

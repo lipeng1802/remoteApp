@@ -43,7 +43,7 @@ public struct ControllerInputCapture {
     private var wheelY = 0.0
 
     public init() {}
-    public var heldCount: Int { keys.count + buttons.count + modifierKeys.count }
+    public var heldCount: Int { keys.count + buttons.count + modifiers.heldKeyCodes.count }
 
     /// Activation is explicit; calling it twice must not forget held inputs.
     public mutating func start() { isActive = true }
@@ -83,10 +83,12 @@ public struct ControllerInputCapture {
         return [.key(event)]
     }
 
-    public mutating func modifierSnapshot(_ pressed: Set<UInt16>) -> [CapturedInput] {
+    public mutating func modifierSnapshot(_ pressed: Set<UInt16>,
+                                          suppressing suppressed: Set<UInt16> = []) -> [CapturedInput] {
         guard isActive else { return [] }
         modifierKeys = pressed.intersection(MacKeyboardMapper.modifierKeyCodes)
-        return modifiers.update(pressedKeyCodes: modifierKeys).map(CapturedInput.key)
+        let mirrored = modifierKeys.subtracting(suppressed)
+        return modifiers.update(pressedKeyCodes: mirrored).map(CapturedInput.key)
     }
 
     /// User-initiated Command+C convenience for a Windows target. Temporarily
@@ -120,7 +122,7 @@ public struct ControllerInputCapture {
         let ordinary = keys.sorted().compactMap {
             MacKeyboardMapper.event(keyCode: $0, action: action).map(CapturedInput.key)
         }
-        let modifierEvents = modifierKeys.sorted().compactMap {
+        let modifierEvents = modifiers.heldKeyCodes.sorted().compactMap {
             MacKeyboardMapper.event(keyCode: $0, action: action).map(CapturedInput.key)
         }
         return ordinary + modifierEvents

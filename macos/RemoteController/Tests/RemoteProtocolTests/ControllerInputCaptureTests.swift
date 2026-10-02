@@ -90,6 +90,42 @@ final class ControllerInputCaptureTests: XCTestCase {
         XCTAssertTrue(capture.clipboardPasteShortcut(text: "ignored").isEmpty)
     }
 
+    func testSuppressedCommandClipboardShortcutNeverMirrorsWindowsKey() throws {
+        var capture = ControllerInputCapture()
+        capture.start()
+        XCTAssertTrue(capture.modifierSnapshot([55], suppressing: [55]).isEmpty)
+        XCTAssertEqual(capture.heldCount, 0)
+        let copy = capture.clipboardCopyShortcut()
+        XCTAssertEqual(copy.map(\.messageType), [
+            .keyEvent, .keyEvent, .keyEvent, .keyEvent, .clipboardRequest,
+        ])
+        let keys = try copy.compactMap { command -> KeyEventPayload? in
+            guard case .key = command else { return nil }
+            return try KeyEventPayload.decode(command.payload)
+        }
+        XCTAssertEqual(keys.map(\.scanCode), [0x1d, 0x2e, 0x2e, 0x1d])
+        XCTAssertTrue(keys.allSatisfy { $0.scanCode != 0x5b && $0.scanCode != 0x5c })
+        XCTAssertTrue(capture.modifierSnapshot([], suppressing: [55]).isEmpty)
+        XCTAssertEqual(capture.heldCount, 0)
+    }
+
+    func testDeferredCommandCanStillBeMirroredForOtherShortcuts() throws {
+        var capture = ControllerInputCapture()
+        capture.start()
+        XCTAssertTrue(capture.modifierSnapshot([55], suppressing: [55]).isEmpty)
+        let down = try KeyEventPayload.decode(XCTUnwrap(
+            capture.modifierSnapshot([55]).first).payload)
+        XCTAssertEqual(down.scanCode, 0x5b)
+        XCTAssertTrue(down.extended)
+        XCTAssertEqual(down.action, .down)
+        let up = try KeyEventPayload.decode(XCTUnwrap(
+            capture.modifierSnapshot([]).first).payload)
+        XCTAssertEqual(up.scanCode, 0x5b)
+        XCTAssertTrue(up.extended)
+        XCTAssertEqual(up.action, .up)
+        XCTAssertEqual(capture.heldCount, 0)
+    }
+
     func testBlackBarsRejectDownButAllowTrackedRelease() {
         var capture = ControllerInputCapture()
         capture.start()

@@ -104,6 +104,7 @@ public enum MacKeyboardMapper {
 // alone cannot distinguish release of one side while its partner remains held.
 public struct MacModifierTracker {
     private var held: Set<UInt16> = []
+    var heldKeyCodes: Set<UInt16> { held }
     public init() {}
     public mutating func update(pressedKeyCodes: Set<UInt16>) -> [KeyEventPayload] {
         let next = pressedKeyCodes.intersection(MacKeyboardMapper.modifierKeyCodes)
