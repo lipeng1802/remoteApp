@@ -1,10 +1,12 @@
 # 下一次 Codex 会话交接
 
-## 当前：Mac Command+C/V 弹出 Windows 开始菜单修复（2026-10-02，最新）
+## 已通过：Mac Command+C/V 弹出 Windows 开始菜单修复（2026-10-02，最新）
 
 双机首次验证发现，在远程画面按 Mac `Command+C/V` 会弹出 Windows 开始菜单；`Control+C/V` 仅能操作 Windows 自己的剪贴板，不能替代跨设备同步，因此该轮结果判定不通过。根因是 AppKit 先发出 Command 的 `flagsChanged`，旧实现立即将其映射为 Windows 键按下，随后即使 C/V 被特殊处理，Windows 键的按下/释放仍会打开开始菜单。
 
 Mac 现改为延迟 Command：Command 刚按下时只在本地跟踪，不立即镜像到 Windows；若下一键是 C/V，则消费该 Command 并执行跨设备剪贴板，整个序列不产生任何 Windows 键事件；若下一键是其他键或鼠标按下，则先补发 Windows 键，再保持原有 Windows 快捷键行为。单独按下并释放 Command 仍补发完整 Windows 键按下/释放。失焦、停止、断开与发送失败会清空所有延迟/消费状态，不留下远程持有键。Mac 全量测试现为 **125/125 passed**，新增“剪贴板快捷键绝不镜像 Windows 键”和“其他快捷键仍可补发 Command”两项回归；Windows 源码与协议未改变，无需重装 Windows。
+
+用户已在安装修订 `8d88ac047cc9` 后完成双机复测并确认通过；此前 `Command+C/V` 弹出 Windows 开始菜单的问题已关闭，双向复制粘贴按本节清单通过。下一项优先处理 macOS ad-hoc 签名每次重建都会改变应用身份、从而重复触发 Keychain 密码授权的问题。
 
 Mac 重新安装本提交生成的包后复测：
 
