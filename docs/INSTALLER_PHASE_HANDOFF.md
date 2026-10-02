@@ -3,6 +3,8 @@
 日期：2026-10-01  
 目标版本：`0.3.0`
 
+> 2026-10-02 Windows 重装交接：最新 main 新增 Windows GUI 显示/隐藏配对密钥与 Mac GUI v2 Keychain 配对。Windows 可更新构建环境所需的仓库内容并重新安装 Agent，但必须保留 Tailscale 的安装、登录和网络状态，同时保留 `PersonalRemoteDesktop/Agent/v1` 凭据。完整步骤与保密边界见 [HANDOFF.md](HANDOFF.md) 顶部。
+
 > 2026-10-02 更新：最新 Windows 候选已从 `d1b536b53568` 构建并覆盖安装到原 D 盘，Release 0 警告/错误、协议 63/63、WindowsInput 10/10。Setup 大小 49278970 bytes，SHA-256 `7c347e2802f6749cdb1f5853785f34ac3987698ac93fc44343c8cf448cdaf68f`。版本、安装/publish 文件一致性、只读等待、注入组合拒绝与停止按钮已实测。此前紧急停止复现使用 RDP，实体键盘及真实控制中的释放/断开、已有 Mac 配对认证仍待验证。详细证据以 [HANDOFF.md](HANDOFF.md) 顶部为准；下文 d769777 为历史候选。
 
 > 2026-10-02 macOS 更新：用户暂时无法使用 Windows 实体键盘，该项保留为环境受限的待验收项，不用 RDP 替代。macOS `0.3.0` 已从 `91ecda122bd4` 重建，111/111、Release、签名及 DMG 校验通过；DMG 478945 bytes，SHA-256 `8bc46d0c73a8ed4e426d0fb1b3978ed71247409d2ac5468289c863278043b758`。开发机覆盖安装、启动、Keychain 配对保留和可恢复卸载/重装均通过；无开发工具的干净 macOS 环境仍待验收。

@@ -1,5 +1,26 @@
 # 下一次 Codex 会话交接
 
+## 当前：交给 Windows 更新、重装并验证图形化配对（2026-10-02，最新）
+
+用户当前在 Windows 侧，授权下一会话更新开发环境相关内容并重新安装测试，但明确要求**不得删除、卸载、注销或重置 Tailscale**。也不得删除 Windows Credential Manager 中的 PersonalRemoteDesktop/Agent/v1、证书/私钥或 Mac 旧 Keychain 条目；不得在聊天、提交、日志或截图中暴露 Base64 配对密钥。
+
+Windows 接手顺序：
+
+1. 在仓库根目录确认没有需要覆盖的本地修改，然后拉取 main；目标至少包含 5deda3c，产品代码提交为 2eda171。保留现有 .NET 8、Inno Setup、Tailscale 及其登录/网络状态；除非构建明确报缺失或版本不兼容，不升级或卸载这些系统依赖。
+2. 关闭所有 RemoteAgent 实例，运行：
+
+   ~~~powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\build-installer.ps1
+   ~~~
+
+   预期 Release 0 错误，RemoteProtocol **63/63**，WindowsInput **10/10**。记录新 Setup 的大小、SHA-256 和 publish exe 的 FileVersion/ProductVersion；ProductVersion 必须对应实际构建 HEAD。
+3. 先记录当前安装目录、卸载项、快捷方式和 Personal Remote Desktop Agent 进程状态。只卸载旧 **Personal Remote Desktop Agent**，确认程序文件、开始菜单和桌面快捷方式被移除；Tailscale 应继续安装、登录并在线，Windows 配对凭据应保留。不要以“清理”为由删除 Tailscale、Tailnet 状态、Windows Credential Manager 配对目标、项目源码或开发工具。
+4. 运行新 Setup，优先复用此前 D 盘目录；启动安装版，确认新增“显示配对密钥”按钮存在。点击后只由用户本人读取并直接输入到 Mac RemoteController 的 SecureField；不要让 Codex、终端、日志或截图读取该值。隐藏按钮、开始共享和关闭窗口都应清空界面中的明文。
+5. Mac 当前已安装修订 2eda17164d57。用相同 Windows Tailscale 地址保存一次新 GUI 配对密钥，首次只读连接核对证书指纹；完成后断开、退出并重新启动 Mac 应用，连续连接至少 3 次，预期不再要求输入 macOS 用户密码。若仍弹窗，只记录弹窗标题、触发步骤和按钮，不提供密码或密钥。
+6. 验证只读画面、双方授权真实控制、Mac 断开后 Windows 仍等待重新连接，以及停止共享后“持有 0”。Windows 实体键盘 Ctrl+Alt+Esc 因当前无实体键盘继续标记为环境受限待验收，不得用 RDP 冒充通过。
+
+完成标准：Windows 构建门禁全部通过；旧 Agent 卸载和新版 D 盘安装通过；Tailscale 全程未删除且仍在线；Windows GUI 密钥显示/隐藏生命周期符合预期；Mac v2 配对成功并在至少 3 次重启/重连中不再弹系统密码框；真实控制停止后持有 0。完成后更新本文件顶部，提交并推送远程，交回 Mac。
+
 ## 当前：图形化配对与 Mac Keychain 弹窗收口（2026-10-02，最新）
 
 用户反馈 Mac 连接时频繁要求输入 macOS 用户密码。根因与当前开发流程一致：设备密钥由 TLSProbeClient 命令行程序创建，图形应用是另一个 Keychain 访问主体；同时开发 DMG 仅 ad-hoc 签名，指定要求是会随产物变化的 CDHash，不能提供正式签名应用的稳定身份。
