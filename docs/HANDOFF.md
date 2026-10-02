@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 当前：Windows 实机接手定位紧急停止（2026-10-02，最新）
+
+用户报告 `518fb1b fix: add physical emergency stop fallback` 仍未解决：Windows 物理键盘 `Ctrl + Alt + Esc` 按下后共享无反应。该故障已在“只有 1 个 RemoteAgent 进程”、“只读共享且不连接 Mac”条件下复现，因此不是多实例、Mac 传入修饰键或真实控制授权问题。Mac 端无法继续证明 Windows 全局键盘链路，本问题正式交给 Windows 实机 Codex 定位并修复。
+
+Windows 端不应直接再换一种 Hook 猜测。先建立可观测证据：
+
+1. `git pull --ff-only origin main` 后确认 HEAD 至少为 `518fb1b2a0b4`；运行打包脚本，记录 Release、RemoteProtocol **63/63**、WindowsInput **7/7** 和 Setup SHA-256。
+2. 覆盖安装后从固定 Inno Setup AppId 读取 `InstallLocation`，确认实际运行 exe 的 `ProductVersion` 包含 `518fb1b2a0b4` 或后续修复提交，并核对安装 exe 与 `artifacts\windows\publish\RemoteAgent.exe` SHA-256 一致。未完成此项时不得把结果归因于新代码。
+3. 在 Windows 本机为 `RegisterHotKey`、`SetWindowsHookEx`、`WM_HOTKEY`、低级 Hook 回调和 `RequestEmergencyStop` 加不含凭据/输入内容的诊断记录，至少记录 Win32 成功值、失败时 `GetLastWin32Error`、是否收到 Escape、物理/注入标志、Ctrl/Alt 状态以及停止请求是否执行。
+4. 用 Windows 本机的 Debug/Release 发布 exe 分别复现，区分“Hook 未安装”、“未收到按键”、“修饰键判断错误”、“已命中但取消未生效”四个阶段；确认根因后再修改实现。
+5. 修复必须保留安全边界：仅 Windows 本机物理 `Ctrl + Alt + Esc` 停止；Mac 经 `SendInput` 发送同组合不能触发；停止后释放所有持有输入，Mac 断开，Windows 共享结束。
+
+完成标准：Windows 自动测试全部通过；新 Setup 覆盖安装保留 D 盘目录和已有配对；只读等待和真实控制两种状态下物理快捷键均能立即停止；远程注入同组合不会停止；最终“持有 0”。Windows 端修复后更新本文档顶部，提交并推送远程，交回 Mac 端做最终双机回归。
+
 ## 当前：Windows 安装版紧急停止兜底修复，待 Windows 构建复测（2026-10-01，最新）
 
 两端 0.3.0 安装版核心回归中，默认只读、Mac 断开后 Windows 持续共享、授权真实控制三项通过；Windows 物理键盘 `Ctrl + Alt + Esc` 未结束共享。已排除多实例和远程修饰键：只有 1 个 D 盘安装版进程，且在不连接 Mac 的只读等待阶段按键仍无任何反应，窗口继续显示“等待已配对的 Mac 连接”。

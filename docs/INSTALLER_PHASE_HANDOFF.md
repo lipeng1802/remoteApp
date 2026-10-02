@@ -117,6 +117,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\buil
 
 安装版双机回归结果：默认只读、Mac 断开后 Windows 持续等待、双方授权真实控制三项通过；物理 `Ctrl + Alt + Esc` 紧急停止失败。单实例、无 Mac 连接的只读共享下同样无反应，已排除多实例和远程输入状态。
 
-已增加低级物理键盘 Hook 作为 `RegisterHotKey/WM_HOTKEY` 的兜底，并拒绝所有注入标志；WindowsInput 自动测试预期增至 7/7。此前 `d7697772f98d` Setup 被取代。Windows 应拉取后运行默认打包脚本，并直接覆盖安装到现有 D 盘目录；覆盖后验证安装目录与配对保留，再分别测试只读共享和真实控制中的物理紧急停止。
+已增加低级物理键盘 Hook 作为 `RegisterHotKey/WM_HOTKEY` 的兜底，并拒绝所有注入标志；WindowsInput 自动测试预期增至 7/7。但用户于 2026-10-02 报告 `518fb1b` 方案实机仍未解决，不得将其标记为有效候选版。具体 Windows 本机诊断与完成标准见 [HANDOFF.md](HANDOFF.md) 顶部。
 
-仍待验收：兜底紧急停止、覆盖安装后配对保留、卸载残留、无 .NET 开发环境的干净 Windows 启动。前三条已通过的安装版核心路径无需在旧包重复测试，但新包覆盖后至少做一次连接与真实控制冒烟。
+仍待验收：Windows 实机定位并修复紧急停止、覆盖安装后配对保留、卸载残留、无 .NET 开发环境的干净 Windows 启动。前三条已通过的安装版核心路径无需在旧包重复测试，但新包覆盖后至少做一次连接与真实控制冒烟。
