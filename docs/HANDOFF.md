@@ -10,6 +10,7 @@
 - Mac GUI 增加 SecureField 和“保存配对”；只接受解码后精确 32 字节的 Base64，以 Windows Tailscale 地址为 account 存入应用专用 v2 Keychain service。
 - Mac 不再自动读取旧命令行 v1 设备密钥或指纹条目，因此不会为了旧 ACL 弹出密码框。旧条目不删除，可回退；用户需在新 GUI 中重新输入一次配对密钥，首次连接再核对一次证书指纹。
 - 新增配对密钥解析正反测试；Mac Release 全量 **114/114** 通过。Windows 源码只能在 Windows 实机编译，Release/63/10 及 GUI 展示仍待后续验证。
+- 已从源码提交 2eda17164d57 生成并覆盖安装新版 macOS 0.3.0：DMG **488647 bytes**，SHA-256 883eda0d887d10092b9a96e261a49ffad1d28530c711edaacdae9ff35789c81c；安装版二进制 SHA-256 7bda01241b5a285e25bd50e0ea633df9b0d96f1c31e299668ada388ab3778e6e。签名、DMG、安装后修订与启动均通过。尚未把真实 Windows 配对密钥写入 v2 条目，因此“保存一次后重复连接不再弹系统密码框”仍需双机人工验证，不能仅凭启动记为通过。
 
 曾尝试将新条目切到 macOS Data Protection Keychain，实测返回 -34018（缺少经配置文件授权的 Keychain entitlement），因此没有把不可用路径留在产品中。当前 v2 仍是标准 macOS Keychain，但由图形应用自己创建，解决同一开发包日常连接的反复授权。要保证升级后仍有稳定 Keychain 身份，必须完成 Apple Developer ID 签名、配置文件与公证，不伪造 entitlement。
 
