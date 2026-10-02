@@ -1,20 +1,53 @@
 # 下一次 Codex 会话交接
 
-## 当前：Windows 实机接手定位紧急停止（2026-10-02，最新）
+## 当前：Windows 紧急停止诊断与注入隔离修复已安装，实体键盘验收待完成（2026-10-02，最新）
 
-用户报告 `518fb1b fix: add physical emergency stop fallback` 仍未解决：Windows 物理键盘 `Ctrl + Alt + Esc` 按下后共享无反应。该故障已在“只有 1 个 RemoteAgent 进程”、“只读共享且不连接 Mac”条件下复现，因此不是多实例、Mac 传入修饰键或真实控制授权问题。Mac 端无法继续证明 Windows 全局键盘链路，本问题正式交给 Windows 实机 Codex 定位并修复。
+Windows 本轮已定位复现条件、修复独立的注入隔离漏洞、完成自动门禁及 D 盘覆盖安装。**尚未证明实体键盘紧急停止通过，不得沿用历史“P2 全部通过”的结论关闭本项。**
 
-Windows 端不应直接再换一种 Hook 猜测。先建立可观测证据：
+### 实机证据与结论
 
-1. `git pull --ff-only origin main` 后确认 HEAD 至少为 `518fb1b2a0b4`；运行打包脚本，记录 Release、RemoteProtocol **63/63**、WindowsInput **7/7** 和 Setup SHA-256。
-2. 覆盖安装后从固定 Inno Setup AppId 读取 `InstallLocation`，确认实际运行 exe 的 `ProductVersion` 包含 `518fb1b2a0b4` 或后续修复提交，并核对安装 exe 与 `artifacts\windows\publish\RemoteAgent.exe` SHA-256 一致。未完成此项时不得把结果归因于新代码。
-3. 在 Windows 本机为 `RegisterHotKey`、`SetWindowsHookEx`、`WM_HOTKEY`、低级 Hook 回调和 `RequestEmergencyStop` 加不含凭据/输入内容的诊断记录，至少记录 Win32 成功值、失败时 `GetLastWin32Error`、是否收到 Escape、物理/注入标志、Ctrl/Alt 状态以及停止请求是否执行。
-4. 用 Windows 本机的 Debug/Release 发布 exe 分别复现，区分“Hook 未安装”、“未收到按键”、“修饰键判断错误”、“已命中但取消未生效”四个阶段；确认根因后再修改实现。
-5. 修复必须保留安全边界：仅 Windows 本机物理 `Ctrl + Alt + Esc` 停止；Mac 经 `SendInput` 发送同组合不能触发；停止后释放所有持有输入，Mac 断开，Windows 共享结束。
+- 已拉取 `0c4ffd0`；开始排查时 D 盘实际安装版为 `0.3.0+518fb1b2a0b4`，不是旧版 `d769777`。基线打包 Release 0 错误、协议 **63/63**、输入 **7/7**；本轮基线 Setup SHA-256 为 `b63fb3187812fe597580a67df05063538ed0cc610c8ba8c3fd4a8acfeb6f05f0`。
+- Debug、Release 诊断版本均实测 `RegisterHotKey success=True error=0`、`SetWindowsHookEx success=True error=0`，窗口初始化正常。
+- 用户确认此前通过 **Windows RDP 远程桌面**操作，并非 Windows 实体键盘。`query session` 显示应用与 Explorer 位于活动 RDP 会话。Release 日志收到修饰键回调，却没有收到用户尝试的 Escape 或对应 WM_HOTKEY；因此这次复现停在输入到达应用之前，不是已命中后的取消失效。RDP 路径的具体截获点未进一步确定，不能断言实体键盘链路失效或已经修好。
+- 独立代码问题已确认：旧 WM_HOTKEY 分支绕过 Hook 的注入标志检查，且 GetAsyncKeyState 会混入远程注入修饰键。修复后安装版原生 SendInput 实测同时产生 `Escape injected=True matched=False` 和 WM_HOTKEY，证明两条路径都需要阻止注入触发。
 
-完成标准：Windows 自动测试全部通过；新 Setup 覆盖安装保留 D 盘目录和已有配对；只读等待和真实控制两种状态下物理快捷键均能立即停止；远程注入同组合不会停止；最终“持有 0”。Windows 端修复后更新本文档顶部，提交并推送远程，交回 Mac 端做最终双机回归。
+### 修复内容（源码提交 d1b536b53568）
 
-## 当前：Windows 安装版紧急停止兜底修复，待 Windows 构建复测（2026-10-01，最新）
+- 使用非注入 Ctrl/Alt/Escape 的按下/松开状态识别组合，区分左右修饰键，拒绝重复 Escape 与两类注入标志；注入修饰键不能为物理 Escape 授权。
+- WM_HOTKEY 只用于诊断，不再单独调用停止。Hook 安装失败时禁止真实控制，即使 RegisterHotKey 成功也不能放行。
+- RDP 会话显示“组合键可能被截获、可使用停止共享、物理紧急停止需在实体键盘验证”的提示。RDP 输入可能没有 LLKHF_INJECTED，不能用该标志证明键盘来自本机硬件。
+- 可选 `PRD_EMERGENCY_DIAGNOSTICS` 诊断：注册结果/Win32 错误、首个回调、Escape 注入与修饰状态、停止请求、取消及清理。默认关闭；异步写盘，队列最多 256 条，每进程最多写 512 条，不记录普通键码、屏幕、证书或配对密钥。
+- 依据：[Microsoft LowLevelKeyboardProc 文档](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc)说明 Hook 在异步键状态更新前调用，应避免依赖当前事件的 GetAsyncKeyState；本实现直接维护经过注入过滤的转换状态。
+
+### 构建、安装与验证
+
+- Release：**0 警告 / 0 错误**；RemoteProtocol **63/63**；WindowsInput **10/10**。新增转换/重复、注入和左右修饰键释放回归。
+- Setup：`artifacts/windows/PersonalRemoteDesktopAgent-0.3.0-win-x64-Setup.exe`，**49278970 bytes**。
+- Setup SHA-256：`7c347e2802f6749cdb1f5853785f34ac3987698ac93fc44343c8cf448cdaf68f`，与校验文件一致。
+- 同 AppId 直接覆盖安装，退出码 **0**；自动保留 `D:\Program Files\Personal Remote Desktop Agent\`。
+- 实际运行 exe：FileVersion `0.3.0.0`，ProductVersion `0.3.0+d1b536b53568`。安装 exe 与 publish exe SHA-256 均为 `08beb252653a7bf2b15b4dd5a46bef3638ec497e8182f8957c39e6523f0c3d8c`。
+- 覆盖前后证书元数据一致；未删除/重建配对项。**已有 Mac 配对能否继续认证仍需双机验证**，本轮没有以此代替实际认证结果。
+- 安装版只读等待：单独投递 WM_HOTKEY 不停止；聚焦测试窗口后原生 SendInput 发送完整组合（包含释放）不停止；日志确实收到注入 Escape 并拒绝。最后点击“停止共享”，返回“共享已由本机停止”，开始按钮恢复。未开启真实控制或使用 Mac 注入。
+- 本轮日志位于被忽略的 `artifacts/windows/emergency-*-build.log`、`emergency-install.log`、`emergency-diagnostics/`。原生负向检查脚本为本机产物 `artifacts/windows/emergency-installed-smoke.ps1`，未纳入源码。安装版当前保留打开、未共享。
+
+用户已确认暂时不能使用 Windows 实体键盘，并要求记录待验收后提交推送。本轮不继续声称或尝试以 RDP 代替该验收。
+
+### 剩余验收与接手顺序
+
+1. 在 Windows **控制台会话和实体键盘**上启动上述 D 盘安装版，确保没有其他 Agent 实例。不要把 RDP 中的按键算作实体键盘证据。
+2. 不连接 Mac，只读开始共享后按左 Ctrl + 左 Alt + Esc，必须立即结束共享、恢复开始按钮。必要时收集下列诊断日志，核对 Escape matched=True → RequestEmergencyStop → cancellation → cleanup。
+3. Mac 使用原配对连接安装版并经双方许可开始真实控制；Windows 实体键盘组合必须结束共享、Mac 断开、最终持有 0。Mac 注入同组合应保持连接；这项双机结果不能由本轮本机 SendInput 负向检查替代。
+4. 复测关闭/重启、只读和控制两种状态。实体键盘与真实控制释放验证完成前，本故障仍为**待验收**；之后再继续安装包卸载/干净环境检查。
+
+诊断启动命令（先关闭旧窗口；环境变量仅影响当前 PowerShell 及其子进程）：
+
+~~~powershell
+Set-Location -LiteralPath 'H:\chatgpt\远程软件开发\remoteApp'
+$env:PRD_EMERGENCY_DIAGNOSTICS = Join-Path (Get-Location) 'artifacts\windows\emergency-diagnostics'
+& 'D:\Program Files\Personal Remote Desktop Agent\RemoteAgent.exe'
+~~~
+
+## 历史：Windows 安装版紧急停止兜底修复（2026-10-01，已被顶部修复替代）
 
 两端 0.3.0 安装版核心回归中，默认只读、Mac 断开后 Windows 持续共享、授权真实控制三项通过；Windows 物理键盘 `Ctrl + Alt + Esc` 未结束共享。已排除多实例和远程修饰键：只有 1 个 D 盘安装版进程，且在不连接 Mac 的只读等待阶段按键仍无任何反应，窗口继续显示“等待已配对的 Mac 连接”。
 
