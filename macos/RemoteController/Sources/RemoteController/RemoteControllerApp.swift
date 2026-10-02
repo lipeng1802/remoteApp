@@ -102,6 +102,9 @@ private final class ViewerModel: ObservableObject {
                         count += 1
                         slot.replace(ReceivedImage(image: decoded, screen: screen, count: count))
                     },
+                    onClipboardText: { [weak self] payload in
+                        self?.receiveClipboardText(payload)
+                    },
                     onAuthenticated: { [weak self] in
                         DispatchQueue.main.async {
                             guard let self, self.generation == current, self.connected else { return }
@@ -249,6 +252,24 @@ private final class ViewerModel: ObservableObject {
     func inputFocusResumed() {
         guard connected, controlReady, controlCapturing else { return }
         status = "正在远程控制 Windows · Esc 可立即停止"
+    }
+
+    private func receiveClipboardText(_ payload: ClipboardTextPayload) {
+        guard connected, controlReady else { return }
+        switch payload.status {
+        case .success:
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            guard pasteboard.setString(payload.text, forType: .string) else {
+                status = "Windows 文本已收到，但写入 Mac 剪贴板失败"
+                return
+            }
+            status = "已将 Windows 文本复制到 Mac 剪贴板（\(payload.text.utf8.count) bytes）"
+        case .unavailable:
+            status = "Windows 当前剪贴板没有可同步的文本"
+        case .tooLarge:
+            status = "Windows 剪贴板文本超过 32 KiB，未同步"
+        }
     }
 
     func presentLatest() {

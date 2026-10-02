@@ -9,12 +9,16 @@ final class AuthenticatedInputSenderTests: XCTestCase {
     private let down = CapturedInput.button(MouseButtonPayload(button: .left, action: .down))
     private let up = CapturedInput.button(MouseButtonPayload(button: .left, action: .up))
 
-    private func challenged(capacity: Int = 64, acceptsJpeg: Bool = false) throws -> AuthenticatedInputSender {
+    private func challenged(capacity: Int = 64, acceptsJpeg: Bool = false,
+                            acceptsClipboard: Bool = false) throws -> AuthenticatedInputSender {
         var sender = try AuthenticatedInputSender(deviceKey: key, localControlAllowed: true,
-            acceptsJpeg: acceptsJpeg, capacity: capacity, nonce: nonce, now: 0)
+            acceptsJpeg: acceptsJpeg, acceptsClipboard: acceptsClipboard,
+            capacity: capacity, nonce: nonce, now: 0)
         let hello = try XCTUnwrap(sender.poll(now: 0))
         XCTAssertEqual(hello.sequence, 1)
-        let capabilities: Capabilities = acceptsJpeg ? [.jpeg, .input] : [.input]
+        var capabilities: Capabilities = [.input]
+        if acceptsJpeg { capabilities.insert(.jpeg) }
+        if acceptsClipboard { capabilities.insert(.clipboardText) }
         XCTAssertEqual(try HelloPayload.decode(hello.payload).capabilities, capabilities)
         try sender.receive(Frame(type: .hello, sequence: 1,
             payload: HelloPayload(role: .agent, capabilities: capabilities, nonce: agentNonce).encode()), now: 0.001)
@@ -32,8 +36,10 @@ final class AuthenticatedInputSenderTests: XCTestCase {
         return sender
     }
 
-    private func authenticated(capacity: Int = 64, acceptsJpeg: Bool = false) throws -> AuthenticatedInputSender {
-        var sender = try challenged(capacity: capacity, acceptsJpeg: acceptsJpeg)
+    private func authenticated(capacity: Int = 64, acceptsJpeg: Bool = false,
+                               acceptsClipboard: Bool = false) throws -> AuthenticatedInputSender {
+        var sender = try challenged(capacity: capacity, acceptsJpeg: acceptsJpeg,
+                                    acceptsClipboard: acceptsClipboard)
         try sender.receive(Frame(type: .authResult, sequence: 3,
             payload: AuthResultPayload(status: .success, retryDelayMilliseconds: 0).encode()), now: 0.03)
         XCTAssertEqual(sender.state, .active)
@@ -47,11 +53,33 @@ final class AuthenticatedInputSenderTests: XCTestCase {
             payload: screen.encode()), now: 0.04))
         let jpeg = Data([0xff, 0xd8, 0xff, 0xd9])
         XCTAssertEqual(try sender.receive(Frame(type: .videoFrameJPEG, sequence: 5,
-            payload: jpeg), now: 0.05), .init(screen: screen, jpeg: jpeg))
+            payload: jpeg), now: 0.05), .jpeg(.init(screen: screen, jpeg: jpeg)))
         try sender.enqueue([down], now: 1)
         let input = try XCTUnwrap(sender.poll(now: 1))
         XCTAssertEqual(input.type, .mouseButton)
         XCTAssertEqual(input.sequence, 3)
+    }
+
+    func testClipboardRequiresNegotiationRequestAndBoundedUtf8Response() throws {
+        var sender = try authenticated(acceptsClipboard: true)
+        let text = ClipboardTextPayload(status: .success, text: "跨设备 clipboard")
+        XCTAssertThrowsError(try sender.receive(Frame(type: .clipboardText, sequence: 4,
+            payload: text.encode()), now: 0.04))
+
+        sender = try authenticated(acceptsClipboard: true)
+        try sender.enqueue([.clipboardRequest], now: 1)
+        let pending = sender.pendingCount
+        try sender.enqueue([.clipboardRequest], now: 1.001)
+        XCTAssertEqual(sender.pendingCount, pending)
+        XCTAssertEqual(sender.state, .active)
+
+        sender = try authenticated(acceptsClipboard: true)
+        try sender.enqueue([.clipboardRequest], now: 1)
+        let request = try XCTUnwrap(sender.poll(now: 1))
+        XCTAssertEqual(request.type, .clipboardRequest)
+        try sender.didWrite(sequence: request.sequence, now: 1.001)
+        XCTAssertEqual(try sender.receive(Frame(type: .clipboardText, sequence: 4,
+            payload: text.encode()), now: 1.01), .clipboard(text))
     }
 
     func testDuplexRejectsVideoBeforeMetadataAndMissingJpegCapability() throws {

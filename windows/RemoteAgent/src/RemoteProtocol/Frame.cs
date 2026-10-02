@@ -28,6 +28,8 @@ public enum MessageType : ushort
     Pong = 0x000d,
     Disconnect = 0x000e,
     Error = 0x000f,
+    ClipboardRequest = 0x0010,
+    ClipboardText = 0x0011,
 }
 
 public sealed record Frame(

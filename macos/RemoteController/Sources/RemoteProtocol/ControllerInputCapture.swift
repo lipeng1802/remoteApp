@@ -7,6 +7,7 @@ public enum CapturedInput: Equatable {
     case button(MouseButtonPayload)
     case wheel(MouseWheelPayload)
     case key(KeyEventPayload)
+    case clipboardRequest
 
     public var messageType: MessageType {
         switch self {
@@ -14,6 +15,7 @@ public enum CapturedInput: Equatable {
         case .button: return .mouseButton
         case .wheel: return .mouseWheel
         case .key: return .keyEvent
+        case .clipboardRequest: return .clipboardRequest
         }
     }
     public var payload: Data {
@@ -22,6 +24,7 @@ public enum CapturedInput: Equatable {
         case .button(let value): return value.encode()
         case .wheel(let value): return value.encode()
         case .key(let value): return value.encode()
+        case .clipboardRequest: return Data()
         }
     }
 }
@@ -81,6 +84,29 @@ public struct ControllerInputCapture {
         guard isActive else { return [] }
         modifierKeys = pressed.intersection(MacKeyboardMapper.modifierKeyCodes)
         return modifiers.update(pressedKeyCodes: modifierKeys).map(CapturedInput.key)
+    }
+
+    /// User-initiated Command+C convenience for a Windows target. Temporarily
+    /// release every physical modifier already mirrored to Windows, perform an
+    /// isolated Ctrl+C, request clipboard text, then restore held modifiers.
+    public func clipboardCopyShortcut() -> [CapturedInput] {
+        let commandCodes: Set<UInt16> = [54, 55]
+        guard isActive, !modifierKeys.isDisjoint(with: commandCodes) else { return [] }
+        let held = modifierKeys.sorted()
+        var result = held.compactMap {
+            MacKeyboardMapper.event(keyCode: $0, action: .up).map(CapturedInput.key)
+        }
+        guard let controlDown = try? KeyEventPayload(scanCode: 0x1d, extended: false, action: .down),
+              let cDown = try? KeyEventPayload(scanCode: 0x2e, extended: false, action: .down),
+              let cUp = try? KeyEventPayload(scanCode: 0x2e, extended: false, action: .up),
+              let controlUp = try? KeyEventPayload(scanCode: 0x1d, extended: false, action: .up) else {
+            return []
+        }
+        result += [.key(controlDown), .key(cDown), .key(cUp), .key(controlUp), .clipboardRequest]
+        result += held.compactMap {
+            MacKeyboardMapper.event(keyCode: $0, action: .down).map(CapturedInput.key)
+        }
+        return result
     }
 
     public func move(to point: MouseMovePayload?) -> [CapturedInput] {

@@ -14,6 +14,7 @@ final class RemoteInputCanvas: NSView {
     private var screen: ScreenInfoPayload?
     private var enabled = false
     private var resumeWhenFocused = false
+    private var clipboardShortcutKeyDown = false
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -62,6 +63,7 @@ final class RemoteInputCanvas: NSView {
               window?.makeFirstResponder(self) == true else { return false }
         resumeWhenFocused = false
         modifiers.reset()
+        clipboardShortcutKeyDown = false
         capture.start()
         return true
     }
@@ -71,6 +73,7 @@ final class RemoteInputCanvas: NSView {
         resumeWhenFocused = false
         let releases = capture.stop()
         modifiers.reset()
+        clipboardShortcutKeyDown = false
         if !releases.isEmpty { _ = onInputs?(releases) }
         onPaused?()
         return releases
@@ -80,6 +83,7 @@ final class RemoteInputCanvas: NSView {
         resumeWhenFocused = false
         let releases = capture.stop()
         modifiers.reset()
+        clipboardShortcutKeyDown = false
         onPaused?()
         return releases
     }
@@ -88,6 +92,7 @@ final class RemoteInputCanvas: NSView {
         resumeWhenFocused = false
         _ = capture.stop()
         modifiers.reset()
+        clipboardShortcutKeyDown = false
         onPaused?()
     }
 
@@ -101,6 +106,7 @@ final class RemoteInputCanvas: NSView {
         resumeWhenFocused = enabled
         let releases = capture.stop()
         modifiers.reset()
+        clipboardShortcutKeyDown = false
         if !releases.isEmpty { _ = onInputs?(releases) }
         if resumeWhenFocused { onFocusSuspended?() }
     }
@@ -111,6 +117,7 @@ final class RemoteInputCanvas: NSView {
               window?.makeFirstResponder(self) == true else { return }
         resumeWhenFocused = false
         modifiers.reset()
+        clipboardShortcutKeyDown = false
         capture.start()
         onFocusResumed?()
     }
@@ -162,11 +169,21 @@ final class RemoteInputCanvas: NSView {
     override func keyDown(with event: NSEvent) {
         guard capture.isActive else { return }
         if event.keyCode == 53 { pause(); return }
+        if event.keyCode == 8, event.modifierFlags.contains(.command) {
+            guard !event.isARepeat, !clipboardShortcutKeyDown else { return }
+            clipboardShortcutKeyDown = true
+            send(capture.clipboardCopyShortcut())
+            return
+        }
         send(capture.key(keyCode: event.keyCode, action: .down, isRepeat: event.isARepeat))
     }
 
     override func keyUp(with event: NSEvent) {
         guard capture.isActive else { return }
+        if event.keyCode == 8, clipboardShortcutKeyDown {
+            clipboardShortcutKeyDown = false
+            return
+        }
         send(capture.key(keyCode: event.keyCode, action: .up))
     }
 

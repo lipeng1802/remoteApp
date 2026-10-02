@@ -57,9 +57,11 @@ final class InputConnectionDriverTests: XCTestCase {
 
     private func make(clock: Clock, transport: FakeTransport, authenticated: @escaping () -> Void = {},
                       jpeg: ((AuthenticatedInputSender.ReceivedJpegFrame) -> Void)? = nil,
+                      clipboard: ((ClipboardTextPayload) -> Void)? = nil,
                       done: @escaping (Result<Void, InputSimulationError>) -> Void) throws -> InputConnectionDriver {
         try InputConnectionDriver(transport: transport, deviceKey: key, localControlAllowed: true,
             automaticTimer: false, clock: { clock.now }, onJpegFrame: jpeg,
+            onClipboardText: clipboard,
             onAuthenticated: authenticated, completion: done)
     }
 
@@ -112,6 +114,28 @@ final class InputConnectionDriverTests: XCTestCase {
         driver.tick()
         XCTAssertEqual(try transport.frames().last?.sequence, 3)
         XCTAssertEqual(try transport.frames().last?.type, .mouseButton)
+        driver.cancel()
+        wait(for: [ended], timeout: 2)
+    }
+
+    func testClipboardResponseOnlyAfterExplicitRequestReachesCallback() throws {
+        let clock = Clock(), transport = FakeTransport()
+        let received = expectation(description: "clipboard")
+        let ended = expectation(description: "cancel")
+        let expected = ClipboardTextPayload(status: .success, text: "跨设备 clipboard")
+        let driver = try make(clock: clock, transport: transport, clipboard: { payload in
+            XCTAssertEqual(payload, expected)
+            received.fulfill()
+        }) { _ in ended.fulfill() }
+        try authenticate(driver, transport, clock)
+        clock.now = 1
+        XCTAssertTrue(driver.submit([.clipboardRequest]))
+        driver.tick()
+        XCTAssertEqual(try transport.frames().last?.type, .clipboardRequest)
+        transport.ack(2)
+        transport.deliver(try FrameCodec.encode(Frame(type: .clipboardText, sequence: 4,
+            payload: expected.encode())))
+        wait(for: [received], timeout: 2)
         driver.cancel()
         wait(for: [ended], timeout: 2)
     }

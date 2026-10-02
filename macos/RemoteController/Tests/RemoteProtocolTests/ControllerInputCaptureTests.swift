@@ -40,6 +40,29 @@ final class ControllerInputCaptureTests: XCTestCase {
         XCTAssertTrue(try KeyEventPayload.decode(XCTUnwrap(capture.stop().first).payload).extended)
     }
 
+    func testCommandCIsIsolatedCtrlCClipboardRequestAndRestoresModifiers() throws {
+        var capture = ControllerInputCapture()
+        capture.start()
+        _ = capture.modifierSnapshot([55, 56])
+        let commands = capture.clipboardCopyShortcut()
+        XCTAssertEqual(commands.map(\.messageType), [
+            .keyEvent, .keyEvent,
+            .keyEvent, .keyEvent, .keyEvent, .keyEvent,
+            .clipboardRequest,
+            .keyEvent, .keyEvent,
+        ])
+        let keys = try commands.compactMap { command -> KeyEventPayload? in
+            guard case .key = command else { return nil }
+            return try KeyEventPayload.decode(command.payload)
+        }
+        XCTAssertEqual(keys.map(\.action), [.up, .up, .down, .down, .up, .up, .down, .down])
+        XCTAssertEqual(Array(keys[2...5].map(\.scanCode)), [0x1d, 0x2e, 0x2e, 0x1d])
+        XCTAssertEqual(capture.heldCount, 2)
+        XCTAssertTrue(capture.clipboardCopyShortcut().contains(.clipboardRequest))
+        _ = capture.modifierSnapshot([])
+        XCTAssertTrue(capture.clipboardCopyShortcut().isEmpty)
+    }
+
     func testBlackBarsRejectDownButAllowTrackedRelease() {
         var capture = ControllerInputCapture()
         capture.start()

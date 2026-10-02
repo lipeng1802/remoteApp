@@ -24,6 +24,8 @@ public enum MessageType: UInt16, Codable, CaseIterable {
     case pong = 0x000d
     case disconnect = 0x000e
     case error = 0x000f
+    case clipboardRequest = 0x0010
+    case clipboardText = 0x0011
 
     var isVideo: Bool {
         self == .videoFrameJPEG || self == .videoFrameH264

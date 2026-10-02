@@ -10,6 +10,10 @@ struct AuthenticatedInputSender {
         let screen: ScreenInfoPayload
         let jpeg: Data
     }
+    enum ReceivedMessage: Equatable {
+        case jpeg(ReceivedJpegFrame)
+        case clipboard(ClipboardTextPayload)
+    }
     enum State: Equatable { case authenticating, active, draining, finished, failed }
     private(set) var state: State = .authenticating
     private var gate = SessionGate(localRole: .controller)
@@ -17,6 +21,7 @@ struct AuthenticatedInputSender {
     private let key: Data
     private let nonce: Data
     private let acceptsJpeg: Bool
+    private let acceptsClipboard: Bool
     private var agentNonce: Data?
     private var screen: ScreenInfoPayload?
     private var incomingSequence: UInt32 = 1
@@ -32,16 +37,20 @@ struct AuthenticatedInputSender {
     private var nextHeartbeat: Double
     private var nextWrite: Double
     private var lastTime: Double
+    private var clipboardRequestPending = false
+    private var clipboardDeadline: Double?
     var pendingCount: Int { queue.count }
     var hasWriteInFlight: Bool { inFlight != nil }
 
-    init(deviceKey: Data, localControlAllowed: Bool = false, acceptsJpeg: Bool = false, capacity: Int = 64,
+    init(deviceKey: Data, localControlAllowed: Bool = false, acceptsJpeg: Bool = false,
+         acceptsClipboard: Bool = false, capacity: Int = 64,
          nonce: Data? = nil, now: Double) throws {
         guard localControlAllowed, deviceKey.count == 32, now.isFinite, now >= 0 else {
             throw InputSendError.invalidConfiguration
         }
         self.key = deviceKey
         self.acceptsJpeg = acceptsJpeg
+        self.acceptsClipboard = acceptsClipboard
         self.nonce = try nonce ?? SecureRandom.bytes(count: 32)
         guard self.nonce.count == 32 else { throw InputSendError.invalidConfiguration }
         queue = try InputSendQueue(capacity: capacity)
@@ -49,16 +58,26 @@ struct AuthenticatedInputSender {
         nextHeartbeat = now + 5
         nextWrite = now
         lastTime = now
+        var capabilities: Capabilities = [.input]
+        if acceptsJpeg { capabilities.insert(.jpeg) }
+        if acceptsClipboard { capabilities.insert(.clipboardText) }
         try queue.append(QueuedInputMessage(type: .hello,
-            payload: HelloPayload(role: .controller,
-                capabilities: acceptsJpeg ? [.jpeg, .input] : [.input], nonce: self.nonce).encode()))
+            payload: HelloPayload(role: .controller, capabilities: capabilities, nonce: self.nonce).encode()))
     }
 
     mutating func enqueue(_ inputs: [CapturedInput], now: Double) throws {
         do {
             try checkTime(now)
             guard state == .active else { throw InputSendError.invalidState }
+            let clipboardRequests = inputs.filter { $0.messageType == .clipboardRequest }.count
+            guard clipboardRequests <= 1, clipboardRequests == 0 || acceptsClipboard else {
+                throw InputSendError.invalidState
+            }
+            // A fast repeated Command+C must not tear down the whole control
+            // session. Keep at most one explicit clipboard read in flight.
+            if clipboardRequests == 1, clipboardRequestPending { return }
             try queue.append(inputs)
+            if clipboardRequests == 1 { clipboardRequestPending = true }
         } catch { abort(); throw error }
     }
 
@@ -118,15 +137,22 @@ struct AuthenticatedInputSender {
                 state = .finished
                 queue.stop()
             }
+            if frame.type == .clipboardRequest { clipboardDeadline = now + 5 }
         } catch { abort(); throw error }
     }
 
     @discardableResult
-    mutating func receive(_ frame: Frame, now: Double) throws -> ReceivedJpegFrame? {
+    mutating func receive(_ frame: Frame, now: Double) throws -> ReceivedMessage? {
         do {
             try checkTime(now)
-            let payloadLimit = acceptsJpeg && frame.type == .videoFrameJPEG
-                ? ProtocolConstants.maximumPayloadLength : 64
+            let payloadLimit: Int
+            if acceptsJpeg && frame.type == .videoFrameJPEG {
+                payloadLimit = ProtocolConstants.maximumPayloadLength
+            } else if acceptsClipboard && frame.type == .clipboardText {
+                payloadLimit = ClipboardTextPayload.maximumTextBytes + 1
+            } else {
+                payloadLimit = 64
+            }
             guard state != .finished, state != .failed, helloStarted,
                   frame.sequence == incomingSequence, frame.flags == 0,
                   frame.payload.count <= payloadLimit else {
@@ -138,7 +164,8 @@ struct AuthenticatedInputSender {
             case .hello:
                 let hello = try HelloPayload.decode(frame.payload)
                 guard hello.capabilities.contains(.input),
-                      !acceptsJpeg || hello.capabilities.contains(.jpeg) else {
+                      !acceptsJpeg || hello.capabilities.contains(.jpeg),
+                      !acceptsClipboard || hello.capabilities.contains(.clipboardText) else {
                     throw ProtocolError.invalidPayload
                 }
                 agentNonce = hello.nonce
@@ -158,7 +185,14 @@ struct AuthenticatedInputSender {
                 screen = try ScreenInfoPayload.decode(frame.payload)
             case .videoFrameJPEG:
                 guard acceptsJpeg, let screen else { throw ProtocolError.invalidState }
-                return ReceivedJpegFrame(screen: screen, jpeg: frame.payload)
+                return .jpeg(ReceivedJpegFrame(screen: screen, jpeg: frame.payload))
+            case .clipboardText:
+                guard acceptsClipboard, clipboardRequestPending, clipboardDeadline != nil else {
+                    throw ProtocolError.invalidState
+                }
+                clipboardRequestPending = false
+                clipboardDeadline = nil
+                return .clipboard(try ClipboardTextPayload.decode(frame.payload))
             case .pong:
                 guard let heartbeat, heartbeatDeadline != nil, frame.payload == heartbeat else {
                     throw ProtocolError.invalidPayload
@@ -184,6 +218,8 @@ struct AuthenticatedInputSender {
         heartbeat = nil
         heartbeatDeadline = nil
         closeDeadline = nil
+        clipboardRequestPending = false
+        clipboardDeadline = nil
     }
 
     private mutating func checkTime(_ now: Double) throws {
@@ -194,5 +230,6 @@ struct AuthenticatedInputSender {
         if let closeDeadline, now >= closeDeadline { throw InputSendError.closingTimeout }
         if let writeDeadline, now >= writeDeadline { throw InputSendError.writeTimeout }
         if let heartbeatDeadline, now >= heartbeatDeadline { throw InputSendError.heartbeatTimeout }
+        if let clipboardDeadline, now >= clipboardDeadline { throw InputSendError.writeTimeout }
     }
 }

@@ -30,6 +30,7 @@ final class InputConnectionDriver {
     private var announcedAuthentication = false
     private let receivesJpeg: Bool
     private var onJpegFrame: ((AuthenticatedInputSender.ReceivedJpegFrame) -> Void)?
+    private var onClipboardText: ((ClipboardTextPayload) -> Void)?
     private let connectDeadline: Double
     private var onAuthenticated: (() -> Void)?
     private var completion: ((Result<Void, InputSimulationError>) -> Void)?
@@ -40,6 +41,7 @@ final class InputConnectionDriver {
          clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime },
          connectTimeout: Double = 15,
          onJpegFrame: ((AuthenticatedInputSender.ReceivedJpegFrame) -> Void)? = nil,
+         onClipboardText: ((ClipboardTextPayload) -> Void)? = nil,
          onAuthenticated: @escaping () -> Void,
          completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws {
         guard connectTimeout.isFinite, connectTimeout > 0, connectTimeout <= 300 else {
@@ -53,11 +55,13 @@ final class InputConnectionDriver {
         let shouldReceiveJpeg = onJpegFrame != nil
         receivesJpeg = shouldReceiveJpeg
         self.onJpegFrame = onJpegFrame
+        self.onClipboardText = onClipboardText
         self.onAuthenticated = onAuthenticated
         self.completion = completion
         let now = clock()
         sender = try AuthenticatedInputSender(deviceKey: deviceKey,
-            localControlAllowed: localControlAllowed, acceptsJpeg: shouldReceiveJpeg, now: now)
+            localControlAllowed: localControlAllowed, acceptsJpeg: shouldReceiveJpeg,
+            acceptsClipboard: onClipboardText != nil, now: now)
         decoder.allowJpeg = shouldReceiveJpeg
         connectDeadline = now + connectTimeout
         queue.setSpecific(key: queueKey, value: 1)
@@ -159,13 +163,21 @@ final class InputConnectionDriver {
                 guard success else { self.end(.failure(.connectionFailed)); return }
                 do {
                     // Bound each adapter callback even though a JPEG may span many callbacks.
-                    let callbackLimit = self.receivesJpeg ? 65_536 : 4_096
+                    let callbackLimit = self.receivesJpeg || self.onClipboardText != nil ? 65_536 : 4_096
                     guard (data?.count ?? 0) <= callbackLimit else {
                         throw ProtocolError.messageTooLarge(data?.count ?? 0)
                     }
                     for frame in try self.decoder.append(data ?? Data()) {
-                        if let video = try self.sender.receive(frame, now: self.clock()) {
-                            self.onJpegFrame?(video)
+                        if let message = try self.sender.receive(frame, now: self.clock()) {
+                            switch message {
+                            case .jpeg(let video): self.onJpegFrame?(video)
+                            case .clipboard(let clipboard):
+                                self.callbackQueue.async { [weak self] in
+                                    guard let self else { return }
+                                    let callback = self.own { self.ended ? nil : self.onClipboardText }
+                                    callback?(clipboard)
+                                }
+                            }
                         }
                         if self.sender.state == .failed { self.end(.failure(.protocolFailure)); return }
                     }
@@ -206,6 +218,7 @@ final class InputConnectionDriver {
         completion = nil
         onAuthenticated = nil
         onJpegFrame = nil
+        onClipboardText = nil
         callbackQueue.async { callback?(result) }
     }
 }

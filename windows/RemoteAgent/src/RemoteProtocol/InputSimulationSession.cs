@@ -9,7 +9,8 @@ public sealed record InputSimulationOptions(
     bool LocalControlAllowed = false,
     int BurstLimit = 120,
     int EventsPerSecond = 240,
-    TimeSpan? ReadTimeout = null)
+    TimeSpan? ReadTimeout = null,
+    Func<CancellationToken, Task<ClipboardTextPayload>>? ReadClipboardText = null)
 {
     internal void Validate()
     {
@@ -26,14 +27,16 @@ internal static class InputSimulationSession
         InputSimulationOptions options, CancellationToken cancellationToken)
     {
         await RunReadLoopAsync(wire, gate, options,
-            (payload, token) => wire.WriteAsync(MessageType.Pong, payload, token),
+            (type, payload, token) => wire.WriteAsync(type, payload, token),
+            clipboardNegotiated: options.ReadClipboardText is not null,
             cancellationToken).ConfigureAwait(false);
     }
 
     // The duplex JPEG profile supplies a bounded callback so only its single
     // writer touches ProbeFrameStream's outgoing sequence and TLS writes.
     internal static async Task RunReadLoopAsync(ProbeFrameStream wire, SessionGate gate,
-        InputSimulationOptions options, Func<byte[], CancellationToken, Task> sendPong,
+        InputSimulationOptions options, Func<MessageType, byte[], CancellationToken, Task> sendResponse,
+        bool clipboardNegotiated,
         CancellationToken cancellationToken)
     {
         if (!options.LocalControlAllowed)
@@ -63,7 +66,15 @@ internal static class InputSimulationSession
                 gate.Receive(frame);
                 if (frame.Payload.Length != 8)
                     throw new ProtocolException(ProtocolError.InvalidPayload, "Invalid heartbeat.");
-                await sendPong(frame.Payload, deadline.Token).ConfigureAwait(false);
+                await sendResponse(MessageType.Pong, frame.Payload, deadline.Token).ConfigureAwait(false);
+            }
+            else if (frame.Type == MessageType.ClipboardRequest)
+            {
+                gate.Receive(frame);
+                if (!clipboardNegotiated || options.ReadClipboardText is null || frame.Payload.Length != 0)
+                    throw new ProtocolException(ProtocolError.InvalidState, "Clipboard text is not negotiated.");
+                var clipboard = await options.ReadClipboardText(deadline.Token).ConfigureAwait(false);
+                await sendResponse(MessageType.ClipboardText, clipboard.Encode(), deadline.Token).ConfigureAwait(false);
             }
             else dispatcher.Apply(frame);
         }

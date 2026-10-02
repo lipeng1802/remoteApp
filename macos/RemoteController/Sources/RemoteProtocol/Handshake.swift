@@ -17,6 +17,7 @@ public struct Capabilities: OptionSet, Equatable, Sendable {
     public static let h264 = Capabilities(rawValue: 1 << 1)
     public static let input = Capabilities(rawValue: 1 << 2)
     public static let reconnect = Capabilities(rawValue: 1 << 3)
+    public static let clipboardText = Capabilities(rawValue: 1 << 4)
 }
 
 public struct HelloPayload: Equatable {
@@ -256,6 +257,8 @@ public extension MessageType {
         switch self {
         case .screenInfo, .videoFrameJPEG, .videoFrameH264,
              .mouseMove, .mouseButton, .mouseWheel, .keyEvent, .ping, .pong:
+            return true
+        case .clipboardRequest, .clipboardText:
             return true
         default:
             return false

@@ -1,17 +1,19 @@
 # 下一次 Codex 会话交接
 
-## 当前：Mac 失焦自动恢复；远程剪贴板尚未实现（2026-10-02，最新）
+## 当前：Mac 失焦自动恢复与 Windows → Mac 文本剪贴板切片（2026-10-02，最新）
 
 用户实测发现 Mac 切换到其他应用时会安全释放输入，但返回 RemoteController 后仍需再次点击“开始控制”。随后澄清第二项不是 Windows 配对密钥复制：实际是在 Mac RemoteController 中操作 Windows，复制 Windows 应用里的内容后，无法粘贴到 Mac。
 
 本切片已修改源码：
 
 - Mac 仍在应用或窗口失焦时立即发送所有按键/鼠标释放，避免 Windows 留下“持有”；但保留本次控制意图。回到 RemoteController 且窗口重新成为 key window 后，画面输入视图自动重新取得焦点并恢复捕获，不再要求再次点击“开始控制”。用户主动按 Esc、点击“停止控制”、断开或发送失败仍会真正停止，不会自动恢复。
-- 当前协议只传输画面与键鼠事件，没有 Clipboard 消息、Windows 剪贴板读取或 Mac NSPasteboard 写入。Mac 键盘触发的复制最多只会改变 Windows 会话内的剪贴板，不会跨 TLS 回传到 Mac；这与 RDP 剪贴板重定向无关。此前因误解添加的 Windows“复制配对密钥”界面已撤回。
-- Mac `swift test` **114/114** 通过，`swift build -c release` 通过。远程剪贴板需要作为新的安全切片设计并实现，不能把现状记录为普通复制故障已修复。
-- 已从产品提交 `1e6a224fb33c` 生成 macOS 0.3.0 DMG；打包门禁再次完成 **114/114**、Release 构建、签名校验和 DMG 校验。DMG 大小 **492129 bytes**，SHA-256 `728915171db9eff8b404a4085169727581967ef3f6f2f9959c322671f6fd920e`。尚未覆盖 `/Applications` 中的当前安装版，避免在用户未准备测试时触发 ad-hoc 签名变化带来的 Keychain 授权提示。
+- 新增认证能力 `ClipboardText`、显式 `ClipboardRequest` 和 `ClipboardText` 响应。只有双方声明能力、HMAC/TLS 认证完成且 Windows 本次明确允许真实控制时才可使用；Mac 只接受与本机未完成请求匹配的响应，拒绝服务端主动推送剪贴板。
+- RemoteController 捕获远程画面中的 `Command+C` 后，临时释放已映射到 Windows 的修饰键，发送隔离的 Windows `Ctrl+C`、一次剪贴板请求，再恢复仍物理按住的修饰键；重复按键不会堆积请求或断开会话。Windows 等待 120 ms 让前台程序处理复制，仅在 WPF STA 线程读取一次纯文本，剪贴板忙时有限重试。
+- 只传 Windows → Mac 的 UTF-8 纯文本，最大 **32 KiB**；无文本、过大和 Mac 写入失败均显示固定状态。不支持 Mac → Windows、文件、图片、富文本或后台监听，也不把剪贴板内容写入状态、日志或指标。
+- Mac `swift test` **119/119** 通过，`swift build -c release` 通过，包含 payload 边界、UTF-8、能力协商、未请求响应拒绝、重复请求、Command+C 修饰键恢复及驱动回调测试。Windows 新增两项协议测试，预期 RemoteProtocol 从 **63/63** 增至 **65/65**，WindowsInput 仍为 **10/10**；本机没有 .NET SDK，Windows 编译与实测待交接。
+- 先前从产品提交 `1e6a224fb33c` 生成的 macOS 0.3.0 DMG 不包含本剪贴板切片，不再作为本轮候选；尚未覆盖 `/Applications` 中的当前安装版。待 Windows 编译门禁通过并提交交接后，再从本切片产品提交生成双方匹配的安装包，避免协议能力不匹配。
 
-后续双机人工检查：开始真实控制并按住一个修饰键切换到其他 Mac 应用，Windows 必须立即显示“持有 0”；返回 RemoteController 后无需点击“开始控制”，鼠标或键盘应可继续控制。Esc/“停止控制”后再切换窗口不得自动恢复。远程剪贴板后续建议先做显式的纯文本 Windows → Mac 同步，限制 UTF-8 大小、要求双方控制授权并由用户主动触发，不后台监控、不支持文件/图片、不把剪贴板写入日志。
+Windows 接手后运行默认打包脚本，预期 Release 0 错误、RemoteProtocol **65/65**、WindowsInput **10/10**。覆盖安装新版 Agent 后，Mac 也必须使用包含本切片的新版。双机检查：在 Windows 记事本分别选择英文、中文和多行文本，在远程画面按 Mac `Command+C`，RemoteController 应提示已写入 Mac 剪贴板，随后切换到本地文本编辑器用 `Command+V` 粘贴并逐字核对。再验证无选区/非文本、超过 32 KiB、快速连续两次复制、复制后继续键鼠控制，以及按住 Shift+Command+C 后双方最终“持有 0”。同时复测失焦自动恢复；Esc/“停止控制”后切换窗口不得自动恢复。
 
 ## 当前：Windows 图形化配对重装与三次无密码重连通过（2026-10-02，最新）
 

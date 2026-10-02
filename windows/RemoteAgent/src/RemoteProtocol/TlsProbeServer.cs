@@ -149,11 +149,13 @@ public static class TlsProbeServer
         CancellationTokenSource sessionDeadline, Func<IJpegFrameSource>? createJpegSource, Action<string>? reportStatus,
         Action<JpegTransferMetrics>? reportMetrics, TimeSpan frameTimeout, InputSimulationOptions? inputSimulation)
     {
-        var wire = new ProbeFrameStream(tls, createJpegSource is not null);
+        var clipboardAvailable = inputSimulation?.ReadClipboardText is not null;
+        var wire = new ProbeFrameStream(tls, createJpegSource is not null, clipboardAvailable);
         var gate = new SessionGate(PeerRole.Agent);
         var agentNonce = RandomNumberGenerator.GetBytes(32);
         var capabilities = (createJpegSource is null ? Capabilities.None : Capabilities.Jpeg) |
-            (inputSimulation is null ? Capabilities.None : Capabilities.Input);
+            (inputSimulation is null ? Capabilities.None : Capabilities.Input) |
+            (clipboardAvailable ? Capabilities.ClipboardText : Capabilities.None);
         await wire.WriteAsync(MessageType.Hello,
             new HelloPayload(PeerRole.Agent, 1, 1, capabilities, agentNonce).Encode(), cancellationToken);
         var helloFrame = await Receive(MessageType.Hello);
@@ -162,6 +164,10 @@ public static class TlsProbeServer
             throw new ProtocolException(ProtocolError.InvalidPayload, "Peer does not support JPEG.");
         var inputNegotiated = inputSimulation is not null &&
             controllerHello.Capabilities.HasFlag(Capabilities.Input);
+        var clipboardNegotiated = clipboardAvailable &&
+            controllerHello.Capabilities.HasFlag(Capabilities.ClipboardText);
+        if (inputSimulation is not null && clipboardAvailable && !clipboardNegotiated)
+            inputSimulation = inputSimulation with { ReadClipboardText = null };
         if (createJpegSource is null && inputSimulation is not null && !inputNegotiated)
             throw new ProtocolException(ProtocolError.InvalidPayload, "Input capability required for simulation.");
         reportStatus?.Invoke("正在验证应用密钥");

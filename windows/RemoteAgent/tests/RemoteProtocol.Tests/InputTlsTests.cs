@@ -12,6 +12,7 @@ internal static class InputTlsTests
     public static void CoalescedQueue() => Run("queue");
     public static void CaptureLifecycle() => Run("capture");
     public static void Success() => Run("success");
+    public static void Clipboard() => Run("clipboard");
     public static void WrongKey() => Run("wrong-key");
     public static void PreAuth() => Run("preauth");
     public static void NoCapability() => Run("no-capability");
@@ -70,7 +71,10 @@ internal static class InputTlsTests
         var options = new InputSimulationOptions(() => { constructed = true; return sink; },
             LocalControlAllowed: mode != "no-local", BurstLimit: mode == "rate" ? 3 : 120,
             EventsPerSecond: mode == "rate" ? 1 : 240,
-            ReadTimeout: mode == "idle" ? TimeSpan.FromSeconds(1) : TimeSpan.FromSeconds(5));
+            ReadTimeout: mode == "idle" ? TimeSpan.FromSeconds(1) : TimeSpan.FromSeconds(5),
+            ReadClipboardText: mode == "clipboard"
+                ? _ => Task.FromResult(new ClipboardTextPayload(ClipboardTextStatus.Success, "跨设备 clipboard"))
+                : null);
         var server = TlsProbeServer.RunInputSimulationOnceAsync(port, certificate, key, new byte[16], options, stop.Token);
         using var client = new TcpClient { NoDelay = true };
         try
@@ -85,7 +89,11 @@ internal static class InputTlsTests
             var wire = new ProbeFrameStream(tls);
             uint nextSequence = 1;
             var hello = HelloPayload.Decode((await wire.ReadAsync(deadline.Token)).Payload);
-            Check(hello.Capabilities == Capabilities.Input && !constructed, "Simulation only advertises input; no sink before auth.");
+            var expectedCapabilities = mode == "clipboard"
+                ? Capabilities.Input | Capabilities.ClipboardText
+                : Capabilities.Input;
+            Check(hello.Capabilities == expectedCapabilities && !constructed,
+                "Simulation advertised unexpected capabilities or created sink before auth.");
             if (mode == "preauth")
             {
                 await Send(MessageType.KeyEvent, new KeyEventPayload(30, false, KeyAction.Down).Encode());
@@ -95,7 +103,7 @@ internal static class InputTlsTests
             }
             var nonce = RandomNumberGenerator.GetBytes(32);
             await Send(MessageType.Hello, new HelloPayload(PeerRole.Controller, 1, 1,
-                mode == "no-capability" ? Capabilities.Jpeg : Capabilities.Input, nonce).Encode());
+                mode == "no-capability" ? Capabilities.Jpeg : expectedCapabilities, nonce).Encode());
             if (mode == "no-capability")
             {
                 await ExpectFailure(e => e is ProtocolException { Error: ProtocolError.InvalidPayload });
@@ -119,6 +127,18 @@ internal static class InputTlsTests
             {
                 await ExpectFailure(e => e is ProtocolException { Error: ProtocolError.InvalidState });
                 Check(!constructed, "No local permission must not construct input.");
+                return;
+            }
+            if (mode == "clipboard")
+            {
+                await Send(MessageType.ClipboardRequest, []);
+                var response = await wire.ReadAsync(deadline.Token);
+                Check(response.Type == MessageType.ClipboardText, "Clipboard response type changed.");
+                Check(ClipboardTextPayload.Decode(response.Payload) ==
+                    new ClipboardTextPayload(ClipboardTextStatus.Success, "跨设备 clipboard"),
+                    "Clipboard response content changed.");
+                await Send(MessageType.Disconnect, [0, 0]);
+                await server;
                 return;
             }
             if (mode is "capture" or "queue")

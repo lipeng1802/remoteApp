@@ -18,6 +18,7 @@ public enum Capabilities : uint
     H264 = 1 << 1,
     Input = 1 << 2,
     Reconnect = 1 << 3,
+    ClipboardText = 1 << 4,
 }
 
 public sealed record HelloPayload(
@@ -285,7 +286,8 @@ public static class MessageTypeExtensions
     public static bool RequiresAuthentication(this MessageType type) => type is
         MessageType.ScreenInfo or MessageType.VideoFrameJpeg or MessageType.VideoFrameH264 or
         MessageType.MouseMove or MessageType.MouseButton or MessageType.MouseWheel or
-        MessageType.KeyEvent or MessageType.Ping or MessageType.Pong;
+        MessageType.KeyEvent or MessageType.Ping or MessageType.Pong or
+        MessageType.ClipboardRequest or MessageType.ClipboardText;
 
     public static bool IsHandshake(this MessageType type) => type is
         MessageType.Hello or MessageType.AuthChallenge or MessageType.AuthResponse or MessageType.AuthResult;

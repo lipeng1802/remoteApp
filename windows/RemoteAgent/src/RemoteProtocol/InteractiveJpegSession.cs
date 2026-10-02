@@ -17,7 +17,7 @@ internal static class InteractiveJpegSession
     {
         if (!input.LocalControlAllowed)
             throw new ProtocolException(ProtocolError.InvalidState, "Local input consent is required.");
-        var replies = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(16)
+        var replies = Channel.CreateBounded<(MessageType Type, byte[] Payload)>(new BoundedChannelOptions(16)
         {
             SingleReader = true,
             SingleWriter = true,
@@ -25,12 +25,12 @@ internal static class InteractiveJpegSession
         });
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var reader = InputSimulationSession.RunReadLoopAsync(wire, gate, input,
-            (payload, _) =>
+            (type, payload, _) =>
             {
-                if (!replies.Writer.TryWrite(payload.ToArray()))
-                    throw new ProtocolException(ProtocolError.InvalidState, "PONG reply queue is full.");
+                if (!replies.Writer.TryWrite((type, payload.ToArray())))
+                    throw new ProtocolException(ProtocolError.InvalidState, "Reply queue is full.");
                 return Task.CompletedTask;
-            }, lifetime.Token);
+            }, clipboardNegotiated: input.ReadClipboardText is not null, lifetime.Token);
 
         Exception? primaryFailure = null;
         try
@@ -50,13 +50,13 @@ internal static class InteractiveJpegSession
                     await reader.ConfigureAwait(false);
                     return;
                 }
-                if (replies.Reader.TryRead(out var pong))
+                if (replies.Reader.TryRead(out var reply))
                 {
                     using var replyDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     replyDeadline.CancelAfter(frameTimeout);
                     try
                     {
-                        await wire.WriteAsync(MessageType.Pong, pong, replyDeadline.Token).ConfigureAwait(false);
+                        await wire.WriteAsync(reply.Type, reply.Payload, replyDeadline.Token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && replyDeadline.IsCancellationRequested)
                     {

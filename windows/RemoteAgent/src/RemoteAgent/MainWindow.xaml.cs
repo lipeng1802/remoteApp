@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using RemoteProtocol;
@@ -145,7 +146,8 @@ public partial class MainWindow : Window
                 ? new InputSimulationOptions(
                     () => new SessionNativeInputSink(snapshot => Dispatcher.BeginInvoke(() =>
                         ControlText.Text = $"远程控制中 · 事件 {snapshot.Events} · 释放 {snapshot.Releases} · 持有 {snapshot.Held}")),
-                    LocalControlAllowed: true)
+                    LocalControlAllowed: true,
+                    ReadClipboardText: ReadClipboardTextAsync)
                 : null;
             await Task.Run(() => TlsProbeServer.RunContinuousAsync(endpoints.Local, endpoints.Peer, 47475,
                 certificate, credentials.DeviceKey, credentials.AgentIdentifier, lifetime.Token,
@@ -194,6 +196,39 @@ public partial class MainWindow : Window
             ControlText.Text = ControlConsent.IsChecked == true
                 ? "已选择：开始共享时还需确认，之后会真实操作 Windows"
                 : "未允许：本次共享只发送画面";
+    }
+
+    private async Task<ClipboardTextPayload> ReadClipboardTextAsync(CancellationToken cancellationToken)
+    {
+        // SendInput is asynchronous. Give the foreground application a brief chance
+        // to process Ctrl+C before reading its clipboard result on the WPF STA thread.
+        await Task.Delay(120, cancellationToken).ConfigureAwait(false);
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await Dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    if (!Clipboard.ContainsText(TextDataFormat.UnicodeText))
+                        return (Busy: false, Payload: new ClipboardTextPayload(
+                            ClipboardTextStatus.Unavailable, string.Empty));
+                    var text = Clipboard.GetText(TextDataFormat.UnicodeText);
+                    var payload = Encoding.UTF8.GetByteCount(text) <= ClipboardTextPayload.MaximumTextBytes
+                        ? new ClipboardTextPayload(ClipboardTextStatus.Success, text)
+                        : new ClipboardTextPayload(ClipboardTextStatus.TooLarge, string.Empty);
+                    return (Busy: false, Payload: payload);
+                }
+                catch (ExternalException)
+                {
+                    return (Busy: true, Payload: new ClipboardTextPayload(
+                        ClipboardTextStatus.Unavailable, string.Empty));
+                }
+            });
+            if (!result.Busy) return result.Payload;
+            await Task.Delay(40, cancellationToken).ConfigureAwait(false);
+        }
+        return new ClipboardTextPayload(ClipboardTextStatus.Unavailable, string.Empty);
     }
 
     private void PairingKey_Click(object sender, RoutedEventArgs e)
