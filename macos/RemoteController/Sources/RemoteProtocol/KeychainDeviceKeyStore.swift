@@ -1,9 +1,15 @@
 import Foundation
 import Security
 
+public enum DeviceKeychainService {
+    public static let legacy = "com.personalremotedesktop.controller.device-key"
+    public static let application = "com.personalremotedesktop.controller.device-key.v2"
+}
+
 public final class KeychainDeviceKeyStore {
     private let service: String
-    public init(service: String = "com.personalremotedesktop.controller.device-key") {
+
+    public init(service: String = DeviceKeychainService.legacy) {
         self.service = service
     }
     public func loadKey(for deviceIdentifier: String) throws -> Data? {
@@ -39,7 +45,11 @@ public final class KeychainDeviceKeyStore {
         guard !deviceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw FingerprintStoreError.invalidDeviceIdentifier
         }
-        return [kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service, kSecAttrAccount as String: deviceIdentifier]
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: deviceIdentifier
+        ]
+        return query
     }
 }

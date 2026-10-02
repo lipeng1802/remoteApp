@@ -40,8 +40,19 @@ private final class ViewerModel: ObservableObject {
     @Published var requestControl = false
     @Published var controlReady = false
     @Published var controlCapturing = false
+    @Published var pairingKey = ""
+    @Published var pairingStatus = "首次使用请保存 Windows 显示的配对密钥"
     @Published var screenInfo: ScreenInfoPayload?
-    private let fingerprintStore = KeychainTrustedFingerprintStore()
+    // Development DMGs are ad-hoc signed and have no provisioned keychain
+    // access group. Keep app-owned items separate from legacy CLI-created
+    // items; switch these v2 services to the data-protection keychain when
+    // Developer ID signing and its entitlements are available.
+    private let fingerprintStore = KeychainTrustedFingerprintStore(
+        service: FingerprintKeychainService.application
+    )
+    private let deviceKeyStore = KeychainDeviceKeyStore(
+        service: DeviceKeychainService.application
+    )
     private lazy var readOnlyClient = TLSControllerClient(trustStore: fingerprintStore)
     private var duplexClient: TLSInputSimulationClient?
     private var stopConnection: (() -> Void)?
@@ -56,8 +67,8 @@ private final class ViewerModel: ObservableObject {
         guard !address.isEmpty else { status = "请输入 Windows Tailscale 地址"; return }
         let key: Data
         do {
-            guard let stored = try KeychainDeviceKeyStore().loadKey(for: address) else {
-                status = "尚未配对：请先用 TLSProbeClient --pair 为同一地址保存密钥"
+            guard let stored = try deviceKeyStore.loadKey(for: address) else {
+                status = "尚未配对：请在上方输入 Windows 显示的配对密钥并保存"
                 return
             }
             key = stored
@@ -152,6 +163,27 @@ private final class ViewerModel: ObservableObject {
             })
     }
 
+    func savePairingKey() {
+        guard !connected else { return }
+        let address = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !address.isEmpty else {
+            pairingStatus = "请先输入 Windows Tailscale 地址"
+            return
+        }
+        do {
+            let key = try PairingKeyParser.parseBase64(pairingKey)
+            try deviceKeyStore.saveKey(key, for: address)
+            pairingKey = ""
+            pairingStatus = "配对密钥已安全保存；首次连接还需核对一次证书指纹"
+        } catch PairingKeyParserError.invalidEncoding {
+            pairingStatus = "配对密钥不是有效的 Base64"
+        } catch PairingKeyParserError.invalidLength {
+            pairingStatus = "配对密钥长度不正确"
+        } catch {
+            pairingStatus = "无法保存配对密钥"
+        }
+    }
+
     private func complete(status: String) {
         inputCanvas?.abandon()
         connected = false
@@ -239,6 +271,18 @@ private struct ContentView: View {
                 Button("连接") { model.connect() }.disabled(model.connected)
                 Button("断开") { model.disconnect() }.disabled(!model.connected)
             }
+            HStack {
+                SecureField("Windows 配对密钥（Base64）", text: $model.pairingKey)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(model.connected)
+                Button("保存配对") { model.savePairingKey() }
+                    .disabled(model.connected || model.pairingKey.isEmpty)
+            }
+            HStack {
+                Text(model.pairingStatus).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .font(.caption)
             HStack {
                 Toggle("请求远程控制（会真实操作 Windows）", isOn: $model.requestControl)
                     .disabled(model.connected)

@@ -13,23 +13,25 @@ public enum FingerprintStoreError: Error, Equatable {
     case keychainStatus(OSStatus)
 }
 
+public enum FingerprintKeychainService {
+    public static let legacy = "com.personalremotedesktop.controller.certificate-fingerprint"
+    public static let application = "com.personalremotedesktop.controller.certificate-fingerprint.v2"
+}
+
 public final class KeychainTrustedFingerprintStore: TrustedFingerprintStore {
     private let service: String
 
-    public init(service: String = "com.personalremotedesktop.controller.certificate-fingerprint") {
+    public init(service: String = FingerprintKeychainService.legacy) {
         self.service = service
     }
 
     public func loadFingerprint(for deviceIdentifier: String) throws -> CertificateFingerprint? {
         try validate(deviceIdentifier)
         var result: CFTypeRef?
-        let status = SecItemCopyMatching([
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: deviceIdentifier,
-            kSecReturnData: true,
-            kSecMatchLimit: kSecMatchLimitOne
-        ] as CFDictionary, &result)
+        var query = baseQuery(deviceIdentifier)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
 
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw FingerprintStoreError.keychainStatus(status) }
@@ -46,11 +48,7 @@ public final class KeychainTrustedFingerprintStore: TrustedFingerprintStore {
         for deviceIdentifier: String
     ) throws {
         try validate(deviceIdentifier)
-        let query = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: deviceIdentifier
-        ] as CFDictionary
+        let query = baseQuery(deviceIdentifier) as CFDictionary
         let attributes = [kSecValueData: fingerprint.bytes] as CFDictionary
 
         let updateStatus = SecItemUpdate(query, attributes)
@@ -59,13 +57,10 @@ public final class KeychainTrustedFingerprintStore: TrustedFingerprintStore {
             throw FingerprintStoreError.keychainStatus(updateStatus)
         }
 
-        let addStatus = SecItemAdd([
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: deviceIdentifier,
-            kSecValueData: fingerprint.bytes,
-            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        ] as CFDictionary, nil)
+        var add = baseQuery(deviceIdentifier)
+        add[kSecValueData as String] = fingerprint.bytes
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
             throw FingerprintStoreError.keychainStatus(addStatus)
         }
@@ -73,11 +68,7 @@ public final class KeychainTrustedFingerprintStore: TrustedFingerprintStore {
 
     public func removeFingerprint(for deviceIdentifier: String) throws {
         try validate(deviceIdentifier)
-        let status = SecItemDelete([
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: deviceIdentifier
-        ] as CFDictionary)
+        let status = SecItemDelete(baseQuery(deviceIdentifier) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw FingerprintStoreError.keychainStatus(status)
         }
@@ -87,6 +78,15 @@ public final class KeychainTrustedFingerprintStore: TrustedFingerprintStore {
         guard !deviceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw FingerprintStoreError.invalidDeviceIdentifier
         }
+    }
+
+    private func baseQuery(_ deviceIdentifier: String) -> [String: Any] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: deviceIdentifier
+        ]
+        return query
     }
 }
 

@@ -1,5 +1,20 @@
 # 下一次 Codex 会话交接
 
+## 当前：图形化配对与 Mac Keychain 弹窗收口（2026-10-02，最新）
+
+用户反馈 Mac 连接时频繁要求输入 macOS 用户密码。根因与当前开发流程一致：设备密钥由 TLSProbeClient 命令行程序创建，图形应用是另一个 Keychain 访问主体；同时开发 DMG 仅 ad-hoc 签名，指定要求是会随产物变化的 CDHash，不能提供正式签名应用的稳定身份。
+
+本切片已实现：
+
+- Windows WPF 增加显式“显示/隐藏配对密钥”，仅用户点击后才展示；启动共享或关闭窗口会清空并隐藏文本。界面明确警告密钥不得发送到聊天、邮件或日志。
+- Mac GUI 增加 SecureField 和“保存配对”；只接受解码后精确 32 字节的 Base64，以 Windows Tailscale 地址为 account 存入应用专用 v2 Keychain service。
+- Mac 不再自动读取旧命令行 v1 设备密钥或指纹条目，因此不会为了旧 ACL 弹出密码框。旧条目不删除，可回退；用户需在新 GUI 中重新输入一次配对密钥，首次连接再核对一次证书指纹。
+- 新增配对密钥解析正反测试；Mac Release 全量 **114/114** 通过。Windows 源码只能在 Windows 实机编译，Release/63/10 及 GUI 展示仍待后续验证。
+
+曾尝试将新条目切到 macOS Data Protection Keychain，实测返回 -34018（缺少经配置文件授权的 Keychain entitlement），因此没有把不可用路径留在产品中。当前 v2 仍是标准 macOS Keychain，但由图形应用自己创建，解决同一开发包日常连接的反复授权。要保证升级后仍有稳定 Keychain 身份，必须完成 Apple Developer ID 签名、配置文件与公证，不伪造 entitlement。
+
+Tailscale 本切片不直接嵌入：官方 tsnet 是 Go 库，嵌入后应用会成为独立 Tailnet 节点；macOS 完整客户端还需系统扩展/VPN 用户授权，不能静默合并或绕过系统确认。MVP 继续使用官方 Tailscale 客户端；下一个可独立切片可在两端 GUI 增加“未安装/未登录/已连接”状态与一键打开官方安装或登录入口，但不代为安装系统扩展。
+
 ## 当前：macOS 0.3.0 覆盖安装与可恢复卸载已验收（2026-10-02，最新）
 
 Windows 实体键盘 `Ctrl + Alt + Esc` 仍为**待验收**：用户当前无法使用 Windows 实体键盘，本项因验证环境不可用而延期，不记为通过或失败。RDP 不能代替该证据。下方 `d1b536b` 的 Windows 自动测试、注入拒绝和安装证据保留，待可接触实体键盘时按原清单继续。

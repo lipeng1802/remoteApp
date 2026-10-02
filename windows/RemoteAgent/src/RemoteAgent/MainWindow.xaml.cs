@@ -125,6 +125,8 @@ public partial class MainWindow : Window
         var quality = QualitySelector.SelectedIndex switch { 0 => 40, 2 => 85, _ => 70 };
         QualitySelector.IsEnabled = false;
         ControlConsent.IsEnabled = false;
+        HidePairingKey();
+        PairingKeyButton.IsEnabled = false;
         StartButton.IsEnabled = false;
         StopButton.IsEnabled = true;
         MetricsText.Text = "等待首帧统计";
@@ -180,6 +182,7 @@ public partial class MainWindow : Window
             QualitySelector.IsEnabled = true;
             ControlConsent.IsChecked = false;
             ControlConsent.IsEnabled = true;
+            PairingKeyButton.IsEnabled = true;
             ControlText.Text = "未允许：下一次共享默认为只读";
             StartButton.IsEnabled = true;
             StopButton.IsEnabled = false;
@@ -192,9 +195,33 @@ public partial class MainWindow : Window
                 ? "已选择：开始共享时还需确认，之后会真实操作 Windows"
                 : "未允许：本次共享只发送画面";
     }
+
+    private void PairingKey_Click(object sender, RoutedEventArgs e)
+    {
+        if (PairingKeyText.Visibility == Visibility.Visible)
+        {
+            HidePairingKey();
+            return;
+        }
+        using var credentials = AgentCredentialStore.LoadOrCreate();
+        PairingKeyText.Text = Convert.ToBase64String(credentials.DeviceKey);
+        PairingKeyText.Visibility = Visibility.Visible;
+        PairingKeyWarning.Visibility = Visibility.Visible;
+        PairingKeyButton.Content = "隐藏配对密钥";
+    }
+
+    private void HidePairingKey()
+    {
+        PairingKeyText.Text = string.Empty;
+        PairingKeyText.Visibility = Visibility.Collapsed;
+        PairingKeyWarning.Visibility = Visibility.Collapsed;
+        PairingKeyButton.Content = "显示配对密钥";
+    }
+
     private void Stop_Click(object sender, RoutedEventArgs e) => sharing?.Cancel();
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        HidePairingKey();
         sharing?.Cancel();
         if (windowSource is not null)
         {
