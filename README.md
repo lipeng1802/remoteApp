@@ -95,3 +95,7 @@ swift run -c release InputPreview
 ### 输入发送状态机
 
 有界队列、相邻移动合并、单写入序号、认证门禁、心跳与结束期限已加入。固定回环的 TLS 网络适配器已编写，Mac 新增代码仍待编译和实测；当前优先完成 [流程检查点](docs/WORKFLOW_REVIEW.md)，GUI 仍只读。
+
+git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
+
+git -c http.proxy=http://127.0.0.1:1080 push origin main
