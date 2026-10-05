@@ -1,12 +1,27 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-05 收口与下一阶段入口（优先于下方历史记录）
+
+用户已确认双向文本剪贴板及 Command+C/V 修复测试通过，当前产品基线为 `8d88ac0`，验收记录为 `dccda38`。剪贴板切片关闭；下方各轮“待双机验证”是历史状态，不再作为重复验收要求。功能范围限于显式纯文本复制粘贴，不扩大到文件/图片/富文本或后台同步。
+
+下一阶段调整为“免 Tailscale 登录的最终连接架构 PoC + 商业可行性确认”，建立独立 `codex/connection-architecture-poc` 分支。自动重连、外部 Tailscale 状态深度集成、H.264 与多平台角色扩展顺延；现有产品保持可回退基线。实施边界、验收和商务问题见 [连接架构 PoC](CONNECTION_ARCHITECTURE_POC.md)。
+
+保留但不阻塞本次架构研究的待办：
+
+- Windows 实体键盘 Ctrl+Alt+Esc：环境受限待验收，RDP 不替代证据。
+- 干净 Windows（无 .NET SDK/运行时）和干净 macOS（无开发工具）安装启动：环境未准备，待验收。
+- Apple Developer ID/公证、Windows Authenticode 及跨升级 Keychain 稳定身份：延期，未实现；用户先前明确暂缓签名切片。
+- 长时间耐久、帧率指标及未明确反馈的密钥界面生命周期：保留待验证，不因剪贴板通过而关闭。
+
+工作区 `README.md` 中代理 pull/push 命令是用户已有修改，保留且不纳入本次提交。不删除或重置现有 Tailscale、Keychain、Windows 配对凭据，不部署服务器或购买资源。
+
 ## 已通过：Mac Command+C/V 弹出 Windows 开始菜单修复（2026-10-02，最新）
 
 双机首次验证发现，在远程画面按 Mac `Command+C/V` 会弹出 Windows 开始菜单；`Control+C/V` 仅能操作 Windows 自己的剪贴板，不能替代跨设备同步，因此该轮结果判定不通过。根因是 AppKit 先发出 Command 的 `flagsChanged`，旧实现立即将其映射为 Windows 键按下，随后即使 C/V 被特殊处理，Windows 键的按下/释放仍会打开开始菜单。
 
 Mac 现改为延迟 Command：Command 刚按下时只在本地跟踪，不立即镜像到 Windows；若下一键是 C/V，则消费该 Command 并执行跨设备剪贴板，整个序列不产生任何 Windows 键事件；若下一键是其他键或鼠标按下，则先补发 Windows 键，再保持原有 Windows 快捷键行为。单独按下并释放 Command 仍补发完整 Windows 键按下/释放。失焦、停止、断开与发送失败会清空所有延迟/消费状态，不留下远程持有键。Mac 全量测试现为 **125/125 passed**，新增“剪贴板快捷键绝不镜像 Windows 键”和“其他快捷键仍可补发 Command”两项回归；Windows 源码与协议未改变，无需重装 Windows。
 
-用户已在安装修订 `8d88ac047cc9` 后完成双机复测并确认通过；此前 `Command+C/V` 弹出 Windows 开始菜单的问题已关闭，双向复制粘贴按本节清单通过。下一项优先处理 macOS ad-hoc 签名每次重建都会改变应用身份、从而重复触发 Keychain 密码授权的问题。
+用户已在安装修订 `8d88ac047cc9` 后完成双机复测并确认通过；此前 `Command+C/V` 弹出 Windows 开始菜单的问题已关闭，双向复制粘贴按本节清单通过。签名切片已按用户要求暂缓；下一项以本文件顶部 2026-10-05 的连接架构入口为准。
 
 Mac 重新安装本提交生成的包后复测：
 
