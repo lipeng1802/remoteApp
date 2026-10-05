@@ -4,6 +4,8 @@
 
 用户已确认双向文本剪贴板及 Command+C/V 修复测试通过，当前产品基线为 `8d88ac0`，验收记录为 `dccda38`。剪贴板切片关闭；下方各轮“待双机验证”是历史状态，不再作为重复验收要求。功能范围限于显式纯文本复制粘贴，不扩大到文件/图片/富文本或后台同步。
 
+本轮在正常 macOS 权限下运行 `swift test -c release`：构建成功，**125/125 passed，0 failures**，包括真实 TLS 回归。首次沙箱执行因 Swift 缓存访问受限失败，不是产品测试失败。Windows 本轮未重新执行，保留此前用户通过反馈，不新增 Windows 证据。
+
 下一阶段调整为“免 Tailscale 登录的最终连接架构 PoC + 商业可行性确认”，建立独立 `codex/connection-architecture-poc` 分支。自动重连、外部 Tailscale 状态深度集成、H.264 与多平台角色扩展顺延；现有产品保持可回退基线。实施边界、验收和商务问题见 [连接架构 PoC](CONNECTION_ARCHITECTURE_POC.md)。
 
 保留但不阻塞本次架构研究的待办：
