@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-05 自托管连接 PoC 首轮（当前入口）
+
+用户确认托管 Tailscale 商业许可/收费不符合规划，授权尝试新路线。候选改为 tsnet + 自托管 Headscale + 自托管 DERP；托管服务路线关闭。工作仍在 `codex/connection-architecture-poc`，产品 Swift/C#、安装包和原有 Tailscale 配对未修改。
+
+新增隔离原型 `poc/selfhost`，固定 Go 1.26.8、Headscale 0.29.4、tsnet 1.102.5；工具链在忽略的 `artifacts/connection-poc`，官方下载校验通过，不安装系统 Go。Headscale/DERP 仅在 loopback 上运行，DERP 临时证书采用 SHA-256 pin；注册 key 与随机会话 token 仅在父子进程管道中传递。关闭日志上传，不使用托管控制面/公共 DERP；没有部署公网服务或购买资源。
+
+本机已证实：免浏览器注册、自建 DERP 固定载荷、错误 token 双端拒绝、第三注册节点被 ACL 拒绝、被控节点重启后身份/地址保留且节点数仍为 3。Go 单元测试和 `go mod verify` 通过。Windows x64、Linux x64、Mac ARM64 helper 已交叉编译，不能记为各平台运行通过。既有产品 Mac 125/125 是收尾基线，本轮没有因 PoC 重测产品或 Windows。
+
+**完整 PoC 验收未通过。** v1.98.4 首轮关闭阻塞，升级至 v1.102.5 后仍复现；栈停在 `tsnet.Close → LocalBackend.Shutdown → userspaceEngine.Close` 的 WireGuard 关闭调用。先停止 WantRunning 再关闭的试验未解决，未保留该无效改动。helper 现给 Close 8 秒期限，超时明确报 `cleanup_timeout` 并非零退出，由进程退出回收资源；不是优雅关闭已修复。`verify.zsh` 全部网络检查后仍非零退出，最终 `FAIL graceful_shutdown_unresolved_network_checks_passed`。
+
+另一个未通过项：同一客户端退出后重新注册成功，但再次 Dial 报 `dial_failed`。错误 token 检查现放在同一存活节点中并由服务端 `token_rejected` 确认；这不关闭重连问题。所有本轮 fixture 进程和临时身份均已回收，没有清理原 Tailscale 或产品凭据。
+
+下一切片先定位/解决独立 helper 的 WireGuard 退出和客户端重连问题，明确生命周期与状态持久化，再考虑跨网、设备码/验证码后端和真实 TLS 桥接。暂不把候选宣布为最终底座。复现：仓库根目录 `zsh poc/selfhost/verify.zsh`；跨平台构建：`zsh poc/selfhost/cross-build.zsh`。重连复现：在 `poc/selfhost` 运行 `python3 smoke.py --check-reconnect`，本机已确认输出 `registered,dialing,closing,cleanup_timeout,dial_failed` 后 `FAIL client_reconnect_failed`。准备条件和边界见 [PoC README](../poc/selfhost/README.md) 与 [架构记录](CONNECTION_ARCHITECTURE_POC.md)。
+
 ## 2026-10-05 收口与下一阶段入口（优先于下方历史记录）
 
 用户已确认双向文本剪贴板及 Command+C/V 修复测试通过，当前产品基线为 `8d88ac0`，验收记录为 `dccda38`。剪贴板切片关闭；下方各轮“待双机验证”是历史状态，不再作为重复验收要求。功能范围限于显式纯文本复制粘贴，不扩大到文件/图片/富文本或后台同步。

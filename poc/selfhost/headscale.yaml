@@ -1,0 +1,32 @@
+# Local-only compatibility lab. Never use this HTTP config on a public server.
+server_url: http://127.0.0.1:18443
+listen_addr: 127.0.0.1:18443
+metrics_listen_addr: 127.0.0.1:19090
+grpc_listen_addr: 127.0.0.1:15443
+grpc_allow_insecure: false
+noise:
+  private_key_path: ../../artifacts/connection-poc/headscale/noise.key
+prefixes:
+  v4: 100.120.0.0/24
+  v6: fd7a:115c:a1e0:abcd::/64
+derp:
+  server:
+    enabled: false
+  urls: []
+  paths: [derp.yaml]
+  auto_update_enabled: false
+disable_check_updates: true
+database:
+  type: sqlite
+  sqlite:
+    path: ../../artifacts/connection-poc/headscale/db.sqlite
+dns:
+  magic_dns: false
+  override_local_dns: false
+policy:
+  mode: file
+  path: policy.json
+unix_socket: ../../artifacts/connection-poc/headscale/admin.sock
+unix_socket_permission: "0600"
+log:
+  level: warn

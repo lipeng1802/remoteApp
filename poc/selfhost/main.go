@@ -1,0 +1,263 @@
+// A fixed-payload transport experiment. This is not a product remote-control agent.
+package main
+
+import (
+	"context"
+	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/netip"
+	"net/url"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"time"
+
+	"tailscale.com/envknob"
+	"tailscale.com/tsnet"
+)
+
+const port = "47476"
+const payload = "remoteapp-selfhost-poc-v1"
+
+type config struct {
+	Role         string `json:"role"`
+	ControlURL   string `json:"control_url"`
+	StateDir     string `json:"state_dir"`
+	Hostname     string `json:"hostname"`
+	AuthKey      string `json:"auth_key"`
+	SessionToken string `json:"session_token"`
+	Peer         string `json:"peer"`
+	ForceRelay   bool   `json:"force_relay"`
+	CheckReject  bool   `json:"check_reject"`
+}
+
+func parseConfig(r io.Reader) (config, []byte, error) {
+	var c config
+	raw, readErr := io.ReadAll(io.LimitReader(r, 8193))
+	if readErr != nil || len(raw) > 8192 {
+		return c, nil, errors.New("invalid_config")
+	}
+	d := json.NewDecoder(strings.NewReader(string(raw)))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&c); err != nil {
+		return c, nil, errors.New("invalid_config")
+	}
+	var extra any
+	if d.Decode(&extra) != io.EOF {
+		return c, nil, errors.New("invalid_config")
+	}
+	u, err := url.Parse(c.ControlURL)
+	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
+		return c, nil, errors.New("invalid_control_url")
+	}
+	// First slice intentionally accepts only the isolated local Headscale lab.
+	if u.Scheme != "http" || u.Host != "127.0.0.1:18443" {
+		return c, nil, errors.New("nonlocal_control_rejected")
+	}
+	if c.Role != "serve" && c.Role != "probe" {
+		return c, nil, errors.New("invalid_role")
+	}
+	if c.Hostname != "poc-server" && c.Hostname != "poc-client" && c.Hostname != "poc-denied" {
+		return c, nil, errors.New("invalid_hostname")
+	}
+	// All private state stays under one explicit, separate PoC directory.
+	root, err := filepath.Abs("../../artifacts/connection-poc/nodes")
+	if err != nil || c.StateDir == "" {
+		return c, nil, errors.New("invalid_state_dir")
+	}
+	c.StateDir, err = filepath.Abs(c.StateDir)
+	rel, relErr := filepath.Rel(root, c.StateDir)
+	if err != nil || relErr != nil || rel == "." || strings.Contains(rel, string(filepath.Separator)) || strings.HasPrefix(rel, ".") {
+		return c, nil, errors.New("invalid_state_dir")
+	}
+	token, err := hex.DecodeString(c.SessionToken)
+	if err != nil || len(token) != 32 {
+		return c, nil, errors.New("invalid_session_token")
+	}
+	if len(c.AuthKey) == 0 || len(c.AuthKey) > 256 {
+		return c, nil, errors.New("registration_key_required")
+	}
+	if c.Role == "probe" && c.Peer != "100.120.0.1" {
+		return c, nil, errors.New("unapproved_peer")
+	}
+	return c, token, nil
+}
+
+func exchange(conn net.Conn, token []byte, server bool) error {
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if server {
+		got := make([]byte, 32)
+		if _, err := io.ReadFull(conn, got); err != nil {
+			return errors.New("request_failed")
+		}
+		if subtle.ConstantTimeCompare(got, token) != 1 {
+			return errors.New("unauthorized")
+		}
+		if _, err := io.WriteString(conn, payload); err != nil {
+			return errors.New("response_failed")
+		}
+		return nil
+	}
+	if n, err := conn.Write(token); err != nil || n != len(token) {
+		return errors.New("request_failed")
+	}
+	got := make([]byte, len(payload))
+	if _, err := io.ReadFull(conn, got); err != nil || string(got) != payload {
+		return errors.New("response_failed")
+	}
+	return nil
+}
+
+func emit(status string, ips []netip.Addr) {
+	json.NewEncoder(os.Stdout).Encode(struct {
+		Status    string       `json:"status"`
+		Addresses []netip.Addr `json:"addresses,omitempty"`
+	}{status, ips})
+}
+
+func closeWithin(closeNode func() error, timeout time.Duration) error {
+	done := make(chan error, 1)
+	go func() { done <- closeNode() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		return errors.New("cleanup_timeout")
+	}
+}
+
+func run(c config, token []byte) (result error) {
+	// Never inherit a system tailnet identity or upload logs to the hosted service.
+	for _, key := range []string{"TS_AUTHKEY", "TS_AUTH_KEY", "TS_CONTROL_URL", "TS_CLIENT_SECRET", "TSNET_FORCE_LOGIN"} {
+		os.Unsetenv(key)
+	}
+	envknob.SetNoLogsNoSupport()
+	envknob.Setenv("TS_DEBUG_ALWAYS_USE_DERP", "false")
+	if c.ForceRelay {
+		envknob.Setenv("TS_DEBUG_ALWAYS_USE_DERP", "true")
+	}
+	if err := os.MkdirAll(c.StateDir, 0700); err != nil {
+		return errors.New("state_failed")
+	}
+	st, err := os.Lstat(c.StateDir)
+	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
+		return errors.New("state_failed")
+	}
+	if err := os.Chmod(c.StateDir, 0700); err != nil {
+		return errors.New("state_failed")
+	}
+	quiet := func(string, ...any) {}
+	s := &tsnet.Server{Dir: c.StateDir, Hostname: c.Hostname, ControlURL: c.ControlURL, AuthKey: c.AuthKey, UserLogf: quiet, Logf: quiet}
+	defer func() {
+		emit("closing", nil)
+		if closeWithin(s.Close, 8*time.Second) != nil {
+			emit("cleanup_timeout", nil)
+			if result == nil {
+				result = errors.New("cleanup_timeout")
+			}
+			return
+		}
+		emit("closed", nil)
+	}()
+	parent, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	timeout := 90 * time.Second
+	if c.Role == "probe" {
+		timeout = 25 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	status, err := s.Up(ctx)
+	if err != nil {
+		return errors.New("registration_failed")
+	}
+	emit("registered", status.TailscaleIPs)
+	if c.Role == "probe" {
+		emit("dialing", nil)
+		conn, err := s.Dial(ctx, "tcp", net.JoinHostPort(c.Peer, port))
+		if err != nil {
+			return errors.New("dial_failed")
+		}
+		if err := exchange(conn, token, false); err != nil {
+			return err
+		}
+		lc, err := s.LocalClient()
+		if err != nil {
+			return errors.New("status_failed")
+		}
+		state, err := lc.Status(ctx)
+		if err != nil {
+			return errors.New("status_failed")
+		}
+		path := "unknown"
+		for _, p := range state.Peer {
+			for _, ip := range p.TailscaleIPs {
+				if ip.String() == c.Peer {
+					if p.CurAddr != "" {
+						path = "direct"
+					} else if p.Relay == "lab" {
+						path = "selfhost_relay"
+					}
+				}
+			}
+		}
+		if c.ForceRelay && path != "selfhost_relay" {
+			return errors.New("relay_not_verified")
+		}
+		emit(path, nil)
+		emit("probe_passed", nil)
+		if c.CheckReject {
+			badToken := append([]byte(nil), token...)
+			badToken[0] ^= 1
+			badConn, err := s.Dial(ctx, "tcp", net.JoinHostPort(c.Peer, port))
+			if err != nil {
+				return errors.New("negative_dial_failed")
+			}
+			if exchange(badConn, badToken, false) == nil {
+				return errors.New("wrong_token_accepted")
+			}
+			emit("wrong_token_rejected", nil)
+		}
+		return nil
+	}
+	ln, err := s.Listen("tcp", ":"+port)
+	if err != nil {
+		return errors.New("listen_failed")
+	}
+	defer ln.Close()
+	go func() { <-ctx.Done(); ln.Close() }()
+	emit("listening", nil)
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return errors.New("accept_failed")
+		}
+		err = exchange(conn, token, true)
+		if err == nil {
+			emit("exchange_passed", nil)
+		} else if err.Error() == "unauthorized" {
+			emit("token_rejected", nil)
+		}
+	}
+}
+
+func main() {
+	c, token, err := parseConfig(os.Stdin)
+	if err == nil {
+		err = run(c, token)
+	}
+	if err != nil {
+		emit(err.Error(), nil)
+		os.Exit(1)
+	}
+}
