@@ -38,14 +38,16 @@ zsh poc/selfhost/verify.zsh
 - 重启沿用同一节点状态，避免新增身份；完整产品仍需专用凭据存储、撤销、验证码后端和本地桥接访问控制。
 - 强制中继使用固定版本的调试开关，仅用于证明 DERP 路径，不写入最终用户配置。没有模拟真实 NAT/运营商，也不代表跨网验收。
 
-## 首轮结果与未通过项
+## 生命周期修复与回归
 
 本机已证明免浏览器注册、自建 DERP 固定数据、错误 token 拒绝和第三节点 ACL 拒绝。Go 单元测试与依赖校验通过。Windows/Linux/Apple Silicon helper 已交叉编译；实际运行未验收。
 
-v1.98.4 与升级后的 v1.102.5 均在 WireGuard 关闭中阻塞。helper 现给 `tsnet.Close` 8 秒期限，失败明确输出 `cleanup_timeout` 并以非零退出，进程退出后由 OS 回收资源；这只是防止上层等待无期限，不代表库的优雅关闭已修复。`verify.zsh` 仍应非零退出并报告该未解决项，不把网络 PASS 解释为全量通过。
+首轮退出阻塞已定位到强制中继调试开关 `TS_DEBUG_ALWAYS_USE_DERP`：固定版本的 `bindSocket` 在调试分支替换模拟连接，却没有关闭原模拟连接，WireGuard 的接收线程因此仍等待在 `blockForeverConn.ReadFromUDPAddrPort`，关闭线程等待 `closeBindLocked`。现改为 `TS_DEBUG_NEVER_DIRECT_UDP`，保留真实 UDP socket、禁止直连探测；仍须由状态确认数据经过本项目 DERP。没有修改第三方库或放宽 TLS/ACL。
 
-首轮“退出后重启同一客户端，再做错误 token 检查”在注册成功后出现 `dial_failed`，因此改在同一存活节点内验证 token 拒绝；重连问题独立保留，未因调整测试关闭。完成关闭与重连可靠性验证前，不接真实键鼠、不宣称最终架构已选定。
+客户端保留身份重启时仍曾出现 `dial_failed`；关闭问题修复后可单独复现。禁用 `TS_USE_CACHED_NETMAP` 后重连恢复。该开关同时禁用磁盘网络图恢复和关联的 TSMP disco 广告路径，目前证据定位到这组缓存功能，尚不能断言其中某条内部路径是唯一原因。本 PoC 是在线模式，要求本轮控制面提供网络图，不承诺离线缓存启动；不删除节点身份、不重复注册。拨号前还检查目标存在于当前网络图，未知目标直接失败，避免 `tsnet.Dial` 回退到系统网络。
 
-复现客户端重连：构建完成后在 `poc/selfhost` 运行 `python3 smoke.py --check-reconnect`；复用本轮客户端私有状态，再尝试传输固定数据。所有状态仍属于临时 fixture，退出后删除；此命令失败不影响现有远控应用。
+默认 `verify.zsh` 现包含客户端重启、服务端重启后真实数据交换、原地址/节点数不变及正常关闭门禁。构建完成后在 `poc/selfhost` 运行 `python3 smoke.py --check-reconnect`，增加连续三次客户端重启；每次均检查固定数据、错误 token 拒绝和 `closed`/零退出码。8 秒 Close 期限仍是失败兜底，不把超时退出算通过。全部临时 fixture 在退出后清理；不接真实键鼠、不宣称最终架构或跨网已验收。
+
+2026-10-05 修复后：依赖校验、Go 单元测试、默认 smoke 与连续三次重启 smoke 均零退出通过；Windows x64、Linux x64、Mac ARM64 helper 重新交叉编译通过，目标机实际运行待验收。
 
 许可证依据：[Tailscale BSD-3-Clause](https://github.com/tailscale/tailscale/blob/v1.102.5/LICENSE)、[Headscale BSD-3-Clause](https://github.com/juanfont/headscale/blob/v0.29.4/LICENSE)。本切片不分发第三方二进制；对外打包前需提供完整第三方声明及依赖许可证清单。

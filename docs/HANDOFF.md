@@ -1,6 +1,18 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-05 自托管连接 PoC 首轮（当前入口）
+## 2026-10-05 自托管连接生命周期修复（当前入口）
+
+当前仍为独立 `codex/connection-architecture-poc` 分支、tsnet v1.102.5 / Headscale v0.29.4 / Go 1.26.8；只修改本机隔离 PoC，不改产品安装包、系统 Tailscale 或真实凭据。下方首轮未通过描述保留为历史。
+
+退出阻塞定位：`TS_DEBUG_ALWAYS_USE_DERP` 的模拟 UDP 连接在 rebind 时被替换但原连接没有关闭，接收线程等待 `blockForeverConn.ReadFromUDPAddrPort`，WireGuard 关闭等待 `closeBindLocked`。改用 `TS_DEBUG_NEVER_DIRECT_UDP`：保留真实 socket、禁止直连探测，仍检查实际 DERP 路径；没有 fork/修改依赖。8 秒关闭兜底仍保留，超时不计通过。
+
+单独复现了正常退出后的重连失败；禁用 `TS_USE_CACHED_NETMAP` 后恢复。该开关同时影响磁盘网络图恢复与 TSMP disco 广告，所以目前只确认这组缓存功能相关，未将某条内部路径断言为唯一根因。本 PoC 在线启动须取得当前控制面网络图，不承诺离线缓存启动；保留节点私有状态，不生成替代身份。新增目标网络图成员检查，避免未知 IP 拨号回退到系统网络。
+
+回归入口：仓库根目录 `zsh poc/selfhost/verify.zsh`；在 `poc/selfhost` 执行 `python3 smoke.py --check-reconnect` 加测连续三次客户端重启。默认门禁已纳入客户端重启、服务端重启后固定数据与错误 token 检查、原 IP/节点数和正常关闭。构建命令与边界见 [PoC README](../poc/selfhost/README.md)。跨平台仍须区分交叉编译和实体运行；下阶段先做各平台独立 helper 的运行验收，再推进授权后端/真实 TLS 桥接；公网部署及资源购买须另行确认。
+
+本轮实际结果：`GOPROXY=off zsh poc/selfhost/verify.zsh` 零退出，依赖校验、Go 单元测试及完整本机门禁通过；`python3 smoke.py --check-reconnect` 零退出，连续三次客户端重启及服务端重启后传输/错误 token 拒绝/身份保留/正常退出全部通过；Windows x64、Linux x64、Mac ARM64 交叉编译通过并核对文件架构，未进行目标机运行。所有测试 fixture 进程及临时身份已清理；无 `cleanup_timeout`，不靠强杀将节点记为通过。
+
+## 2026-10-05 自托管连接 PoC 首轮（历史）
 
 用户确认托管 Tailscale 商业许可/收费不符合规划，授权尝试新路线。候选改为 tsnet + 自托管 Headscale + 自托管 DERP；托管服务路线关闭。工作仍在 `codex/connection-architecture-poc`，产品 Swift/C#、安装包和原有 Tailscale 配对未修改。
 

@@ -76,10 +76,16 @@ PoC 初期仅固定小载荷 ping/echo，不接 SendInput，不修改现有产�
 已完成产品收尾和独立分支创建；自托管 PoC 固定 Go 1.26.8、tsnet/Tailscale v1.102.5、Headscale v0.29.4。Headscale 发布说明要求客户端至少 v1.80.0；版本数字满足最低要求不代替本机兼容性实测。
 工具链仅放在忽略目录 `artifacts/connection-poc`；Go 和 Headscale 下载已核对官方 SHA-256。不修改系统 Go 或原 Tailscale。Docker 镜像拉取因现有失效代理失败，未修改 Docker 代理；改用官方 macOS 原生 Headscale。
 当前实验只测试固定载荷，注册 key 与随机 32 字节会话 token 从父进程管道传入，不打印、不提交。自建 DERP 仅监听 loopback，使用每轮临时 TLS 证书的 SHA-256 pin；不关闭 DERP 证书验证。Headscale 本机 HTTP 不得用于公开部署。
-完整本机 smoke 已执行，网络检查通过，退出门禁未通过，因此阶段 A 不标为完成；跨网、验证码 UI/后端、产品桥接、多租户及撤销均未验收。Windows .NET 未安装，本轮不修改或重测 Windows 产品。
+首轮本机 smoke 网络检查通过，但退出门禁未通过，以下两段是历史诊断；生命周期修复见本节末。跨网、验证码 UI/后端、产品桥接、多租户及撤销均未验收。Windows .NET 未安装，本轮不修改或重测 Windows 产品。
 
 首轮 v1.98.4 已证明 Headscale 注册和自建 DERP 固定载荷成功，但 `tsnet.Close → LocalBackend.Shutdown → userspaceEngine.Close` 在 `userspace.go:1197` 的 WireGuard 关闭中阻塞。升级 v1.102.5 后在 `userspace.go:1121` 同一调用仍复现，未将整轮标为通过。尝试先停止 WantRunning 未解决，已撤去无效改动。测试进程已清理，诊断仅输出函数名/源码行号，未输出密钥。
 
 最终本机 smoke：注册、强制自建 DERP、错误 token 双端拒绝、第三节点 ACL 拒绝、被控节点重启身份保留及节点数为 3 均通过；Go 单元测试及依赖完整性校验通过。完整命令仍以非零退出，提示优雅关闭未解决；helper 8 秒关闭期限只是把无期限等待转成明确失败和进程回收。
 
 还观察到：退出后重启同一客户端能够注册，但 Dial 超时。错误 token 验证改为同一存活节点内进行，以服务端明确拒绝事件为证据；客户端重连作为独立缺陷保留。下一阶段优先解决这两个生命周期问题，完成后才进入双机网络验收。
+
+生命周期修复：退出阻塞定位到 `TS_DEBUG_ALWAYS_USE_DERP` 的 rebind 分支未关闭被替换的模拟 UDP 连接，接收线程残留导致 WireGuard 等待。现采用 `TS_DEBUG_NEVER_DIRECT_UDP` 保留真实 socket，同时要求实测路径为自建 DERP。正常退出后仍复现客户端重连失败；禁用 `TS_USE_CACHED_NETMAP`（磁盘网络图恢复及关联 TSMP disco 广告）后恢复，尚未证明两条内部路径中哪一条是唯一原因。在线 PoC 要求当前控制面网络图，保留持久化身份；新增目标网络图成员检查，禁止未知目标回退系统网络。没有修改依赖或删除用户状态。
+
+默认 smoke 已新增客户端重启、服务端重启后的完整数据交换与错误 token 双端拒绝、原地址/节点数不变和正常关闭门禁；`--check-reconnect` 加测连续三次客户端重启。8 秒关闭兜底仍保留且超时失败，不靠强杀计通过。后续优先各平台独立 helper 实体运行，再进入授权后端与 TLS 桥接；不把本机隔离实验当作跨网或最终架构决策。
+
+本轮验证：依赖完整性、Go 单元测试、默认完整 smoke、连续三次重启扩展 smoke 均零退出通过；目标 Windows x64 / Linux x64 / macOS ARM64 helper 重新交叉编译通过，目标机实际运行仍未验收。修复关闭了本机两个已复现的生命周期故障，不扩大为线上可靠性承诺。

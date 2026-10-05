@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"tailscale.com/envknob"
+	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/tsnet"
 )
 
@@ -133,16 +134,45 @@ func closeWithin(closeNode func() error, timeout time.Duration) error {
 	}
 }
 
-func run(c config, token []byte) (result error) {
+func configureNetwork(c config) {
 	// Never inherit a system tailnet identity or upload logs to the hosted service.
 	for _, key := range []string{"TS_AUTHKEY", "TS_AUTH_KEY", "TS_CONTROL_URL", "TS_CLIENT_SECRET", "TSNET_FORCE_LOGIN"} {
 		os.Unsetenv(key)
 	}
 	envknob.SetNoLogsNoSupport()
+	// This online-only PoC requires a current control-plane map after restart.
+	// Disable disk-cache restoration and its TSMP disco-advertisement path;
+	// cached startup with these pinned versions reproduced a stalled reconnect.
+	envknob.Setenv("TS_USE_CACHED_NETMAP", "false")
 	envknob.Setenv("TS_DEBUG_ALWAYS_USE_DERP", "false")
+	envknob.Setenv("TS_DEBUG_NEVER_DIRECT_UDP", "false")
 	if c.ForceRelay {
-		envknob.Setenv("TS_DEBUG_ALWAYS_USE_DERP", "true")
+		// Keep real UDP sockets, but suppress direct discovery. ALWAYS_USE_DERP
+		// replaces sockets on rebind without closing the previous dummy socket,
+		// leaving WireGuard receive workers blocked during Close (v1.102.5).
+		envknob.Setenv("TS_DEBUG_NEVER_DIRECT_UDP", "true")
 	}
+}
+
+func hasPeer(state *ipnstate.Status, peer string) bool {
+	if state == nil {
+		return false
+	}
+	for _, p := range state.Peer {
+		if !p.InNetworkMap {
+			continue
+		}
+		for _, ip := range p.TailscaleIPs {
+			if ip.String() == peer {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func run(c config, token []byte) (result error) {
+	configureNetwork(c)
 	if err := os.MkdirAll(c.StateDir, 0700); err != nil {
 		return errors.New("state_failed")
 	}
@@ -168,7 +198,7 @@ func run(c config, token []byte) (result error) {
 	}()
 	parent, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	timeout := 90 * time.Second
+	timeout := 180 * time.Second
 	if c.Role == "probe" {
 		timeout = 25 * time.Second
 	}
@@ -180,6 +210,19 @@ func run(c config, token []byte) (result error) {
 	}
 	emit("registered", status.TailscaleIPs)
 	if c.Role == "probe" {
+		lc, err := s.LocalClient()
+		if err != nil {
+			return errors.New("status_failed")
+		}
+		state, err := lc.Status(ctx)
+		if err != nil {
+			return errors.New("status_failed")
+		}
+		// tsnet.Dial can fall back to the system network for an unknown IP.
+		// Never let a lab probe accidentally use the installed system Tailscale.
+		if !hasPeer(state, c.Peer) {
+			return errors.New("dial_failed")
+		}
 		emit("dialing", nil)
 		conn, err := s.Dial(ctx, "tcp", net.JoinHostPort(c.Peer, port))
 		if err != nil {
@@ -188,11 +231,7 @@ func run(c config, token []byte) (result error) {
 		if err := exchange(conn, token, false); err != nil {
 			return err
 		}
-		lc, err := s.LocalClient()
-		if err != nil {
-			return errors.New("status_failed")
-		}
-		state, err := lc.Status(ctx)
+		state, err = lc.Status(ctx)
 		if err != nil {
 			return errors.New("status_failed")
 		}

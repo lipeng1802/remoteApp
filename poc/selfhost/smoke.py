@@ -91,6 +91,7 @@ def collect_events(proc, timeout=45):
         if item["status"] == "closing":
             deadline = min(deadline, time.monotonic() + 12)
     proc.wait(timeout=5)
+    proc.events = events
     return [item["status"] for item in events]
 
 
@@ -185,18 +186,31 @@ def main():
         statuses = collect_events(client)
         check("selfhost_relay" in statuses and "probe_passed" in statuses,
               "fixed payload traversed self-hosted DERP")
-        shutdown_issues = ["cleanup_timeout" in statuses or client.returncode != 0]
+        check("closed" in statuses and client.returncode == 0 and "cleanup_timeout" not in statuses,
+              "client closed gracefully within deadline")
+        shutdown_issues = []
 
         check("wrong_token_rejected" in statuses, "client observed wrong-token rejection")
         check(read_status(server)["status"] == "exchange_passed" and read_status(server)["status"] == "token_rejected",
               "server confirmed wrong-token rejection")
 
-        if "--check-reconnect" in sys.argv[1:]:
+        def verify_reconnect():
             reconnect = node(client_config)
             reconnect_statuses = collect_events(reconnect)
-            print("STATE reconnect: " + ",".join(reconnect_statuses), flush=True)
-            check("registered" in reconnect_statuses and "probe_passed" in reconnect_statuses,
-                  "client_reconnect_failed" if "probe_passed" not in reconnect_statuses else "client reconnected")
+            check(any(item["status"] == "registered" and "100.120.0.2" in item.get("addresses", [])
+                      for item in reconnect.events), "client retained its authorized address")
+            check("selfhost_relay" in reconnect_statuses and "probe_passed" in reconnect_statuses
+                  and "wrong_token_rejected" in reconnect_statuses,
+                  "client restart transmitted and rejected wrong token over self-hosted DERP")
+            check("closed" in reconnect_statuses and reconnect.returncode == 0
+                  and "cleanup_timeout" not in reconnect_statuses, "restarted client closed gracefully")
+
+        # Default gate includes reconnect; the flag adds rapid consecutive restarts.
+        for _ in range(3 if "--check-reconnect" in sys.argv[1:] else 1):
+            verify_reconnect()
+            check(read_status(server)["status"] == "exchange_passed"
+                  and read_status(server)["status"] == "token_rejected", "server confirmed restarted client exchange")
+        check(len(admin("nodes", "list")) == 2, "client restart did not create a new node")
 
         outsider = node(config("probe", "poc-denied", force=True))
         statuses = collect_events(outsider)
@@ -209,6 +223,10 @@ def main():
         status = read_status(restarted)
         check(status["status"] == "registered" and "100.120.0.1" in status["addresses"],
               "server identity retained across restart")
+        check(read_status(restarted)["status"] == "listening", "restarted server listener ready")
+        verify_reconnect()
+        check(read_status(restarted)["status"] == "exchange_passed"
+              and read_status(restarted)["status"] == "token_rejected", "restarted server accepted existing client identity")
         check(len(admin("nodes", "list")) == 3, "restart did not create a fourth node")
         stop(restarted)
         shutdown_issues.append(restarted.returncode != 0)

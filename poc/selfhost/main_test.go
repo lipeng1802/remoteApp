@@ -3,10 +3,41 @@ package main
 import (
 	"encoding/json"
 	"net"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
+
+	"tailscale.com/envknob"
+	"tailscale.com/ipn/ipnstate"
+	"tailscale.com/types/key"
 )
+
+func TestNetworkLifecyclePolicy(t *testing.T) {
+	for _, force := range []bool{true, false} {
+		t.Setenv("TS_DEBUG_ALWAYS_USE_DERP", "true")
+		t.Setenv("TS_USE_CACHED_NETMAP", "true")
+		configureNetwork(config{ForceRelay: force})
+		if envknob.Bool("TS_DEBUG_ALWAYS_USE_DERP") || envknob.BoolDefaultTrue("TS_USE_CACHED_NETMAP") {
+			t.Fatal("unsafe lifecycle mode retained")
+		}
+		if envknob.Bool("TS_DEBUG_NEVER_DIRECT_UDP") != force {
+			t.Fatal("relay test mode not explicit")
+		}
+	}
+}
+
+func TestUnknownPeerFailsClosed(t *testing.T) {
+	peer := &ipnstate.PeerStatus{TailscaleIPs: []netip.Addr{netip.MustParseAddr("100.120.0.1")}}
+	state := &ipnstate.Status{Peer: map[key.NodePublic]*ipnstate.PeerStatus{key.NewNode().Public(): peer}}
+	if hasPeer(nil, "100.120.0.1") || hasPeer(state, "100.120.0.1") {
+		t.Fatal("peer outside current map accepted")
+	}
+	peer.InNetworkMap = true
+	if !hasPeer(state, "100.120.0.1") || hasPeer(state, "100.120.0.3") {
+		t.Fatal("peer membership check failed")
+	}
+}
 
 func validConfig() config {
 	return config{Role: "probe", ControlURL: "http://127.0.0.1:18443", StateDir: "../../artifacts/connection-poc/nodes/test", Hostname: "poc-client", AuthKey: "test-only", SessionToken: strings.Repeat("ab", 32), Peer: "100.120.0.1"}
