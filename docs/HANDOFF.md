@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 真实 Headscale 驱动接入（管理操作已实测，闭环待验收）
+
+新增 `poc/selfhost/headscale.Driver` 实现 ProvisionDriver：服务器本地受限 CLI、工单独占用户/短期非 reusable key、严格观察、按工单发现未知结果孤儿并精确回收，以及 db 模式策略 check/set/严格回读。没有 live proof 回调默认拒绝绑定。注册 secret 不进日志/参数/持久账本；策略错误继续失败关闭。详见 [真实驱动边界与复测](../poc/selfhost/headscale/README.md)。
+
+Linux x64 检查程序在真实隔离服务器验证随机工单发钥匙/实际到期上界/精确回收/重复回收通过。真实接口差异：expiration CLI 只收时长，现按剩余绝对期限保守取整并核对服务返回截止时间；时间 JSON 是 protobuf seconds/nanos，已适配。调试失败留下的两个已确认工单也已精确回收；最终 nodes/users=null、服务 active、业务 Nginx 两项哈希 OK。未改公网策略模式（仍 file）、原 ACL、业务 443、Windows、产品安装包或系统 Tailscale。证书续期由用户安排。
+
+尚未完成：策略动态更新/零规则的真实数据通道拒绝证据；helper 注册前节点公钥获取与真实 LiveProof；ProvisionBackend 与 helper 的完整注册/策略/重启恢复闭环。不能把本轮管理 CLI 实测或策略 JSON 单测当最终免登录连接验收。下一切片优先这些，不进入产品 TLS 桥接。历史“真实驱动未实现”现仅指上述未接入闭环，不指管理适配器。
+
+最终验证：新增 7 项驱动测试，全量 `go test -race ./...`、`go vet ./...`、`GOPROXY=off zsh poc/selfhost/verify.zsh` 均通过（含原 token DERP/双端重启/第三节点 ACL/正常清理）。最终真实驱动检查再次零退出，同工单重复 Mint 拒绝、用户归属和期限核验、精确幂等回收通过，users/nodes 再次为空。没有本轮动态策略或 Windows 新注册证据。
+
 ## 2026-10-07 私有受控注册账本核心（当前入口）
 
 本轮先收口注册/策略闭环的持久化后端核心，不直接部署或修改服务器策略。新增 invite.ProvisionBackend、独立签名注册意图与单次短期凭据驱动接口，复用现有私有快照/单写者 lease；旧快照兼容，不重置身份。凭据明文不落盘，工单在驱动副作用前持久化；状态 planned/issued/bound/cleanup_pending/cleaned。所有网络观察/真实节点持有证明必须来自可信驱动，不能信客户端报文里的布尔或 IP。

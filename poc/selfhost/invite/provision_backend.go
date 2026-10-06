@@ -14,8 +14,8 @@ type RegistrationCredential struct{ UserID, KeyID, Secret string }
 // Verify checks live network-key possession, not only a control-plane row.
 // ReplaceRules must atomically replace ONLY this backend's managed policy.
 // A zero-rule projection means explicit deny-all, NEVER omitted/default policy.
-// All calls must honor ctx. No implementation of the real Headscale driver is
-// shipped by this slice; a memory fake is test evidence, not a network proof.
+// All calls must honor ctx. The headscale package supplies the server-local CLI
+// adapter; it still requires a trusted live proof implementation for Bind.
 type ProvisionDriver interface {
 	Mint(context.Context, ProvisionRecord) (RegistrationCredential, error)
 	Observe(context.Context, ProvisionRecord) (ProvisionObservation, error)
