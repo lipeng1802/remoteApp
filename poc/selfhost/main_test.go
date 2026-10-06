@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"net"
 	"net/netip"
@@ -16,7 +17,7 @@ import (
 
 func TestPrivateControlPipe(t *testing.T) {
 	raw, _ := json.Marshal(validConfig())
-	for _, command := range []string{"stop\n", ""} {
+	for _, command := range []string{"stop\n", "revoke\n", ""} {
 		r := bufio.NewReaderSize(strings.NewReader(string(raw)+"\n"+command), 8194)
 		if _, _, err := controlBootstrap(r); err != nil {
 			t.Fatal(err)
@@ -101,6 +102,8 @@ func TestConfigBoundaries(t *testing.T) {
 		{"outside-state", func(c *config) { c.StateDir = "/tmp" }},
 		{"no-token", func(c *config) { c.SessionToken = "" }},
 		{"no-key", func(c *config) { c.AuthKey = "" }},
+		{"conflicting-path-mode", func(c *config) { c.ForceRelay = true; c.DiscoverDirect = true }},
+		{"conflicting-stream-mode", func(c *config) { c.Stream = true; c.CheckReject = true }},
 	}
 	good := validConfig()
 	public := validConfig()
@@ -154,5 +157,63 @@ func TestExchange(t *testing.T) {
 		if !matches && (clientErr == nil || serverErr == nil) {
 			t.Fatal("wrong token accepted")
 		}
+	}
+}
+
+func TestActiveStreamCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, b := net.Pipe()
+	token := make([]byte, 32)
+	serverDone := make(chan error, 1)
+	clientDone := make(chan error, 1)
+	tick := make(chan struct{}, 1)
+	go func() { serverDone <- streamExchange(ctx, a, token, true, func(string) {}) }()
+	go func() {
+		clientDone <- streamExchange(context.Background(), b, token, false, func(s string) {
+			if s == "stream_tick" {
+				select {
+				case tick <- struct{}{}:
+				default:
+				}
+			}
+		})
+	}()
+	select {
+	case <-tick:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream never exchanged")
+	}
+	cancel()
+	for _, done := range []chan error{serverDone, clientDone} {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("active stream not closed")
+		}
+	}
+}
+
+func TestStreamRejectsWrongToken(t *testing.T) {
+	a, b := net.Pipe()
+	token := make([]byte, 32)
+	wrong := make([]byte, 32)
+	wrong[0] = 1
+	done := make(chan error, 1)
+	go func() {
+		done <- streamExchange(context.Background(), a, token, true, func(s string) {
+			if s == "stream_open" {
+				t.Error("unauthorized stream opened")
+			}
+		})
+	}()
+	if streamExchange(context.Background(), b, wrong, false, func(string) {}) == nil {
+		t.Fatal("wrong stream token accepted")
+	}
+	if err := <-done; err == nil || err.Error() != "unauthorized" {
+		t.Fatal("server did not reject stream token")
 	}
 }

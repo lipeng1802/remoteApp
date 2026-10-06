@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-06 直连/新连接中继回退与活动授权撤销（当前入口）
+
+上一切片 `4723f2d` 已按用户要求推送到 `origin/codex/connection-architecture-poc`。本切片只改独立 Go helper/隔离公网编排，不改产品安装包、原 Tailscale、Windows 防火墙或原 Nginx 443。
+
+新增明确测试模式：允许直连时用受限 disco 探测、再核对真实载荷路径；持续认证心跳流用于验证已有连接；私有父子管道 `revoke` 撤销本次授权，取消上下文并显式关闭活动连接/监听/节点。与注册 key 撤销区分。新增配置冲突拒绝、活动流取消单测；原 `stop` 和本机 fixture 兼容。
+
+公网门禁连续两轮零退出，均观测真实直连 `direct`；随后抑制直连的新连接明确走自建 DERP；此前重启/错误 token/第三节点门禁均通过。撤销注册 key 后活动流仍正常传输（不能当作会话撤销）；显式授权撤销后双方活动流关闭、后续连接被拒绝；相同设备身份以新 token 重新授权后，旧 token 双端拒绝，新 token 成功。身份/节点数无增生，正常关闭、短期 key/节点/用户及两端测试私钥清理通过。最终版强化的新连接拒绝断言要求注册成功且 dial_failed，第二轮已实测通过。
+
+复测发现地址游标的准备问题：节点删除后隔离服务仍保留内存分配游标，固定 ACL 的 `.1` 门禁失败并安全清理。本脚本现在要求数据库无节点，随后只重启 `remoteapp-poc` 服务，保留数据库/Noise/DERP 私钥，重新健康检查；不是重置生产身份。原服务器业务不重启。
+
+`GOPROXY=off zsh poc/selfhost/verify.zsh` 依赖校验、Go 单测、完整本机回归零退出；`go test -race ./...` 通过。公网入口 `python3 -B poc/selfhost/public-server/cross-network.py --network-lifecycle` 连续两轮通过，清理后独立复核 nodes/users 为空、原业务配置哈希一致、服务 active。证据与边界见 [公网记录](../poc/selfhost/public-server/README.md)。尚未验收已有长连接直连→中继的无缝迁移；撤销入口只是被控端私有控制管道，不是后端签名撤销通知或持久授权服务。下一步设备码/一次性邀请后端及其授权生命周期，再接产品 TLS 固定载荷；不把本轮记为完整设备码产品。
+
 ## 2026-10-06 双机公网自建中继通过（当前入口）
 
 在用户授权资源上实际执行 Windows serve / Mac probe 固定载荷，独立 helper 严格增加唯一公网 HTTPS URL，保持证书验证，并按控制入口确认本项目 DERP region。`cross-network.py` 零退出：公网自建 DERP、错误 token 双端拒绝、Mac 客户端连续三次重启、Windows serve 重启、身份/地址/节点数稳定、第三节点 ACL 拒绝、正常退出均通过，无 cleanup_timeout 或强杀后计通过。SSH/现有 Tailscale 仅用于管理/上传，helper 数据由独立 tsnet 身份承载，不改产品/安装包。

@@ -11,6 +11,7 @@ from pathlib import Path
 import secrets
 import select
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -26,6 +27,7 @@ ALLOWED = {"registered", "listening", "exchange_passed", "token_rejected", "dial
            "closing", "closed", "cleanup_timeout", "registration_failed", "dial_failed",
            "response_failed", "request_failed", "status_failed", "relay_not_verified",
            "negative_dial_failed", "wrong_token_accepted"}
+ALLOWED.update({"stream_open", "stream_tick", "stream_closed", "authorization_revoked"})
 
 
 def check(ok, label):
@@ -110,8 +112,21 @@ class Node:
 
 
 def main():
+    if sys.argv[1:] not in ([], ["--network-lifecycle"]):
+        raise RuntimeError("invalid_arguments")
+    extended = bool(sys.argv[1:])
     os.umask(0o077)
     check(not (admin("nodes", "list") or []), "isolated_database_empty")
+    # The fixed-IP fixture must reset the in-memory allocation cursor, not its
+    # durable control-plane keys/database. Never restart a populated test net.
+    restarted = subprocess.run(SERVER + ["systemctl restart remoteapp-poc"],
+                               capture_output=True, timeout=25)
+    check(restarted.returncode == 0, "empty_fixture_control_restarted")
+    health = subprocess.run(["curl", "--silent", "--fail", "--noproxy", "*",
+                             "--retry", "5", "--retry-connrefused", "--retry-delay", "1",
+                             "--max-time", "5", "https://mk.fengmap.com:8443/health"],
+                            capture_output=True, timeout=35)
+    check(health.returncode == 0, "public_control_healthy")
     run = time.strftime("%Y%m%d%H%M%S")+secrets.token_hex(3)
     root = "C:\\Users\\jarvis\\remoteapp-public-poc-"+run
     work = root+"\\poc\\selfhost"
@@ -159,6 +174,8 @@ def main():
 
         windows_command = WIN + [f'cmd.exe /d /c "cd /d {work} && selfhost-node.exe --control-stdin"']
         server_cfg = config("serve", "poc-server", "../../artifacts/connection-poc/nodes/public-server")
+        if extended:
+            server_cfg["force_relay"] = False
         server = launch(windows_command, server_cfg)
         registered = server.until("registered")
         check("100.120.0.1" in registered["addresses"], "windows_server_address")
@@ -167,19 +184,27 @@ def main():
         folder = Path(tempfile.mkdtemp(prefix="public-client-", dir=root_nodes))
         private_folders.append(folder)
         client_cfg = config("probe", "poc-client", folder)
+        if extended:
+            client_cfg.update(force_relay=False, discover_direct=True)
 
         def probe(label):
             node = launch(local_command, client_cfg)
             events = node.finish()
-            check(node.proc.returncode == 0 and all(e in events for e in
-                  ("registered", "selfhost_relay", "probe_passed", "wrong_token_rejected", "closed"))
+            path_ok = "selfhost_relay" in events or (not client_cfg["force_relay"] and "direct" in events)
+            check(node.proc.returncode == 0 and path_ok and all(e in events for e in
+                  ("registered", "probe_passed", "wrong_token_rejected", "closed"))
                   and "cleanup_timeout" not in events, label)
+            if extended and client_cfg.get("discover_direct"):
+                print("OBSERVED " + ("direct" if "direct" in events else "selfhost_relay"), flush=True)
             check(any(e.get("addresses") and "100.120.0.2" in e["addresses"] for e in node.events),
                   "client_identity_preserved")
             server.until("exchange_passed")
             server.until("token_rejected")
 
-        probe("cross_network_selfhost_relay")
+        probe("direct_discovery_data_exchange" if extended else "cross_network_selfhost_relay")
+        if extended:
+            client_cfg.update(force_relay=True, discover_direct=False)
+            probe("direct_suppressed_new_connection_relay_fallback")
         for attempt in range(3):
             probe("client_restart_"+str(attempt+1))
         server.stop()
@@ -199,6 +224,51 @@ def main():
         active = admin("nodes", "list") or []
         check(len(active) == 3, "node_count_stable_after_restarts")
         server.stop()
+        if extended:
+            server_cfg.update(stream=True, force_relay=True)
+            server = launch(windows_command, server_cfg)
+            server.until("listening")
+            stream_cfg = dict(client_cfg, stream=True, check_reject=False)
+            stream = launch(local_command, stream_cfg)
+            stream.until("stream_open")
+            stream.until("stream_tick")
+            server.until("stream_open")
+            # Registration credentials and session authorization are distinct.
+            admin("preauthkeys", "expire", "--id", key_ids[0])
+            for _ in range(4):
+                stream.until("stream_tick")
+            check(stream.proc.poll() is None, "registration_key_expiry_does_not_revoke_live_session")
+            server.proc.stdin.write(b"revoke\n")
+            server.proc.stdin.close()
+            server_events = server.finish()
+            stream_events = stream.finish()
+            check(server.proc.returncode == 0 and "authorization_revoked" in server_events and
+                  "stream_closed" in server_events and "closed" in server_events and
+                  "cleanup_timeout" not in server_events, "revocation_closes_active_server_stream")
+            check(stream.proc.returncode == 0 and "stream_closed" in stream_events and
+                  "closed" in stream_events and "cleanup_timeout" not in stream_events,
+                  "revoked_client_observed_stream_close")
+            after = launch(local_command, dict(client_cfg, check_reject=False))
+            after_events = after.finish()
+            check(after.proc.returncode != 0 and "probe_passed" not in after_events and
+                  "registered" in after_events and "dial_failed" in after_events and
+                  "closed" in after_events and "cleanup_timeout" not in after_events,
+                  "revocation_blocks_new_connection")
+            # New explicit authorization rotates the token; old authority must
+            # not resurrect merely because the same device identity is restarted.
+            server_cfg.update(stream=False, session_token=secrets.token_hex(32))
+            server = launch(windows_command, server_cfg)
+            server.until("listening")
+            old = launch(local_command, dict(client_cfg, check_reject=False))
+            old_events = old.finish()
+            check(old.proc.returncode != 0 and "response_failed" in old_events and
+                  "probe_passed" not in old_events and "closed" in old_events and
+                  "cleanup_timeout" not in old_events, "old_authorization_rejected_after_restart")
+            server.until("token_rejected")
+            client_cfg["session_token"] = server_cfg["session_token"]
+            probe("new_explicit_authorization_succeeds")
+            server.stop()
+            check(len(admin("nodes", "list") or []) == 3, "revocation_did_not_duplicate_identity")
         check(True, "cross_network_complete")
     finally:
         for node in reversed(nodes):
