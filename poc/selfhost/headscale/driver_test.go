@@ -110,7 +110,7 @@ func TestPolicyExplicitEmptyReadbackAndBoundary(t *testing.T) {
 	os.Chmod(dir, 0700)
 	var policy []byte
 	sets := 0
-	d := Driver{PolicyMode: "db", PolicyDir: dir, Run: func(ctx context.Context, a ...string) ([]byte, error) {
+	d := Driver{PolicyMode: "database", PolicyDir: dir, Run: func(ctx context.Context, a ...string) ([]byte, error) {
 		if a[1] == "get" {
 			return policy, nil
 		}
@@ -178,7 +178,7 @@ func TestProviderTimestampAndExpiryFailClosed(t *testing.T) {
 func TestPolicyFailureAndSanitizedProviderErrors(t *testing.T) {
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
-	d := Driver{PolicyMode: "db", PolicyDir: dir, Run: func(context.Context, ...string) ([]byte, error) { return []byte("secret"), errors.New("secret") }}
+	d := Driver{PolicyMode: "database", PolicyDir: dir, Run: func(context.Context, ...string) ([]byte, error) { return []byte("secret"), errors.New("secret") }}
 	e := d.ReplaceRules(context.Background(), nil)
 	if e == nil || strings.Contains(e.Error(), "secret") {
 		t.Fatal("secret error")
@@ -191,5 +191,56 @@ func TestPolicyFailureAndSanitizedProviderErrors(t *testing.T) {
 	}
 	if d.ReplaceRules(context.Background(), nil) == nil {
 		t.Fatal("readback mismatch")
+	}
+}
+
+func TestLiveProofTemporaryPortRestoredAndFailureFenced(t *testing.T) {
+	dir := t.TempDir()
+	os.Chmod(dir, 0700)
+	var policy []byte
+	seen := []string{}
+	failRestore := false
+	d := Driver{PolicyMode: "database", PolicyDir: dir, VerifierIP: "100.120.0.1", Run: func(ctx context.Context, a ...string) ([]byte, error) {
+		if a[1] == "get" {
+			return policy, nil
+		}
+		b, e := os.ReadFile(a[3])
+		if e != nil {
+			return nil, e
+		}
+		if a[1] == "set" {
+			if failRestore && string(b) == `{"acls":[]}` {
+				return nil, ErrDriver
+			}
+			policy = b
+			seen = append(seen, string(b))
+		}
+		return nil, nil
+	}}
+	if d.ReplaceRules(context.Background(), nil) != nil {
+		t.Fatal("initial")
+	}
+	d.Proof = func(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation) bool {
+		if !strings.Contains(string(policy), "100.120.0.2:47477") || strings.Contains(string(policy), "47476") {
+			t.Error("payload opened during proof")
+		}
+		return true
+	}
+	r := record()
+	o := invite.ProvisionObservation{UserID: r.UserID, NodeKey: r.NodeKey, IP: "100.120.0.2"}
+	if !d.Verify(context.Background(), r, o) || string(policy) != `{"acls":[]}` {
+		t.Fatal("proof restoration")
+	}
+	failRestore = true
+	if d.Verify(context.Background(), r, o) || !d.poisoned {
+		t.Fatal("restore failure must fence")
+	}
+	d.Now = func() time.Time { return time.Unix(10000, 0) }
+	if c, e := d.Mint(context.Background(), r); e == nil || c.Secret != "" {
+		t.Fatal("poisoned driver issued secret")
+	}
+	failRestore = false
+	if d.ReplaceRules(context.Background(), nil) != nil || d.poisoned {
+		t.Fatal("reconcile recovery")
 	}
 }

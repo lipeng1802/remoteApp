@@ -30,13 +30,18 @@ type LiveProof func(context.Context, invite.ProvisionRecord, invite.ProvisionObs
 type Driver struct {
 	Run Run
 	// PolicyDir is private (0700), on the same server as the CLI. PolicyMode must
-	// be db: file mode cannot acknowledge an atomic live policy replacement.
+	// be database: file mode cannot acknowledge an atomic live policy replacement.
 	PolicyDir, PolicyMode string
 	// Proof must independently authenticate a live tsnet peer AND its app device.
 	// A control-plane row, helper self-report or an IP alone is not a proof.
 	Proof LiveProof
-	Now   func() time.Time
-	mu    sync.Mutex
+	// VerifierIP belongs to a separately provisioned trusted verifier. Verify
+	// opens only this source -> candidate:47477 temporarily, never payload.
+	VerifierIP string
+	rules      []invite.NetworkRule
+	poisoned   bool
+	Now        func() time.Time
+	mu         sync.Mutex
 }
 
 // LocalRunner is deliberately pinned to the isolated PoC installation.
@@ -81,6 +86,10 @@ func (d *Driver) now() time.Time {
 	}
 	return time.Now()
 }
+
+// Healthy separates a policy/restore failure from an ordinary invalid proof so
+// the backend can propagate the failure fence to every wrapper of the Store.
+func (d *Driver) Healthy() bool { d.mu.Lock(); defer d.mu.Unlock(); return !d.poisoned }
 func ticket(r invite.ProvisionRecord) (string, error) {
 	if len(r.ID) != 32 {
 		return "", ErrDriver
@@ -144,7 +153,7 @@ func (d *Driver) Mint(ctx context.Context, r invite.ProvisionRecord) (invite.Reg
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	name, err := ticket(r)
-	if err != nil || r.Expires <= d.now().Unix() || r.Expires > d.now().Unix()+120 {
+	if d.poisoned || err != nil || r.Expires <= d.now().Unix() || r.Expires > d.now().Unix()+120 {
 		return invite.RegistrationCredential{}, ErrDriver
 	}
 	var users []user
@@ -219,8 +228,25 @@ func (d *Driver) Observe(ctx context.Context, r invite.ProvisionRecord) (invite.
 	}
 	return result, nil
 }
-func (d *Driver) Verify(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation) bool {
-	if ctx.Err() != nil || d.Proof == nil || o.UserID != r.UserID || o.NodeKey != r.NodeKey {
+func (d *Driver) Verify(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation) (verified bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.poisoned || ctx.Err() != nil || d.Proof == nil || d.VerifierIP == "" || o.UserID != r.UserID || o.NodeKey != r.NodeKey {
+		return false
+	}
+	// Always restore, including unknown policy-set outcomes. Failed restoration
+	// prevents issuing new credentials until a successful normal ReplaceRules.
+	defer func() {
+		restore, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if d.replaceRules(restore, d.rules, nil) != nil {
+			d.poisoned = true
+			verified = false
+		}
+	}()
+	extra := invite.NetworkRule{Source: d.VerifierIP, Destination: o.IP + ":47477"}
+	if d.replaceRules(ctx, d.rules, &extra) != nil {
+		d.poisoned = true
 		return false
 	}
 	return d.Proof(ctx, r, o) && ctx.Err() == nil
@@ -271,7 +297,16 @@ func (d *Driver) Cleanup(ctx context.Context, r invite.ProvisionRecord) error {
 func (d *Driver) ReplaceRules(ctx context.Context, rules []invite.NetworkRule) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.PolicyMode != "db" || !filepath.IsAbs(d.PolicyDir) {
+	if e := d.replaceRules(ctx, rules, nil); e != nil {
+		d.poisoned = true
+		return e
+	}
+	d.rules = append([]invite.NetworkRule(nil), rules...)
+	d.poisoned = false
+	return nil
+}
+func (d *Driver) replaceRules(ctx context.Context, rules []invite.NetworkRule, proof *invite.NetworkRule) error {
+	if d.PolicyMode != "database" || !filepath.IsAbs(d.PolicyDir) {
 		return ErrDriver
 	}
 	st, e := os.Lstat(d.PolicyDir)
@@ -289,11 +324,19 @@ func (d *Driver) ReplaceRules(ctx context.Context, rules []invite.NetworkRule) e
 	if len(rules) > 256 {
 		return ErrDriver
 	}
-	for _, r := range rules {
-		if !strings.HasSuffix(r.Destination, ":47476") {
+	all := append([]invite.NetworkRule(nil), rules...)
+	if proof != nil {
+		all = append(all, *proof)
+	}
+	for i, r := range all {
+		port := ":47476"
+		if proof != nil && i == len(rules) {
+			port = ":47477"
+		}
+		if !strings.HasSuffix(r.Destination, port) {
 			return ErrDriver
 		}
-		dst := strings.TrimSuffix(r.Destination, ":47476")
+		dst := strings.TrimSuffix(r.Destination, port)
 		for _, s := range []string{r.Source, dst} {
 			a, e := netip.ParseAddr(s)
 			if e != nil || a.String() != s || !netip.MustParsePrefix("100.120.0.0/24").Contains(a) || s == "100.120.0.0" || s == "100.120.0.255" {

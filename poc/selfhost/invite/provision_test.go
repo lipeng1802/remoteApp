@@ -18,6 +18,49 @@ type memoryDriver struct {
 	failMint, failCleanup, failPolicy, rejectProof, badObservation bool
 }
 
+type proofFailureDriver struct {
+	*memoryDriver
+	unhealthy bool
+}
+
+func (d *proofFailureDriver) Healthy() bool { return !d.unhealthy }
+func (d *proofFailureDriver) Verify(context.Context, ProvisionRecord, ProvisionObservation) bool {
+	d.unhealthy = true
+	return false
+}
+func (d *proofFailureDriver) ReplaceRules(ctx context.Context, r []NetworkRule) error {
+	e := d.memoryDriver.ReplaceRules(ctx, r)
+	if e == nil {
+		d.unhealthy = false
+	}
+	return e
+}
+func TestLiveProofPolicyFailureFencesSharedStore(t *testing.T) {
+	f, g, b, base := provisionFixture(t)
+	d := &proofFailureDriver{memoryDriver: base}
+	b.Driver = d
+	if b.Reconcile(context.Background()) != nil {
+		t.Fatal("reconcile")
+	}
+	other := &ProvisionBackend{Store: f.s, Driver: base}
+	if other.Reconcile(context.Background()) != nil {
+		t.Fatal("other")
+	}
+	id, _, e := b.Enroll(context.Background(), g, intent(f, g, f.owner, "a"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if b.Bind(context.Background(), id) == nil {
+		t.Fatal("proof failure")
+	}
+	if _, c, e := other.Enroll(context.Background(), g, intent(f, g, f.client, "b")); e == nil || c.Secret != "" {
+		t.Fatal("shared wrapper bypassed proof-policy fence")
+	}
+	if b.Reconcile(context.Background()) != nil {
+		t.Fatal("recover")
+	}
+}
+
 func (d *memoryDriver) Mint(ctx context.Context, r ProvisionRecord) (RegistrationCredential, error) {
 	if ctx.Err() != nil {
 		return RegistrationCredential{}, ErrDenied

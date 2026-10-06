@@ -1,18 +1,20 @@
 # 真实 Headscale 管理驱动（私有、服务器本地）
 
+2026-10-07 后续闭环已实测：helper 离线生成节点公钥并签名意图，真实网络/应用持有证明、单向最小数据策略、零 ACL 实际拒绝、撤销和持久 Store/冷驱动重开通过。详见 [双机注册验收](../public-server/ENROLLMENT_TEST.md)。当前仍是私有 fixture，非公开注册或产品桥接。
+
 `Driver` 实现 `invite.ProvisionDriver`，用受信任 CLI 执行隔离 Headscale 0.29.4 的管理操作。`LocalRunner` 固定 `/opt/remoteapp-poc/headscale` 和 `/etc/remoteapp-poc/config.yaml`；只能部署到独占的 PoC 控制平面，不能指向共享生产 tailnet。不是公网 HTTP 注册接口，不把管理员权限下发给客户端。
 
 已接入：
 
 - Mint 创建 `remoteapp-ticket-<32hex>` 专属用户、默认非 reusable 单次 key；发现已有同名工单拒绝重发。CLI 只支持时长，按绝对剩余期限向下取整减一秒；回读核对实际 expiry 不超过工单绝对截止时间，且 user/key 归属正确，否则不给客户端 secret。时间支持 protobuf seconds/nanos 和 RFC3339 两种格式。
 - Observe 精确核对工单用户、节点 key、唯一节点、隔离 IPv4，不相信客户端上报 IP。管理观察并非持有证明。
-- Verify 必须注入可信 `LiveProof`；未接入或上下文取消时拒绝。实现者须通过实际 tsnet 加密连接的 WhoIs 及应用身份 challenge 验证，不能传一个无条件 true 的回调。
+- Verify 必须注入可信 `LiveProof` 与独立验证节点 IP；未接入或上下文取消时拒绝。已在 fixture 接 `nodeproof` 的真实 WhoIs/新鲜 nonce/应用签名；只临时增加验证节点→候选:47477，结束恢复数据规则，恢复失败毒化驱动并经 Healthy 同步 Store 失败栅栏。不能传一个无条件 true 的回调。
 - Cleanup 根据工单名重新发现用户，即使未知 Mint 结果没有返回句柄也能按工单 expire keys / 删除节点 / 删除用户；不存在时成功，不清其他工单或普通用户。
-- ReplaceRules 只允许隔离 IPv4 单地址、目标端口 47476；零规则显式 `{"acls":[]}`。私有 0700 目录写临时 0600 文件，policy check → policy set → 严格回读核对。只支持 db 模式，当前公网仍为 file 模式，拒绝假成功。独占整个隔离策略；不是共享策略的部分合并器。更新错误不得视为原规则已撤销，调用方保持失败栅栏及应用授权门禁。
+- ReplaceRules 只允许隔离 IPv4 单地址、目标端口 47476；零规则显式 `{"acls":[]}`。私有 0700 目录写临时 0600 文件，policy check → policy set → 严格回读核对。只支持 `database` 模式（修正此前按 CLI 帮助采用的 `db`），双机实测临时切换后已恢复原 file 模式。独占整个隔离策略；不是共享策略的部分合并器。更新错误不得视为原规则已撤销，调用方保持失败栅栏及应用授权门禁。
 
 输出/错误不包含 provider 原始响应，注册 secret 不进命令参数、日志或持久化账本。CLI 响应上限 1MiB，exec.CommandContext 支持取消。可信回调/Run 仍须遵守上下文；不能靠接口强制杀死任意不守约回调。
 
-## 本轮证据与未完成项
+## 前一切片证据（历史，后续进展见顶部）
 
 2026-10-07：独立 Linux x64 `cmd/headscale-driver-check` 在真实隔离服务器验证随机工单的单次凭据创建、到期上界和精确/幂等回收。调试暴露 CLI 不接受 RFC3339 expiration，以及 CLI protobuf Timestamp 对象格式，已修复。两次因解析失败遗留的已确认工单也精确回收；最终 users/nodes=null，服务 active，原两项业务 Nginx 哈希 OK。
 

@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 真实注册与动态策略闭环通过（当前入口）
+
+新增 nodeidentity 版本敏感的离线私有 profile 适配（公开 StateStore/Prefs/Persist/Profile 类型，没有 fake 注册 NodeID，不用测试专用 hooks）；helper 在无凭据/未注册时自己签名节点公钥意图。真实 Linux 验证节点、Windows target 和 Mac controller 注册后公钥与准备值一致；Mac 重启后原身份/地址一致。SDK 仍固定 1.102.5，升级必须回归实际公钥一致性，不能当官方稳定注册前 API。已有状态损坏/符号链接/控制入口变化拒绝且不重生身份。
+
+两类新 helper 均清除本进程继承的登录/OAuth/强制登录变量、禁托管日志上传，禁用缓存 map 与已复现泄漏的 ALWAYS_USE_DERP dummy sockets，使用真实 UDP 的直连抑制测试路径；不改系统环境或系统客户端。已有非空状态目录丢失 state 文件也失败关闭，不重生身份。
+
+真实 Driver.Verify 注入 nodeproof：仅临时允许可信验证节点→候选:47477，实际 tsnet map/WhoIs、256-bit 新鲜 challenge、设备 Ed25519 互绑定后才 bound，随后恢复数据策略；恢复错误同步驱动 Healthy/共享 Store 禁发栅栏。错误应用私钥实机必须收到 challenge 且 signed=0，后端明确 peer_rejected、工单未过期，不以拨号超时当负向通过。无缺省 true 证明。
+
+enrollment-network.py 实机完整门禁通过：未绑定无载荷、双方绑定仅 controller→target:47476、真实跨网固定载荷、反向拒绝、持久 Store/全新 Backend+Driver 重开恢复批准规则；显式空 ACL 回读后连续 3 次 LocalAPI overlay 连接请求拒绝且存活 target 计数不增加；恢复规则同进程载荷再次成功；撤销精确清理、磁盘重开不复活旧 grant。拒绝包括 ACL 撤回 peer 路由/Dial-Self 拒绝和 overlay 拨号拒绝，绝不跟随系统网络；不扩大为抓包证明或已有流 ACL 即时切断。既有流授权门禁仍保留，尚未与本轮动态注册桥接。
+
+遇到两项实际问题并修正：Headscale 0.29.4 配置实际为 policy.mode=database，而 CLI 帮助说 db；模式切换失败自动还原。Mac 重启后初次证明出现 dial 超时且工单未过期，Bind 预算从含策略/握手的 5 秒改为有界 12 秒，并等待可信 map 中 peer online；其他管理 5 秒、key ≤120 秒/grant 300 秒绝对期限不变。随后加强负向及反向门禁的连续复测通过。挑战不要求用户时钟同步，靠 nonce+连接截止；签名意图仍有原 ±30 秒窗口。
+
+测试后恢复服务原 file 配置/静态 ACL，临时 key/node/user 与两端节点私钥回收，服务 active、原 Nginx 两项哈希 OK；没有改业务 443、Windows 防火墙、系统 Tailscale、产品安装包或证书（续期用户安排）。公开入口、周期 Reconcile daemon、生产权限/设备本地安全存储、多进程锁与 SDK 升级仍待后续，fixture 测试私钥交付不能公开。见 [完整验收/复测/边界](../poc/selfhost/public-server/ENROLLMENT_TEST.md)。
+
+最终全量 `go test -race ./...`、`go vet ./...` 通过；`verify.zsh` 原 Headscale/DERP/双端重启/第三节点 ACL/正常清理零退出。修正后完整真实注册脚本多轮零退出，最后一轮包含共享策略失败栅栏、helper 自签意图、反向网络负向与真实错误私钥挑战断言。没有借此宣称新动态 ACL 的 300 秒长测、服务器断电恢复或产品安装包验收。
+
+下一切片：产品 TLS 固定载荷与现有签名状态门禁桥接，消除旧 `.1/.2` 固定地址假设；补受控周期 Reconcile/故障恢复，再做公开设备码服务/防滥用和 GUI/安装包。不跳过到宣称最终免账号产品上线。下方“闭环待验收”均为历史。
+
 ## 2026-10-07 真实 Headscale 驱动接入（管理操作已实测，闭环待验收）
 
 新增 `poc/selfhost/headscale.Driver` 实现 ProvisionDriver：服务器本地受限 CLI、工单独占用户/短期非 reusable key、严格观察、按工单发现未知结果孤儿并精确回收，以及 db 模式策略 check/set/严格回读。没有 live proof 回调默认拒绝绑定。注册 secret 不进日志/参数/持久账本；策略错误继续失败关闭。详见 [真实驱动边界与复测](../poc/selfhost/headscale/README.md)。

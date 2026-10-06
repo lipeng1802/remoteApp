@@ -82,7 +82,10 @@ func (b *ProvisionBackend) Bind(ctx context.Context, id string) error {
 	if !b.Store.provisionReady {
 		return ErrDenied
 	}
-	ctx, cancel := bounded(ctx)
+	// Live proof includes two policy projections and a first/restarted DERP
+	// handshake. Keep it bounded, but do not reuse the 5s admin-only budget.
+	// ProvisionBound still checks the original absolute ticket/grant expiry.
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
 	var r ProvisionRecord
 	for _, v := range b.Store.ProvisionRecords() {
@@ -98,6 +101,11 @@ func (b *ProvisionBackend) Bind(ctx context.Context, id string) error {
 		return ErrDenied
 	}
 	verified := b.Driver.Verify(ctx, r, o)
+	if health, ok := b.Driver.(interface{ Healthy() bool }); ok && !health.Healthy() {
+		b.ready = false
+		b.Store.provisionReady = false
+		return ErrDenied
+	}
 	if ctx.Err() != nil {
 		return ErrDenied
 	}
