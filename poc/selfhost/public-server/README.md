@@ -1,5 +1,19 @@
 # 公网服务准备切片（2026-10-06）
 
+## 最新结果：双机公网中继通过
+
+以下部署/入口阻塞段落保留为历史，以本节为当前状态。用户完成云入口调整后，Mac/Windows 公网 HTTPS 8443 健康检查通过，DERP 探测 200，管理路径 404；UDP 3478 有效 STUN Binding 响应也通过。此前最小 STUN 探测缺少固定网络库要求的 SOFTWARE=`tailnode` 和 FINGERPRINT，服务器会拒绝；不能仅凭该超时断言端口未放行。按固定版本 net/stun 源码补齐属性后通过。
+
+`cross-network.py` 实际零退出，全部通过：Windows serve / Mac probe 的固定载荷观测 `selfhost_relay`，经过本项目 `remoteapp-poc` 中继；正确 token 传输/错误 token 拒绝由双方状态确认；Mac 连续三次重启、Windows serve 重启后再次传输成功；身份/地址不变；第三节点 `.3` 被 ACL 拒绝访问 `.1:47476`，节点数稳定为 3；双方正常关闭，无 cleanup_timeout 或强杀后计通过。Windows helper 上传后的 SHA-256 一致。SSH/现有 Tailscale 仅用于管理，helper 使用独立身份，不依赖用户 Tailscale 登录。
+
+收尾：本轮短期 key 按 ID 撤销，本轮节点/用户删除，两端节点私钥清理。独立复核服务器 nodes/users 均为空、服务 active、原业务配置哈希一致。Windows 专用 `remoteapp-public-poc-*` 目录保留二进制/空目录，不保留节点私钥。首次 Windows 目录 ACL 的数字 SID 缺少 `*`，导致 icacls 失败，发生在身份创建前；修正后完整验证通过，未修改已有目录权限。
+
+helper 额外仅允许精确 `https://mk.fengmap.com:8443`，保留正常 HTTPS 证书验证，拒绝其他域名/端口、HTTP、URL 用户信息/路径/query/fragment。路径检查区分本机 `lab` 与公网 `remoteapp-poc`。`GOPROXY=off zsh poc/selfhost/verify.zsh` 在正常网络权限下零退出，包含依赖验证、单测与完整本机回归；首次沙箱 PermissionError 是 fixture 权限限制。
+
+复测前先使用 `verify.zsh` 构建最新 Mac helper，再用隔离 Go 工具链、CGO_ENABLED=0、GOOS=windows/GOARCH=amd64 将源码编译为 `artifacts/connection-poc/selfhost-node-public-win-x64.exe`，然后执行 `python3 -B poc/selfhost/public-server/cross-network.py`。须具备本轮服务器和 Windows SSH 授权及对应密钥；脚本要求空的隔离数据库，发现已有节点就拒绝。注册 key/token 只存在管理响应和私有管道，不写配置或打印日志。
+
+本轮不代表直连/NAT 穿透、撤销活动流、多租户设备码/邀请、产品 TLS 桥接、真实画面键鼠、多平台双向角色、长期耐久或生产运维完成。下一切片优先直连/中继回退与授权撤销，再推进邀请后端和产品桥接。
+
 此目录是已授权测试服务器的隔离部署记录，不是通用生产安装器。固定 Headscale v0.29.4；无 Docker、无系统 Tailscale 登录、无公共 DERP。配置按该版本官方 `config-example.yaml` 核对，嵌入 DERP 开启 `verify_clients`，清空外部 DERP URL。CentOS 7 已停止维护，此环境只用于短期 PoC，不作为生产底座。
 
 ## 已部署

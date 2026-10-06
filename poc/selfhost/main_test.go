@@ -87,6 +87,13 @@ func TestConfigBoundaries(t *testing.T) {
 		change func(*config)
 	}{
 		{"hosted", func(c *config) { c.ControlURL = "https://login.tailscale.com" }},
+		{"public-http", func(c *config) { c.ControlURL = "http://mk.fengmap.com:8443" }},
+		{"public-wrong-port", func(c *config) { c.ControlURL = "https://mk.fengmap.com" }},
+		{"public-path", func(c *config) { c.ControlURL = "https://mk.fengmap.com:8443/test" }},
+		{"public-query", func(c *config) { c.ControlURL = "https://mk.fengmap.com:8443?key=secret" }},
+		{"public-empty-query", func(c *config) { c.ControlURL = "https://mk.fengmap.com:8443?" }},
+		{"public-empty-fragment", func(c *config) { c.ControlURL = "https://mk.fengmap.com:8443#" }},
+		{"public-suffix", func(c *config) { c.ControlURL = "https://mk.fengmap.com.evil:8443" }},
 		{"missing-control", func(c *config) { c.ControlURL = "" }},
 		{"url-secret", func(c *config) { c.ControlURL = "http://secret@127.0.0.1:18443" }},
 		{"wrong-peer", func(c *config) { c.Peer = "100.73.4.118" }},
@@ -96,6 +103,12 @@ func TestConfigBoundaries(t *testing.T) {
 		{"no-key", func(c *config) { c.AuthKey = "" }},
 	}
 	good := validConfig()
+	public := validConfig()
+	public.ControlURL = "https://mk.fengmap.com:8443"
+	publicRaw, _ := json.Marshal(public)
+	if _, _, err := parseConfig(strings.NewReader(string(publicRaw))); err != nil {
+		t.Fatal(err)
+	}
 	raw, _ := json.Marshal(good)
 	if _, _, err := parseConfig(strings.NewReader(string(raw))); err != nil {
 		t.Fatal(err)

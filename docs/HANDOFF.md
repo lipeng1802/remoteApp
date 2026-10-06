@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-06 双机公网自建中继通过（当前入口）
+
+在用户授权资源上实际执行 Windows serve / Mac probe 固定载荷，独立 helper 严格增加唯一公网 HTTPS URL，保持证书验证，并按控制入口确认本项目 DERP region。`cross-network.py` 零退出：公网自建 DERP、错误 token 双端拒绝、Mac 客户端连续三次重启、Windows serve 重启、身份/地址/节点数稳定、第三节点 ACL 拒绝、正常退出均通过，无 cleanup_timeout 或强杀后计通过。SSH/现有 Tailscale 仅用于管理/上传，helper 数据由独立 tsnet 身份承载，不改产品/安装包。
+
+精确撤销本轮短期 key、删除测试节点/用户、清理两端测试节点私钥，独立复核 nodes/users 均为空、服务 active、原 443 配置哈希一致。Windows 专用测试目录仅保留二进制/空目录。服务未设置开机启动，现有证书仍须在 2026-10-13 到期前续期。
+
+入口阻塞已解除：Mac/Windows HTTPS 8443 通过，UDP 3478 有效 STUN 响应通过。此前缺少 SOFTWARE/FINGERPRINT 的最小探测会被固定库拒绝，不能把超时直接解释为 UDP 未开放。Windows 初次目录 ACL SID 格式错误在身份创建前已修复。本机 `GOPROXY=off zsh poc/selfhost/verify.zsh` 依赖验证/单测/完整回归零退出；沙箱 PermissionError 经正常权限执行通过。
+
+执行与边界见 [公网记录](../poc/selfhost/public-server/README.md)。下一切片优先直连/NAT 探测与中继回退、授权撤销关闭活动流；设备码邀请后端/产品 TLS 桥接仍未实现。Linux/Apple Silicon 实际运行、双向角色、长期耐久、生产运维仍待验收，不宣布最终架构完成。下方公网入口阻塞和本机阶段描述是历史。
+
 ## 2026-10-06 公网 PoC 服务准备（当前入口）
 
 用户提供并授权服务器 `182.92.117.114`、域名 `mk.fengmap.com`，已配置专用 Mac SSH 公钥，并确认 TCP 8443/UDP 3478 安全组放行。已部署独立 Headscale v0.29.4 + 开启客户端身份检查的嵌入 DERP，独立低权限用户、私有数据库/密钥；未安装 Docker，未修改系统 Tailscale、原 443 业务或云安全组。服务 active、没有设置开机启动。服务器内受信任 HTTPS 健康检查、DERP 探测与管理路径拒绝通过，原业务配置哈希一致。

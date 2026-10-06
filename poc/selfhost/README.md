@@ -1,5 +1,7 @@
 # 自托管连接最小实验
 
+2026-10-06：已授权公网 Headscale/嵌入 DERP 的 Windows serve / Mac probe 实测通过，包括固定载荷、错误 token 双端拒绝、客户端连续三次重启/服务端重启、身份保留、第三节点拒绝、正常关闭与凭据清理。helper 除本机 fixture 外，仅额外允许 `https://mk.fengmap.com:8443`，保持证书验证。见 [公网验证记录](public-server/README.md)。下方本机 fixture 边界仍适用于本机脚本；公网通过不等于设备码产品或直连穿透验收完成。
+
 这是独立测试程序，不进入 RemoteController/RemoteAgent 安装包，不采集屏幕、不注入输入。
 客户端内嵌 tsnet，注册到本机 Headscale；另一个本机进程提供 TLS DERP。没有 Tailscale 账号登录或公共 DERP 配置，系统已安装的 Tailscale 状态不参与实验。
 

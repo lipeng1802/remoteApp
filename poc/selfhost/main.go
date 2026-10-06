@@ -58,8 +58,10 @@ func parseConfig(r io.Reader) (config, []byte, error) {
 	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
 		return c, nil, errors.New("invalid_control_url")
 	}
-	// First slice intentionally accepts only the isolated local Headscale lab.
-	if u.Scheme != "http" || u.Host != "127.0.0.1:18443" {
+	// Explicit endpoints only. Public testing retains normal certificate validation.
+	local := c.ControlURL == "http://127.0.0.1:18443"
+	public := c.ControlURL == "https://mk.fengmap.com:8443"
+	if !local && !public {
 		return c, nil, errors.New("nonlocal_control_rejected")
 	}
 	if c.Role != "serve" && c.Role != "probe" {
@@ -246,7 +248,8 @@ func runContext(parent context.Context, c config, token []byte) (result error) {
 				if ip.String() == c.Peer {
 					if p.CurAddr != "" {
 						path = "direct"
-					} else if p.Relay == "lab" {
+					} else if (c.ControlURL == "http://127.0.0.1:18443" && p.Relay == "lab") ||
+						(c.ControlURL == "https://mk.fengmap.com:8443" && p.Relay == "remoteapp-poc") {
 						path = "selfhost_relay"
 					}
 				}
