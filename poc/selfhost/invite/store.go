@@ -473,6 +473,9 @@ func VerifyGrant(pub ed25519.PublicKey, g Grant, target, controller string, now 
 func (s *Store) Authorized(g Grant, target, controller string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.authorizedLocked(g, target, controller)
+}
+func (s *Store) authorizedLocked(g Grant, target, controller string) bool {
 	if s.broken || s.clock().Unix() < s.state.LastTime {
 		return false
 	}

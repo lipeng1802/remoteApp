@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"remoteapp.local/selfhost-poc/session"
+
 	"tailscale.com/envknob"
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/tailcfg"
@@ -29,17 +31,19 @@ const port = "47476"
 const payload = "remoteapp-selfhost-poc-v1"
 
 type config struct {
-	Role           string `json:"role"`
-	ControlURL     string `json:"control_url"`
-	StateDir       string `json:"state_dir"`
-	Hostname       string `json:"hostname"`
-	AuthKey        string `json:"auth_key"`
-	SessionToken   string `json:"session_token"`
-	Peer           string `json:"peer"`
-	ForceRelay     bool   `json:"force_relay"`
-	CheckReject    bool   `json:"check_reject"`
-	DiscoverDirect bool   `json:"discover_direct"`
-	Stream         bool   `json:"stream"`
+	Role           string               `json:"role"`
+	ControlURL     string               `json:"control_url"`
+	StateDir       string               `json:"state_dir"`
+	Hostname       string               `json:"hostname"`
+	AuthKey        string               `json:"auth_key"`
+	SessionToken   string               `json:"session_token"`
+	Peer           string               `json:"peer"`
+	ForceRelay     bool                 `json:"force_relay"`
+	CheckReject    bool                 `json:"check_reject"`
+	DiscoverDirect bool                 `json:"discover_direct"`
+	Stream         bool                 `json:"stream"`
+	Authorization  *authorizationConfig `json:"authorization,omitempty"`
+	cache          *session.StateCache
 }
 
 func parseConfig(r io.Reader) (config, []byte, error) {
@@ -87,7 +91,19 @@ func parseConfig(r io.Reader) (config, []byte, error) {
 		return c, nil, errors.New("invalid_state_dir")
 	}
 	token, err := hex.DecodeString(c.SessionToken)
-	if err != nil || len(token) != 32 {
+	if c.Authorization != nil {
+		if c.SessionToken != "" || c.Stream || c.CheckReject || c.DiscoverDirect {
+			return c, nil, errors.New("invalid_authorization")
+		}
+		cfg, e := sessionConfig(c)
+		if e != nil {
+			return c, nil, e
+		}
+		c.cache = session.NewStateCache(cfg.Issuer, cfg.Grant, c.Authorization.State.Claims.Binding, time.Now)
+		if !c.cache.Update(c.Authorization.State) {
+			return c, nil, errors.New("invalid_authorization")
+		}
+	} else if err != nil || len(token) != 32 {
 		return c, nil, errors.New("invalid_session_token")
 	}
 	if len(c.AuthKey) == 0 || len(c.AuthKey) > 256 {
@@ -289,6 +305,9 @@ func runContext(parent context.Context, c config, token []byte) (result error) {
 	if c.Role == "probe" {
 		timeout = 25 * time.Second
 	}
+	if c.Authorization != nil {
+		timeout = 360 * time.Second
+	} // permits a later real 300s grant-expiry test
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	status, err := s.Up(ctx)
@@ -333,6 +352,58 @@ func runContext(parent context.Context, c config, token []byte) (result error) {
 		}
 		if c.Stream {
 			return streamExchange(ctx, conn, token, false, func(status string) { emit(status, nil) })
+		}
+		if c.Authorization != nil {
+			cfg, e := sessionConfig(c)
+			if e != nil {
+				conn.Close()
+				return e
+			}
+			if !networkPeer(ctx, s, conn, c, false) {
+				conn.Close()
+				return errors.New("node_binding_rejected")
+			}
+			emit("authorized_stream_open", nil)
+			streamCtx, stopStream := context.WithCancel(ctx)
+			defer stopStream()
+			verified, pathFailed := false, false
+			e = session.Probe(streamCtx, conn, cfg, func() {
+				if !verified {
+					pathCtx, stopPath := context.WithTimeout(streamCtx, time.Second)
+					state, err := lc.Status(pathCtx)
+					stopPath()
+					path := "unknown"
+					if err == nil && state != nil {
+						for _, p := range state.Peer {
+							for _, ip := range p.TailscaleIPs {
+								if ip.String() == c.Peer {
+									if p.CurAddr != "" {
+										path = "direct"
+									} else if (c.ControlURL == "http://127.0.0.1:18443" && p.Relay == "lab") || (c.ControlURL == "https://mk.fengmap.com:8443" && p.Relay == "remoteapp-poc") {
+										path = "selfhost_relay"
+									}
+								}
+							}
+						}
+					}
+					if path == "unknown" || (c.ForceRelay && path != "selfhost_relay") {
+						pathFailed = true
+						stopStream()
+						return
+					}
+					emit(path, nil)
+					verified = true
+				}
+				emit("authorized_tick", nil)
+			})
+			emit("authorized_stream_closed", nil)
+			if pathFailed {
+				return errors.New("relay_not_verified")
+			}
+			if parent.Err() != nil {
+				return nil
+			}
+			return e
 		}
 		if err := exchange(conn, token, false); err != nil {
 			return err
@@ -388,7 +459,21 @@ func runContext(parent context.Context, c config, token []byte) (result error) {
 			}
 			return errors.New("accept_failed")
 		}
-		if c.Stream {
+		if c.Authorization != nil {
+			cfg, e := sessionConfig(c)
+			if e != nil || !networkPeer(ctx, s, conn, c, true) {
+				conn.Close()
+				emit("node_binding_rejected", nil)
+				continue
+			}
+			emit("authorized_stream_open", nil)
+			e = session.Serve(ctx, conn, cfg, c.cache.Check)
+			emit("authorized_stream_closed", nil)
+			if e != nil {
+				emit("session_denied", nil)
+			}
+			continue
+		} else if c.Stream {
 			err = streamExchange(ctx, conn, token, true, func(status string) { emit(status, nil) })
 		} else {
 			err = exchange(conn, token, true)
@@ -438,6 +523,31 @@ func controlledRun(input io.Reader) error {
 	defer cancel()
 	stopped := make(chan error, 1)
 	go func() {
+		if c.Authorization != nil {
+			for {
+				line, e := r.ReadSlice('\n')
+				if e == io.EOF && len(line) == 0 {
+					stopped <- nil
+					cancel()
+					return
+				}
+				if e != nil {
+					stopped <- errors.New("invalid_control")
+					cancel()
+					return
+				}
+				if string(line) == "stop\n" {
+					stopped <- nil
+					cancel()
+					return
+				}
+				if !updateState(c, line) {
+					stopped <- errors.New("invalid_authorization_update")
+					cancel()
+					return
+				}
+			}
+		}
 		command, err := controlCommand(r)
 		if command == "revoke" {
 			emit("authorization_revoked", nil)

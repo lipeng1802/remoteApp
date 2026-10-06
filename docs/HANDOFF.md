@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 双机授权接入：代码就绪、实机验收待恢复（当前入口）
+
+在 `1129ce3` 的 session 门禁上新增 helper authorization 模式，私有管道签名状态刷新、3 秒绝对到期、撤销不可被旧状态恢复；可信管理绑定设备 grant 到固定测试网络节点，并在 tsnet status/WhoIs 中核对实际双方节点公钥，实际 socket 地址/设备互证仍由 session 检查。不是仅父脚本查一次状态再运行旧 token 流。原 token 模式保留回归，不改安装包/服务器业务/现有 Tailscale。
+
+新增 `cmd/grant-fixture`（私有 stdout 含凭据，禁止交互输出）、`public-server/authorized-network.py`。本机签名缓存、bootstrap 边界、真实 TCP 活动流撤销/到期、私有 fixture 的撤销→后端重启→新授权已测试；双机入口的预期场景/构建/边界见 [授权复测](../poc/selfhost/public-server/AUTHORIZATION_TEST.md)。网络绑定签发仅受控管理 fixture，不是正式注册服务/动态 ACL，grant 到期与 3 秒状态到期要分别记录。
+
+本机验证：最终 `go test -race ./...` 通过，`go vet ./...` 通过，完整 `verify.zsh` 零退出（原 token 自建 DERP/双端重启/ACL/退出清理）；私有 fixture 协议 bind/lease/revoke/restart/renew 实际零退出，两端 helper 构建/Windows x64 交叉编译通过。新的公网编排只做语法与其私有 Authority 适配验证，没有真实 Windows/WhoIs/网络绑定签名流的通过证据。
+
+**公网双机本轮未验收**：SSH agent `The agent has no identities`，服务器 `182.92.117.114` 公钥认证失败，Windows `100.73.4.118:22` 超时。本轮尚未部署、上传或创建远端测试身份。恢复专用 SSH 密钥、Windows 在线后优先执行授权复测，不直接跳到产品桥接。新编排的 Headscale 字段/WhoIs/时钟兼容仍待实机校验。证书记录为 2026-10-13 到期，复测前确认续期。未完成的双机验收不记作通过。
+
 ## 2026-10-07 签名授权连接门禁（当前入口）
 
 上一切片 `7280cfc` 已推送 `origin/codex/connection-architecture-poc`。上次中断留下未提交的 `session` 草稿，本轮先修复编译并收口为独立授权连接模块；不跳过未完成工作。模块在真实本机 TCP 中接入邀请持久化核心，固定服务公钥/双方设备公钥/grant/实际网络地址，双方随机 challenge 和分角色签名互证，帧有界；当前在线授权允许才回应固定载荷。活动/空闲连接通过有界查询及轮询处理撤销、到期、后端故障、时钟回退，取消时主动关闭连接；旧 grant 重启后不复活，新明确批准只允许新 grant。
