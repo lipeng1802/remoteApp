@@ -1,0 +1,50 @@
+# Dedicated short-lived public PoC. Never share this database with a product.
+server_url: https://mk.fengmap.com:8443
+listen_addr: 127.0.0.1:18443
+metrics_listen_addr: 127.0.0.1:19090
+grpc_listen_addr: 127.0.0.1:15443
+grpc_allow_insecure: false
+trusted_proxies: [127.0.0.1/32]
+noise:
+  private_key_path: /var/lib/remoteapp-poc/noise.key
+prefixes:
+  v4: 100.120.0.0/24
+  v6: fd7a:115c:a1e0:abcd::/64
+  allocation: sequential
+derp:
+  server:
+    enabled: true
+    region_id: 901
+    region_code: remoteapp-poc
+    region_name: RemoteApp isolated PoC
+    verify_clients: true
+    stun_listen_addr: 0.0.0.0:3478
+    private_key_path: /var/lib/remoteapp-poc/derp.key
+    automatically_add_embedded_derp_region: true
+    ipv4: 182.92.117.114
+  urls: []
+  paths: []
+  auto_update_enabled: false
+disable_check_updates: true
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/remoteapp-poc/db.sqlite
+    write_ahead_log: true
+dns:
+  magic_dns: false
+  override_local_dns: false
+policy:
+  mode: file
+  path: /etc/remoteapp-poc/policy.json
+unix_socket: /var/lib/remoteapp-poc/admin.sock
+unix_socket_permission: "0600"
+log:
+  level: warn
+  format: json
+logtail:
+  enabled: false
+taildrop:
+  enabled: false
+auto_update:
+  enabled: false

@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-06 公网 PoC 服务准备（当前入口）
+
+用户提供并授权服务器 `182.92.117.114`、域名 `mk.fengmap.com`，已配置专用 Mac SSH 公钥，并确认 TCP 8443/UDP 3478 安全组放行。已部署独立 Headscale v0.29.4 + 开启客户端身份检查的嵌入 DERP，独立低权限用户、私有数据库/密钥；未安装 Docker，未修改系统 Tailscale、原 443 业务或云安全组。服务 active、没有设置开机启动。服务器内受信任 HTTPS 健康检查、DERP 探测与管理路径拒绝通过，原业务配置哈希一致。
+
+**公网可达性未通过**：Mac/Windows HTTPS 8443 超时，Mac 标准 STUN 3478 超时；DNS 正确，指定服务器 IP 仍超时；服务器 iptables ACCEPT。需用户核对安全组实际绑定实例、入方向规则、源地址及其他云侧限制。不要声称双机跨网、中继载荷或免登录最终架构已完成。服务尚未注册节点；helper 仍限定本机 fixture URL，下一步须在公网可达后增加严格 HTTPS allowlist 与跨网编排。
+
+现有证书 2026-10-13 到期，必须续期。CentOS 7 只做短期测试，不作为生产选择。首次因 Nginx reload 异步就绪触发自动回退，已补等待并安全激活；没有关闭 TLS 校验。配置、部署/回退边界和实际结果见 [公网服务记录](../poc/selfhost/public-server/README.md)。
+
 ## 2026-10-06 Windows x64 实机 PoC 验收（当前入口）
 
 Windows 实机验证已完成：PowerShell 5.1、Docker Desktop 本机 npipe / Linux 引擎。通过用户授权的 SSH 管理/传包，**没有用系统 Tailscale 承载 PoC 数据流**；Headscale 宿主映射 127.0.0.1:18443，DERP 127.0.0.1:18444、临时证书 SHA-256 pin。未改产品、系统 Tailscale、防火墙、WSL 或原 Docker 配置。

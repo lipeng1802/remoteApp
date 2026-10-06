@@ -1,0 +1,23 @@
+[Unit]
+Description=RemoteApp isolated Headscale and DERP PoC
+After=network.target
+
+[Service]
+Type=simple
+User=remoteapp-poc
+Group=remoteapp-poc
+WorkingDirectory=/var/lib/remoteapp-poc
+ExecStart=/opt/remoteapp-poc/headscale --config /etc/remoteapp-poc/config.yaml serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+CapabilityBoundingSet=
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target
