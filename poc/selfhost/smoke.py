@@ -28,7 +28,14 @@ def check(condition, label):
 
 def stop(proc):
     if proc.poll() is None:
-        proc.terminate()
+        if getattr(proc, "control_pipe", False):
+            try:
+                proc.stdin.write(b"stop\n")
+                proc.stdin.close()
+            except BrokenPipeError:
+                pass
+        else:
+            proc.terminate()
         try:
             proc.wait(timeout=12)
         except subprocess.TimeoutExpired:
@@ -96,7 +103,7 @@ def collect_events(proc, timeout=45):
 
 
 def main():
-    if sys.argv[1:] not in ([], ["--check-reconnect"]):
+    if sys.argv[1:] not in ([], ["--check-reconnect"], ["--check-control"]):
         raise RuntimeError("invalid_arguments")
     os.umask(0o077)
     for port in (18443, 18444, 19090, 15443):
@@ -167,12 +174,16 @@ def main():
 
         def node(c):
             diagnostics = stack.enter_context(tempfile.TemporaryFile())
-            proc = subprocess.Popen([str(NODE)], cwd=HERE, stdin=subprocess.PIPE,
+            controlled = "--check-control" in sys.argv[1:]
+            args = [str(NODE)] + (["--control-stdin"] if controlled else [])
+            proc = subprocess.Popen(args, cwd=HERE, stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE, stderr=diagnostics, bufsize=0)
             proc.diagnostics = diagnostics
+            proc.control_pipe = controlled
             stack.callback(stop, proc)
-            proc.stdin.write(json.dumps(c).encode("utf-8"))
-            proc.stdin.close()
+            proc.stdin.write(json.dumps(c).encode("utf-8") + (b"\n" if controlled else b""))
+            if not controlled:
+                proc.stdin.close()
             return proc
 
         server_config = config("serve", "poc-server", force=True)
@@ -206,7 +217,7 @@ def main():
                   and "cleanup_timeout" not in reconnect_statuses, "restarted client closed gracefully")
 
         # Default gate includes reconnect; the flag adds rapid consecutive restarts.
-        for _ in range(3 if "--check-reconnect" in sys.argv[1:] else 1):
+        for _ in range(3 if sys.argv[1:] else 1):
             verify_reconnect()
             check(read_status(server)["status"] == "exchange_passed"
                   and read_status(server)["status"] == "token_rejected", "server confirmed restarted client exchange")

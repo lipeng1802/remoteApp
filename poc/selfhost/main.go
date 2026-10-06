@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/subtle"
 	"encoding/hex"
@@ -171,7 +172,13 @@ func hasPeer(state *ipnstate.Status, peer string) bool {
 	return false
 }
 
-func run(c config, token []byte) (result error) {
+func run(c config, token []byte) error {
+	parent, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runContext(parent, c, token)
+}
+
+func runContext(parent context.Context, c config, token []byte) (result error) {
 	configureNetwork(c)
 	if err := os.MkdirAll(c.StateDir, 0700); err != nil {
 		return errors.New("state_failed")
@@ -196,8 +203,6 @@ func run(c config, token []byte) (result error) {
 		}
 		emit("closed", nil)
 	}()
-	parent, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	timeout := 180 * time.Second
 	if c.Role == "probe" {
 		timeout = 25 * time.Second
@@ -290,10 +295,62 @@ func run(c config, token []byte) (result error) {
 	}
 }
 
+// Windows has no SIGTERM equivalent for a redirected console child. This mode
+// keeps a private parent-child pipe open, with bounded JSON bootstrap then a
+// single stop command (or EOF if the parent disappears). No listening IPC port.
+func controlBootstrap(r *bufio.Reader) (config, []byte, error) {
+	line, err := r.ReadSlice('\n')
+	if err != nil {
+		return config{}, nil, errors.New("invalid_config")
+	}
+	return parseConfig(strings.NewReader(string(line)))
+}
+
+func controlStop(r *bufio.Reader) error {
+	line, err := r.ReadSlice('\n')
+	if err == io.EOF && len(line) == 0 {
+		return nil
+	}
+	if err != nil || string(line) != "stop\n" {
+		return errors.New("invalid_control")
+	}
+	return nil
+}
+
+func controlledRun(input io.Reader) error {
+	r := bufio.NewReaderSize(input, 8194)
+	c, token, err := controlBootstrap(r)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stopped := make(chan error, 1)
+	go func() { err := controlStop(r); stopped <- err; cancel() }()
+	err = runContext(ctx, c, token)
+	select {
+	case controlErr := <-stopped:
+		if controlErr != nil {
+			return controlErr
+		}
+	default:
+	}
+	return err
+}
+
 func main() {
-	c, token, err := parseConfig(os.Stdin)
-	if err == nil {
-		err = run(c, token)
+	var err error
+	if len(os.Args) == 2 && os.Args[1] == "--control-stdin" {
+		err = controlledRun(os.Stdin)
+	} else if len(os.Args) == 1 {
+		var c config
+		var token []byte
+		c, token, err = parseConfig(os.Stdin)
+		if err == nil {
+			err = run(c, token)
+		}
+	} else {
+		err = errors.New("invalid_arguments")
 	}
 	if err != nil {
 		emit(err.Error(), nil)

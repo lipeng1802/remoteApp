@@ -8,7 +8,7 @@ Headscale 发布说明中最低客户端为 1.80.0，但实际兼容性须以本
 
 ## 本机运行
 
-需要 macOS/Linux、Python 3、上述 Go 和 Headscale。当前 `smoke.py` 使用 Unix 管道与短 Unix socket 路径；Windows 暂仅交叉编译 helper，不能用它声称 Windows 已运行通过。
+Mac/Linux 本机脚本需要 Python 3、上述 Go 和 Headscale，使用 Unix 管道与短 Unix socket 路径。Windows 使用独立 PowerShell/Docker 入口，见 [Windows 实机验证](WINDOWS_TEST.md)，无需 Go/Python/.NET SDK。
 
 在仓库 `artifacts/connection-poc/toolchain/` 放置官方 Go 解压后的 `go/bin/go` 和 Headscale 二进制。当前 Mac Intel 二进制命名 `headscale-0.29.4`；Linux 则用同版本官方 Linux 二进制放到同一路径。首次下载后按官方校验清单验证 SHA-256；工具链不提交。
 
@@ -50,4 +50,8 @@ zsh poc/selfhost/verify.zsh
 
 2026-10-05 修复后：依赖校验、Go 单元测试、默认 smoke 与连续三次重启 smoke 均零退出通过；Windows x64、Linux x64、Mac ARM64 helper 重新交叉编译通过，目标机实际运行待验收。
 
-许可证依据：[Tailscale BSD-3-Clause](https://github.com/tailscale/tailscale/blob/v1.102.5/LICENSE)、[Headscale BSD-3-Clause](https://github.com/juanfont/headscale/blob/v0.29.4/LICENSE)。本切片不分发第三方二进制；对外打包前需提供完整第三方声明及依赖许可证清单。
+2026-10-06 Windows x64 实机：PowerShell 5.1 + Docker Desktop Linux 引擎中运行独立测试包，完整脚本零退出并输出 `PASS windows_smoke_complete`；连续三次客户端重启、服务端重启、固定载荷、错误 token 双端拒绝、第三节点拒绝、身份/节点数不变、正常退出及 fixture 清理均通过。现有系统 Tailscale 保留；SSH 仅用于管理/传包，本轮不是双机跨网证据。Linux 与 Mac ARM64 实际运行仍未验收。
+
+构建 Windows 内部测试包：`zsh poc/selfhost/package-windows.zsh`，生成唯一 ZIP、SHA-256 清单及内嵌依赖许可证文本，不携带节点状态或 key。Windows 通过私有 stdin 一行 JSON 引导，再通过 `stop`/管道 EOF 停止；默认 Mac 引导协议不变。Mac 可用 `python3 smoke.py --check-control` 验证同一控制管道和连续重启，本轮通过。
+
+许可证依据：[Tailscale BSD-3-Clause](https://github.com/tailscale/tailscale/blob/v1.102.5/LICENSE)、[Headscale BSD-3-Clause](https://github.com/juanfont/headscale/blob/v0.29.4/LICENSE)。内部测试 ZIP 含 Go helper 与编译依赖根目录 LICENSE/NOTICE 等文本，Headscale 镜像由测试环境获取；不作为签名产品发布。对外发布前仍需审查第三方声明、依赖许可证及品牌使用。

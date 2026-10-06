@@ -1,6 +1,20 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-05 自托管连接生命周期修复（当前入口）
+## 2026-10-06 Windows x64 实机 PoC 验收（当前入口）
+
+Windows 实机验证已完成：PowerShell 5.1、Docker Desktop 本机 npipe / Linux 引擎。通过用户授权的 SSH 管理/传包，**没有用系统 Tailscale 承载 PoC 数据流**；Headscale 宿主映射 127.0.0.1:18443，DERP 127.0.0.1:18444、临时证书 SHA-256 pin。未改产品、系统 Tailscale、防火墙、WSL 或原 Docker 配置。
+
+新增 `verify-windows.ps1` 与内部 Windows ZIP 打包入口，Windows 不需 Go/Python/.NET SDK。Go helper 新增 `--control-stdin`：一行受限 JSON bootstrap，随后私有管道 `stop` 或父进程 EOF 正常停止，避免 Windows 没有 SIGTERM 而使用强杀作为验收。原 Mac bootstrap 兼容；新增协议边界单测。
+
+实际结果：Mac `verify.zsh`（依赖/单测/默认回归）零退出；`smoke.py --check-control`（同一私有管道加连续三次重启）零退出；官方便携 PowerShell 7.4.13 语法解析和目标机 PowerShell 5.1 解析通过；Windows 完整脚本最终 `PASS windows_smoke_complete`、退出码 0。客户端连续三次重启、服务端重启后数据与错误 token 双端拒绝、第三节点拒绝、地址/节点数不变、所有节点正常关闭及 fixture 清理均通过。没有 `cleanup_timeout`，没有强杀节点后记为通过。
+
+Windows 初次镜像下载碰到公钥 SSH 会话不可访问 Windows Docker credential helper 的 logon session 错误。采用单次临时 CLI 配置，显式匿名 `auths.ghcr.io={}` + 已确认本机 Linux Engine 下载固定镜像，完成后删除临时配置；不删除用户凭据，不变更 SSH/Docker 认证。空 `{}` 仍自动探测 wincred，不能当作已解决。测试脚本只检查镜像存在，不隐式下载。
+
+测试包仅用于内部验证，含固定 allowlist、ZIP SHA-256 和编译依赖根目录 LICENSE/NOTICE 等文本，不打包节点私钥/注册 key；远端保留独立解压测试目录和已下载镜像，临时节点状态与本轮容器已清理。执行和边界见 [Windows 测试说明](../poc/selfhost/WINDOWS_TEST.md)。
+
+当前仅 Mac Intel 和 Windows x64 实际运行通过。Linux x64 / Mac ARM64 仍是构建证据，验证码/授权后端、产品 TLS 桥接、多租户撤销和真实跨网未验收。补平台运行与双机服务环境准备仍是后续任务；公开服务部署、资源购买与防火墙变更需要另行确认。下一步不重复本轮 Windows 本机验收、不宣称最终架构已选定。
+
+## 2026-10-05 自托管连接生命周期修复（历史）
 
 当前仍为独立 `codex/connection-architecture-poc` 分支、tsnet v1.102.5 / Headscale v0.29.4 / Go 1.26.8；只修改本机隔离 PoC，不改产品安装包、系统 Tailscale 或真实凭据。下方首轮未通过描述保留为历史。
 

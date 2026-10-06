@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"net"
 	"net/netip"
@@ -12,6 +13,29 @@ import (
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/types/key"
 )
+
+func TestPrivateControlPipe(t *testing.T) {
+	raw, _ := json.Marshal(validConfig())
+	for _, command := range []string{"stop\n", ""} {
+		r := bufio.NewReaderSize(strings.NewReader(string(raw)+"\n"+command), 8194)
+		if _, _, err := controlBootstrap(r); err != nil {
+			t.Fatal(err)
+		}
+		if err := controlStop(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, command := range []string{"logout\n", "stop", strings.Repeat("s", 9000) + "\n"} {
+		if controlStop(bufio.NewReaderSize(strings.NewReader(command), 8194)) == nil {
+			t.Fatal("invalid command accepted")
+		}
+	}
+	for _, bootstrap := range []string{string(raw), string(raw) + "{}\n", strings.Repeat(" ", 9000) + "\n"} {
+		if _, _, err := controlBootstrap(bufio.NewReaderSize(strings.NewReader(bootstrap), 8194)); err == nil {
+			t.Fatal("invalid bootstrap accepted")
+		}
+	}
+}
 
 func TestNetworkLifecyclePolicy(t *testing.T) {
 	for _, force := range []bool{true, false} {

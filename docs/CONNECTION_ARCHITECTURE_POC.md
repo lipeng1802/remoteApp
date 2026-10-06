@@ -89,3 +89,5 @@ PoC 初期仅固定小载荷 ping/echo，不接 SendInput，不修改现有产�
 默认 smoke 已新增客户端重启、服务端重启后的完整数据交换与错误 token 双端拒绝、原地址/节点数不变和正常关闭门禁；`--check-reconnect` 加测连续三次客户端重启。8 秒关闭兜底仍保留且超时失败，不靠强杀计通过。后续优先各平台独立 helper 实体运行，再进入授权后端与 TLS 桥接；不把本机隔离实验当作跨网或最终架构决策。
 
 本轮验证：依赖完整性、Go 单元测试、默认完整 smoke、连续三次重启扩展 smoke 均零退出通过；目标 Windows x64 / Linux x64 / macOS ARM64 helper 重新交叉编译通过，目标机实际运行仍未验收。修复关闭了本机两个已复现的生命周期故障，不扩大为线上可靠性承诺。
+
+2026-10-06 更新：Windows x64 实机本机隔离验收通过（PowerShell 5.1 + Docker Desktop Linux 引擎，脚本零退出）。内嵌网络注册、自建 DERP 固定载荷、错误 token 双端拒绝、第三节点 ACL 拒绝、连续三次客户端重启/服务端重启后传输、原身份及正常退出均有实机证据。Windows 新增私有 stdin 正常停止模式，Mac 同协议回归通过。SSH 管理通道不是本次 PoC 数据通道，不计为真实跨网；Linux/ARM64 实际运行仍待验收。镜像下载的 Windows SSH 凭据助手问题通过单次匿名 CLI 配置解决，未变更用户 Docker 登录或系统 Tailscale。
