@@ -88,14 +88,17 @@ type snapshot struct {
 	Requests   map[string]request
 	Replay     map[string]int64
 	Attempts   map[string]bucket
+	Provisions map[string]ProvisionRecord `json:",omitempty"`
 }
 type Store struct {
-	mu     sync.Mutex
-	root   string
-	clock  func() time.Time
-	state  snapshot
-	lease  *os.File
-	broken bool
+	provisionOps   sync.Mutex // serialize privileged side effects across backend wrappers
+	provisionReady bool       // guarded by provisionOps; policy failure fences all wrappers
+	mu             sync.Mutex
+	root           string
+	clock          func() time.Time
+	state          snapshot
+	lease          *os.File
+	broken         bool
 }
 
 func randomHex(bytes int) (string, error) {
@@ -182,6 +185,9 @@ func Open(root string, clock func() time.Time) (*Store, error) {
 		return fail()
 	}
 	if subtle.ConstantTimeCompare(key, ed25519.NewKeyFromSeed(key[:32])) != 1 {
+		return fail()
+	}
+	if !validProvisions(s.state.Provisions) {
 		return fail()
 	}
 	return s, nil

@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 私有受控注册账本核心（当前入口）
+
+本轮先收口注册/策略闭环的持久化后端核心，不直接部署或修改服务器策略。新增 invite.ProvisionBackend、独立签名注册意图与单次短期凭据驱动接口，复用现有私有快照/单写者 lease；旧快照兼容，不重置身份。凭据明文不落盘，工单在驱动副作用前持久化；状态 planned/issued/bound/cleanup_pending/cleaned。所有网络观察/真实节点持有证明必须来自可信驱动，不能信客户端报文里的布尔或 IP。
+
+仅当前授权双方都绑定才投影控制端→目标:47476 最小规则；先撤无效规则再回收资源、最终重算，回收确认持久化。启动必须 Reconcile 成功才发凭据；未知 Mint 结果/崩溃孤儿按精确工单回收，不重发。key 注册到期与 bound grant 到期分开处理；策略/清理失败阻止发新凭据，不能把驱动错误当 ACL 已撤回。完整边界与测试见 [邀请核心](../poc/selfhost/invite/README.md)。
+
+新增 13 项核心测试通过，涉及内存驱动/私有磁盘账本，并非真实 Headscale API/持有挑战/动态策略证据；包括共享 Store 同步失败禁止其他 wrapper 继续发钥匙。最终全量 `go test -race ./...`、`go vet ./...` 和本机 `verify.zsh` 零退出（依赖校验、原 token 自建 DERP/双端重启/ACL/退出清理）。本轮没有使用服务器 SSH、公开端口、Windows 防火墙或产品安装包变更，没有新增公网注册验收。
+
+下一切片：实现受限 Headscale 驱动，在隔离资源上验证单次凭据/工单隔离、节点观察与实际网络持有证明、策略原子更新/撤销与重启恢复，再把 helper 私有注册流程接上。需先确认节点公钥如何在内嵌 helper 注册前可信取得，不假设 tsnet 有未经验证的 API；阶段完成前保持现有审批/管理 fixture 可回归。证书续期由用户安排。
+
 ## 2026-10-07 公网负向门禁与真实 grant 到期通过（当前入口）
 
 在用户确认继续切片后新增 `authorized-network.py --negative-expiry`，真实 Windows serve / Mac probe 实测退出码 0。基础门禁回归仍通过；补齐 pending/明确拒绝均无新 grant 且无法用旧 grant 传载荷、服务签名正确但节点公钥绑定错误的连接拒绝、已允许网络节点上第三应用私钥对真实 challenge 的证明拒绝（要求 EOF 和 server session_denied，不将超时当成功），以及撤销后旧正向状态重放不能恢复 helper。旧正向重放触发明确 invalid_authorization_update，helper 正常关闭，没有强杀/cleanup_timeout。
