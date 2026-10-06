@@ -1,6 +1,16 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-07 双机授权接入：代码就绪、实机验收待恢复（当前入口）
+## 2026-10-07 双机签名授权门禁实测通过（当前入口）
+
+用户恢复两把专用 SSH 密钥后，服务器和 Windows SSH 均认证成功；隔离数据库无节点。使用 `0d79fb0` 实际执行 `python3 -B poc/selfhost/public-server/authorized-network.py`，退出码 0。Windows x64 独立 helper 上传和校验通过；两节点归属确认、Headscale 输出适配、实际 tsnet status/WhoIs 节点公钥绑定，以及应用设备互证在本轮真实连接中通过，不再只是编译/本机证据。
+
+通过项：签名授权后真实固定载荷且自建 DERP 路径确认；后端撤销关闭活动流；后端重启保持撤销；Windows serve 重启后旧授权被拒绝且零载荷；新的明确 grant 成功；停止后端状态刷新后，3 秒绝对有效期使活动流关闭；节点数保持 2，没有身份增生。所有正常停止、私有后端关闭及本轮短期 key/节点/用户/两端测试节点状态清理均成功，没有 cleanup_timeout 或强杀计通过。
+
+清理后独立 SSH 复核 Headscale nodes/users 均为 null，PoC 服务 active，原 nginx.conf 和 mk.fengmap.com.conf 哈希均 OK。原业务 443、产品安装包、Windows 防火墙和系统 Tailscale 未修改。测试目录仅保留二进制等非私密制品。证书实测 `notAfter=Oct 13 23:59:59 2026 GMT`，需及时续期；本轮没有执行证书更新。
+
+边界：仍是管理员受控的私有后端/审批 fixture，不是最终用户 SSH 流程，不是公网注册服务或动态 ACL。跨网到期证据为 3 秒状态到期，300 秒 grant 实际到期仍待实机验收。第三设备/错误网络绑定负向、未批准/明确拒绝、旧正向状态重放在公网 helper 的完整门禁覆盖尚待补充；不能用以前 token ACL 或本机测试代替。下一切片优先补齐这些双机负向与真实 grant 到期（可复用此入口），再进入正式受控注册/网络策略和产品 TLS 桥接。记录与复测见 [授权验证](../poc/selfhost/public-server/AUTHORIZATION_TEST.md)。下方 SSH 阻塞描述为已解除的历史。
+
+## 2026-10-07 双机授权接入：代码就绪、实机验收待恢复（历史，现已解除）
 
 在 `1129ce3` 的 session 门禁上新增 helper authorization 模式，私有管道签名状态刷新、3 秒绝对到期、撤销不可被旧状态恢复；可信管理绑定设备 grant 到固定测试网络节点，并在 tsnet status/WhoIs 中核对实际双方节点公钥，实际 socket 地址/设备互证仍由 session 检查。不是仅父脚本查一次状态再运行旧 token 流。原 token 模式保留回归，不改安装包/服务器业务/现有 Tailscale。
 

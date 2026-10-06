@@ -1,6 +1,18 @@
-# 双机签名授权联动：待实机验收
+# 双机签名授权联动：基础实机门禁通过
 
-2026-10-07：helper 新增独立 authorization 模式，接入 session 门禁及签名状态缓存；提供 `authorized-network.py` 编排。**公网双机授权尚未执行**：本机 SSH agent 没有身份，服务器公钥认证失败；Windows `100.73.4.118:22` 超时。不得将此前 token 中继测试当作本轮签名授权证据。
+2026-10-07：用户恢复专用 SSH 密钥及 Windows 在线条件后，使用 `0d79fb0` 实际执行 `authorized-network.py`，退出码 0。真实 Windows serve/Mac probe 的节点公钥绑定、应用互证与签名状态门禁通过。此前无 SSH agent 身份/Windows 超时的阻塞已解除；本轮证据与此前 token 中继测试分别记录。
+
+## 本轮公网结果
+
+- 两个独立测试节点注册、用户归属、Windows helper 上传校验通过。
+- 批准后的签名 grant 能承载真实固定载荷，实际路径核对为自建 DERP。
+- 后端撤销关闭活动流；后端重启保持撤销，Windows serve 重启后旧授权被拒绝且没有载荷。
+- 新明确 grant 成功；停止状态刷新后，3 秒签名状态到期关闭活动流。
+- 节点数保持 2；正常停止、私有后端关闭、短期 key/节点/用户与两端节点状态清理成功。
+
+没有 cleanup_timeout 或强杀后计通过。独立复核 nodes/users 均 null、服务 active、原 nginx.conf/mk.fengmap.com.conf 哈希 OK。原产品/系统 Tailscale/防火墙/业务 443 未变。证书实测仍为 2026-10-13 23:59:59 UTC 到期，需续期。本轮没有公开 HTTP 授权接口或正式 GUI。
+
+300 秒 grant 实际到期、第三设备/错误节点绑定、未批准/拒绝和旧正向状态重放的完整公网负向覆盖尚待下一切片补齐；本轮仅相应本机证据及 3 秒状态到期，不扩张为这些场景全部通过。
 
 ## 当前实现
 
@@ -41,6 +53,6 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 artifacts/connection-poc/toolchain/go/bi
 python3 -B poc/selfhost/public-server/authorized-network.py
 ```
 
-预期批准后的真实载荷/自建中继路径、后端撤销活动流关闭、后端/serve 重启后旧授权无载荷、新明确 grant 成功、停止刷新后的状态到期、身份/节点数不增生，以及精确清理测试节点/用户/key/两端状态。必须全部零退出，不将强杀算正常关闭。脚本入口已做语法/私有 fixture 协议检查，实机适配（含 Headscale node_key 输出、WhoIs 及两机时钟）仍须以真实运行校验，不承诺脚本首次执行必过。
+批准后的真实载荷/自建中继路径、后端撤销活动流关闭、后端/serve 重启后旧授权无载荷、新明确 grant 成功、停止刷新后的状态到期、身份/节点数不增生，以及精确清理测试节点/用户/key/两端状态已在本轮零退出实测。Headscale node_key 输出与 WhoIs 适配在当前两机环境通过；其他环境仍须实测，尤其需确认时钟同步。不将强杀算正常关闭，不把一次通过当作长期耐久证明。
 
 编排错误仅输出固定标签，清理逐项尝试并报告清理不完整；若连接在中途丢失，人工复核本轮唯一 `grant-poc-*` 用户，按准确 ID 回收，不全局删除。后续还需第三节点/错误节点绑定实机负向测试、300 秒 grant 实际到期、拒绝请求双机联动、正式注册防滥用/动态 ACL 和产品桥接。
