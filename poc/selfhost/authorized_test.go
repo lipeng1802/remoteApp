@@ -99,3 +99,13 @@ func TestAuthorizationNoLegacyOrUntrustedMode(t *testing.T) {
 		})
 	}
 }
+
+func TestNegativeProofModeCannotBeEnabledOnServe(t *testing.T) {
+	c, _, owner := authorizedFixture(t)
+	c.Role = "serve"
+	c.Authorization.PrivateKey = hex.EncodeToString(owner)
+	c.Authorization.RejectProof = true
+	if _, e := sessionConfig(c); e == nil {
+		t.Fatal("negative proof mode allowed on target")
+	}
+}

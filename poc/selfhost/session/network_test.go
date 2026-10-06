@@ -99,3 +99,18 @@ func TestSignedStateControlsRealActiveConnection(t *testing.T) {
 		})
 	}
 }
+
+func TestExpiredGrantReceivesOnlyInactiveState(t *testing.T) {
+	f := setup(t)
+	b := invite.NetworkBinding{TargetNode: "nodekey:" + strings.Repeat("a", 64), ControllerNode: "nodekey:" + strings.Repeat("b", 64), TargetIP: "100.120.0.1", ControllerIP: "100.120.0.2"}
+	g := f.server.Grant
+	f.now.Add(301)
+	n, e := f.s.NetworkState(g, b)
+	if e != nil || n.Claims.Active || !invite.VerifyNetworkState(f.s.PublicKey(), n, f.clock()) {
+		t.Fatal("expired grant did not receive authenticated inactive state")
+	}
+	g.Claims.ExpiresAt++
+	if _, e = f.s.NetworkState(g, b); e != invite.ErrDenied {
+		t.Fatal("tampered expired grant accepted")
+	}
+}

@@ -432,3 +432,21 @@ func TestClockRollbackClosesActiveStream(t *testing.T) {
 	f.now.Add(-60)
 	ended(t, r)
 }
+
+func TestNegativeProbeRequiresServerProofRejection(t *testing.T) {
+	f := setup(t)
+	s, c := sockets(t)
+	done := make(chan error, 1)
+	go func() { done <- Serve(context.Background(), s, f.server, f.check) }()
+	if err := RejectProof(context.Background(), c, f.probe); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != ErrDenied {
+			t.Fatal("server accepted third key")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("rejection timeout")
+	}
+}

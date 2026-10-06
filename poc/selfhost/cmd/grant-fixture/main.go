@@ -67,12 +67,19 @@ func run() error {
 	if _, err = exec(client, invite.Body{Action: "register"}); err != nil {
 		return err
 	}
-	create := func() (invite.Grant, error) {
+	request := func() (invite.Result, error) {
 		inv, e := exec(target, invite.Body{Action: "invite"})
 		if e != nil {
-			return invite.Grant{}, e
+			return invite.Result{}, e
 		}
 		req, e := exec(client, invite.Body{Action: "claim", TargetCode: a.DeviceCode, Code: inv.Code})
+		if e != nil {
+			return invite.Result{}, e
+		}
+		return req, nil
+	}
+	create := func() (invite.Grant, error) {
+		req, e := request()
 		if e != nil {
 			return invite.Grant{}, e
 		}
@@ -87,6 +94,7 @@ func run() error {
 		return err
 	}
 	var binding invite.NetworkBinding
+	var pending string
 	r := bufio.NewReaderSize(os.Stdin, 4098)
 	for {
 		line, e := r.ReadSlice('\n')
@@ -106,6 +114,7 @@ func run() error {
 		if d.Decode(&extra) != io.EOF {
 			return invite.ErrDenied
 		}
+		requestStatus := ""
 		switch c.Op {
 		case "bind":
 			binding = c.Binding
@@ -127,6 +136,28 @@ func run() error {
 			if e != nil {
 				return e
 			}
+		case "pending":
+			if _, e = exec(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID}); e != nil {
+				return e
+			}
+			req, err := request()
+			if err != nil {
+				return err
+			}
+			if req.Grant != nil || req.Status != "pending" {
+				return invite.ErrDenied
+			}
+			pending = req.RequestID
+			requestStatus = req.Status
+		case "deny":
+			req, err := exec(target, invite.Body{Action: "approve", RequestID: pending, Allow: false})
+			if err != nil {
+				return err
+			}
+			if req.Grant != nil || req.Status != "denied" {
+				return invite.ErrDenied
+			}
+			requestStatus = req.Status
 		default:
 			return invite.ErrDenied
 		}
@@ -143,7 +174,7 @@ func run() error {
 		}
 		server["private_key"] = hex.EncodeToString(target)
 		probe["private_key"] = hex.EncodeToString(client)
-		if e = json.NewEncoder(os.Stdout).Encode(map[string]any{"server": server, "probe": probe, "state": n}); e != nil {
+		if e = json.NewEncoder(os.Stdout).Encode(map[string]any{"server": server, "probe": probe, "state": n, "request_status": requestStatus}); e != nil {
 			return e
 		}
 	}

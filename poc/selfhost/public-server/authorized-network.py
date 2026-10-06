@@ -21,7 +21,7 @@ t = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(t)
 t.ALLOWED.update({"authorized_stream_open", "authorized_stream_closed", "authorized_tick",
                   "session_denied", "node_binding_rejected", "invalid_authorization",
-                  "invalid_authorization_update"})
+                  "invalid_authorization_update", "wrong_proof_rejected", "negative_proof_failed"})
 
 
 class Authority:
@@ -53,11 +53,16 @@ class Refresh:
         self.stop_event = threading.Event()
         self.failed = False
 
+        self.last_active = None
+        self.requests = 0
+
         def work():
             try:
                 while not self.stop_event.wait(0.5):
                     n = authority.request("lease")["state"]
                     server.proc.stdin.write(json.dumps(n).encode()+b"\n")
+                    self.requests += 1
+                    if n["claims"]["active"]: self.last_active = n
             except Exception:
                 self.failed = True  # fixed label only, never raw exception/key
         self.thread = threading.Thread(target=work, daemon=True)
@@ -70,8 +75,9 @@ class Refresh:
 
 
 def main():
-    if sys.argv[1:]:
+    if sys.argv[1:] not in ([],["--negative-expiry"]):
         raise RuntimeError("invalid_arguments")
+    extended = bool(sys.argv[1:])
     t.os.umask(0o077)
     t.check(not (t.admin("nodes", "list") or []), "isolated_database_empty")
     p = subprocess.run(t.SERVER+["systemctl restart remoteapp-poc"], capture_output=True, timeout=25)
@@ -136,7 +142,7 @@ def main():
         authority = Authority()
         credentials = authority.request("bind", binding=binding)
         sc["session_token"] = pc["session_token"] = ""
-        def start_pair(creds):
+        def start_pair(creds, wrong_proof=False):
             nonlocal server, refresh
             sc["authorization"] = creds["server"]
             server = launch(wc, sc)
@@ -144,6 +150,7 @@ def main():
             server.until("listening")
             fresh = authority.request("lease")
             pc["authorization"] = fresh["probe"]
+            if wrong_proof: pc["authorization"]["reject_proof"] = True
             return launch(mc, pc)
         def ended(client, label):
             events = client.finish()
@@ -171,6 +178,68 @@ def main():
         refresh.close(); refresh = None  # backend outage: no TTL reset on receipt
         ended(client, "signed_state_expiry_closes_active_stream")
         server.stop()
+        if extended:
+            credentials = authority.request("pending")
+            t.check(credentials["request_status"] == "pending" and not credentials["state"]["claims"]["active"], "unapproved_request_has_no_authorization")
+            client = start_pair(credentials)
+            ended(client, "pending_request_cannot_carry_payload")
+            t.check(not any(e["status"] == "authorized_tick" for e in client.events), "pending_zero_payload")
+            refresh.close(); refresh = None; server.stop()
+            credentials = authority.request("deny")
+            t.check(credentials["request_status"] == "denied", "owner_explicitly_denied_request")
+            client = start_pair(credentials)
+            ended(client, "denied_request_cannot_carry_payload")
+            t.check(not any(e["status"] == "authorized_tick" for e in client.events), "denied_zero_payload")
+            refresh.close(); refresh = None; server.stop()
+
+            authority.request("renew")
+            wrong_binding = dict(binding, target_node="nodekey:"+"c"*64)
+            credentials = authority.request("bind", binding=wrong_binding)
+            client = start_pair(credentials)
+            ev = client.finish()
+            t.check(client.proc.returncode != 0 and "node_binding_rejected" in ev and "authorized_tick" not in ev and "cleanup_timeout" not in ev, "signed_wrong_network_node_rejected")
+            refresh.close(); refresh = None; server.stop()
+            credentials = authority.request("bind", binding=binding)
+            client = start_pair(credentials, wrong_proof=True)
+            ev = client.finish()
+            t.check(client.proc.returncode == 0 and "wrong_proof_rejected" in ev and "authorized_tick" not in ev and "closed" in ev, "third_private_key_proof_rejected_on_allowed_node")
+            server.until("session_denied")
+            refresh.close(); refresh = None; server.stop()
+
+            credentials = authority.request("lease")
+            client = start_pair(credentials)
+            client.until("authorized_tick")
+            refresh.close(); refresh = None
+            old_positive = authority.request("lease")["state"]
+            revoked = authority.request("revoke")["state"]
+            server.proc.stdin.write(json.dumps(revoked).encode()+b"\n")
+            server.proc.stdin.write(json.dumps(old_positive).encode()+b"\n")
+            ended(client, "revoke_then_positive_replay_closes_stream")
+            ev = server.finish()
+            t.check(server.proc.returncode != 0 and "invalid_authorization_update" in ev and "closed" in ev and "cleanup_timeout" not in ev, "old_positive_state_cannot_restore_revoked_helper")
+
+            credentials = authority.request("renew")
+            grant_end = credentials["state"]["claims"]["grant"]["claims"]["expires_at"]
+            client = start_pair(credentials)
+            started = time.monotonic()
+            last_report = started
+            ticks = 0
+            deadline = started+330
+            while time.monotonic() < deadline:
+                event = client.read(timeout=5)
+                if event is None: break
+                if event["status"] == "authorized_tick": ticks += 1
+                if time.monotonic()-last_report >= 30:
+                    print("PROGRESS grant_expiry_elapsed_"+str(int(time.monotonic()-started))+"s", flush=True)
+                    last_report = time.monotonic()
+            else: raise RuntimeError("grant_expiry_deadline")
+            client.proc.wait(timeout=5)
+            ev = [e["status"] for e in client.events]
+            t.check(client.proc.returncode != 0 and "session_denied" in ev and "closed" in ev and "cleanup_timeout" not in ev and ticks > 100 and time.monotonic()-started >= 280 and grant_end-0.5 <= time.time() <= grant_end+8, "real_300_second_grant_expiry_closes_stream")
+            last = refresh.last_active
+            t.check(not refresh.failed and refresh.requests > 400 and last is not None and last["claims"]["expires_at"] > grant_end*1_000_000_000, "fresh_state_remained_valid_beyond_grant_expiry")
+            refresh.close(); refresh = None; server.stop()
+            t.check(True, "public_negative_and_grant_expiry_complete")
         t.check(len(t.admin("nodes", "list") or []) == 2, "authorization_did_not_duplicate_nodes")
         t.check(True, "dual_machine_signed_authorization_complete")
     finally:

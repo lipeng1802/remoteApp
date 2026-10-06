@@ -240,6 +240,16 @@ func Serve(ctx context.Context, conn net.Conn, c Config, check Check) error {
 // Probe verifies the target's key and the exact grant/transcript, then requests
 // only the fixed payload. The caller may cancel after any observed response.
 func Probe(ctx context.Context, conn net.Conn, c Config, received func()) error {
+	return probe(ctx, conn, c, received, false)
+}
+
+// RejectProof is an explicit isolated negative test: a fresh third private key
+// signs the actual server challenge on an otherwise approved network node.
+// Success requires EOF before any payload, not a timeout or arbitrary I/O error.
+func RejectProof(ctx context.Context, conn net.Conn, c Config) error {
+	return probe(ctx, conn, c, nil, true)
+}
+func probe(ctx context.Context, conn net.Conn, c Config, received func(), wrongProof bool) error {
 	defer conn.Close()
 	if !c.valid(conn, false) {
 		return ErrDenied
@@ -258,7 +268,22 @@ func Probe(ctx context.Context, conn net.Conn, c Config, received func()) error 
 	if t.Version != 1 || t.Grant != c.Grant || t.ClientNonce != n || !validNonce(t.ServerNonce) || t.TargetIP != c.Binding.TargetIP.String() || t.ControllerIP != c.Binding.ControllerIP.String() || !verifies(c.Binding.Target, "target", t, w.Signature) {
 		return ErrDenied
 	}
-	if write(conn, proof{signed(c.Key, "controller", t)}) != nil {
+	key := c.Key
+	if wrongProof {
+		_, key, err = ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return ErrDenied
+		}
+	}
+	if write(conn, proof{signed(key, "controller", t)}) != nil {
+		return ErrDenied
+	}
+	if wrongProof {
+		var b [1]byte
+		n, err := conn.Read(b[:])
+		if n == 0 && err == io.EOF {
+			return nil
+		}
 		return ErrDenied
 	}
 	for {

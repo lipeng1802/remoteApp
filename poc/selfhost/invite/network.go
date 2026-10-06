@@ -56,7 +56,9 @@ func (s *Store) NetworkState(g Grant, b NetworkBinding) (NetworkState, error) {
 		return NetworkState{}, ErrDenied
 	}
 	key, _ := hex.DecodeString(s.state.PrivateKey)
-	if !VerifyGrant(ed25519.PrivateKey(key).Public().(ed25519.PublicKey), g, g.Claims.Target, g.Claims.Controller, s.clock()) {
+	// An expired but genuine grant can still receive a signed inactive state;
+	// otherwise its normal expiry would look like a broken authority process.
+	if !VerifyGrant(ed25519.PrivateKey(key).Public().(ed25519.PublicKey), g, g.Claims.Target, g.Claims.Controller, time.Unix(g.Claims.IssuedAt, 0)) {
 		return NetworkState{}, ErrDenied
 	}
 	active := s.authorizedLocked(g, g.Claims.Target, g.Claims.Controller)

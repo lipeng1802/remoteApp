@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 公网负向门禁与真实 grant 到期通过（当前入口）
+
+在用户确认继续切片后新增 `authorized-network.py --negative-expiry`，真实 Windows serve / Mac probe 实测退出码 0。基础门禁回归仍通过；补齐 pending/明确拒绝均无新 grant 且无法用旧 grant 传载荷、服务签名正确但节点公钥绑定错误的连接拒绝、已允许网络节点上第三应用私钥对真实 challenge 的证明拒绝（要求 EOF 和 server session_denied，不将超时当成功），以及撤销后旧正向状态重放不能恢复 helper。旧正向重放触发明确 invalid_authorization_update，helper 正常关闭，没有强杀/cleanup_timeout。
+
+真实 300 秒 grant 长测保持正常固定载荷及每 0.5 秒状态刷新，不改机器时钟/不缩短 grant。约 30 秒输出一次无凭据进度；连接在签名绝对到期附近关闭（不是 360 秒 helper 上限）。后端无故障，最后正向状态有效期跨过 grant 到期，独立断言证明并非 3 秒状态超时导致结束。真实已过期 grant 可继续获得签名 inactive 状态，后端不退出；篡改 grant 仍拒绝。
+
+新增过期 inactive/篡改拒绝、负向探针实际 EOF/server 拒绝、serve 禁止负向开关单测；最终全量 `go test -race ./...`、`go vet ./...` 通过。Mac/Windows helper 构建、完整原 token 本机 `verify.zsh` 回归零退出。公网测试节点数保持 2；临时 key/节点/用户/两端节点状态和私有 fixture 精确回收。清理后独立复核 nodes/users=null、服务 active、原两项 Nginx 配置哈希 OK。现有产品/安装包/系统 Tailscale/Windows 防火墙不变。证书续期由用户安排，本切片不修改证书。
+
+下一切片：受控设备注册/短期网络凭据与最小网络策略的后端闭环，逐步替代当前可信管理员读取节点身份/审批 fixture，先私有入口，不直接发布已有 loopback 注册服务。需要明确设备持有证明与网络节点所有权绑定、凭据回收、授权到期/撤销的网络规则收敛及故障恢复。再进入产品 TLS 固定载荷桥接。当前仍不宣称最终用户无 SSH 设备码 GUI、多租户公开服务、动态 ACL 或已有流无缝直连→中继迁移完成。第三私钥证明在已允许节点上实测，不扩张为本切片新注册第三网络节点测试。复测说明见 [授权验证](../poc/selfhost/public-server/AUTHORIZATION_TEST.md)。下方“负向/300 秒待验收”为历史。
+
 ## 2026-10-07 双机签名授权门禁实测通过（当前入口）
 
 用户恢复两把专用 SSH 密钥后，服务器和 Windows SSH 均认证成功；隔离数据库无节点。使用 `0d79fb0` 实际执行 `python3 -B poc/selfhost/public-server/authorized-network.py`，退出码 0。Windows x64 独立 helper 上传和校验通过；两节点归属确认、Headscale 输出适配、实际 tsnet status/WhoIs 节点公钥绑定，以及应用设备互证在本轮真实连接中通过，不再只是编译/本机证据。

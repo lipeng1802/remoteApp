@@ -18,16 +18,20 @@ import (
 )
 
 type authorizationConfig struct {
-	Issuer     string              `json:"issuer"`
-	PrivateKey string              `json:"private_key"`
-	Target     string              `json:"target"`
-	Controller string              `json:"controller"`
-	State      invite.NetworkState `json:"state"`
+	RejectProof bool                `json:"reject_proof,omitempty"` // isolated malicious-proof fixture, probe only
+	Issuer      string              `json:"issuer"`
+	PrivateKey  string              `json:"private_key"`
+	Target      string              `json:"target"`
+	Controller  string              `json:"controller"`
+	State       invite.NetworkState `json:"state"`
 }
 
 func sessionConfig(c config) (session.Config, error) {
 	a := c.Authorization
 	if a == nil {
+		return session.Config{}, errors.New("invalid_authorization")
+	}
+	if a.RejectProof && c.Role != "probe" {
 		return session.Config{}, errors.New("invalid_authorization")
 	}
 	decode := func(s string, n int) []byte {

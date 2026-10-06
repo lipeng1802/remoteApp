@@ -363,6 +363,13 @@ func runContext(parent context.Context, c config, token []byte) (result error) {
 				conn.Close()
 				return errors.New("node_binding_rejected")
 			}
+			if c.Authorization.RejectProof {
+				if session.RejectProof(ctx, conn, cfg) != nil {
+					return errors.New("negative_proof_failed")
+				}
+				emit("wrong_proof_rejected", nil)
+				return nil
+			}
 			emit("authorized_stream_open", nil)
 			streamCtx, stopStream := context.WithCancel(ctx)
 			defer stopStream()
