@@ -1,6 +1,14 @@
-# 4C-4J：旧ACL留存时TLS关闭/显式恢复（入口完成，实机待验）
+# 4C-4J：旧ACL留存时TLS关闭/显式恢复（完整实机通过）
 
-用户已确认4C-4I桌面STOPPED。本轮仅开发入口/组件，不暂停线上服务，不新增Headscale节点/修改规则或Store。整体4未完成。
+用户确认4C-4I桌面STOPPED后完成入口准备，再重新READY，最新真实双机完整验收退出0。只对本轮私有隔离进程/节点/策略实验，不暂停或替换线上服务。整体4未完成。
+
+## 实机结果
+
+实际Windows OS probe、本轮源码archive/hash与65协议测试/publish通过（DPAPI明确SKIP）。独立daemon/frontend、OS consent/nodeproof/最小规则、真实Swift/C#负向与正常跨lease全部通过。隔离daemon实际SIGSTOP/T态确认，frontend HTTPS503，旧精确批准ACL在TLS关闭前后均仍留存；自主watch done/join，真实TLS connection_closed而非timeout/cancelled，C#/helper各关闭一次且后续pong不增。
+
+recover正常CONT/TERM/STOPPED/零退出/join后原Store与原verifier key/IP显式新daemon，fresh active签名binding同原pair、最小ACL恢复；旧managed gate仍done/不active、fresh parent state不能复活、旧TLS不增pong。显式新helper/clock/watch/gate与新TLS可正常同身份恢复并再次跨lease；随后OS owner撤销、watch/TLS正常关闭、实际资源回收。
+
+最终cleaned日志屏障、全部进程正常零退出/join、精确Retire与隔离资源清理、原file策略恢复完成，整轮退出0。独立SSH核对服务active/线上State原hash/Nginx全部OK/控制资源零/原规则完整。没有沿用准备轮组件结果冒充实机；Windows最后用户Enter/STOPPED待确认。
 
 ## 故障范围
 
@@ -18,7 +26,7 @@ recover先SIGCONT本轮daemon以便正常TERM/STOPPED/零退出/join，再以原
 
 - Linux最新check构建/vet完成，8项真实组件PASS无SKIP：原5项、故障协议顺序/失败不报成功、精确非零policy保留断言、实际自建sleep子进程内核暂停确认。测试没有访问Headscale/Store或线上PID，临时binary已删除。
 - Python5项纯断言PASS，包括fault bootstrap/ack必须精确且True、非超时关闭与无protected载荷。不是实际TLS故障证据。
-- 没有执行新双机故障验收，没有本轮Windows编译/节点/ACL变化；服务源码未改，未重跑全量Go race。
+- 最新双机故障验收及Windows编译已实际完成；未修改线上服务/Store/Nginx/public API，未重跑全量Go race。
 - 这模拟“权威进程暂停、网络规则留存”，不是provider断网、真实磁盘损坏、硬崩溃或自然300秒到期。暂停会让同进程verifier也停顿，仍需实测证明旧规则存在时产品关闭。
 - 管理SSH、私有test root/CA、HMAC测试管道依然不是最终安装/信任准入/秘密投递，整体4未完成。
 

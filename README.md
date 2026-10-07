@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-4C-4J：[旧ACL留存时真实TLS关闭/显式恢复入口](poc/selfhost/public-server/SPLIT_TLS_FAULT.md) 已准备，Linux8项组件与Python5项断言通过。只允许暂停本轮隔离daemon，要求真HTTPS503/旧最小规则留存/旧gate不自动重开；新双机实测待Windows READY，不宣称通过，整体4未完成。
+4C-4J：[旧ACL留存时真实TLS关闭/显式恢复](poc/selfhost/public-server/SPLIT_TLS_FAULT.md) 完整双机实测通过，退出0。隔离daemon实际暂停、HTTPS503且旧最小规则仍在，真实TLS非timeout关闭；同verifier身份显式恢复后旧gate/连接不自动重开，显式新helper/TLS可恢复，最终撤销/清理/原策略恢复。线上Store/Nginx未变，Windows最终STOPPED待确认；非正式信任安装/公网产品，整体4未完成。
 
 4C-4I：[独立 daemon/frontend 的真实产品 TLS](poc/selfhost/public-server/SPLIT_PRODUCT_TLS.md) 完整双机复测通过，退出0：真实Swift/C#、OS签名证书私钥证明/新鲜描述符、错pin/错HMAC/认证前载荷拒绝、自主HTTPS刷新跨lease、撤销关闭非timeout、精确回收恢复。修复先停daemon导致cleanup_pending尚未提交的清理竞争，Linux5项断言通过。Windows最终STOPPED待确认；旧ACL残留故障/正式信任安装等仍待，整体4未完成。
 

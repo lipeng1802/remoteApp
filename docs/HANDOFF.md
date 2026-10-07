@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片4C-4J：旧ACL留存TLS故障关闭/显式恢复完整通过
+
+用户重新READY，实际Windows pinned probe通过，最新 split-consent.py --tls-fault 完整退出0。本轮Windows源码archive/hash、65/65协议测试/publish通过（DPAPI明确SKIP）；OS consent/nodeproof/最小规则与真实Swift/C#负向/正常跨lease仍通过，未使用旧fixture。
+
+实际本轮隔离daemon SIGSTOP并确认内核T态；非root frontend真实HTTPS/network在broker期限后503，暂停前后非零policy相同。外部控制面核对精确controllerIP→targetIP:47476，TLS关闭前后旧规则仍在；两端自主watch退出/join，真实Swift connection_closed非timeout/cancelled，C#session/helper tunnel各关闭一次且无新pong。线上authority/frontend/poc/provider均未被暂停。
+
+明确recover CONT→原daemon正常TERM/STOPPED/零退出/join→同Store/issuer与原verifier key/IP显式新daemon；批准最小规则恢复，fresh signed active binding与原节点一致。旧两端managed gate仍done/不active，fresh parent state拒绝重开，旧TLS不增加pong。显式新helper/clock/watch/gate和新Swift TLS连接才恢复，同node/IP、fresh descriptor匹配原C#证书，原连接之外新会话持续跨lease；最后Windows真实OS签名撤销，自主watch关闭、TLS非timeout关闭/零新增pong。
+
+所有helper/API/产品进程正常closed/零退出，客户端cleaned日志提交屏障通过；独立daemon/frontend正常STOPPED/join/零ACL、精确verifier Retire，临时节点/目录/上传程序清理，原file模式/策略恢复。独立SSH复核三服务active、线上State哈希仍5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca、Nginx全部OK、nodes/users/preauthkeys null（零），原100.120.0.2→100.120.0.1:47476规则完整。
+
+本轮未修改服务逻辑/新跑全量组件；Linux8/Python5是上一准备轮证据，此轮新增是完整实际双机零退出。**Windows桌面owner未被远程停止，需用户最后Enter/STOPPED确认。** 未验provider断网/磁盘损坏/硬崩溃/自然300秒到期，不把SIGSTOP场景扩展宣称到这些；HMAC/SSH/test root仍私有验证边界，正式信任安装/admission/安全秘密投递/GUI/安装仍待，整体4未完成。下方待验记录为历史。见[实机记录](../poc/selfhost/public-server/SPLIT_TLS_FAULT.md)。
+
 ## 2026-10-07 切片4C-4J：旧ACL留存TLS故障关闭入口准备，待READY
 
 用户确认4C-4I Windows STOPPED，上一轮桌面停止闭环。新增--tls-fault/--os-tls-fault及fault_phase公共marker；私有stdio严格freeze→recover→stop一轮，拒乱序/扩展/重复/代批准，普通模式只stop。仅实际隔离daemon PID SIGSTOP并核对内核T态，不改线上服务/provider，不清规则/删节点；私有frontend真HTTPS/network在broker预算后必须503，控制policy暂停前后精确同一非零语义。异常仍暂停则先SIGCONT再正常stop，join/cleaned未确认保留journal。
