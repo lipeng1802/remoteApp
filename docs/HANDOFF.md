@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 Windows 原生生命周期独立入口（当前入口，双机入口尚未补齐）
+
+按用户“不使用旧安装包”要求新增便携 `TestNativeVaultPortableLifecycle` 和 `run-native-validation.ps1`，制品为独立 zip，不改安装产品。脚本核对两份 exe 的 hash，必须有指定测试 PASS、无 SKIP、退出码 0；设置 vault 绝对路径并恢复原环境变量，无需 SDK/管理员。两个应用身份必须真实 OS vault，临时 issuer 在测试内存中；不依赖 Unix Store，也不放宽生产存储权限。
+
+Mac 真实 OS 存储执行通过：两个身份重开、两端 HTTPS 自主刷新超过初始租期、签名撤销、双向会话证明/opaque 隧道、服务故障关闭与 worker join/无后续查询，正常精确清理随机身份。Go 完整 race/vet 通过；Windows x64 编译、包内 hash 核对清单/五文件 zip、Windows PowerShell 只读 ParseInput 语法检查通过。Windows 用户交互式实际验收待回传。本轮补齐的是 **Windows 本机 OS 集成入口，不是完整跨网双机 OS signer 联合启动入口**；那项仍待，不应宣布全部验证入口完成。详见 [入口清单与边界](../poc/selfhost/public-server/NATIVE_WINDOWS_ENTRY_TEST.md)。旧安装包、配对密钥、系统 Tailscale、服务器和防火墙未改。
+
 ## 2026-10-07 切片 4B-3：真实双机自主刷新/产品 TLS 门禁通过（当前入口）
 
 新增 `enrollment-network.py --managed` 并实际完整零退出。沿用真实设备 HTTPS 申请/明确确认、注册前节点 key、网络节点与应用持有证明、动态单向 ACL/真实零 ACL 拒绝；通过后同身份显式重启两端 helper 到自主模式，Token 为空，API TLS 根/issuer 固定私有 bootstrap。父脚本没有状态刷新线程，也不让独立 device-api-client 开启 watch；每个网络 helper 自生成挑战校准、自己签名 HTTPS 刷新并验证 gate。
