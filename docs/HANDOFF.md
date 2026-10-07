@@ -1,6 +1,18 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-07 切片 4B-4B：真实 OS 双机协调代码完成，网络实测待新 READY
+## 2026-10-07 切片 4B-4B：真实 OS 身份双机网络验收通过（本轮 Windows STOPPED 待回传）
+
+用户使用新 `windows-native-network` 包保持桌面 owner，提供中文目录 READY。实际执行 `REMOTEAPP_WINDOWS_INTERACTIVE_DIR=... enrollment-network.py --native`，完整退出码 0。独立 Windows pinned probe 先通过，authority 确认只有两端固定 OS 公钥，无 target_key/controller_key；设备 HTTPS 注册、邀请单次兑换、拒绝/再次明确批准、issuer/grant 校准均使用真实 OS signer。无批准无授权、未知设备码/复用验证码/自批拒绝。Mac 负向使用另一份真实随机 OS 身份，不是 fixture AppKey。
+
+实机通过：注册前节点 key/OS 签名意图、实际 Windows/Mac 网络+应用实时持有证明、错误身份真实挑战拒绝、同节点重启；只投影单向批准端口、实际正向载荷/反向拒绝、零 ACL 三轮拒绝且 target 无收到载荷、恢复正向。两端自主 HTTPS 校准/刷新，父 state 不可授权、token probe 禁用；发布 TLS RSA 持有证明由 target OS app signer 签名，controller 验新鲜 issuer 描述。真实 Swift/C# TLS 的错 pin/错 HMAC/认证前 PING 均零保护载荷，正确连接持续超过初始 lease。
+
+生命周期实机通过：helper watch stop/join 关闭活动 TLS，双方无新增 PONG且不是 client timeout；周期策略命令失败保留旧 ACL 时 TLS 仍关闭，周期恢复/冷 Store 重开+显式 helper 重启恢复同一绑定；真实 Store 关闭时不能刷新、TLS 关闭；OS 设备 HTTPS revoke 后两端自身观察终止，无父 inactive 投递，尚有效旧正向 state 不能复活，旧 ACL 尚在时 TLS 仍关闭。周期回收/零规则/所有 helper、API、TLS 与 fixture 正常零退出。
+
+正常 teardown 完成两份 Mac 随机 OS 身份的 delete/零退出与节点状态回收，恢复原 file policy/原 PoC policy，service active、业务 Nginx 哈希一致。独立 SSH 再读 nodes/users/preauthkeys 数量均 0；未新增公网端口、未改系统 Tailscale/安装 GUI/生产配对身份。Windows 桌面 owner 属用户，本脚本只关闭自身 relay，仍待用户按 Enter 回传本轮 STOPPED；前一轮 STOPPED 已通过但不替代本轮清理。
+
+边界：这是 **私有协调 fixture 的真实 OS 全链路 Headscale/产品 TLS 验收**，不是最终 GUI/安装免登录产品。API 根/issuer/HMAC/RSA 产品测试身份仍由可信测试 bootstrap 提供，确认仍由协调器发起；正式信任锚安装/轮换/恢复、HMAC 可信投递、产品 IPC/GUI/独立安装仍待。Windows SSH 产品测试 65/65、默认产品 DPAPI 明确 SKIP，不能当默认 66 项通过。未新增数据直连/DERP 分类证据或整个 daemon 断电/300 秒自然到期测试；整体切片 4 未完成。见 [实际验收记录](../poc/selfhost/public-server/NATIVE_NETWORK_TEST.md)。
+
+## 2026-10-07 切片 4B-4B：协调入口实现记录（下方待验为历史）
 
 用户确认前一轮按 Enter 后 STOPPED，桌面 owner 正常退出与随机测试身份清理验收闭环。新增 `enrollment-network.py --native`、`native_bootstrap.py` 及 `enrollment-fixture --native`。Windows 先 SSH pinned probe，严格匹配本机公开 bootstrap/包路径，helper/API 使用 relay+固定 scope/public；Mac 创建随机 controller/独立错误身份两份 OS 凭据，helper 重开 signer，最后 join 后删除。authority 只接两端 public，不生成/输出应用私钥，不预注册/批准 OS 设备，native 模式拒绝特权代签 enroll/revoke；正常授权与撤销均走 OS 签名 HTTPS。父管道不调用 OS sign 或刷新 state。异常特权 fixture teardown 先零 ACL 再清理自己 journal 节点，不伪造设备 revoke。
 
