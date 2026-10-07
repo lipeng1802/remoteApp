@@ -1,6 +1,6 @@
 # 4C-4C：新版真实双机协调入口（实机通过）
 
-2026-10-07新版 `--supervised` 完整真实双机验收通过，退出码0；独立SSH确认实验nodes/users/preauthkeys零、原file策略恢复、线上State和业务Nginx哈希未变，三个服务active。Windows桌面owner最终Enter/STOPPED确认仍待用户回传。仍为私有协调fixture；未部署线上network backend，整体4未完成。
+2026-10-07新版 `--supervised` 完整真实双机验收通过，退出码0；独立SSH确认实验nodes/users/preauthkeys零、原file策略恢复、线上State和业务Nginx哈希未变，三个服务active。Windows最终STOPPED已由用户确认。仍为私有协调fixture；未部署线上network backend，整体4未完成。
 
 ## Windows准备
 
@@ -47,4 +47,4 @@ Python纯断言新增精确绑定/实际ACL对应、额外规则/缺marker拒绝
 
 前三次未完整通过：绑定状态旧假设、撤销join等待2秒、join后3秒快照过期；修正验收时序/精确状态断言后完整复测退出0。未改真实授权TTL或取消deny/join要求。完整记录见 [HANDOFF](../../../docs/HANDOFF.md)。
 
-还没有新增300秒自然grant到期、整机断电/崩溃恢复、DERP/直连分类证据，需另外计划。线上network仍关闭；下一步是持久verifier/真实backend进入独立权威daemon的受控装配与隔离验收，不直接公开fixture。Windows正常STOPPED确认仍待回传。
+还没有新增300秒自然grant到期、整机断电/崩溃恢复、DERP/直连分类证据，需另外计划。线上network仍关闭；下一步是持久verifier/真实backend进入独立权威daemon的受控装配与隔离验收，不直接公开fixture。Windows正常STOPPED已确认。

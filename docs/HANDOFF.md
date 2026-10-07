@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4D：daemon可选网络装配与Linux组件通过，未部署
+
+用户确认本轮Windows已STOPPED，4C-4C最终桌面停止确认闭环（无额外退出码/详细清理输出），下方待确认记录为历史。
+
+新增authority-daemon可选 `--network-config`；原默认device-only行为不变，frontend network仍404。可信同UID0600单行严格配置/父目录0700，verifier/policy已有0700绝对无symlink、Store/配置/socket目录不可重叠。固定Headscale CLI/control/database模式，程序不切模式。现网仍file，禁止直接追加参数。
+
+仅重开既有verifier(create=false)，无Mint/rekey；Runtime overlay/Store可信公钥nodeproof与supervisor装配、1秒维护，首投影/维护Ready才broker监听。后端故障关闭broker并错误退出，不自动恢复；正常TERM先broker请求join，再supervisor join/零ACL确认，再Runtime stop，最后Store close。join/零规则确认或Runtime停止失败不关闭Store、不报正常STOPPED，journal保留；OS最终进程退出释放锁不能当清理成功。Runtime正常停止顺序不由父context抢先关闭，原有30秒重开预算仍在。
+
+全量Go race/vet通过，Linux amd64新入口构建通过；实际Linux三项隔离组件PASS无SKIP（严格配置；真实Store/kernel socket+替身owner四种生命周期；实际入口缺verifier不创建）。不调用真实Headscale，不能算daemon真实网络后端/跨UID新验收。临时测试程序已删除，本地构建可恢复。只读复核authority/frontend/poc均active，线上State哈希仍5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca，Nginx全部OK，nodes/users/preauthkeys零。
+
+未安装新binary/unit、未创建长期节点/切Headscale database、未改线上Store/profile/公网路由。下一步隔离环境准备既有verifier，真实daemon+不同UID broker/故障退出/同身份重启验收，再决定前端网络路由与受控部署。公网admission、安装锚/floor/轮换、HMAC安全投递及GUI安装仍待，整体4未完成。见 [装配与边界](../poc/selfhost/public-server/DAEMON_NETWORK.md)。
+
 ## 2026-10-07 切片 4C-4C：新版真实双机验收通过，Windows最终STOPPED待确认
 
 用户重新READY后，使用现有windows-native-network包和实际pinned probe，执行新版 `enrollment-network.py --supervised`，最终完整退出码0；没有沿用旧--native结果。真实persistent Runtime、Unix kernel broker、supervisor、Store可信公钥/overlay nodeproof、两端OS signer设备注册/邀请/拒绝/明确批准及签名授权全链路通过。fixture同root/UID的kernel IPC不等同线上不同UID新后端部署，正式network接口仍未开启。

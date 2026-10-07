@@ -11,7 +11,7 @@ import (
 )
 
 // StartHeadscaleNetworkSupervisor is privileged process-local assembly, NOT
-// exposed by the device-only daemon or frontend. Runtime must already be live
+// exposed to frontend callers. Runtime must already be live
 // and caller must Stop supervisor BEFORE stopping runtime or closing Store.
 // The fixed local CLI and runtime-owned overlay never use installed Tailscale.
 func StartHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, policyDir string, interval time.Duration) (*NetworkSupervisor, error) {

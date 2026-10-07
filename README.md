@@ -1,12 +1,14 @@
 # Personal Remote Desktop MVP
 
+4C-4D：[独立权威服务可选网络装配](poc/selfhost/public-server/DAEMON_NETWORK.md) 代码、全量race/vet、Linux构建及三项Linux隔离组件测试通过；默认device-only不变，尚未部署真实daemon网络后端或开放公网接口。4C-4C Windows最终STOPPED已由用户确认。下一步隔离实机装配验收，整体4未完成。
+
 最新 4C-3D：[单一权威 daemon / 无特权 HTTPS frontend](poc/selfhost/public-server/AUTHORITY_MIGRATION.md) 已受控迁移至服务器，真实权限隔离、回环HTTPS、第二writer拒绝、权威退出503/重启恢复通过，线上State哈希未变。root-only备份保留，新服务active但未开机启用；网络仍关闭。下一步接 verifier/nodeproof/maintenance/fence 真实后端。整体切片 4 未完成。
 
 4C-4A：[真实后端装配与生命周期 supervisor](poc/selfhost/public-server/NETWORK_SUPERVISOR.md) 组件已接入固定Headscale驱动、可信Store公钥与runtime-owned nodeproof；故障取消/join/锁闭测试完成。尚未部署或完成该装配的真实双机验收，线上network继续404。
 
 4C-4B 补齐私有HTTPS→kernel broker验证适配，修正策略目录/database配置与network执行期限；Linux五项隔离组件测试及Windows桌面签名探针通过。真实双机新版协调流程仍待，未改线上network授权。
 
-4C-4C：[新版 supervised 真实双机协调验收](poc/selfhost/public-server/SUPERVISED_NETWORK_TEST.md) 已完整实机通过（退出码0）：真实Runtime/kernel broker/supervisor、两端OS签名/nodeproof、最小规则/零规则真实拒绝、产品TLS、故障锁闭/显式恢复、撤销及同身份verifier重启。实验资源全部回收、原策略恢复，线上State/Nginx未变；Windows桌面owner最终Enter/STOPPED确认待用户回传。仍为私有协调实验，非公网产品或整体切片4完成。
+4C-4C：[新版 supervised 真实双机协调验收](poc/selfhost/public-server/SUPERVISED_NETWORK_TEST.md) 已完整实机通过（退出码0）：真实Runtime/kernel broker/supervisor、两端OS签名/nodeproof、最小规则/零规则真实拒绝、产品TLS、故障锁闭/显式恢复、撤销及同身份verifier重启。实验资源全部回收、原策略恢复，线上State/Nginx未变；Windows最终STOPPED已确认。仍为私有协调实验，非公网产品或整体切片4完成。
 
 最新 4C-3A：[持久 verifier](poc/selfhost/public-server/PERSISTENT_VERIFIER.md) 的明确创建/同身份重启/故障停止/精确回收代码与真实 Headscale 验收通过，测试资源已回收。尚未部署长期 verifier 或接通设备服务网络接口；下一步是固定权限 broker/可信设备公钥绑定，再接实际后端。整体切片 4 未完成。
 

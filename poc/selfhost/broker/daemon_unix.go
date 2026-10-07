@@ -17,11 +17,17 @@ type DaemonConfig struct {
 	Profile, ReleaseRoot, Service, StateDirectory, Socket string
 	MinimumEpoch                                          uint64
 	PeerUID, GroupID                                      uint32
+	// Empty retains the deployed device-only behavior. Trusted local path only.
+	NetworkConfig string
 }
 
 // RunDaemon owns the sole existing Store. It has NO TLS listener or generic
-// privileged operations and currently NO enabled network backend.
+// privileged operations. Network is opt-in via trusted local configuration.
 func RunDaemon(ctx context.Context, c DaemonConfig, ready func()) (result error) {
+	return runDaemon(ctx, c, ready, startDaemonNetwork)
+}
+
+func runDaemon(ctx context.Context, c DaemonConfig, ready func(), start networkStarter) (result error) {
 	root, e := hex.DecodeString(c.ReleaseRoot)
 	if e != nil || len(root) != 32 || hex.EncodeToString(root) != c.ReleaseRoot || ctx.Err() != nil {
 		return ErrBroker
@@ -57,6 +63,13 @@ func RunDaemon(ctx context.Context, c DaemonConfig, ready func()) (result error)
 	if _, e = trustprofile.Verify(p, root, c.Service, c.MinimumEpoch, time.Now()); e != nil {
 		return ErrBroker
 	}
+	var networkConfig DaemonNetworkConfig
+	if c.NetworkConfig != "" {
+		networkConfig, e = loadDaemonNetworkConfig(c)
+		if e != nil {
+			return ErrBroker
+		}
+	}
 	// Missing state cannot turn into a fresh issuer. Open never creates the
 	// authority directory, and no caller-controlled paths enter IPC messages.
 	info, e = os.Lstat(filepath.Join(c.StateDirectory, "state.json"))
@@ -67,8 +80,9 @@ func RunDaemon(ctx context.Context, c DaemonConfig, ready func()) (result error)
 	if e != nil {
 		return ErrBroker
 	}
+	closeStore := true
 	defer func() {
-		if s.Close() != nil {
+		if closeStore && s.Close() != nil {
 			result = ErrBroker
 		}
 	}()
@@ -78,7 +92,40 @@ func RunDaemon(ctx context.Context, c DaemonConfig, ready func()) (result error)
 	lifetime, cancel := context.WithDeadline(ctx, time.Now().Add(time.Until(time.Unix(p.Claims.ExpiresAt, 0))))
 	defer cancel()
 	a := &Authority{Store: s}
-	return Serve(lifetime, Config{Socket: c.Socket, PeerUID: c.PeerUID, GroupID: c.GroupID, Executor: &timeBoundAuthority{a: a, issued: p.Claims.IssuedAt, expires: p.Claims.ExpiresAt}}, ready)
+	var owner daemonNetworkOwner
+	if c.NetworkConfig != "" {
+		owner, e = start(lifetime, s, networkConfig)
+		if owner != nil {
+			defer func() {
+				stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer stopCancel()
+				if owner.Stop(stopCtx) != nil {
+					// Never release Store ownership under unjoined network workers.
+					closeStore = false
+					result = ErrBroker
+				}
+			}()
+		}
+		if e != nil || owner == nil || owner.Authority() == nil || owner.Authority().Store != s {
+			return ErrBroker
+		}
+		a = owner.Authority()
+		watchDone := make(chan struct{})
+		defer func() { cancel(); <-watchDone }()
+		go func() {
+			defer close(watchDone)
+			select {
+			case <-owner.Done():
+				cancel()
+			case <-lifetime.Done():
+			}
+		}()
+	}
+	e = Serve(lifetime, Config{Socket: c.Socket, PeerUID: c.PeerUID, GroupID: c.GroupID, Executor: &timeBoundAuthority{a: a, issued: p.Claims.IssuedAt, expires: p.Claims.ExpiresAt}}, ready)
+	if owner != nil && ctx.Err() == nil {
+		return ErrBroker
+	}
+	return e
 }
 
 type timeBoundAuthority struct {

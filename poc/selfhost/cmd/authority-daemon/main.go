@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 9 {
+	if len(os.Args) != 9 && (len(os.Args) != 11 || os.Args[9] != "--network-config") {
 		fmt.Println("FAIL authority_arguments")
 		os.Exit(1)
 	}
@@ -27,7 +27,16 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	c := broker.DaemonConfig{Profile: os.Args[1], ReleaseRoot: os.Args[2], Service: os.Args[3], MinimumEpoch: floor, StateDirectory: os.Args[5], Socket: os.Args[6], PeerUID: uint32(peer), GroupID: uint32(group)}
-	if broker.RunDaemon(ctx, c, func() { fmt.Println("READY sole authority; network disabled") }) != nil {
+	if len(os.Args) == 11 {
+		c.NetworkConfig = os.Args[10]
+	}
+	if broker.RunDaemon(ctx, c, func() {
+		if c.NetworkConfig == "" {
+			fmt.Println("READY sole authority; network disabled")
+		} else {
+			fmt.Println("READY sole authority; supervised network enabled on private broker")
+		}
+	}) != nil {
 		fmt.Println("FAIL authority unavailable")
 		os.Exit(1)
 	}
