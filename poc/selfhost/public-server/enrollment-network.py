@@ -72,12 +72,13 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"]):
+    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"]):
         raise RuntimeError("invalid_arguments")
     streams=bool(sys.argv[1:])
-    apimode=sys.argv[1:]==["--api"]
-    periodic=sys.argv[1:] in (["--maintenance"],["--api"])
-    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"],["--api"])
+    deviceflow=sys.argv[1:]==["--device-flow"]
+    apimode=sys.argv[1:] in (["--api"],["--device-flow"])
+    periodic=sys.argv[1:] in (["--maintenance"],["--api"],["--device-flow"])
+    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"],["--api"],["--device-flow"])
     os.umask(0o077)
     if tlsmode:
         env=dict(os.environ,COPYFILE_DISABLE="1")
@@ -114,7 +115,7 @@ def main():
         if values and values[-1].get("status")=="failed":
             print("FAIL mode_switch_"+values[-1].get("reason","internal_error"),flush=True)
         t.check(switched.returncode==0 and values[-1].get("status")=="db_deny_ready","isolated_db_policy_ready")
-        authority=Pipe(t.SERVER+[remote])
+        authority=Pipe(t.SERVER+[remote+(" --device-flow" if deviceflow else "")])
         ready=authority.read()
         t.check(ready.get("status")=="ready","real_backend_verifier_prepared_key_matched")
         # Private test keys only; production enrollment must receive signatures,
@@ -156,12 +157,55 @@ def main():
             actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\device-api-client.exe').Hash")
             t.check(actual.lower()==hashlib.sha256(api_binary.read_bytes()).hexdigest(),"device_api_client_binary_verified")
             def api_client(command,port,key):
-                p=Pipe(command,{"Endpoint":f"https://127.0.0.1:{port}","Certificate":ready["api_certificate"],"AppKey":key,"Grant":ready["grant"]});helpers.append(p)
+                p=Pipe(command,{"Endpoint":f"https://127.0.0.1:{port}","Certificate":ready["api_certificate"],"AppKey":key,"Grant":ready["grant"],"Issuer":ready["issuer"],"Target":hashlib.sha256(bytes.fromhex(ready["target"])).hexdigest(),"Controller":hashlib.sha256(bytes.fromhex(ready["controller"])).hexdigest()});helpers.append(p)
                 t.check(p.read()["status"]=="ready","device_owned_http_signer_ready");return p
             target_api=api_client(t.WIN+[f'cmd.exe /d /c "cd /d {work} && device-api-client.exe"'],remote_port,ready["target_key"])
             controller_api=api_client([str(t.ARTIFACTS/"device-api-client")],local_port,ready["controller_key"])
             for device in (target_api,controller_api):
                 t.check(device.request("device",Device={"action":"register"})["passed"],"device_signed_https_registration_passed")
+            if deviceflow:
+                def device_call(p,**body):
+                    r=p.request("device",Device=body)
+                    t.check(r["passed"],"device_flow_"+body["action"]+"_https_passed")
+                    return r["device"]
+                target_registration=device_call(target_api,action="register")
+                controller_registration=device_call(controller_api,action="register")
+                t.check(not ready["grant"]["claims"]["id"],"no_preapproved_fixture_grant")
+                t.check(not controller_api.request("network_state")["passed"],"no_network_authorization_before_consent")
+                def claim_invitation():
+                    invitation=device_call(target_api,action="invite")
+                    denied=controller_api.request("device",Device={"action":"claim","target_code":"000000000000","code":invitation["code"]})
+                    t.check(not denied["passed"],"unknown_device_code_denied")
+                    claimed=device_call(controller_api,action="claim",target_code=target_registration["device_code"],code=invitation["code"])
+                    t.check(claimed["status"]=="pending" and "grant" not in claimed,"code_exchange_never_auto_approves")
+                    incoming=device_call(target_api,action="incoming")
+                    t.check(incoming["request_id"]==claimed["request_id"] and incoming["controller_id"]==controller_registration["device_id"] and "code" not in incoming and "grant" not in incoming,"owner_discovers_exact_pending_peer")
+                    t.check(device_call(controller_api,action="incoming")["status"]=="idle","controller_cannot_discover_target_queue")
+                    reused=controller_api.request("device",Device={"action":"claim","target_code":target_registration["device_code"],"code":invitation["code"]})
+                    t.check(not reused["passed"],"verification_code_single_use")
+                    return claimed["request_id"]
+                request_id=claim_invitation()
+                device_call(target_api,action="approve",request_id=request_id,allow=False)
+                rejected=device_call(controller_api,action="status",request_id=request_id)
+                t.check(rejected["status"]=="denied" and "grant" not in rejected,"explicit_denial_never_grants")
+                # First invitation consumed three attempts; next gets fresh
+                # target budget, controller stays within its five attempts/minute.
+                invitation=device_call(target_api,action="invite")
+                claimed=device_call(controller_api,action="claim",target_code=target_registration["device_code"],code=invitation["code"])
+                incoming=device_call(target_api,action="incoming")
+                t.check(incoming["request_id"]==claimed["request_id"],"second_pending_discovered")
+                foreign=controller_api.request("device",Device={"action":"approve","request_id":claimed["request_id"],"allow":True})
+                t.check(not foreign["passed"],"controller_cannot_self_approve")
+                pending=device_call(controller_api,action="status",request_id=claimed["request_id"])
+                t.check(pending["status"]=="pending" and "grant" not in pending,"pending_poll_has_no_grant")
+                approved=device_call(target_api,action="approve",request_id=incoming["request_id"],allow=True)
+                received=device_call(controller_api,action="status",request_id=claimed["request_id"])
+                t.check(approved["grant"]==received["grant"],"both_devices_receive_same_approved_grant")
+                grant=received["grant"]
+                for device in (target_api,controller_api):
+                    t.check(device.request("use_grant",Grant=grant)["passed"],"device_verifies_issuer_subjects_expiry")
+                t.check(authority.request("adopt_grant",Grant=grant)["passed"],"private_fixture_adopts_only_device_approved_grant")
+                ready["grant"]=grant;ready["grant_id"]=grant["claims"]["id"]
         product=None
         tlsclient=None
         product_ready=None

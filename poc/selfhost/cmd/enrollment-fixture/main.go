@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -38,6 +39,10 @@ func random(n int) string {
 	}
 	return hex.EncodeToString(b)
 }
+func hexDeviceID(pub ed25519.PublicKey) string {
+	h := sha256.Sum256(pub)
+	return hex.EncodeToString(h[:])
+}
 func main() {
 	if run() != nil {
 		os.Exit(1)
@@ -62,6 +67,10 @@ func run() error {
 	}()
 	_, target, _ := ed25519.GenerateKey(rand.Reader)
 	_, controller, _ := ed25519.GenerateKey(rand.Reader)
+	deviceFlow := len(os.Args) == 2 && os.Args[1] == "--device-flow"
+	if len(os.Args) > 1 && !deviceFlow {
+		return invite.ErrDenied
+	}
 	execute := func(k ed25519.PrivateKey, b invite.Body) (invite.Result, error) {
 		b.Nonce = random(16)
 		b.IssuedAt = time.Now().Unix()
@@ -74,19 +83,22 @@ func run() error {
 	if _, e = execute(controller, invite.Body{Action: "register"}); e != nil {
 		return e
 	}
-	inv, e := execute(target, invite.Body{Action: "invite"})
-	if e != nil {
-		return e
+	var g invite.Grant
+	if !deviceFlow {
+		inv, e := execute(target, invite.Body{Action: "invite"})
+		if e != nil {
+			return e
+		}
+		req, e := execute(controller, invite.Body{Action: "claim", TargetCode: t.DeviceCode, Code: inv.Code})
+		if e != nil {
+			return e
+		}
+		approved, e := execute(target, invite.Body{Action: "approve", RequestID: req.RequestID, Allow: true})
+		if e != nil {
+			return e
+		}
+		g = *approved.Grant
 	}
-	req, e := execute(controller, invite.Body{Action: "claim", TargetCode: t.DeviceCode, Code: inv.Code})
-	if e != nil {
-		return e
-	}
-	approved, e := execute(target, invite.Body{Action: "approve", RequestID: req.RequestID, Allow: true})
-	if e != nil {
-		return e
-	}
-	g := *approved.Grant
 	var failPolicy atomic.Bool
 	runner := headscale.LocalRunner()
 	// Private fault injection: reject privileged policy commands, retain the
@@ -177,7 +189,8 @@ func run() error {
 	}()
 	out := json.NewEncoder(os.Stdout)
 	var apiMu sync.RWMutex
-	apiHandler := invite.NetworkHandler(b)
+	admission := invite.NewAdmission()
+	apiHandler := admission.Wrap(invite.NetworkHandler(b))
 	api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiMu.RLock()
 		defer apiMu.RUnlock()
@@ -215,6 +228,7 @@ func run() error {
 		var c struct {
 			Op, Role, NodeKey, Ticket, Challenge string
 			Intent                               invite.ProvisionEnvelope
+			Grant                                invite.Grant
 		}
 		if json.Unmarshal(line, &c) != nil {
 			return invite.ErrDenied
@@ -222,6 +236,13 @@ func run() error {
 		callCtx, stop := context.WithTimeout(context.Background(), 25*time.Second)
 		result := map[string]any{"status": c.Op, "passed": false}
 		switch c.Op {
+		case "adopt_grant":
+			apiMu.Lock()
+			if deviceFlow && g == (invite.Grant{}) && c.Grant.Claims.Target == t.DeviceID && c.Grant.Claims.Controller == hexDeviceID(controller.Public().(ed25519.PublicKey)) && s.Authorized(c.Grant, c.Grant.Claims.Target, c.Grant.Claims.Controller) {
+				g = c.Grant
+				result["passed"] = true
+			}
+			apiMu.Unlock()
 		case "proof_result":
 			apiMu.Lock()
 			result["proof_stage"] = proofStage
@@ -324,7 +345,7 @@ func run() error {
 				authorityOffline = false
 				d = &headscale.Driver{Run: policyRunner, PolicyDir: dir, PolicyMode: "database", VerifierIP: d.VerifierIP, Proof: d.Proof}
 				b = &invite.ProvisionBackend{Store: s, Driver: d}
-				apiHandler = invite.NetworkHandler(b)
+				apiHandler = admission.Wrap(invite.NetworkHandler(b))
 				if periodic {
 					maintenance, e = b.StartMaintenance(context.Background(), 500*time.Millisecond, 2*time.Second)
 					result["passed"] = e == nil

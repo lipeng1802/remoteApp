@@ -33,6 +33,16 @@ func (b *ProvisionBackend) ClockProof(g Grant, nonce string) (ClockProof, error)
 	if e != nil || !n.Claims.Active {
 		return ClockProof{}, ErrDenied
 	}
+	return b.GrantClockProof(g, nonce)
+}
+
+// A newly approved device needs time calibration before network enrollment.
+// This proves issuer time for an online approved grant, NEVER network readiness.
+func (b *ProvisionBackend) GrantClockProof(g Grant, nonce string) (ClockProof, error) {
+	raw, e := hex.DecodeString(nonce)
+	if e != nil || len(raw) != 32 || hex.EncodeToString(raw) != nonce {
+		return ClockProof{}, ErrDenied
+	}
 	s := b.Store
 	s.mu.Lock()
 	defer s.mu.Unlock()

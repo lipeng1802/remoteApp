@@ -57,13 +57,14 @@ type Grant struct {
 	Signature string `json:"signature"`
 }
 type Result struct {
-	DeviceID   string `json:"device_id,omitempty"`
-	DeviceCode string `json:"device_code,omitempty"`
-	InviteID   string `json:"invite_id,omitempty"`
-	Code       string `json:"code,omitempty"` // returned only once to the owning device
-	RequestID  string `json:"request_id,omitempty"`
-	Status     string `json:"status"`
-	Grant      *Grant `json:"grant,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
+	DeviceCode   string `json:"device_code,omitempty"`
+	InviteID     string `json:"invite_id,omitempty"`
+	Code         string `json:"code,omitempty"` // returned only once to the owning device
+	RequestID    string `json:"request_id,omitempty"`
+	Status       string `json:"status"`
+	Grant        *Grant `json:"grant,omitempty"`
+	ControllerID string `json:"controller_id,omitempty"`
 }
 type device struct{ Code, ActiveInvite string }
 type invitation struct {
@@ -280,6 +281,14 @@ func (s *Store) Execute(e Envelope) (Result, error) {
 		return Result{}, ErrDenied
 	}
 	id := deviceID(pub)
+	if _, known := s.state.Devices[id]; !known {
+		budget := s.state.Attempts["new-registration"]
+		if e.Body.Action != "register" || len(s.state.Devices) >= 128 || budget.Expires > now && budget.Count >= 10 {
+			// No side effect, nonce allocation or disk write for unadmitted
+			// anonymous keys; the global durable registration budget is intact.
+			return Result{}, ErrDenied
+		}
+	}
 	replayID := id + ":" + e.Body.Nonce
 	if _, seen := s.state.Replay[replayID]; seen {
 		return Result{}, ErrDenied
@@ -303,7 +312,25 @@ func (s *Store) Execute(e Envelope) (Result, error) {
 	}
 	next.Replay[replayID] = now + 61
 	next.LastTime = now
-	result, opErr := s.apply(&next, id, e.Body, now)
+	// Global new-identity budget survives handler/process restarts. Known
+	// devices have an independent general budget; invitation rotation is small.
+	budget, limit := "request:"+id, 240
+	if _, known := next.Devices[id]; !known {
+		budget, limit = "new-registration", 10
+	} else if e.Body.Action == "invite" {
+		budget, limit = "rotation:"+id, 3
+	}
+	var result Result
+	opErr := ErrDenied
+	v := next.Attempts[budget]
+	if v.Expires <= now {
+		v = bucket{Expires: now + 60}
+	}
+	if v.Count < limit && (next.Attempts[budget].Expires > now || len(next.Attempts) < 1024) {
+		v.Count++
+		next.Attempts[budget] = v
+		result, opErr = s.apply(&next, id, e.Body, now)
+	}
 	if s.save(next) != nil {
 		s.broken = true
 		return Result{}, ErrStorage
@@ -347,6 +374,18 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 		return denied()
 	}
 	switch b.Action {
+	case "incoming":
+		// Only the owning device can discover its current request. No public
+		// directory, peer alias, verification code or arbitrary target lookup.
+		if b.TargetCode != "" || b.InviteID != "" || b.Code != "" || b.RequestID != "" || b.GrantID != "" || b.Allow {
+			return denied()
+		}
+		inv, exists := st.Invites[st.Devices[id].ActiveInvite]
+		req, found := st.Requests[inv.RequestID]
+		if !exists || !found || req.Owner != id || req.Status != "pending" || req.Expires <= now {
+			return Result{Status: "idle"}, nil
+		}
+		return Result{RequestID: inv.RequestID, ControllerID: req.Controller, Status: "pending"}, nil
 	case "invite":
 		if len(st.Invites) >= 512 {
 			return denied()
@@ -388,6 +427,15 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 		keys := []string{"device:" + id}
 		if _, exists := st.Invites[inviteID]; exists {
 			keys = append(keys, "invite:"+inviteID)
+		}
+		newBuckets := 0
+		for _, k := range keys {
+			if _, exists := st.Attempts[k]; !exists {
+				newBuckets++
+			}
+		}
+		if len(st.Attempts)+newBuckets > 1024 {
+			return denied()
 		}
 		for _, k := range keys {
 			bucket := st.Attempts[k]

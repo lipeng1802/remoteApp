@@ -30,6 +30,8 @@ python3 -B poc/selfhost/public-server/enrollment-network.py --api
 
 ## 尚未交付
 
+切片 3 已补齐设备签名 HTTPS 邀请/被控发现/确认流程、有界入口和持久注册/轮换预算、批准后 `grant_clock`；详见 [当前流程记录](DEVICE_FLOW_TEST.md)。下方“切片 3 全待完成”是历史；公开代理来源、多实例/DDoS、信任分发与 GUI 仍待交付。
+
 2026-10-07 验收：全量 `go test -race ./...`、`go vet ./...` 通过，最终上述 `--api` 完整实机零退出。双方注册/绑定/查询及设备签名撤销均走真实 HTTPS；真实 TLS 正负向、周期失败关闭/自动恢复、持久后端重开、Store 不可用、inactive 拒绝仍有效旧正向状态及自动回收通过。两端 API 客户端正常关闭，临时转发退出，隔离 nodes/users/preauthkeys 均为 0（另行独立复核），原 file 策略恢复、服务 active、业务 Nginx 哈希一致。没有新增公网端口或改变产品安装/系统 Tailscale。后续未交付项如下。
 
 公开注册入口的 IP/匿名 admission、防枚举、容量/滥用防护和设备码 UX（切片 3）；正式 issuer/证书信任分发、平台私钥存储、安全 IPC（切片 4）；helper 自主生命周期/自动刷新、GUI/安装集成。当前仍由父测试协调刷新和初始化，设备测试私钥/初始批准仍由 fixture 提供，不是正式设备制造/注册模式；不得公开部署当前 fixture。已有基线产品仍依赖系统 Tailscale。

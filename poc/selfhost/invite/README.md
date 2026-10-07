@@ -1,5 +1,7 @@
 # 设备码与一次性邀请授权核心
 
+切片 3 当前入口：新增仅设备本人查询的 `incoming`，完整设备侧 HTTPS 邀请/申请/拒绝/明确批准/查询流程、有界入口/持久注册与轮换预算、未绑定已批准 grant 的签名时间证明。见 [流程记录与上线限制](../public-server/DEVICE_FLOW_TEST.md)。这是协议与私有实机验证，不是最终设备码 GUI 或可直接公开的服务；下面“设备码/入口防滥用全部待完成”为历史。正式信任分发/安全存储/IPC 和公开部署防护仍待完成。
+
 当前：新增设备签名 HTTPS handler/client，原设备注册/撤销与网络 enroll/bind/state/clock 均已通过实际双机调用；认证范围、持久重放和预算、TLS 信任/严格请求测试通过。详见 [接口与私有部署边界](../public-server/DEVICE_API_TEST.md)。周期维护与真实产品 TLS 回归通过，接口仅私有回环测试，不是公开生产服务；匿名/IP admission、设备码 UX、正式身份分发/存储/安全 IPC 和 helper 自主刷新仍待完成。以下“接口/周期待实现/未接 TLS”为历史状态。
 
 最新签名桥接前置：私有 `ProvisionBackend.NetworkState(grant)` 从两个唯一已验证 bound 记录派生动态节点/IP，成功 Reconcile 的规则与共享就绪状态才允许 active。真实双机核对动态绑定与冷驱动恢复通过。未投影、重开未同步、撤销/过期或已知策略故障不签有效状态；仅隔离 /24 主机地址，不接受调用者 binding。原 Store 手工绑定仅历史 fixture 用，绝对 3 秒 lease 与 inactive 重放锁定不变。未接动态 helper 活动流或产品 TLS；外部手改策略不自动被缓存感知，周期 Reconcile 待实现。

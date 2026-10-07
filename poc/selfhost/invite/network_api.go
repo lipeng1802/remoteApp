@@ -131,7 +131,7 @@ func (s *Store) authorizeNetworkRequest(e NetworkRequest) error {
 		if e.Body.Ticket != "" || e.Body.Challenge != "" || e.Body.Intent != (ProvisionEnvelope{}) {
 			return ErrDenied
 		}
-	case "clock":
+	case "clock", "grant_clock":
 		if e.Body.Ticket != "" || e.Body.Intent != (ProvisionEnvelope{}) {
 			return ErrDenied
 		}
@@ -168,6 +168,12 @@ func (b *ProvisionBackend) ExecuteNetworkRequest(ctx context.Context, e NetworkR
 		return NetworkReply{State: &n}, nil
 	case "clock":
 		p, err := b.ClockProof(e.Body.Grant, e.Body.Challenge)
+		if err != nil {
+			return NetworkReply{}, err
+		}
+		return NetworkReply{Proof: &p}, nil
+	case "grant_clock":
+		p, err := b.GrantClockProof(e.Body.Grant, e.Body.Challenge)
 		if err != nil {
 			return NetworkReply{}, err
 		}

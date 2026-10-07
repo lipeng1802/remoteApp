@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -32,6 +33,7 @@ func run() error {
 	}
 	var cfg struct {
 		Endpoint, Certificate, AppKey string
+		Issuer, Target, Controller    string
 		Grant                         invite.Grant
 	}
 	if read(&cfg) != nil {
@@ -57,6 +59,7 @@ func run() error {
 			Op, Ticket, Challenge string
 			Intent                invite.ProvisionEnvelope
 			Device                invite.Body
+			Grant                 invite.Grant
 		}
 		if e := read(&request); e == io.EOF {
 			return nil
@@ -66,6 +69,26 @@ func run() error {
 		if request.Op == "stop" {
 			out.Encode(map[string]any{"status": "closed"})
 			return nil
+		}
+		if request.Op == "use_grant" {
+			issuer, err := hex.DecodeString(cfg.Issuer)
+			var nonce [32]byte
+			_, randomErr := rand.Read(nonce[:])
+			challenge := hex.EncodeToString(nonce[:])
+			start := time.Now()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			proof, proofErr := client.Request(ctx, invite.NetworkRequestBody{Action: "grant_clock", Grant: request.Grant, Challenge: challenge})
+			cancel()
+			passed := false
+			if err == nil && randomErr == nil && proofErr == nil && proof.Proof != nil && cfg.Grant == (invite.Grant{}) {
+				clock, clockErr := invite.AuthorityClock(issuer, *proof.Proof, request.Grant.Claims.ID, challenge, start)
+				passed = clockErr == nil && invite.VerifyGrant(issuer, request.Grant, cfg.Target, cfg.Controller, clock())
+			}
+			if passed {
+				cfg.Grant = request.Grant
+			}
+			out.Encode(map[string]any{"status": "use_grant", "passed": passed})
+			continue
 		}
 		if request.Op == "device" {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

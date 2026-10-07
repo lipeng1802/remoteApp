@@ -137,7 +137,7 @@ func (c *NetworkClient) Request(ctx context.Context, b NetworkRequestBody) (Netw
 		if result.State == nil || result.State.Claims.Grant != b.Grant || result.Ticket != "" || result.Credential != nil || result.Proof != nil {
 			return NetworkReply{}, ErrDenied
 		}
-	case "clock":
+	case "clock", "grant_clock":
 		if result.Proof == nil || result.Proof.Claims.GrantID != b.Grant.Claims.ID || result.Proof.Claims.Nonce != b.Challenge || result.Ticket != "" || result.Credential != nil || result.State != nil {
 			return NetworkReply{}, ErrDenied
 		}
