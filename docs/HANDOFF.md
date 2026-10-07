@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4F：私有前端网络路由与跨进程HTTPS通过
+
+device-frontend增加显式--private-network；默认network404，启用必须loopback+独立broker，无standalone/public监听回退。沿用profile/root/service/floor/TLS/kernel UID/issuer核对，frontend不拥有Store或privileged CLI。私有模式WriteTimeout20秒覆盖5秒读+14秒network执行，默认仍5秒，device预算4秒不变。请求body/frame/JSON/配额/socket/slot限制保留。
+
+全量Go race/vet及Linux新frontend/check构建通过；Mac新测试先修正编译问题后通过。实际Linux两项新组件PASS无SKIP：loopback/broker强制、6秒模拟network操作正常返回503且期限13–14秒、严格JSON/大小写别名/body、unknown404、broker停止无回退503。模拟executor不算真实后端验收。
+
+扩展daemon-network.py --frontend，最新完整真实Linux验收退出0。root独立daemon+实际Headscale verifier，nobody独立frontend持TLS材料，无authority，随机回环端口；服务器随机测试root/CA/profile，客户端root/service/floor验签+CA验证。内存随机设备Ed25519（非OS signer）HTTPS注册200/重放403、注册设备签名无grant network403非503；重复/尾随/8193body400、health404、错误API CA拒绝。停daemon前端仍活且device/network503；正常恢复仍拒绝注册重放。
+
+真实stop PoC provider触发verifier/daemon非零故障退出，前端network503；provider恢复继续503、不自动重建daemon。原key/IP显式恢复后frontend重连IPC，无grant仍403、重放仍403。最终daemon/frontend正常STOPPED/零退出/join，注册之后Store字节不变，无额外issuer/设备状态重建。首次末尾runuser包装TERM退出判断失败不算完整PASS；改SysProcAttr Credential直接非root启动并对真实PID停止后复测通过，同时scanner读完stdout后Wait防末行丢失。
+
+每轮精确Retire与实验目录/上传程序清理，原file模式/原PoC规则恢复；独立SSH三服务active、state哈希仍5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca、Nginx全部OK、nodes/users/preauthkeys零。未安装线上binary/unit、未改在线Store/profile/业务443/公网路由。
+
+本轮未批准grant、未验双机OS signer/nodeproof/产品TLS，不算最终产品。下一步把双机完整流程接到独立daemon+frontend而不是旧fixture（届时才需Windows READY），再做受控部署；公网admission、安装锚/floor/轮换、HMAC安全投递、GUI/安装仍待，整体4未完成。见 [私有前端验收](../poc/selfhost/public-server/PRIVATE_FRONTEND.md)。
+
 ## 2026-10-07 切片 4C-4E：真实独立daemon跨UID/故障恢复验收通过
 
 新增daemon-network-check Linux程序及daemon-network.py协调入口；上传check/最新daemon/mode工具并验哈希，在空的PoC控制面临时切database后运行。服务器随机生成隔离材料，未使用或上传本地发布根/CA私钥、未复制线上Store。独立root daemon，nobody为准许peer、root作为错误peer；nobody核对root kernel UID与精确issuer，network无grant403非503、不能读现有Store/profile/node私有文件，root客户端内核UID拒绝。

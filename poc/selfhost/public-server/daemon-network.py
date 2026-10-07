@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import secrets
 import subprocess
+import sys
 
 spec=importlib.util.spec_from_file_location("transport",Path(__file__).with_name("cross-network.py"))
 t=importlib.util.module_from_spec(spec)
@@ -23,21 +24,28 @@ def upload(source, target):
     t.check(p.returncode==0 and p.stdout.decode().split()[0]==hashlib.sha256(source.read_bytes()).hexdigest(),"uploaded_artifact_hash_verified")
 
 def main():
+    if sys.argv[1:] not in ([],["--frontend"]):
+        raise RuntimeError("invalid_arguments")
+    with_frontend=sys.argv[1:]==["--frontend"]
     t.check(not t.admin("nodes","list") and not t.admin("users","list") and not t.admin("preauthkeys","list"),"isolated_control_plane_empty_before_daemon_test")
     prefix="/tmp/remoteapp-daemon-check-"+secrets.token_hex(8)
     program,daemon,mode=prefix+"-check",prefix+"-daemon",prefix+"-mode.py"
+    frontend=prefix+"-frontend"
     backup=None
     try:
         upload(t.ARTIFACTS/"daemon-network-check",program)
         upload(t.ARTIFACTS/"authority-daemon-network",daemon)
         upload(Path(__file__).with_name("enrollment-mode.py"),mode)
+        if with_frontend:
+            upload(t.ARTIFACTS/"device-frontend-private",frontend)
         p=subprocess.run(t.SERVER+["python "+mode+" prepare"],capture_output=True,timeout=45)
         lines=p.stdout.splitlines()
         if lines:
             backup=json.loads(lines[0]).get("backup")
         t.check(p.returncode==0 and backup is not None,"isolated_database_deny_policy_prepared")
         # Program emits only fixed labels and a non-secret retained directory.
-        p=subprocess.Popen(t.SERVER+[program+" "+daemon],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+        command=program+" "+daemon+(" --frontend "+frontend if with_frontend else "")
+        p=subprocess.Popen(t.SERVER+[command],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
         for raw in p.stdout:
             line=raw.decode().strip()
             if line.startswith(("PASS ","FAIL ","PRESERVED /tmp/remoteapp-daemon-check-")):
@@ -52,7 +60,7 @@ def main():
                 print("PRESERVED_POLICY_BACKUP "+backup,flush=True)
             t.check(p.returncode==0,"original_file_policy_mode_restored")
         # Only uploaded executables/script, never journal or retained resources.
-        p=subprocess.run(t.SERVER+["rm -- "+program+" "+daemon+" "+mode],capture_output=True,timeout=15)
+        p=subprocess.run(t.SERVER+["rm -- "+program+" "+daemon+" "+mode+(" "+frontend if with_frontend else "")],capture_output=True,timeout=15)
         t.check(p.returncode==0,"temporary_uploaded_programs_removed")
     t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":["100.120.0.2"],"dst":["100.120.0.1:47476"]}]},"original_poc_policy_unchanged")
     p=subprocess.run(t.SERVER+["systemctl is-active remoteapp-authority remoteapp-frontend remoteapp-poc && sha256sum --check /opt/remoteapp-prerelease/nginx-baseline.sha256"],capture_output=True,timeout=15)

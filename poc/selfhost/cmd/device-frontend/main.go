@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 8 {
+	if len(os.Args) != 8 && (len(os.Args) != 9 || os.Args[8] != "--private-network") {
 		fmt.Println("FAIL frontend_arguments")
 		os.Exit(1)
 	}
@@ -26,7 +26,14 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	c := deviceservice.Config{Directory: os.Args[1], ReleaseRoot: os.Args[2], Service: os.Args[3], MinimumEpoch: floor, Listen: os.Args[5], Broker: &broker.Client{Socket: os.Args[6], ServerUID: uint32(uid)}}
-	if deviceservice.Run(ctx, c, func(net.Addr) { fmt.Println("READY unprivileged frontend; network disabled") }) != nil {
+	c.PrivateNetwork = len(os.Args) == 9
+	if deviceservice.Run(ctx, c, func(net.Addr) {
+		if c.PrivateNetwork {
+			fmt.Println("READY unprivileged frontend; private network enabled")
+		} else {
+			fmt.Println("READY unprivileged frontend; network disabled")
+		}
+	}) != nil {
 		fmt.Println("FAIL frontend unavailable")
 		os.Exit(1)
 	}

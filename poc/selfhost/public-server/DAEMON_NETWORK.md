@@ -47,4 +47,4 @@ Mac全量 `go test -race ./...`、`go vet ./...`及Linux amd64构建通过。Lin
 
 本轮没有批准设备grant/真实客户端nodeproof/产品TLS载荷，也没有Windows桌面签名器参与；旧fixture双机结果不冒充新daemon的这些证据。只接私有broker，不是线上前端或公网部署验收，整体4未完成。
 
-下一步受控接入前端的私有网络路由，再验跨进程HTTPS签名设备与network请求、拒绝/故障503、可信profile；之后安排新daemon双机完整授权/真实nodeproof/TLS与部署。公网admission、安装锚/floor/轮换、HMAC安全投递、GUI/安装仍待。
+4C-4F 已完成 [私有前端跨进程HTTPS验收](PRIVATE_FRONTEND.md)，非root独立frontend/真实daemon链路通过但线上默认仍network404。下一步安排新daemon双机完整授权/真实nodeproof/TLS与部署。公网admission、安装锚/floor/轮换、HMAC安全投递、GUI/安装仍待。

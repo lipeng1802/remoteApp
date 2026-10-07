@@ -1,6 +1,5 @@
-// Package deviceservice hosts only the bounded device invitation API.
-// It deliberately does not expose network provisioning until the independent
-// server verifier and privileged backend lifecycle are implemented.
+// Package deviceservice hosts the bounded device invitation API. Network
+// forwarding is explicit loopback-only opt-in through an independent broker.
 package deviceservice
 
 import (
@@ -30,6 +29,8 @@ type Config struct {
 	Directory, ReleaseRoot, Service, Listen string
 	MinimumEpoch                            uint64
 	Broker                                  *broker.Client
+	// Operator opt-in for isolated loopback integration, not public deployment.
+	PrivateNetwork bool
 }
 
 func read(path string, limit int64, private bool) ([]byte, error) {
@@ -89,6 +90,9 @@ func load(c Config) (trustprofile.Profile, tls.Certificate, error) {
 	u, _ := url.Parse(p.Claims.Endpoint)
 	host, port, e := net.SplitHostPort(c.Listen)
 	if e != nil || port != u.Port() || net.ParseIP(host) == nil {
+		return fail()
+	}
+	if c.PrivateNetwork && (c.Broker == nil || !net.ParseIP(host).IsLoopback()) {
 		return fail()
 	}
 	cert, e := read(filepath.Join(c.Directory, "server-private/api-cert.pem"), 16384, false)
@@ -167,6 +171,9 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 			return ErrService
 		}
 		device = broker.DeviceHandler(*c.Broker, p.Claims.Issuer)
+		if c.PrivateNetwork {
+			device = broker.PrivateNetworkHandler(*c.Broker, p.Claims.Issuer)
+		}
 	} else {
 		s, e := invite.Open(filepath.Join(c.Directory, "server-private/authority"), time.Now)
 		if e != nil {
@@ -187,8 +194,8 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 		return ErrService
 	}
 	defer l.Close()
-	// Reuse the four-work-slot device dispatcher, but do not route privileged
-	// network operations at all. A signed grant is not a network authorization.
+	// Default routes device requests only. The private opt-in forwards network
+	// requests; all actual authorization remains inside the privileged broker.
 	h := invite.NewAdmission().Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().Unix()
 		if r.Context().Err() != nil || now < p.Claims.IssuedAt || now >= p.Claims.ExpiresAt {
@@ -196,7 +203,7 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		if r.URL.Path != "/v1/request" {
+		if r.URL.Path != "/v1/request" && !(c.PrivateNetwork && r.URL.Path == "/v1/network") {
 			w.Header().Set("Cache-Control", "no-store")
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -204,6 +211,9 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 		device.ServeHTTP(w, r)
 	}))
 	server := &http.Server{Handler: h, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{pair}, NextProtos: []string{"http/1.1"}}}
+	if c.PrivateNetwork {
+		server.WriteTimeout = 20 * time.Second
+	}
 	server.SetKeepAlivesEnabled(false)
 	lifecycle, cancel := context.WithDeadline(ctx, time.Now().Add(time.Until(time.Unix(p.Claims.ExpiresAt, 0))))
 	defer cancel()

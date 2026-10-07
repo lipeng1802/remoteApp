@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4F：[私有前端网络路由/跨进程HTTPS](poc/selfhost/public-server/PRIVATE_FRONTEND.md) 完整实机通过，退出码0；默认network404，显式开关仅回环+broker。真实root daemon/nonroot frontend/签名设备HTTPS、无grant拒绝、错误CA拒绝、故障503/显式恢复、重放保持和零退出通过。未部署线上或开放公网，整体4未完成。
+
 4C-4E：[真实独立daemon/非root IPC/恢复验收](poc/selfhost/public-server/DAEMON_NETWORK.md) 已通过，退出码0；修复已join健康故障遗留writer.lock导致显式重启失败。同verifier key/IP恢复、故障非零关闭、不自动重启、精确清理与原策略恢复通过。未启用线上network或完成新daemon双机授权，整体4未完成。
 
 4C-4D：[独立权威服务可选网络装配](poc/selfhost/public-server/DAEMON_NETWORK.md) 代码、全量race/vet、Linux构建及三项Linux隔离组件测试通过；默认device-only不变，尚未部署真实daemon网络后端或开放公网接口。4C-4C Windows最终STOPPED已由用户确认。下一步隔离实机装配验收，整体4未完成。
