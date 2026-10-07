@@ -12,6 +12,8 @@ import secrets
 import socket
 import subprocess
 import time
+import sys
+import shutil
 
 from native_bootstrap import NativeIdentities
 
@@ -25,10 +27,14 @@ enrollment = load("split_transport", "enrollment-network.py")
 t, Pipe = enrollment.t, enrollment.Pipe
 uploads = load("split_uploads", "daemon-network.py")
 
-def checked_ready(value, target, controller):
+def checked_ready(value, target, controller, nodes=False):
     import base64
     import re
     expected = {"status", "split_process", "target", "controller", "issuer", "api_certificate", "api_port"}
+    if nodes:
+        expected.update(("node_phase","verifier"))
+        if value.get("node_phase") is not True or not re.fullmatch(r"nodekey:[0-9a-f]{64}",value.get("verifier","")):
+            raise RuntimeError("invalid_split_node_bootstrap")
     if (set(value) != expected or value["status"] != "ready" or value["split_process"] is not True
             or value["target"] != target or value["controller"] != controller
             or not re.fullmatch(r"[0-9a-f]{64}", value["issuer"])
@@ -37,7 +43,7 @@ def checked_ready(value, target, controller):
         raise RuntimeError("invalid_split_bootstrap")
     return value
 
-def consent(target, controller):
+def consent(target, controller, node_phase=None):
     def call(client, **body):
         response = client.request("device", Device=body)
         t.check(response.get("passed") is True, "split_os_signed_" + body["action"])
@@ -67,7 +73,10 @@ def consent(target, controller):
     for client in (target, controller):
         t.check(client.request("use_grant", Grant=grant)["passed"], "split_client_verifies_issuer_subjects_expiry")
         t.check(not client.request("network_state")["passed"], "split_grant_without_client_bindings_no_network")
-    t.check(call(target, action="revoke", grant_id=grant["claims"]["id"])["status"] == "revoked", "split_os_owner_signed_revocation")
+    try:
+        if node_phase is not None: node_phase(grant)
+    finally:
+        t.check(call(target, action="revoke", grant_id=grant["claims"]["id"])["status"] == "revoked", "split_os_owner_signed_revocation")
     final = call(controller, action="status", request_id=pending["request_id"])
     t.check(final["status"] == "revoked" and "grant" not in final, "split_revocation_not_offline_signature_check")
 
@@ -107,10 +116,14 @@ class Coordinator(Pipe):
         return self.proc.returncode
 
 def main():
+    if sys.argv[1:] not in ([],["--nodes"]): raise RuntimeError("invalid_arguments")
+    nodes=sys.argv[1:]==["--nodes"]
     os.umask(0o077)
     identities = NativeIdentities(t, Pipe)  # Actual pinned desktop probe before mutations.
     coordinator = None
     clients, tunnels = [], []
+    node_helpers, folders, node_result = [], [], []
+    node_cleanup_confirmed = not nodes
     backup = None
     joined = False
     work_created = False
@@ -126,8 +139,8 @@ def main():
         if prepared.stdout.splitlines():
             backup = json.loads(prepared.stdout.splitlines()[0]).get("backup")
         t.check(prepared.returncode == 0 and backup is not None, "split_database_deny_prepared")
-        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+" --os-consent "+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
-        ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"])
+        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+(" --os-nodes " if nodes else " --os-consent ")+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
+        ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"],nodes)
         t.check(True, "split_independent_daemon_nonroot_frontend_ready_public_only")
         local_socket = socket.socket(); local_socket.bind(("127.0.0.1",0)); local_port = local_socket.getsockname()[1]; local_socket.close()
         forward = subprocess.Popen(t.SERVER[:-1]+["-N","-o","ExitOnForwardFailure=yes","-L",f"127.0.0.1:{local_port}:127.0.0.1:{ready['api_port']}",t.SERVER[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -158,13 +171,25 @@ def main():
             command=identities.command(work,"device-api-client.exe") if windows else [str(t.ARTIFACTS/"device-api-client")]
             client=Pipe(command,config); clients.append(client)
             t.check(client.read()["status"]=="ready","split_device_os_signer_ready")
-        consent(*clients)
+        if nodes:
+            import split_nodes
+            def node_phase(grant):
+                node_result.append(split_nodes.run(t,Pipe,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders))
+            consent(*clients,node_phase=node_phase)
+            split_nodes.reclaimed(t)
+            node_cleanup_confirmed=True
+            peer,target_ip=node_result[0]
+            t.check(not peer.request("probe",Peer=target_ip)["passed"],"split_revocation_actual_network_payload_denied")
+            for helper in reversed(node_helpers): helper.stop()
+            node_helpers.clear()
+        else: consent(*clients)
         for client in reversed(clients): client.stop()
         clients.clear()
         coordinator.send({"Op":"stop"})
         code=coordinator.join(); joined=True
         t.check(code==0,"split_consent_coordinator_zero_exit")
     finally:
+        for helper in reversed(node_helpers): helper.emergency()
         for client in reversed(clients): client.emergency()
         if coordinator is not None and not joined:
             try:
@@ -181,8 +206,12 @@ def main():
         for tunnel in reversed(tunnels):
             tunnel.terminate(); tunnel.wait(timeout=5)
         identities.close()  # Only this run's random Mac identities, never Windows owner.
-        if work_created:
+        if work_created and node_cleanup_confirmed:
             t.powershell(f"Remove-Item -LiteralPath '{work}' -Recurse -Force -ErrorAction Stop")
+        if node_cleanup_confirmed:
+            for folder in folders: shutil.rmtree(folder)
+        elif folders or work_created:
+            print("PRESERVED_CLIENT_NODE_JOURNALS",flush=True)
         if backup is not None:
             restored=subprocess.run(t.SERVER+["python "+mode+" restore "+backup],capture_output=True,timeout=45)
             if restored.returncode!=0: print("PRESERVED_POLICY_BACKUP "+backup,flush=True)
@@ -193,7 +222,7 @@ def main():
     t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":["100.120.0.2"],"dst":["100.120.0.1:47476"]}]},"split_original_policy_unchanged")
     status=subprocess.run(t.SERVER+["systemctl is-active remoteapp-authority remoteapp-frontend remoteapp-poc && sha256sum --check /opt/remoteapp-prerelease/nginx-baseline.sha256 && sha256sum /var/lib/remoteapp-authority/state.json"],capture_output=True,timeout=15)
     t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
-    print("VALIDATION PASSED: split-process OS consent only. NOT nodeproof/product TLS/installed trust acceptance.",flush=True)
+    print("VALIDATION PASSED: split-process OS consent"+(" + real nodeproof/minimum ACL/revoked payload" if nodes else " only")+". NOT product TLS/installed trust acceptance.",flush=True)
 
 if __name__=="__main__":
     try: main()

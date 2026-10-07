@@ -18,6 +18,10 @@ class SplitConsentTests(unittest.TestCase):
         for change in changes:
             with self.subTest(change=change),self.assertRaises(Exception):
                 split.checked_ready(dict(ready,**change),"a"*64,"b"*64)
+        node_ready=dict(ready,node_phase=True,verifier="nodekey:"+"d"*64)
+        self.assertEqual(split.checked_ready(node_ready,"a"*64,"b"*64,True),node_ready)
+        with self.assertRaises(Exception): split.checked_ready(ready,"a"*64,"b"*64,True)
+        with self.assertRaises(Exception): split.checked_ready(node_ready,"a"*64,"b"*64)
 
     def test_consent_never_accepts_self_approval_or_auto_grant(self):
         class Client:
@@ -36,6 +40,10 @@ class SplitConsentTests(unittest.TestCase):
         a,b=Client(copy.deepcopy(owner)),Client(copy.deepcopy(peer))
         split.consent(a,b)
         self.assertFalse(a.answers or b.answers)
+        a,b=Client(copy.deepcopy(owner)),Client(copy.deepcopy(peer))
+        def failed_phase(grant): raise ValueError("phase_failed")
+        with self.assertRaises(ValueError): split.consent(a,b,node_phase=failed_phase)
+        self.assertFalse(a.answers)  # Owner revoke attempted even on phase error.
         bad=copy.deepcopy(peer); bad[3]={"passed":True}
         with self.assertRaises(RuntimeError): split.consent(Client(copy.deepcopy(owner)),Client(bad))
         bad=copy.deepcopy(peer); bad[2]["device"]["grant"]=grant

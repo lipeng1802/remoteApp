@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4H：独立 daemon/frontend 链路的[真实双机节点证明](poc/selfhost/public-server/SPLIT_OS_CONSENT.md) 完整复测通过，退出码0。注册前公钥/单次签名意图、两端真实节点与 OS 身份持有证明、错误身份拒绝、同节点恢复、单向最小 ACL 与正反载荷、撤销后回收/拒绝及精确清理通过。首轮日志清理断言失败已修正并完整重跑；产品 TLS 尚未接此新链路，整体4未完成。
+
 4C-4G：[独立 daemon/frontend 双机 OS 授权](poc/selfhost/public-server/SPLIT_OS_CONSENT.md) 真实双机通过，退出码0：两端 OS 签名注册、pending/拒绝/自批准拦截、明确批准/同grant校时验签、撤销及清理恢复。协调端只有公共 bootstrap/stop，无代签批准接口。此阶段只验设备 consent，不宣称客户端 nodeproof、产品 TLS 或可信安装验收；Windows 最终 Enter/STOPPED 待确认，整体 4 未完成。
 
 4C-4F：[私有前端网络路由/跨进程HTTPS](poc/selfhost/public-server/PRIVATE_FRONTEND.md) 完整实机通过，退出码0；默认network404，显式开关仅回环+broker。真实root daemon/nonroot frontend/签名设备HTTPS、无grant拒绝、错误CA拒绝、故障503/显式恢复、重放保持和零退出通过。未部署线上或开放公网，整体4未完成。

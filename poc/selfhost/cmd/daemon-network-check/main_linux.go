@@ -229,6 +229,16 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 				return
 			}
 		}
+		if consent != nil && consent.Nodes {
+			// Only after the sole writer has joined: diagnostics read no private
+			// fields and never remove client journals with unretired provisions.
+			b, err := os.ReadFile(filepath.Join(base, "authority/state.json"))
+			if err != nil || !clientJournalsCleaned(b) {
+				result = denied
+				fmt.Println("PRESERVED " + base)
+				return
+			}
+		}
 		if verifierPlanned {
 			ctx, cancel := bounded()
 			e := verifier.Retire(ctx, vd, d)
@@ -429,7 +439,7 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 		if consent != nil {
 			// The coordinator receives public bootstrap only. It cannot register,
 			// approve, enroll or sign on behalf of either OS-owned identity.
-			if consentSession(os.Stdin, os.Stdout, *consent, signed.Claims.Issuer, der, listen, 5*time.Minute) != nil {
+			if consentSession(os.Stdin, os.Stdout, *consent, signed.Claims.Issuer, der, listen, 5*time.Minute, initial.Key) != nil {
 				return denied
 			}
 			if front.stop() != nil || current.stop() != nil {
@@ -566,11 +576,12 @@ func main() {
 		e = run(os.Args[1], "", nil)
 	} else if len(os.Args) == 4 && os.Args[2] == "--frontend" {
 		e = run(os.Args[1], os.Args[3], nil)
-	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && os.Args[4] == "--os-consent" {
+	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && (os.Args[4] == "--os-consent" || os.Args[4] == "--os-nodes") {
 		pins, err := parseConsentPins(os.Args[5], os.Args[6])
 		if err != nil {
 			e = denied
 		} else {
+			pins.Nodes = os.Args[4] == "--os-nodes"
 			e = run(os.Args[1], os.Args[3], &pins)
 		}
 	} else {

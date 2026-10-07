@@ -12,7 +12,26 @@ import (
 	"time"
 )
 
-type consentPins struct{ Target, Controller string }
+type consentPins struct {
+	Target, Controller string
+	Nodes              bool
+}
+
+func clientJournalsCleaned(raw []byte) bool {
+	var snapshot struct {
+		Version    int
+		Provisions map[string]struct{ Status string }
+	}
+	if json.Unmarshal(raw, &snapshot) != nil || snapshot.Version != 1 {
+		return false
+	}
+	for _, record := range snapshot.Provisions {
+		if record.Status != "cleaned" {
+			return false
+		}
+	}
+	return true
+}
 
 func parseConsentPins(target, controller string) (consentPins, error) {
 	for _, key := range []string{target, controller} {
@@ -24,12 +43,12 @@ func parseConsentPins(target, controller string) (consentPins, error) {
 	if target == controller {
 		return consentPins{}, denied
 	}
-	return consentPins{target, controller}, nil
+	return consentPins{Target: target, Controller: controller}, nil
 }
 
 // Private operator protocol: public readiness and stop only. No Store access,
 // device signature, consent shortcut or network mutation is accepted here.
-func consentSession(input io.Reader, output io.Writer, pins consentPins, issuer string, ca []byte, listen string, timeout time.Duration) error {
+func consentSession(input io.Reader, output io.Writer, pins consentPins, issuer string, ca []byte, listen string, timeout time.Duration, verifierKey ...string) error {
 	host, port, e := net.SplitHostPort(listen)
 	p, pe := strconv.Atoi(port)
 	if e != nil || pe != nil || host != "127.0.0.1" || p < 1 || p > 65535 {
@@ -37,6 +56,13 @@ func consentSession(input io.Reader, output io.Writer, pins consentPins, issuer 
 	}
 	ready := map[string]any{"status": "ready", "split_process": true, "target": pins.Target, "controller": pins.Controller,
 		"issuer": issuer, "api_certificate": base64.StdEncoding.EncodeToString(ca), "api_port": p}
+	if pins.Nodes {
+		if len(verifierKey) != 1 || len(verifierKey[0]) != 72 {
+			return denied
+		}
+		ready["node_phase"] = true
+		ready["verifier"] = verifierKey[0]
+	}
 	if json.NewEncoder(output).Encode(ready) != nil {
 		return denied
 	}

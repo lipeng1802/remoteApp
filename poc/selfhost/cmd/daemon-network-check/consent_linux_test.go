@@ -21,7 +21,7 @@ func TestConsentPublicPins(t *testing.T) {
 }
 
 func TestConsentProtocolNeverApprovesOrAcceptsPrivateMaterial(t *testing.T) {
-	pins := consentPins{strings.Repeat("a", 64), strings.Repeat("b", 64)}
+	pins := consentPins{Target: strings.Repeat("a", 64), Controller: strings.Repeat("b", 64)}
 	for _, c := range []struct {
 		line string
 		ok   bool
@@ -38,6 +38,37 @@ func TestConsentProtocolNeverApprovesOrAcceptsPrivateMaterial(t *testing.T) {
 		var ready map[string]any
 		if json.Unmarshal(out.Bytes(), &ready) != nil || len(ready) != 7 || ready["split_process"] != true || ready["target_key"] != nil || ready["grant"] != nil {
 			t.Fatal("bootstrap exposes unexpected material")
+		}
+	}
+}
+
+func TestNodePhaseRequiresPublicVerifierMarker(t *testing.T) {
+	pins := consentPins{Target: strings.Repeat("a", 64), Controller: strings.Repeat("b", 64), Nodes: true}
+	var out bytes.Buffer
+	if consentSession(strings.NewReader(`{"Op":"stop"}`), &out, pins, "issuer", []byte("ca"), "127.0.0.1:12345", time.Second) == nil {
+		t.Fatal("missing verifier accepted")
+	}
+	if consentSession(strings.NewReader("{\"Op\":\"stop\"}\n"), &out, pins, "issuer", []byte("ca"), "127.0.0.1:12345", time.Second, "nodekey:"+strings.Repeat("c", 64)) != nil {
+		t.Fatal("public verifier refused")
+	}
+	var ready map[string]any
+	if json.Unmarshal(out.Bytes(), &ready) != nil || len(ready) != 9 || ready["node_phase"] != true || ready["verifier"] == nil {
+		t.Fatal("node bootstrap mismatch")
+	}
+}
+
+func TestClientJournalCleanupRequiresConfirmedStatuses(t *testing.T) {
+	for _, c := range []struct {
+		raw string
+		ok  bool
+	}{
+		{`{"Version":1}`, true}, {`{"Version":1,"Provisions":{"a":{"Status":"cleaned"}}}`, true},
+		{`{"Version":1,"Provisions":{"a":{"Status":"bound"}}}`, false},
+		{`{"Version":1,"Provisions":{"a":{"Status":"cleanup_pending"}}}`, false},
+		{`{"Version":1,"Provisions":{"a":{}}}`, false}, {`{"Version":2}`, false}, {`bad`, false},
+	} {
+		if clientJournalsCleaned([]byte(c.raw)) != c.ok {
+			t.Fatal("journal cleanup assertion mismatch")
 		}
 	}
 }

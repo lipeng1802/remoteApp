@@ -2,6 +2,16 @@
 
 真实双机 OS consent 验收已通过，完整退出码0。不是整体切片 4 完成。
 
+## 4C-4H：独立进程真实 nodeproof（已通过）
+
+新增 `split-consent.py --nodes` 与 `daemon-network-check ... --os-nodes <target-public> <controller-public>`，只额外输出本轮公共 verifier node key/marker。设备注册/批准/enroll/bind全部由OS签名HTTPS进入独立进程，不提供协调端批准或Store写接口。
+
+最新整轮复测退出0：两端离线公钥与签名意图、prepare不注册、enroll单次性、真实join key一致、绑定前零ACL拒绝、Windows持有证明；错误Mac OS身份实际challenge收到但未签、bind拒绝且无payload规则；同node key/IP换回正确OS身份恢复，Mac持有证明通过。两端active签名binding与实际node/IP一致，仅controller→target:47476 ACL；正向真实固定载荷允许、反向拒绝且接收计数0。OS owner撤销、权威revoked、周期节点回收/零ACL与实际payload拒绝通过。
+
+全部helper/API及daemon/frontend正常关闭/零退出/join；确认所有客户端日志cleaned后精确Retire verifier、删除本轮隔离资源、原策略恢复，线上Store/Nginx/服务未变、nodes/users/preauthkeys零。首轮清理错误不算完整PASS：把审计日志非空误判未回收；只读确认cleaned及无owner后精确手动清理恢复，修正断言并完整重跑通过。Linux4项实际组件PASS无SKIP，Python2项断言（含phase失败仍撤销）、Linux构建/vet通过。
+
+这里固定载荷Token是私有测试凭证，非产品HMAC分发；不包括产品TLS或可信安装。撤销拒绝时节点已回收，不冒称节点保留场景的纯零规则测试。下一步产品TLS/自主刷新/撤销及旧ACL保留故障关闭，整体4仍未完成；Windows最终Enter/STOPPED待确认。
+
 路径：Windows 桌面 OS signer + Mac 随机测试 OS signer → 私有 loopback HTTPS frontend（nobody）→ kernel broker → 独立 root authority-daemon → 真实 persistent verifier/supervisor。不启动 enrollment-fixture；协调进程只创建隔离测试材料、启动/停止子进程，收到公钥及公共 API CA，不持有设备私钥，也无批准、签名、enroll 或 Store 并发写接口。
 
 `daemon-network-check ... --frontend ... --os-consent <target-public> <controller-public>` 仅输出严格公共 readiness，接受精确 stop 指令；EOF/超长/其他操作/5 分钟超时都走失败退出与保守清理。只有实际 daemon/frontend STOPPED、正常退出与 join、零 ACL 后才清理 verifier。未 join/精确 Retire 失败保留实验目录，协调端不在进程生存未知时恢复策略或删除证据。
@@ -10,7 +20,7 @@
 
 验收计划：两端 OS 签名注册；邀请只产生 pending；明确拒绝无 grant；controller 自批准拒绝；owner 明确批准、双端一致 grant 与签名/主体/期限验证；无节点绑定仍不能取得网络状态；owner 签名撤销，状态 revoked 且无 grant。随后 join API、正常停止独立进程、精确 Retire、原策略恢复，核对资源零和线上 hash/Nginx。
 
-本入口**不注册客户端网络节点、不验 nodeproof、最小规则真实网络拒绝或产品 TLS**；这些是下一阶段，不能沿用旧 fixture 通过证据。客户端 `use_grant` 先请求签名 grant_clock 校时，再验 grant 签名/主体/期限；本入口撤销另以权威签名请求/status 验证，不用单纯 grant 签名判断撤销。
+默认入口不注册客户端网络节点；`--nodes` 扩展的真实 nodeproof 与最小规则证据见上方4C-4H。两个入口均不包含产品TLS/可信安装验收，不能沿用旧fixture证据。客户端 `use_grant` 先请求签名 grant_clock 校时，再验 grant 签名/主体/期限；撤销另以权威签名请求/status 验证，不用单纯 grant 签名判断撤销。
 
 ## 当前证据
 

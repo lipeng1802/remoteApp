@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4H：独立进程真实客户端 nodeproof/最小ACL通过
+
+新增 split-consent.py --nodes / split_nodes.py，check --os-nodes只额外公开verifier节点公钥与node_phase标记，无admin enroll/bind/批准/签名。沿用实际独立root daemon/nobody frontend+kernel broker+真实Runtime/Headscale supervisor，enroll/bind全部走两端OS签名HTTPS；无旧fixture。用户继续时实际Windows pinned probe仍通过，因此没有远程重建桌面owner。
+
+最新完整复测退出码0：Windows/Mac离线准备节点公钥与OS签名意图，prepare不注册客户端；两端HTTPS enroll通过、同意图重放拒绝；实际join key匹配；未绑定零规则拒绝载荷；Windows真实网络+OS持有证明通过；故意错误Mac OS身份bind拒绝，实际收到challenge但signed=0、ACL零；停止错误helper、同node key/IP恢复正确身份后bind通过。周期投影精确controllerIP→targetIP:47476；两端签名active binding与实际node/IP一致；正向实际固定载荷通过，反向route/dial拒绝且peer载荷计数0。
+
+Windows真实OS签名撤销、权威status revoked不回grant；周期回收客户端节点、ACL零；实际载荷再拒绝。两个节点helper与两个API closed/正常零退出；frontend/daemon正常STOPPED/join/零ACL；精确verifier Retire、隔离目录/上传程序/Windows随机客户端目录/Mac随机身份与节点目录回收，原file配置/策略恢复。线上服务active、State原hash/Nginx未变、控制资源零。
+
+首轮前述功能通过但最终清理断言失败，不算完整PASS：checker要求Provisions空，实际后端保留两条Status=cleaned审计记录。修正为writer join后只读诊断核对Version1且所有记录cleaned，不接受bound/cleanup_pending/缺Status；不并发打开Store或改journal。失败轮保留/tmp/remoteapp-daemon-check-1640063052与模式backup；只读确认两记录cleaned、无writer/socket/verifier owner及子进程后，用精确verifier-owner Retire，控制资源零，恢复backup并删除该已验证实验目录/程序；之后完整重跑成功。Linux4项协议/清理断言真实PASS无SKIP，Linux构建/vet、Python2项断言（含phase失败仍签名撤销）与diff检查通过；本轮未重跑Mac全量Go race，不沿用旧记录当新证据。
+
+**本轮无产品TLS/可信安装锚/最终公网API证据。** Token只在私有管道用于固定载荷，不是最终HMAC分发。撤销后网络拒绝发生于节点回收/ACL零，不等同节点保留时单独零ACL拒绝验收。下一步把Swift/C#产品TLS及旧ACL留存时签名刷新/撤销关闭接入独立进程，再补纯零规则/故障/信任安装/GUI等。Windows桌面owner未被远程停止，仍需用户Enter/STOPPED确认；整体4未完成。
+
 ## 2026-10-07 切片 4C-4G：独立进程真实双机 OS consent 通过
 
 用户确认 Windows READY 后执行最新 split-consent.py，完整退出码0。实际桌面 pinned probe通过，两个API进程使用各自真实Windows/Mac OS signer，管理SSH私有转发到实际nobody frontend→kernel broker→独立root daemon/真实persistent verifier/supervisor；不运行旧enrollment-fixture，不代签或批准。
