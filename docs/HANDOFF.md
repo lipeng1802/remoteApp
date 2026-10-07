@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4B-1：OS signer 接入网络 helper（当前入口）
+
+用户提供 Windows 正常交互式 PowerShell 截图：设置 vault 环境变量后，`TestNativeVaultIdentityAndIsolation` 真正 PASS（0.35s），退出码 0。之前未设置变量的 SKIP 不计通过。**4A Windows Credential Manager 创建/签名/重开/身份隔离人工验收已闭环**；这不等于产品默认 DPAPI 66 项验收，也不替代本轮新增签名域的 Windows 复测。下方 4A 的“未通过”是此前 SSH 上下文历史。
+
+新增 `SignProvisionWithSigner`、nodeproof `ServeWithSigner`、session Config.Signer、streamgate `NewWithSigner`。网络注册意图、在线节点持有证明、固定载荷互证、产品 TLS 隧道的独立互证域都可调用 OS 辅助进程，调用方校验固定身份和返回签名；失败不得输出伪证明或打开产品上游。原测试私钥入口保留为 fixture 兼容；同时配置 Key/Signer 拒绝。
+
+`enrollment-helper` 支持可信初始化的 VaultExecutable/VaultScope/ExpectedPublic，**仅重开已创建且固定公钥的身份**；不能在此静默创建，不能混入 AppKey 或缺少 expected。关闭顺序保留网络取消/worker join 后关闭 signer。初始化及后续命令已用 privatepipe 严格 8 KiB 解码，拒绝嵌套重复键/大小写别名/未知字段/尾随 JSON。Mac/Windows vault 新增六个精确域，不开放任意签名或私钥导出；不是对 JSON 内容作独立业务授权，业务门禁仍在可信 helper/在线服务。
+
+本轮完整 Go race/vet 通过；Windows x64 vault/helper/原生测试交叉构建及 Windows 专用 vet 通过；Swift 126/126、vault Release 构建通过。Mac 串行显式 native 三组均通过：HTTPS 注册/重开稳定身份，存储隔离及新增域签名，真实本机 TCP 会话及产品 opaque 隧道认证/到期关闭；正常通过的随机身份精确清理。早期无签名开发程序及并行 native 初始化出现 3 秒超时，施加本地 ad-hoc 签名后串行复测通过；不将超时计通过，不扩展为正式分发签名保证。早期超时未能确认是否已写入随机测试凭据，不广泛删除 Keychain 命名空间；不存在生产密钥删除。
+
+本轮验证记录见 [4B-1 验收](../poc/selfhost/public-server/HELPER_SIGNER_TEST.md)。未执行新的 Windows 实机或真实 Headscale 双机网络验收；现有双机 Python runner 仍使用 fixture AppKey，不能记为“OS signer 双机全链路已完成”。正式 issuer/API TLS 信任锚安装/轮换/恢复、产品 HMAC 安全分发、helper 自主 API 生命周期、旧 Swift/C# IPC 审计仍待后续 4B。无公网部署、安装包/已安装 GUI/系统 Tailscale/服务器业务修改，不进入切片 5。
+
 ## 2026-10-07 切片 4A：身份/存储签名/私有 IPC 核心通过，整体切片 4 未闭环（当前入口）
 
 新增受设备签名保护的 `publish_tls`/`tls_identity`：目标必须属于真实绑定、策略 ready、在线批准授权，并证明持有其 RSA 服务器证书私钥；PSS/SHA-256 独立域绑定 grant/目标/指纹/挑战。仅持久化公开证书，不能让控制方发布/无 TLS 私钥发布/静默换证书；重开校验关联授权与历史证书结构。issuer 签名描述包含完整 grant、真实节点/IP、指纹、设备自生成挑战及绝对最多 3 秒期限（不超 grant），设备客户端以独立 issuer/校准时间逐项验签。真实 TLS 的 pin 改来自已验证描述，不再直接取父脚本观察的 Windows 指纹，每次新连接重新查询。活动流仍由原状态/grant watchdog 约束。

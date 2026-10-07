@@ -29,6 +29,38 @@ type DeviceSigner interface {
 }
 type memorySigner struct{ key ed25519.PrivateKey }
 
+// NewMemorySigner is for private fixtures only. Product helpers use an OS vault.
+func NewMemorySigner(key ed25519.PrivateKey) (DeviceSigner, error) {
+	if len(key) != 64 || !bytes.Equal(key, ed25519.NewKeyFromSeed(key[:32])) {
+		return nil, ErrDenied
+	}
+	return memorySigner{append(ed25519.PrivateKey(nil), key...)}, nil
+}
+
+// CheckedSignature rejects provider failures, identity changes and wrong signatures.
+func CheckedSignature(s DeviceSigner, expected ed25519.PublicKey, raw []byte) ([]byte, error) {
+	if s == nil || len(expected) != 32 || !bytes.Equal(s.PublicKey(), expected) {
+		return nil, ErrDenied
+	}
+	sig, err := s.Sign(raw)
+	if err != nil || len(sig) != 64 || !ed25519.Verify(expected, raw, sig) {
+		return nil, ErrDenied
+	}
+	return sig, nil
+}
+
+func SignRequestWithSigner(s DeviceSigner, b Body) (Envelope, error) {
+	if s == nil {
+		return Envelope{}, ErrDenied
+	}
+	pub := append(ed25519.PublicKey(nil), s.PublicKey()...)
+	sig, err := CheckedSignature(s, pub, requestBytes(b))
+	if err != nil {
+		return Envelope{}, ErrDenied
+	}
+	return Envelope{hex.EncodeToString(pub), b, hex.EncodeToString(sig)}, nil
+}
+
 func (s memorySigner) PublicKey() ed25519.PublicKey    { return s.key.Public().(ed25519.PublicKey) }
 func (s memorySigner) Sign(raw []byte) ([]byte, error) { return ed25519.Sign(s.key, raw), nil }
 

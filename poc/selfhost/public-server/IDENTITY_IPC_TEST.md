@@ -1,5 +1,7 @@
 # 切片 4A：签名 TLS 身份、安全存储签名与私有 IPC
 
+更新：用户 Windows 正常登录 PowerShell 已完成实际 `TestNativeVaultIdentityAndIsolation` PASS、退出码 0，4A 原生存储人工验收通过。第一次缺少环境变量的 SKIP 不计通过。下方 SSH 失败保留为历史；产品默认 DPAPI 测试仍独立待验。后续 helper 接入见 [4B-1](HELPER_SIGNER_TEST.md)。
+
 2026-10-07 完成私有核心与部分实机验收，**整体切片 4 尚未闭环，不能直接进入 GUI/公网发布**。Windows 安全存储交互式验收、正式安装信任锚/HMAC 投递以及 helper 的全生命周期接入仍待完成。
 
 ## 签名 TLS 身份

@@ -157,9 +157,18 @@ func Serve(ctx context.Context, s *tsnet.Server, key ed25519.PrivateKey, verifie
 	return ServeWithReport(ctx, s, key, verifierNode, nil)
 }
 func ServeWithReport(ctx context.Context, s *tsnet.Server, key ed25519.PrivateKey, verifierNode string, report func(string)) error {
-	if len(key) != 64 || verifierNode == "" {
+	signer, err := invite.NewMemorySigner(key)
+	if err != nil {
 		return invite.ErrDenied
 	}
+	return ServeWithSigner(ctx, s, signer, verifierNode, report)
+}
+
+func ServeWithSigner(ctx context.Context, s *tsnet.Server, signer invite.DeviceSigner, verifierNode string, report func(string)) error {
+	if signer == nil || len(signer.PublicKey()) != 32 || verifierNode == "" {
+		return invite.ErrDenied
+	}
+	pub := append(ed25519.PublicKey(nil), signer.PublicKey()...)
 	ln, e := s.Listen("tcp", ":"+Port)
 	if e != nil {
 		return e
@@ -204,7 +213,7 @@ func ServeWithReport(ctx context.Context, s *tsnet.Server, key ed25519.PrivateKe
 			}
 			// Freshness is the verifier's random per-connection nonce + bounded
 			// request deadline, not synchronized clocks on end-user machines.
-			if len(c.Ticket) != 32 || len(c.Grant) != 32 || len(c.Nonce) != 64 || c.Device != identity(key.Public().(ed25519.PublicKey)) || c.Issued <= 0 {
+			if len(c.Ticket) != 32 || len(c.Grant) != 32 || len(c.Nonce) != 64 || c.Device != identity(pub) || c.Issued <= 0 {
 				return
 			}
 			if _, e := hex.DecodeString(c.Nonce); e != nil {
@@ -223,7 +232,11 @@ func ServeWithReport(ctx context.Context, s *tsnet.Server, key ed25519.PrivateKe
 			if !ipMatch {
 				return
 			}
-			if frame(conn, response{hex.EncodeToString(ed25519.Sign(key, transcript(c)))}) == nil && report != nil {
+			sig, err := invite.CheckedSignature(signer, pub, transcript(c))
+			if err != nil || requestCtx.Err() != nil {
+				return
+			}
+			if frame(conn, response{hex.EncodeToString(sig)}) == nil && report != nil {
 				report("signed")
 			}
 		}()

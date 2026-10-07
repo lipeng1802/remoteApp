@@ -29,7 +29,8 @@ func Tunnel(ctx context.Context, conn net.Conn, c Config, check Check, server bo
 			return ErrDenied
 		}
 		t := transcript{1, c.Grant, n, h.Nonce, c.Binding.TargetIP.String(), c.Binding.ControllerIP.String()}
-		if write(conn, welcome{t, signed(c.Key, "product-tls-target", t)}) != nil {
+		sig, e := c.signature("product-tls-target", t)
+		if e != nil || write(conn, welcome{t, sig}) != nil {
 			return ErrDenied
 		}
 		var p proof
@@ -49,7 +50,8 @@ func Tunnel(ctx context.Context, conn net.Conn, c Config, check Check, server bo
 		if t.Version != 1 || t.Grant != c.Grant || t.ClientNonce != n || !validNonce(t.ServerNonce) || t.TargetIP != c.Binding.TargetIP.String() || t.ControllerIP != c.Binding.ControllerIP.String() || !verifies(c.Binding.Target, "product-tls-target", t, w.Signature) {
 			return ErrDenied
 		}
-		if write(conn, proof{signed(c.Key, "product-tls-controller", t)}) != nil {
+		sig, e := c.signature("product-tls-controller", t)
+		if e != nil || write(conn, proof{sig}) != nil {
 			return ErrDenied
 		}
 	}

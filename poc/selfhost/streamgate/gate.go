@@ -26,8 +26,14 @@ type Gate struct {
 }
 
 func New(issuer, target, controller ed25519.PublicKey, key ed25519.PrivateKey, state invite.NetworkState, server bool, now func() time.Time) (*Gate, error) {
-	if now == nil || len(key) != 64 || len(target) != 32 || len(controller) != 32 ||
-		!bytes.Equal(key, ed25519.NewKeyFromSeed(key[:32])) || !state.Claims.Active ||
+	signer, err := invite.NewMemorySigner(key)
+	if err != nil {
+		return nil, session.ErrDenied
+	}
+	return NewWithSigner(issuer, target, controller, signer, state, server, now)
+}
+func NewWithSigner(issuer, target, controller ed25519.PublicKey, signer invite.DeviceSigner, state invite.NetworkState, server bool, now func() time.Time) (*Gate, error) {
+	if now == nil || signer == nil || len(target) != 32 || len(controller) != 32 || !state.Claims.Active ||
 		!invite.VerifyNetworkState(issuer, state, now()) ||
 		!invite.VerifyGrant(issuer, state.Claims.Grant, session.Identity(target), session.Identity(controller), now()) {
 		return nil, session.ErrDenied
@@ -36,11 +42,11 @@ func New(issuer, target, controller ed25519.PublicKey, key ed25519.PrivateKey, s
 	if server {
 		expected = target
 	}
-	if !bytes.Equal(key.Public().(ed25519.PublicKey), expected) {
+	if !bytes.Equal(signer.PublicKey(), expected) {
 		return nil, session.ErrDenied
 	}
 	b := state.Claims.Binding
-	c := session.Config{Issuer: append(ed25519.PublicKey(nil), issuer...), Key: append(ed25519.PrivateKey(nil), key...), Grant: state.Claims.Grant, Now: now,
+	c := session.Config{Issuer: append(ed25519.PublicKey(nil), issuer...), Signer: signer, Grant: state.Claims.Grant, Now: now,
 		Binding: session.Binding{Target: append(ed25519.PublicKey(nil), target...), Controller: append(ed25519.PublicKey(nil), controller...), TargetIP: netip.MustParseAddr(b.TargetIP), ControllerIP: netip.MustParseAddr(b.ControllerIP)}}
 	cache := session.NewStateCache(c.Issuer, c.Grant, b, now)
 	if !cache.Update(state) {

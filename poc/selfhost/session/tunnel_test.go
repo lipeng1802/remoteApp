@@ -14,6 +14,9 @@ import (
 
 func TestTunnelOpaqueBytesAndAuthorityClosure(t *testing.T) {
 	f := setup(t)
+	testTunnel(t, f)
+}
+func testTunnel(t *testing.T, f *fixture) {
 	server, client := sockets(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

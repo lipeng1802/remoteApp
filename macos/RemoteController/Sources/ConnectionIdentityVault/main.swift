@@ -54,7 +54,7 @@ do {
             guard SecItemDelete(q as CFDictionary)==errSecSuccess else {throw VaultError.denied}
             try output(["status":"deleted"]);exit(0)
         }
-        guard op=="sign",Set(c.keys)==Set(["Op","Message"]),let value=c["Message"] as? String,let raw=Data(base64Encoded:value),raw.count<=4096,let text=String(data:raw,encoding:.utf8),(text.hasPrefix("remoteapp-invite-request-v1\n") || text.hasPrefix("remoteapp-network-api-v1\nPOST /v1/network\n")) else {throw VaultError.denied}
+        guard op=="sign",Set(c.keys)==Set(["Op","Message"]),let value=c["Message"] as? String,let raw=Data(base64Encoded:value),raw.count<=4096,let text=String(data:raw,encoding:.utf8),["remoteapp-invite-request-v1\n", "remoteapp-network-api-v1\nPOST /v1/network\n", "remoteapp-provision-intent-v1\n", "remoteapp-node-possession-v1\n", "remoteapp-session-target-v1\n", "remoteapp-session-controller-v1\n", "remoteapp-session-product-tls-target-v1\n", "remoteapp-session-product-tls-controller-v1\n"].contains(where: {text.hasPrefix($0)}) else {throw VaultError.denied}
         try output(["status":"signed","signature":hex(try key.signature(for:raw))])
     }
 } catch {try? output(["status":"failed"]);exit(1)}

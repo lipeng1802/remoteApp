@@ -2,9 +2,7 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -21,11 +19,38 @@ import (
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/nodeidentity"
 	"remoteapp.local/selfhost-poc/nodeproof"
+	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/streamgate"
 	"tailscale.com/tsnet"
 )
 
-type config struct{ Op, StateDir, AuthKey, NodeKey, AppKey, Verifier, Peer, Token, GrantID string }
+type config struct {
+	Op, StateDir, AuthKey, NodeKey, AppKey, Verifier, Peer, Token, GrantID string
+	VaultExecutable, VaultScope, ExpectedPublic                            string
+}
+
+func openSigner(c config) (invite.DeviceSigner, func(), error) {
+	if c.VaultExecutable != "" {
+		// Enrollment only reopens an explicitly pinned identity created earlier.
+		if c.AppKey != "" || c.ExpectedPublic == "" {
+			return nil, nil, invite.ErrDenied
+		}
+		s, err := privatepipe.NewSigner(c.VaultExecutable, c.VaultScope, c.ExpectedPublic, false)
+		if err != nil {
+			return nil, nil, err
+		}
+		return s, s.Close, nil
+	}
+	if c.VaultScope != "" || c.ExpectedPublic != "" {
+		return nil, nil, invite.ErrDenied
+	}
+	key, err := hex.DecodeString(c.AppKey)
+	if err != nil {
+		return nil, nil, invite.ErrDenied
+	}
+	s, err := invite.NewMemorySigner(key)
+	return s, func() {}, err
+}
 
 const payload = "remoteapp-enrollment-poc-v1"
 
@@ -37,27 +62,16 @@ func main() {
 	}
 }
 func run() error {
-	r := bufio.NewReaderSize(os.Stdin, 8194)
-	decode := func(v any) error {
-		line, e := r.ReadSlice('\n')
-		if e != nil {
-			return e
-		}
-		d := json.NewDecoder(strings.NewReader(string(line)))
-		d.DisallowUnknownFields()
-		if d.Decode(v) != nil {
-			return io.ErrUnexpectedEOF
-		}
-		var extra any
-		if d.Decode(&extra) != io.EOF {
-			return io.ErrUnexpectedEOF
-		}
-		return nil
-	}
+	decode := privatepipe.NewReader(os.Stdin).Read
 	var c config
 	if decode(&c) != nil {
 		return io.ErrUnexpectedEOF
 	}
+	app, closeSigner, e := openSigner(c)
+	if e != nil {
+		return e
+	}
+	defer closeSigner()
 	root, e := filepath.Abs("../../artifacts/connection-poc/nodes")
 	if e != nil {
 		return e
@@ -72,23 +86,21 @@ func run() error {
 		return e
 	}
 	if c.Op == "prepare" {
-		app, e := hex.DecodeString(c.AppKey)
-		if e != nil || len(app) != 64 || !ed25519.PrivateKey(app).Equal(ed25519.NewKeyFromSeed(app[:32])) || len(c.GrantID) != 32 {
+		if len(c.GrantID) != 32 {
 			return io.ErrUnexpectedEOF
 		}
 		nonce := make([]byte, 16)
 		if _, e = rand.Read(nonce); e != nil {
 			return e
 		}
-		intent := invite.SignProvision(app, invite.ProvisionBody{GrantID: c.GrantID, NodeKey: pub, Nonce: hex.EncodeToString(nonce), IssuedAt: time.Now().Unix()})
+		intent, e := invite.SignProvisionWithSigner(app, invite.ProvisionBody{GrantID: c.GrantID, NodeKey: pub, Nonce: hex.EncodeToString(nonce), IssuedAt: time.Now().Unix()})
+		if e != nil {
+			return e
+		}
 		output(map[string]any{"status": "prepared", "node_key": pub, "intent": intent})
 		return nil
 	}
 	if c.Op != "join" || c.NodeKey != pub || c.AuthKey == "" || len(c.AuthKey) > 256 {
-		return io.ErrUnexpectedEOF
-	}
-	app, e := hex.DecodeString(c.AppKey)
-	if e != nil || len(app) != 64 || !ed25519.PrivateKey(app).Equal(ed25519.NewKeyFromSeed(app[:32])) {
 		return io.ErrUnexpectedEOF
 	}
 	tokenBytes, e := hex.DecodeString(c.Token)
@@ -128,7 +140,7 @@ func run() error {
 	workers.Add(1)
 	go func() {
 		defer workers.Done()
-		if nodeproof.ServeWithReport(ctx, s, app, c.Verifier, func(stage string) {
+		if nodeproof.ServeWithSigner(ctx, s, app, c.Verifier, func(stage string) {
 			if stage == "challenge" {
 				challenges.Add(1)
 			}
@@ -234,7 +246,7 @@ func run() error {
 			gateMu.Lock()
 			ok := false
 			if gate == nil && (clockIssuer == "" || clockIssuer == request.Issuer) && e1 == nil && e2 == nil && e3 == nil && (request.Role == "target" || request.Role == "controller") {
-				g, e := streamgate.New(issuer, target, controller, app, request.State, request.Role == "target", clockNow)
+				g, e := streamgate.NewWithSigner(issuer, target, controller, app, request.State, request.Role == "target", clockNow)
 				if e == nil {
 					gate = g
 					tlsBridge = request.Bridge

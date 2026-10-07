@@ -39,6 +39,7 @@ type Check func(ctx context.Context, g invite.Grant, target, controller string) 
 type Config struct {
 	Issuer  ed25519.PublicKey
 	Key     ed25519.PrivateKey
+	Signer  invite.DeviceSigner
 	Binding Binding
 	Grant   invite.Grant
 	Now     func() time.Time
@@ -83,16 +84,38 @@ func bytesFor(role string, t transcript) []byte {
 func signed(key ed25519.PrivateKey, role string, t transcript) string {
 	return hex.EncodeToString(ed25519.Sign(key, bytesFor(role, t)))
 }
+func (c Config) provider() (invite.DeviceSigner, error) {
+	if c.Signer != nil {
+		if len(c.Key) != 0 || len(c.Signer.PublicKey()) != 32 {
+			return nil, ErrDenied
+		}
+		return c.Signer, nil
+	}
+	return invite.NewMemorySigner(c.Key)
+}
+func (c Config) signature(role string, t transcript) (string, error) {
+	s, err := c.provider()
+	if err != nil {
+		return "", ErrDenied
+	}
+	pub := c.Binding.Controller
+	if role == "target" || role == "product-tls-target" {
+		pub = c.Binding.Target
+	}
+	sig, err := invite.CheckedSignature(s, pub, bytesFor(role, t))
+	return hex.EncodeToString(sig), err
+}
 func verifies(pub ed25519.PublicKey, role string, t transcript, sig string) bool {
 	b, err := hex.DecodeString(sig)
 	return err == nil && len(b) == 64 && ed25519.Verify(pub, bytesFor(role, t), b)
 }
 func (c Config) valid(conn net.Conn, server bool) bool {
 	b := c.Binding
-	if c.Now == nil || len(c.Issuer) != 32 || len(c.Key) != 64 || len(b.Target) != 32 || len(b.Controller) != 32 || !b.TargetIP.IsValid() || !b.ControllerIP.IsValid() || b.TargetIP.Is4In6() || b.ControllerIP.Is4In6() {
+	if c.Now == nil || len(c.Issuer) != 32 || len(b.Target) != 32 || len(b.Controller) != 32 || !b.TargetIP.IsValid() || !b.ControllerIP.IsValid() || b.TargetIP.Is4In6() || b.ControllerIP.Is4In6() {
 		return false
 	}
-	if !bytes.Equal(c.Key, ed25519.NewKeyFromSeed(c.Key[:32])) {
+	signer, err := c.provider()
+	if err != nil {
 		return false
 	}
 	local, remote := b.TargetIP, b.ControllerIP
@@ -104,7 +127,7 @@ func (c Config) valid(conn net.Conn, server bool) bool {
 	l, e1 := netip.ParseAddrPort(conn.LocalAddr().String())
 	r, e2 := netip.ParseAddrPort(conn.RemoteAddr().String())
 	return e1 == nil && e2 == nil && l.Addr().Unmap() == local && r.Addr().Unmap() == remote &&
-		Identity(c.Key.Public().(ed25519.PublicKey)) == Identity(pub) &&
+		Identity(signer.PublicKey()) == Identity(pub) &&
 		invite.VerifyGrant(c.Issuer, c.Grant, Identity(b.Target), Identity(b.Controller), c.Now())
 }
 
@@ -199,7 +222,8 @@ func Serve(ctx context.Context, conn net.Conn, c Config, check Check) error {
 		return ErrDenied
 	}
 	t := transcript{1, c.Grant, n, h.Nonce, c.Binding.TargetIP.String(), c.Binding.ControllerIP.String()}
-	if write(conn, welcome{t, signed(c.Key, "target", t)}) != nil {
+	sig, err := c.signature("target", t)
+	if err != nil || write(conn, welcome{t, sig}) != nil {
 		return ErrDenied
 	}
 	var p proof
@@ -268,14 +292,18 @@ func probe(ctx context.Context, conn net.Conn, c Config, received func(), wrongP
 	if t.Version != 1 || t.Grant != c.Grant || t.ClientNonce != n || !validNonce(t.ServerNonce) || t.TargetIP != c.Binding.TargetIP.String() || t.ControllerIP != c.Binding.ControllerIP.String() || !verifies(c.Binding.Target, "target", t, w.Signature) {
 		return ErrDenied
 	}
-	key := c.Key
+	sig, err := c.signature("controller", t)
+	if err != nil {
+		return ErrDenied
+	}
 	if wrongProof {
-		_, key, err = ed25519.GenerateKey(rand.Reader)
+		_, key, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return ErrDenied
 		}
+		sig = signed(key, "controller", t)
 	}
-	if write(conn, proof{signed(key, "controller", t)}) != nil {
+	if write(conn, proof{sig}) != nil {
 		return ErrDenied
 	}
 	if wrongProof {

@@ -83,11 +83,20 @@ func run() error {
 			return out.Encode(map[string]string{"status": "deleted"})
 		}
 		raw, e := base64.StdEncoding.DecodeString(c.Message)
-		if c.Op != "sign" || e != nil || len(raw) > 4096 || (!strings.HasPrefix(string(raw), "remoteapp-invite-request-v1\n") && !strings.HasPrefix(string(raw), "remoteapp-network-api-v1\nPOST /v1/network\n")) {
+		if c.Op != "sign" || e != nil || len(raw) > 4096 || !allowedDomain(string(raw)) {
 			return privatepipe.ErrProtocol
 		}
 		if out.Encode(map[string]string{"status": "signed", "signature": hex.EncodeToString(ed25519.Sign(key, raw))}) != nil {
 			return io.ErrClosedPipe
 		}
 	}
+}
+
+func allowedDomain(raw string) bool {
+	for _, domain := range []string{"remoteapp-invite-request-v1\n", "remoteapp-network-api-v1\nPOST /v1/network\n", "remoteapp-provision-intent-v1\n", "remoteapp-node-possession-v1\n", "remoteapp-session-target-v1\n", "remoteapp-session-controller-v1\n", "remoteapp-session-product-tls-target-v1\n", "remoteapp-session-product-tls-controller-v1\n"} {
+		if strings.HasPrefix(raw, domain) {
+			return true
+		}
+	}
+	return false
 }

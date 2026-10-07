@@ -40,6 +40,18 @@ func provisionBytes(b ProvisionBody) []byte {
 func SignProvision(k ed25519.PrivateKey, b ProvisionBody) ProvisionEnvelope {
 	return ProvisionEnvelope{hex.EncodeToString(k.Public().(ed25519.PublicKey)), b, hex.EncodeToString(ed25519.Sign(k, provisionBytes(b)))}
 }
+
+func SignProvisionWithSigner(s DeviceSigner, b ProvisionBody) (ProvisionEnvelope, error) {
+	if s == nil {
+		return ProvisionEnvelope{}, ErrDenied
+	}
+	pub := append(ed25519.PublicKey(nil), s.PublicKey()...)
+	sig, err := CheckedSignature(s, pub, provisionBytes(b))
+	if err != nil {
+		return ProvisionEnvelope{}, ErrDenied
+	}
+	return ProvisionEnvelope{hex.EncodeToString(pub), b, hex.EncodeToString(sig)}, nil
+}
 func validNodeKey(n string) bool {
 	if len(n) != 72 || !strings.HasPrefix(n, "nodekey:") {
 		return false
