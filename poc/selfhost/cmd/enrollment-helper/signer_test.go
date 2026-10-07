@@ -23,3 +23,16 @@ func TestNetworkConfigurationRejectsPartialTrust(t *testing.T) {
 		t.Fatal("legacy fixture compatibility")
 	}
 }
+
+func TestServiceProfileRejectsMixedOrIncompleteBootstrap(t *testing.T) {
+	for _, c := range []config{
+		{ReleaseRoot: "orphan"}, {MinimumEpoch: 1}, {Service: "orphan"},
+		{ServiceProfile: "{}", AppKey: "fixture"}, {ServiceProfile: "{}", VaultExecutable: "/trusted", Endpoint: "override"},
+		{ServiceProfile: "{}", VaultExecutable: "/trusted", Certificate: "override"}, {ServiceProfile: "{}", VaultExecutable: "/trusted", Issuer: "override"},
+		{ServiceProfile: "{}", VaultExecutable: "/trusted", ReleaseRoot: "invalid"},
+	} {
+		if _, e := resolveServiceProfile(c); e == nil {
+			t.Fatal("ambiguous service bootstrap")
+		}
+	}
+}

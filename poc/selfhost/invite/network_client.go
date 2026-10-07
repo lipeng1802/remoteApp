@@ -13,15 +13,18 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"remoteapp.local/selfhost-poc/trustprofile"
 	"strconv"
 	"time"
 )
 
 type NetworkClient struct {
-	endpoint string
-	signer   DeviceSigner
-	client   *http.Client
-	now      func() time.Time
+	endpoint                      string
+	signer                        DeviceSigner
+	client                        *http.Client
+	now                           func() time.Time
+	profileIssued, profileExpires int64
+	profileDeadline               time.Time
 }
 type DeviceSigner interface {
 	PublicKey() ed25519.PublicKey
@@ -73,11 +76,46 @@ func NewNetworkClient(endpoint string, rootDER []byte, key ed25519.PrivateKey) (
 	return NewNetworkClientWithSigner(endpoint, rootDER, memorySigner{append(ed25519.PrivateKey(nil), key...)})
 }
 func NewNetworkClientWithSigner(endpoint string, rootDER []byte, signer DeviceSigner) (*NetworkClient, error) {
-	u, e := url.Parse(endpoint)
-	if e != nil || u.Scheme != "https" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Hostname() != "127.0.0.1" || u.Port() == "" || signer == nil || len(signer.PublicKey()) != 32 {
+	return newNetworkClient(endpoint, rootDER, signer, false)
+}
+
+// NewProfileNetworkClient permits a non-loopback endpoint only after release
+// root verification. Anchor/floor remain installation-provided trusted inputs.
+func NewProfileNetworkClient(p trustprofile.Profile, root ed25519.PublicKey, service string, floor uint64, signer DeviceSigner) (*NetworkClient, error) {
+	der, e := trustprofile.Verify(p, root, service, floor, time.Now())
+	if e != nil {
 		return nil, ErrDenied
 	}
-	port, err := strconv.ParseUint(u.Port(), 10, 16)
+	c, e := newNetworkClient(p.Claims.Endpoint, der, signer, true)
+	if e != nil {
+		return nil, e
+	}
+	c.profileIssued = p.Claims.IssuedAt
+	c.profileExpires = p.Claims.ExpiresAt
+	now := time.Now()
+	c.profileDeadline = now.Add(time.Unix(p.Claims.ExpiresAt, 0).Sub(now))
+	return c, nil
+}
+
+// BoundLifetime gives managed gates an independent monotonic expiry. A slow
+// HTTPS response or wall-clock rollback must not extend a loaded profile.
+func (c *NetworkClient) BoundLifetime(ctx context.Context) (context.Context, context.CancelFunc) {
+	if c.profileDeadline.IsZero() {
+		return context.WithCancel(ctx)
+	}
+	return context.WithDeadline(ctx, c.profileDeadline)
+}
+
+func newNetworkClient(endpoint string, rootDER []byte, signer DeviceSigner, verifiedProfile bool) (*NetworkClient, error) {
+	u, e := url.Parse(endpoint)
+	if e != nil || u.Scheme != "https" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Hostname() == "" || (!verifiedProfile && (u.Hostname() != "127.0.0.1" || u.Port() == "")) || signer == nil || len(signer.PublicKey()) != 32 {
+		return nil, ErrDenied
+	}
+	portText := u.Port()
+	if verifiedProfile && portText == "" {
+		portText = "443"
+	}
+	port, err := strconv.ParseUint(portText, 10, 16)
 	if err != nil || port == 0 {
 		return nil, ErrDenied
 	}
@@ -89,9 +127,12 @@ func NewNetworkClientWithSigner(endpoint string, rootDER []byte, signer DeviceSi
 	roots.AddCert(cert)
 	transport := &http.Transport{Proxy: nil, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}, DialContext: (&net.Dialer{Timeout: 3 * time.Second}).DialContext, TLSHandshakeTimeout: 3 * time.Second, MaxIdleConns: 2, MaxConnsPerHost: 2, ResponseHeaderTimeout: 13 * time.Second}
 	client := &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return ErrDenied }}
-	return &NetworkClient{endpoint, signer, client, time.Now}, nil
+	return &NetworkClient{endpoint: endpoint, signer: signer, client: client, now: time.Now}, nil
 }
 func (c *NetworkClient) signed(raw []byte) (string, string, error) {
+	if c.profileExpires != 0 && (c.now().Unix() < c.profileIssued || c.now().Unix() >= c.profileExpires) {
+		return "", "", ErrDenied
+	}
 	pub := c.signer.PublicKey()
 	sig, e := c.signer.Sign(raw)
 	if e != nil || len(pub) != 32 || len(sig) != 64 || !ed25519.Verify(pub, raw, sig) {
@@ -104,6 +145,11 @@ func (c *NetworkClient) Close() { c.client.CloseIdleConnections() }
 // Device registration/invitation requests retain their existing signature and
 // persistent nonce/rate protocol, now transported through the same strict TLS.
 func (c *NetworkClient) DeviceRequest(ctx context.Context, b Body) (Result, error) {
+	ctx, cancel := c.BoundLifetime(ctx)
+	defer cancel()
+	if ctx.Err() != nil {
+		return Result{}, ErrDenied
+	}
 	var nonce [16]byte
 	if _, e := rand.Read(nonce[:]); e != nil {
 		return Result{}, ErrDenied
@@ -148,6 +194,11 @@ func (c *NetworkClient) DeviceRequest(ctx context.Context, b Body) (Result, erro
 	return result, nil
 }
 func (c *NetworkClient) Request(ctx context.Context, b NetworkRequestBody) (NetworkReply, error) {
+	ctx, cancel := c.BoundLifetime(ctx)
+	defer cancel()
+	if ctx.Err() != nil {
+		return NetworkReply{}, ErrDenied
+	}
 	var nonce [16]byte
 	if _, e := rand.Read(nonce[:]); e != nil {
 		return NetworkReply{}, ErrDenied

@@ -13,6 +13,7 @@ import (
 	"os"
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/privatepipe"
+	"remoteapp.local/selfhost-poc/trustprofile"
 	"time"
 )
 
@@ -30,8 +31,36 @@ func run() error {
 		Grant                                       invite.Grant
 		VaultExecutable, VaultScope, ExpectedPublic string
 		CreateIdentity                              bool
+		ServiceProfile, ReleaseRoot, Service        string
+		MinimumEpoch                                uint64
 	}
 	if read(&cfg) != nil {
+		return invite.ErrDenied
+	}
+	var profile *trustprofile.Profile
+	var releaseRoot ed25519.PublicKey
+	if cfg.ServiceProfile != "" {
+		if cfg.Endpoint != "" || cfg.Certificate != "" || cfg.Issuer != "" || cfg.AppKey != "" || cfg.VaultExecutable == "" {
+			return invite.ErrDenied
+		}
+		root, err := hex.DecodeString(cfg.ReleaseRoot)
+		if err != nil || len(root) != 32 || hex.EncodeToString(root) != cfg.ReleaseRoot {
+			return invite.ErrDenied
+		}
+		p, err := trustprofile.Decode([]byte(cfg.ServiceProfile))
+		if err != nil {
+			return invite.ErrDenied
+		}
+		der, err := trustprofile.Verify(p, root, cfg.Service, cfg.MinimumEpoch, time.Now())
+		if err != nil {
+			return invite.ErrDenied
+		}
+		profile = &p
+		releaseRoot = root
+		cfg.Endpoint = p.Claims.Endpoint
+		cfg.Certificate = base64.StdEncoding.EncodeToString(der)
+		cfg.Issuer = p.Claims.Issuer
+	} else if cfg.ReleaseRoot != "" || cfg.Service != "" || cfg.MinimumEpoch != 0 {
 		return invite.ErrDenied
 	}
 	cert, e := base64.StdEncoding.DecodeString(cfg.Certificate)
@@ -48,7 +77,11 @@ func run() error {
 			return err
 		}
 		defer signer.Close()
-		client, e = invite.NewNetworkClientWithSigner(cfg.Endpoint, cert, signer)
+		if profile != nil {
+			client, e = invite.NewProfileNetworkClient(*profile, releaseRoot, cfg.Service, cfg.MinimumEpoch, signer)
+		} else {
+			client, e = invite.NewNetworkClientWithSigner(cfg.Endpoint, cert, signer)
+		}
 	} else {
 		key, err := hex.DecodeString(cfg.AppKey)
 		if err != nil {

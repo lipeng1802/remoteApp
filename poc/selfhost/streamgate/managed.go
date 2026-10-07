@@ -49,7 +49,7 @@ func StartManaged(ctx context.Context, client *invite.NetworkClient, issuer, tar
 	if client == nil {
 		return nil, session.ErrDenied
 	}
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := client.BoundLifetime(ctx)
 	watch, e := client.StartStateWatch(ctx, issuer, grant, binding, clock)
 	if e != nil {
 		cancel()

@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-1：服务信任配置核心完成，整体 4 未完成
+
+用户要求继续整体 4。新增发布根签名 `trustprofile`（域 remoteapp-service-trust-v1），绑定 HTTPS endpoint/API CA/独立 online issuer/service/epoch/有效期；8 KiB 严格解析，篡改/未知根/回退/同 epoch 换配置/到期拒绝。`Advance` 仅验证，**不等于安装锚/floor 持久化或跨重启防回退**。新增 `NewProfileNetworkClient`，原构造器仍限制回环；profile 到期拒绝请求并以独立单调期限取消 HTTP/ManagedGate，Deny/join。helper 和 device-api-client 私有 ServiceProfile/ReleaseRoot/Service/MinimumEpoch 模式只允许 OS signer，拒绝 raw endpoint/cert/issuer override、AppKey、孤立配置。
+
+Go 全量 race/vet、Windows helper/API/trust 编译与专用 vet 通过；本机真实 HTTPS 正负向及签名/轮换边界通过；真实 Mac Keychain→发布签名 profile→独立 CA→HTTPS 验签 PASS（0.15s），随机测试身份精确清理。Windows 独立 `windows-service-trust.zip` 已生成、PowerShell AST 语法通过，**Windows 四项实际执行待回传**。无服务器部署/配置变更、生产根创建、已安装 GUI/安装包改动；profile 发布根/issuer/CA 测试均在内存，native network runner 尚未切换到新 profile 模式。
+
+下一步需要用户选择创建独立自托管预发布配置（推荐，不改业务443）或提供既有正式配置；已用非阻塞问题请求确认，未默认生成/部署生产发布身份。然后收口可信安装锚/floor 安全持久化与轮换恢复，产品 HMAC 受保护投递，Swift/C# IPC/生命周期、GUI/独立安装及实机验收。**不能宣称整体 4 完成或最终免登录产品已交付。** 新入口与边界见 [服务信任验证](../poc/selfhost/public-server/SERVICE_TRUST_TEST.md)。
+
 ## 2026-10-07 切片 4B-4B：真实 OS 身份双机网络验收与清理闭环
 
 用户使用新 `windows-native-network` 包保持桌面 owner，提供中文目录 READY。实际执行 `REMOTEAPP_WINDOWS_INTERACTIVE_DIR=... enrollment-network.py --native`，完整退出码 0。独立 Windows pinned probe 先通过，authority 确认只有两端固定 OS 公钥，无 target_key/controller_key；设备 HTTPS 注册、邀请单次兑换、拒绝/再次明确批准、issuer/grant 校准均使用真实 OS signer。无批准无授权、未知设备码/复用验证码/自批拒绝。Mac 负向使用另一份真实随机 OS 身份，不是 fixture AppKey。

@@ -22,6 +22,7 @@ import (
 	"remoteapp.local/selfhost-poc/nodeproof"
 	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/streamgate"
+	"remoteapp.local/selfhost-poc/trustprofile"
 	"tailscale.com/tsnet"
 )
 
@@ -29,6 +30,38 @@ type config struct {
 	Op, StateDir, AuthKey, NodeKey, AppKey, Verifier, Peer, Token, GrantID string
 	VaultExecutable, VaultScope, ExpectedPublic                            string
 	Endpoint, Certificate, Issuer                                          string
+	ServiceProfile, ReleaseRoot, Service                                   string
+	MinimumEpoch                                                           uint64
+	profile                                                                *trustprofile.Profile
+}
+
+func resolveServiceProfile(c config) (config, error) {
+	if c.ServiceProfile == "" {
+		if c.ReleaseRoot != "" || c.Service != "" || c.MinimumEpoch != 0 {
+			return c, invite.ErrDenied
+		}
+		return c, nil
+	}
+	if c.VaultExecutable == "" || c.AppKey != "" || c.Endpoint != "" || c.Certificate != "" || c.Issuer != "" {
+		return c, invite.ErrDenied
+	}
+	root, e := hex.DecodeString(c.ReleaseRoot)
+	if e != nil || len(root) != 32 || hex.EncodeToString(root) != c.ReleaseRoot {
+		return c, invite.ErrDenied
+	}
+	p, e := trustprofile.Decode([]byte(c.ServiceProfile))
+	if e != nil {
+		return c, invite.ErrDenied
+	}
+	cert, e := trustprofile.Verify(p, root, c.Service, c.MinimumEpoch, time.Now())
+	if e != nil {
+		return c, invite.ErrDenied
+	}
+	c.Endpoint = p.Claims.Endpoint
+	c.Certificate = base64.StdEncoding.EncodeToString(cert)
+	c.Issuer = p.Claims.Issuer
+	c.profile = &p
+	return c, nil
 }
 
 func openNetwork(c config, signer invite.DeviceSigner) (*invite.NetworkClient, error) {
@@ -46,6 +79,10 @@ func openNetwork(c config, signer invite.DeviceSigner) (*invite.NetworkClient, e
 	cert, e := base64.StdEncoding.DecodeString(c.Certificate)
 	if e != nil || base64.StdEncoding.EncodeToString(cert) != c.Certificate {
 		return nil, invite.ErrDenied
+	}
+	if c.profile != nil {
+		root, _ := hex.DecodeString(c.ReleaseRoot)
+		return invite.NewProfileNetworkClient(*c.profile, root, c.Service, c.MinimumEpoch, signer)
 	}
 	return invite.NewNetworkClientWithSigner(c.Endpoint, cert, signer)
 }
@@ -87,6 +124,11 @@ func run() error {
 	var c config
 	if decode(&c) != nil {
 		return io.ErrUnexpectedEOF
+	}
+	var profileErr error
+	c, profileErr = resolveServiceProfile(c)
+	if profileErr != nil {
+		return profileErr
 	}
 	app, closeSigner, e := openSigner(c)
 	if e != nil {
