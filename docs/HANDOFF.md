@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-3D：服务器权威/前端受控迁移通过
+
+用户“继续”后完成线上检查与迁移。新增migrate-authority.sh：核对新binary哈希，正常停旧remoteapp-device、listener与writer.lock释放，root-only备份线上最新Store及旧binary/unit，再原状态移动至/var/lib/remoteapp-authority（root700/state600）；可信profile在/etc/remoteapp-authority root700。没有上传/覆盖本地初始snapshot，没有发布根/CA私钥上传。备份保留 /var/lib/remoteapp-authority-backup.WUGsLoM5，含在线issuer，禁止日志/外传；回滚不可恢复过时state/不兼容旧binary。
+
+新remoteapp-authority root CAP_CHOWN=1、remoteapp-frontend remoteapp-pre UID995/GID993 capabilities0，两者NoNewPrivileges=yes，active、disabled（未开机启用）；旧remoteapp-device停止。socket root:remoteapp-pre目录0710/socket0660，tmpfiles规则已安装。真实frontend用户不能读issuer/profile或存在的Headscale db.sqlite/config、不能写socket目录/var/lib；frontend目录无authority残留。第二authority实例固定FAIL（预期）且正常实例/锁不受影响。
+
+真实TLS签名profile/CA/域名+malformed403/duplicate400/network404/health404通过；单独停frontend保留authority锁，重启通过；authority正常TERM退出锁/socket释放，frontend仍active，authority-down探针严格要求503通过，重启authority后默认403探针恢复。线上state所有阶段哈希5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca未变；issuer未变，无设备注册/nonce持久写。durable replay证据为4C-3C联调，不冒充线上新增验收。探针本次服务器直接loopback，旧打印SSH forward不准确，已改explicit loopback并输出预期状态。服务Result success/ExecMainCode0/ExecMainStatus0，Nginx全部基线OK、remoteapp-poc active。
+
+未改公网8444/代理/业务443/Headscale ACL/系统Tailscale；无断电/崩溃锁或实际备份恢复验收。整体4仍未完成，network仍404；下一步接持久verifier/新鲜nodeproof/maintenance/fence backend，先回环真实拒绝/零规则/故障测试，不能只凭NetworkReady布尔值开放。详见[迁移实际记录](../poc/selfhost/public-server/AUTHORITY_MIGRATION.md)。
+
 ## 2026-10-07 切片 4C-3C：daemon/frontend 入口及迁移前置
 
 新增 authority-daemon 和 device-frontend：前者核验固定 root/service/floor/签名 profile/既有 Store issuer，独占已有状态、到期关闭，不创建新 issuer，无 TLS 和 network backend；后者仅 TLS/严格JSON/预算与固定IPC，不打开 Store，启动和成功回包核对 issuer，缺权威服务503，不回退。identity IPC仅公钥；双向kernel UID边界沿用4C-3B。

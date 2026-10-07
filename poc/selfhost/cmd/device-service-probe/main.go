@@ -1,4 +1,4 @@
-// Read-only signed-profile HTTPS probe via an explicit trusted SSH forward.
+// Read-only signed-profile HTTPS probe via an explicit loopback endpoint.
 // It sends only malformed requests: no registration or durable device writes.
 package main
 
@@ -19,8 +19,15 @@ import (
 )
 
 func run() error {
-	if len(os.Args) != 5 {
+	if len(os.Args) != 5 && len(os.Args) != 6 {
 		return fmt.Errorf("arguments")
+	}
+	denied := 403
+	if len(os.Args) == 6 {
+		if os.Args[5] != "authority-down" {
+			return fmt.Errorf("arguments")
+		}
+		denied = 503
 	}
 	root, e := hex.DecodeString(os.Args[2])
 	if e != nil || hex.EncodeToString(root) != os.Args[2] {
@@ -61,7 +68,7 @@ func run() error {
 	for _, v := range []struct {
 		path, body string
 		status     int
-	}{{"/v1/request", "{}", 403}, {"/v1/request", `{"body":{"action":"register","Action":"invite"}}`, 400}, {"/v1/network", "{}", 404}, {"/health", "{}", 404}} {
+	}{{"/v1/request", "{}", denied}, {"/v1/request", `{"body":{"action":"register","Action":"invite"}}`, 400}, {"/v1/network", "{}", 404}, {"/health", "{}", 404}} {
 		r, e := client.Post(p.Claims.Endpoint+v.path, "application/json", bytes.NewBufferString(v.body))
 		if e != nil {
 			return e
@@ -72,7 +79,7 @@ func run() error {
 			return fmt.Errorf("boundary")
 		}
 	}
-	fmt.Println("PASS release-profile HTTPS via SSH forward; malformed/duplicate/network/health rejected; no device writes")
+	fmt.Printf("PASS release-profile HTTPS via explicit loopback; device status=%d; duplicate/network/health rejected; no device writes\n", denied)
 	return nil
 }
 

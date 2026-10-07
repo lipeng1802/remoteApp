@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-最新 4C-3C：[单一权威 daemon / 无特权 HTTPS frontend](poc/selfhost/public-server/AUTHORITY_MIGRATION.md) 入口与回环联调完成：frontend 无 Store、authority 退出返回503、重启保留重放保护。受控迁移与回滚流程及 unit 模板已补齐，尚未迁移线上 Store；网络仍关闭。下一步实机权限隔离与迁移验收，再接真实后端。整体切片 4 未完成。
+最新 4C-3D：[单一权威 daemon / 无特权 HTTPS frontend](poc/selfhost/public-server/AUTHORITY_MIGRATION.md) 已受控迁移至服务器，真实权限隔离、回环HTTPS、第二writer拒绝、权威退出503/重启恢复通过，线上State哈希未变。root-only备份保留，新服务active但未开机启用；网络仍关闭。下一步接 verifier/nodeproof/maintenance/fence 真实后端。整体切片 4 未完成。
 
 最新 4C-3A：[持久 verifier](poc/selfhost/public-server/PERSISTENT_VERIFIER.md) 的明确创建/同身份重启/故障停止/精确回收代码与真实 Headscale 验收通过，测试资源已回收。尚未部署长期 verifier 或接通设备服务网络接口；下一步是固定权限 broker/可信设备公钥绑定，再接实际后端。整体切片 4 未完成。
 
