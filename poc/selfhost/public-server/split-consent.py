@@ -1,0 +1,202 @@
+"""Two OS signers -> private HTTPS frontend -> kernel broker -> sole daemon.
+
+Consent phase only: no client enrollment/nodeproof/product TLS claims. SSH is
+management transport; API CA is private test bootstrap, not installed trust.
+"""
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import secrets
+import socket
+import subprocess
+import time
+
+from native_bootstrap import NativeIdentities
+
+def load(name, filename):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(filename))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+enrollment = load("split_transport", "enrollment-network.py")
+t, Pipe = enrollment.t, enrollment.Pipe
+uploads = load("split_uploads", "daemon-network.py")
+
+def checked_ready(value, target, controller):
+    import base64
+    import re
+    expected = {"status", "split_process", "target", "controller", "issuer", "api_certificate", "api_port"}
+    if (set(value) != expected or value["status"] != "ready" or value["split_process"] is not True
+            or value["target"] != target or value["controller"] != controller
+            or not re.fullmatch(r"[0-9a-f]{64}", value["issuer"])
+            or type(value["api_port"]) is not int or not 0 < value["api_port"] < 65536
+            or not 0 < len(base64.b64decode(value["api_certificate"], validate=True)) < 8192):
+        raise RuntimeError("invalid_split_bootstrap")
+    return value
+
+def consent(target, controller):
+    def call(client, **body):
+        response = client.request("device", Device=body)
+        t.check(response.get("passed") is True, "split_os_signed_" + body["action"])
+        return response["device"]
+    owner = call(target, action="register")
+    peer = call(controller, action="register")
+    t.check(owner["device_id"] != peer["device_id"], "split_distinct_registered_os_subjects")
+    for client in (target, controller):
+        t.check(not client.request("network_state")["passed"], "split_no_network_before_consent")
+    invitation = call(target, action="invite")
+    pending = call(controller, action="claim", target_code=owner["device_code"], code=invitation["code"])
+    t.check(pending["status"] == "pending" and "grant" not in pending, "split_code_not_auto_approval")
+    incoming = call(target, action="incoming")
+    t.check(incoming["request_id"] == pending["request_id"] and incoming["controller_id"] == peer["device_id"], "split_owner_sees_exact_peer")
+    foreign = controller.request("device", Device={"action": "approve", "request_id": pending["request_id"], "allow": True})
+    t.check(not foreign["passed"], "split_controller_cannot_self_approve")
+    call(target, action="approve", request_id=pending["request_id"], allow=False)
+    rejected = call(controller, action="status", request_id=pending["request_id"])
+    t.check(rejected["status"] == "denied" and "grant" not in rejected, "split_owner_denial_has_no_grant")
+    invitation = call(target, action="invite")
+    pending = call(controller, action="claim", target_code=owner["device_code"], code=invitation["code"])
+    t.check(pending["status"] == "pending" and "grant" not in pending, "split_second_claim_still_pending")
+    approved = call(target, action="approve", request_id=pending["request_id"], allow=True)
+    received = call(controller, action="status", request_id=pending["request_id"])
+    t.check(approved.get("grant") is not None and approved["grant"] == received.get("grant"), "split_same_owner_approved_grant")
+    grant = received["grant"]
+    for client in (target, controller):
+        t.check(client.request("use_grant", Grant=grant)["passed"], "split_client_verifies_issuer_subjects_expiry")
+        t.check(not client.request("network_state")["passed"], "split_grant_without_client_bindings_no_network")
+    t.check(call(target, action="revoke", grant_id=grant["claims"]["id"])["status"] == "revoked", "split_os_owner_signed_revocation")
+    final = call(controller, action="status", request_id=pending["request_id"])
+    t.check(final["status"] == "revoked" and "grant" not in final, "split_revocation_not_offline_signature_check")
+
+class Coordinator(Pipe):
+    def read(self, timeout=50):
+        end = time.monotonic() + timeout
+        import select
+        while time.monotonic() < end:
+            if not select.select([self.proc.stdout], [], [], max(0, end-time.monotonic()))[0]:
+                break
+            raw = self.proc.stdout.readline()
+            if not raw:
+                break
+            line = raw.decode().strip()
+            if line.startswith("PASS "):
+                print(line, flush=True)
+                continue
+            return json.loads(line)
+        raise RuntimeError("split_readiness_failed")
+
+    def join(self):
+        # EOF causes failure teardown unless the exact stop command was sent.
+        if not self.proc.stdin.closed:
+            self.proc.stdin.close()
+        end = time.monotonic()+100
+        import select
+        while time.monotonic() < end:
+            if not select.select([self.proc.stdout], [], [], max(0,end-time.monotonic()))[0]:
+                raise RuntimeError("split_join_unconfirmed")
+            raw = self.proc.stdout.readline()
+            if not raw:
+                break
+            line = raw.decode().strip()
+            if line.startswith(("PASS ", "FAIL ", "PRESERVED /tmp/remoteapp-daemon-check-")):
+                print(line, flush=True)
+        self.proc.wait(timeout=5)
+        return self.proc.returncode
+
+def main():
+    os.umask(0o077)
+    identities = NativeIdentities(t, Pipe)  # Actual pinned desktop probe before mutations.
+    coordinator = None
+    clients, tunnels = [], []
+    backup = None
+    joined = False
+    work_created = False
+    prefix = "/tmp/remoteapp-split-consent-"+secrets.token_hex(8)
+    program, daemon, frontend, mode = [prefix+x for x in ("-check", "-daemon", "-frontend", "-mode.py")]
+    work = "C:\\Users\\jarvis\\remoteapp-split-consent-"+secrets.token_hex(8)
+    try:
+        t.check(not t.admin("nodes", "list") and not t.admin("users", "list") and not t.admin("preauthkeys", "list"), "split_empty_isolated_control_plane")
+        for source, destination in [(t.ARTIFACTS/"daemon-network-check",program), (t.ARTIFACTS/"authority-daemon-network",daemon),
+                (t.ARTIFACTS/"device-frontend-private",frontend), (Path(__file__).with_name("enrollment-mode.py"),mode)]:
+            uploads.upload(source, destination)
+        prepared = subprocess.run(t.SERVER+["python "+mode+" prepare"], capture_output=True, timeout=45)
+        if prepared.stdout.splitlines():
+            backup = json.loads(prepared.stdout.splitlines()[0]).get("backup")
+        t.check(prepared.returncode == 0 and backup is not None, "split_database_deny_prepared")
+        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+" --os-consent "+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
+        ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"])
+        t.check(True, "split_independent_daemon_nonroot_frontend_ready_public_only")
+        local_socket = socket.socket(); local_socket.bind(("127.0.0.1",0)); local_port = local_socket.getsockname()[1]; local_socket.close()
+        forward = subprocess.Popen(t.SERVER[:-1]+["-N","-o","ExitOnForwardFailure=yes","-L",f"127.0.0.1:{local_port}:127.0.0.1:{ready['api_port']}",t.SERVER[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        tunnels.append(forward)
+        end = time.monotonic()+10
+        while True:
+            try:
+                connection=socket.create_connection(("127.0.0.1",local_port),timeout=.5); connection.close(); break
+            except OSError:
+                if forward.poll() is not None or time.monotonic()>end: raise RuntimeError("split_forward_failed")
+                time.sleep(.1)
+        remote_port = int(t.powershell("$l=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,0);$l.Start();$p=$l.LocalEndpoint.Port;$l.Stop();$p"))
+        reverse = subprocess.Popen(t.WIN[:-1]+["-N","-o","ExitOnForwardFailure=yes","-R",f"127.0.0.1:{remote_port}:127.0.0.1:{local_port}",t.WIN[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        tunnels.append(reverse); time.sleep(1)
+        t.check(reverse.poll() is None,"split_private_windows_api_tunnel")
+        t.powershell("$ErrorActionPreference='Stop'; "+f"if (Test-Path -LiteralPath '{work}') {{throw 'exists'}}; New-Item -ItemType Directory -Path '{work}' | Out-Null")
+        work_created = True
+        t.powershell("$ErrorActionPreference='Stop'; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; "+f"icacls '{work}' /inheritance:r /grant:r \"*${{sid}}:(OI)(CI)F\" '*S-1-5-18:(OI)(CI)F' | Out-Null; if ($LASTEXITCODE -ne 0) {{throw 'acl_failed'}}")
+        binary=t.ARTIFACTS/"device-api-client-win.exe"
+        uploaded=subprocess.run(["scp","-O","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(binary),"jarvis@100.73.4.118:"+work.replace("\\","/")+"/device-api-client.exe"],capture_output=True,timeout=60)
+        t.check(uploaded.returncode==0,"split_windows_api_client_uploaded")
+        actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\device-api-client.exe').Hash")
+        t.check(actual.lower()==hashlib.sha256(binary.read_bytes()).hexdigest(),"split_windows_api_binary_verified")
+        for windows, port, role in [(True,remote_port,"native-target"),(False,local_port,"native-controller")]:
+            config={"Endpoint":f"https://127.0.0.1:{port}","Certificate":ready["api_certificate"],"Issuer":ready["issuer"],
+                "Target":hashlib.sha256(bytes.fromhex(ready["target"])).hexdigest(),"Controller":hashlib.sha256(bytes.fromhex(ready["controller"])).hexdigest()}
+            config.update(identities.config(role,windows))
+            command=identities.command(work,"device-api-client.exe") if windows else [str(t.ARTIFACTS/"device-api-client")]
+            client=Pipe(command,config); clients.append(client)
+            t.check(client.read()["status"]=="ready","split_device_os_signer_ready")
+        consent(*clients)
+        for client in reversed(clients): client.stop()
+        clients.clear()
+        coordinator.send({"Op":"stop"})
+        code=coordinator.join(); joined=True
+        t.check(code==0,"split_consent_coordinator_zero_exit")
+    finally:
+        for client in reversed(clients): client.emergency()
+        if coordinator is not None and not joined:
+            try:
+                coordinator.join(); joined=True
+            except Exception:
+                # Never restore policy/delete evidence while remote process
+                # lifetime is unknown. These handles contain no secret data.
+                if backup is not None: print("PRESERVED_POLICY_BACKUP "+backup,flush=True)
+                print("PRESERVED_COORDINATOR_PROGRAM "+program,flush=True)
+                for tunnel in reversed(tunnels):
+                    tunnel.terminate(); tunnel.wait(timeout=5)
+                identities.close()
+                raise
+        for tunnel in reversed(tunnels):
+            tunnel.terminate(); tunnel.wait(timeout=5)
+        identities.close()  # Only this run's random Mac identities, never Windows owner.
+        if work_created:
+            t.powershell(f"Remove-Item -LiteralPath '{work}' -Recurse -Force -ErrorAction Stop")
+        if backup is not None:
+            restored=subprocess.run(t.SERVER+["python "+mode+" restore "+backup],capture_output=True,timeout=45)
+            if restored.returncode!=0: print("PRESERVED_POLICY_BACKUP "+backup,flush=True)
+            t.check(restored.returncode==0,"split_original_file_policy_restored")
+        removed=subprocess.run(t.SERVER+["rm -f -- "+" ".join((program,daemon,frontend,mode))],capture_output=True,timeout=15)
+        t.check(removed.returncode==0,"split_uploaded_executables_removed")
+    t.check(not t.admin("nodes","list") and not t.admin("users","list") and not t.admin("preauthkeys","list"),"split_control_resources_zero")
+    t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":["100.120.0.2"],"dst":["100.120.0.1:47476"]}]},"split_original_policy_unchanged")
+    status=subprocess.run(t.SERVER+["systemctl is-active remoteapp-authority remoteapp-frontend remoteapp-poc && sha256sum --check /opt/remoteapp-prerelease/nginx-baseline.sha256 && sha256sum /var/lib/remoteapp-authority/state.json"],capture_output=True,timeout=15)
+    t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
+    print("VALIDATION PASSED: split-process OS consent only. NOT nodeproof/product TLS/installed trust acceptance.",flush=True)
+
+if __name__=="__main__":
+    try: main()
+    except Exception:
+        print("FAIL split_os_consent_coordinator",flush=True)
+        raise SystemExit(1)

@@ -179,7 +179,7 @@ func peer(socket string, paths []string) error {
 	fmt.Println("PASS authorized_nonroot_peer_identity_and_network_denial_private_reads_denied")
 	return nil
 }
-func run(binary, frontend string) (result error) {
+func run(binary, frontend string, consent *consentPins) (result error) {
 	if os.Geteuid() != 0 || !filepath.IsAbs(binary) {
 		return denied
 	}
@@ -426,6 +426,17 @@ func run(binary, frontend string) (result error) {
 		tr := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: pool}, Proxy: nil}
 		defer tr.CloseIdleConnections()
 		hc = &http.Client{Transport: tr, Timeout: 20 * time.Second}
+		if consent != nil {
+			// The coordinator receives public bootstrap only. It cannot register,
+			// approve, enroll or sign on behalf of either OS-owned identity.
+			if consentSession(os.Stdin, os.Stdout, *consent, signed.Claims.Issuer, der, listen, 5*time.Minute) != nil {
+				return denied
+			}
+			if front.stop() != nil || current.stop() != nil {
+				return denied
+			}
+			return check(policyZero(d), "split_os_consent_stopped_joined_zero_acl")
+		}
 		_, key, e := ed25519.GenerateKey(rand.Reader)
 		if e != nil {
 			return denied
@@ -552,9 +563,16 @@ func main() {
 	if len(os.Args) >= 3 && os.Args[1] == "peer" {
 		e = peer(os.Args[2], os.Args[3:])
 	} else if len(os.Args) == 2 {
-		e = run(os.Args[1], "")
+		e = run(os.Args[1], "", nil)
 	} else if len(os.Args) == 4 && os.Args[2] == "--frontend" {
-		e = run(os.Args[1], os.Args[3])
+		e = run(os.Args[1], os.Args[3], nil)
+	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && os.Args[4] == "--os-consent" {
+		pins, err := parseConsentPins(os.Args[5], os.Args[6])
+		if err != nil {
+			e = denied
+		} else {
+			e = run(os.Args[1], os.Args[3], &pins)
+		}
 	} else {
 		e = denied
 	}

@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4G：独立进程 OS consent 入口准备，双机待验
+
+用户继续后新增 daemon-network-check --os-consent 公钥对模式与 split-consent.py，不使用 enrollment-fixture。复用真实独立 root daemon/nobody frontend、服务器临时测试 profile/root/CA、persistent verifier/supervisor；协调进程只公共 readiness+精确 stop，不能代签、批准或 enroll，不与 daemon 并发打开 Store。EOF/其他指令/5 分钟超时失败；进程停止/join/零 ACL 与精确 Retire 才清理。未知进程生存保留程序/模式 backup，不盲恢复。
+
+新流程先实际 Windows pinned desktop probe，再切空隔离数据库；两端 OS 签名注册/邀请/pending/拒绝/自批准拒绝/明确批准/同 grant/签名 grant_clock 校时和验签；无客户端绑定仍拒绝 network；OS owner 签名撤销，权威 status revoked 不回 grant；无设备私钥输入。SSH 仅私有管理转发、随机 CA 私有 bootstrap，非正式 trust 安装/最终产品。
+
+Linux check 构建、两项 Linux 真组件 PASS 无 SKIP（纯公钥/operator协议，不访问控制面），上传测试 binary 已删；Python两项模拟断言 PASS，不算实机。未运行新双机，不注册客户端节点、不验 nodeproof/产品 TLS，不改线上服务/Store/Nginx。**下一步请 Windows 重新 READY 并保持，再运行 split-consent.py；成功后仍请用户 Enter/STOPPED。** 路径 H:\chatgpt\远程软件开发\测试安装包\windows-native-network；用户之前 STOPPED，不能假设仍活。详见[新入口](../poc/selfhost/public-server/SPLIT_OS_CONSENT.md)。整体4未完成。
+
 ## 2026-10-07 切片 4C-4F：私有前端网络路由与跨进程HTTPS通过
 
 device-frontend增加显式--private-network；默认network404，启用必须loopback+独立broker，无standalone/public监听回退。沿用profile/root/service/floor/TLS/kernel UID/issuer核对，frontend不拥有Store或privileged CLI。私有模式WriteTimeout20秒覆盖5秒读+14秒network执行，默认仍5秒，device预算4秒不变。请求body/frame/JSON/配额/socket/slot限制保留。
