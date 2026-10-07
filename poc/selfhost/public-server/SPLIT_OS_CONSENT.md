@@ -1,6 +1,6 @@
 # 4C-4G：独立进程双机 OS 授权入口
 
-代码/组件准备完成，真实双机待验。不是整体切片 4 完成。
+真实双机 OS consent 验收已通过，完整退出码0。不是整体切片 4 完成。
 
 路径：Windows 桌面 OS signer + Mac 随机测试 OS signer → 私有 loopback HTTPS frontend（nobody）→ kernel broker → 独立 root authority-daemon → 真实 persistent verifier/supervisor。不启动 enrollment-fixture；协调进程只创建隔离测试材料、启动/停止子进程，收到公钥及公共 API CA，不持有设备私钥，也无批准、签名、enroll 或 Store 并发写接口。
 
@@ -18,6 +18,14 @@
 - Python 两项纯断言 PASS：严格 split readiness、模拟 consent 顺序，拒绝自批准/自动 grant；不是双机实机结果。
 - Linux check 已重新构建；真实双机未运行，等待 Windows READY。
 - 本轮完整 Go race/vet、Linux check vet 通过（Mac 全量不含 Linux 专属组件，后者以实际 Linux 两项结果为准）。
+
+## 真实双机记录
+
+用户重新 READY 后运行最新 split-consent.py，实际 pinned Windows 桌面探针通过。独立 root daemon、nobody frontend/内核 broker/真实 verifier ready；Windows/Mac 各自 OS 签名 API ready。注册、不同主体、授权前拒绝、pending 无 grant、精确 owner peer、controller 自批准拒绝、owner 拒绝、新邀请和明确批准、两端同 grant/签名校时验签、无客户端绑定网络拒绝、Windows owner 签名撤销及 status revoked 无 grant，全部 PASS。
+
+两端 API 正常 closed/零退出，独立 frontend/daemon 正常停止/join/零ACL，精确 verifier ticket 退役、隔离目录/上传程序与 Windows 随机客户端目录回收、Mac 随机身份清理、原策略恢复，最终协调程序退出0。独立 SSH 复核 authority/frontend/poc 均 active，线上 State 原哈希不变，Nginx全部OK，nodes/users/preauthkeys零，原 file policy 完整。Windows 桌面 owner 保留，最终用户 Enter/STOPPED 待确认。
+
+未执行客户端网络注册/nodeproof或产品TLS，未部署公网API或正式trust安装；这些仍待下一阶段。
 
 ## 下一次操作
 

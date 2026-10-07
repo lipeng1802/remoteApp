@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-4C-4G：[独立 daemon/frontend 双机 OS 授权入口](poc/selfhost/public-server/SPLIT_OS_CONSENT.md) 已准备，Linux 协议组件与 Python 断言通过；真实双机待 Windows READY。协调端只有公共 bootstrap/stop，无代签批准接口。此阶段只验设备 consent，不宣称 nodeproof、产品 TLS 或可信安装验收，整体 4 未完成。
+4C-4G：[独立 daemon/frontend 双机 OS 授权](poc/selfhost/public-server/SPLIT_OS_CONSENT.md) 真实双机通过，退出码0：两端 OS 签名注册、pending/拒绝/自批准拦截、明确批准/同grant校时验签、撤销及清理恢复。协调端只有公共 bootstrap/stop，无代签批准接口。此阶段只验设备 consent，不宣称客户端 nodeproof、产品 TLS 或可信安装验收；Windows 最终 Enter/STOPPED 待确认，整体 4 未完成。
 
 4C-4F：[私有前端网络路由/跨进程HTTPS](poc/selfhost/public-server/PRIVATE_FRONTEND.md) 完整实机通过，退出码0；默认network404，显式开关仅回环+broker。真实root daemon/nonroot frontend/签名设备HTTPS、无grant拒绝、错误CA拒绝、故障503/显式恢复、重放保持和零退出通过。未部署线上或开放公网，整体4未完成。
 

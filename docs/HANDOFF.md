@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4G：独立进程真实双机 OS consent 通过
+
+用户确认 Windows READY 后执行最新 split-consent.py，完整退出码0。实际桌面 pinned probe通过，两个API进程使用各自真实Windows/Mac OS signer，管理SSH私有转发到实际nobody frontend→kernel broker→独立root daemon/真实persistent verifier/supervisor；不运行旧enrollment-fixture，不代签或批准。
+
+两端签名注册及不同主体通过；无grant network拒绝；邀请兑换仅pending无grant，owner发现精确peer；controller自批准拒绝；owner明确拒绝不回grant；新邀请仍pending，owner批准后两端同grant、签名grant_clock校时/主体/期限验签；没有客户端节点绑定仍拒绝network；Windows owner真实签名撤销后权威status revoked且不回grant。没有客户端enroll/nodeproof/产品TLS，本轮不能冒称这些已接独立新进程。
+
+两个API helper closed/零退出，frontend与daemon正常STOPPED/join/零ACL，精确verifier Retire、本轮隔离目录/上传程序/Windows随机客户端目录删除，随机Mac测试身份清理；原file策略恢复。独立SSH复核三服务active、线上State哈希仍5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca、Nginx基线全部OK、nodes/users/preauthkeys null（零）、原100.120.0.2→100.120.0.1:47476规则完整。未改线上binary/unit/Store/profile/业务443或开放公网网络路由。
+
+Windows桌面owner未远程停止/删除，**需用户此时Enter并确认STOPPED**。下一步把真实客户端enroll/bind/nodeproof、最小规则/零ACL网络拒绝和产品TLS接到同一独立daemon/frontend；再做正式trust/admission/HMAC/GUI/安装，整体4未完成。下方“待验”是历史准备记录。见[实机记录](../poc/selfhost/public-server/SPLIT_OS_CONSENT.md)。
+
 ## 2026-10-07 切片 4C-4G：独立进程 OS consent 入口准备，双机待验
 
 用户继续后新增 daemon-network-check --os-consent 公钥对模式与 split-consent.py，不使用 enrollment-fixture。复用真实独立 root daemon/nobody frontend、服务器临时测试 profile/root/CA、persistent verifier/supervisor；协调进程只公共 readiness+精确 stop，不能代签、批准或 enroll，不与 daemon 并发打开 Store。EOF/其他指令/5 分钟超时失败；进程停止/join/零 ACL 与精确 Retire 才清理。未知进程生存保留程序/模式 backup，不盲恢复。
