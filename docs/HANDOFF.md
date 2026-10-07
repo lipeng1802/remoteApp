@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4C：新版双机协调入口代码完成，实机待验
+
+用户确认Windows已停止，先改造入口，未改服务器。enrollment-network.py新增--supervised（native/managed/TLS仍真实OS），启动fixture --native-supervised并要求ready supervised=true。新supervisedFixture用persistent Runtime+kernel broker+PrivateNetworkHandler+supervisor；可信Store取pub、runtime proof/report固定标签。早期一分钟维护以显式控制zero/reconcile阶段；周期实验切500ms。Stop后显式新backend/supervisor才恢复，policy服务恢复不能自动开门；Store故障Stop临时policy不可用保留旧ACL，便于TLS关闭验收。撤销接受签名inactive或拒绝（周期可能已清binding），仍禁止active，旧ACL关闭证据由fault阶段区分。末尾真实SDK stop/join+same key/IP explicit resume，已撤销grant不可复活。
+
+constructor未知Mint保留Runtime journal；teardown join/资源cleanup/retire失败保留实验目录/lease而非盲删，不宣称零退出。新fixture自动测试：替身控制面、真实Runtime生命周期/HTTPS/kernel注册重放/策略fault锁闭/显式恢复/冷Store重放通过；Python纯断言3测试防缺marker/混入active/错误恢复。完整Go race/vet/Linux fixture构建通过。未运行新的完整真实Headscale/双机TLS验收，未新增自然到期/断电证据。
+
+下一步用户正常桌面重新运行已有windows-native-network/start-interactive-vault.ps1，确认READY并保持窗口，总控先probe然后使用 REMOTEAPP_WINDOWS_INTERACTIVE_DIR='H:\chatgpt\远程软件开发\测试安装包\windows-native-network' python3 -B poc/selfhost/public-server/enrollment-network.py --supervised。需最新Linux fixture构建和既有匹配helper/API/OS vault；测试未成功不能报完整通过，现场可能需按实际输出修复。运行结束确认所有owned节点/users/preauthkeys零、原policy/Nginx恢复，再请用户Enter/STOPPED。线上network仍404、整体4未完成。见[新版入口](../poc/selfhost/public-server/SUPERVISED_NETWORK_TEST.md)。
+
 ## 2026-10-07 切片 4C-4B：私有HTTP/broker验收前置与实机组件
 
 接续4C-4A发现StartHeadscaleNetworkSupervisor漏PolicyDir/Mode，实际driver会首Reconcile拒绝；新增可信真实绝对0700 policyDir参数+database配置，不自动改Headscale模式。broker仅network固定14秒工作/15秒I/O，解析仍5秒、其他操作4秒，兼容12秒nodeproof，不放宽槽/帧。新增PrivateNetworkHandler device/network均kernel IPC、严格JSON/完整包8191限、issuer核对/503无回退；生产device-frontend不接此路由。

@@ -49,24 +49,30 @@ func main() {
 		os.Exit(1)
 	}
 }
-func run() error {
+func run() (result error) {
 	nodeidentity.ConfigureOnline()
 	dir, e := os.MkdirTemp("/var/lib/remoteapp-poc", "enrollment-")
 	if e != nil {
 		return e
 	}
-	defer os.RemoveAll(dir)
+	retainFixture := false
+	defer func() {
+		if !retainFixture {
+			os.RemoveAll(dir)
+		}
+	}()
 	state := filepath.Join(dir, "authority")
 	s, e := invite.Open(state, time.Now)
 	if e != nil {
 		return e
 	}
 	defer func() {
-		if s != nil {
+		if s != nil && !retainFixture {
 			s.Close()
 		}
 	}()
-	native := len(os.Args) == 2 && os.Args[1] == "--native"
+	supervised := len(os.Args) == 2 && os.Args[1] == "--native-supervised"
+	native := supervised || len(os.Args) == 2 && os.Args[1] == "--native"
 	deviceFlow := native || len(os.Args) == 2 && os.Args[1] == "--device-flow"
 	if len(os.Args) > 1 && !deviceFlow {
 		return invite.ErrDenied
@@ -133,48 +139,78 @@ func run() error {
 		return runner(ctx, args...)
 	}
 	d := &headscale.Driver{Run: policyRunner, PolicyDir: dir, PolicyMode: "database"}
-	verifierDir := filepath.Join(dir, "verifier")
-	vk, e := nodeidentity.Prepare(verifierDir, "https://mk.fengmap.com:8443")
-	if e != nil {
-		return e
-	}
-	vr := invite.ProvisionRecord{ID: random(16), NodeKey: vk, Expires: time.Now().Unix() + 120}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
-		d.Cleanup(ctx, vr)
-	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	credential, e := d.Mint(ctx, vr)
-	if e != nil {
-		return e
-	}
-	v := &tsnet.Server{Dir: verifierDir, Hostname: "poc-verifier", ControlURL: "https://mk.fengmap.com:8443", AuthKey: credential.Secret, Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}
-	defer v.Close()
-	status, e := v.Up(ctx)
-	if e != nil || status.Self == nil || status.Self.PublicKey.String() != vk {
-		return errors.New("verifier identity mismatch")
-	}
-	for _, ip := range status.TailscaleIPs {
-		if ip.Is4() {
-			d.VerifierIP = ip.String()
+	var proofStage atomic.Value
+	proofStage.Store("not_called")
+	var sf *supervisedFixture
+	var vk string
+	if supervised {
+		sf, e = newSupervisedFixture(dir, s, policyRunner, func(stage string) { proofStage.Store(stage) })
+		if e != nil {
+			if sf != nil {
+				retainFixture = true
+			}
+			return e
 		}
-	}
-	if d.VerifierIP == "" {
-		return invite.ErrDenied
-	}
-	proofStage := "not_called"
-	d.Proof = func(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation) bool {
-		pub := controllerPub
-		if r.Device == g.Claims.Target {
-			pub = targetPub
+		defer func() {
+			if err := sf.Close(); err != nil {
+				retainFixture = true
+				result = err
+			}
+		}()
+		vk = sf.runtime.Info().Key
+	} else {
+		verifierDir := filepath.Join(dir, "verifier")
+		vk, e = nodeidentity.Prepare(verifierDir, "https://mk.fengmap.com:8443")
+		if e != nil {
+			return e
 		}
-		return nodeproof.VerifyWithReport(ctx, v, r, o, pub, func(stage string) { proofStage = stage })
+		vr := invite.ProvisionRecord{ID: random(16), NodeKey: vk, Expires: time.Now().Unix() + 120}
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			defer cancel()
+			d.Cleanup(ctx, vr)
+		}()
+		credential, e := d.Mint(ctx, vr)
+		if e != nil {
+			return e
+		}
+		v := &tsnet.Server{Dir: verifierDir, Hostname: "poc-verifier", ControlURL: "https://mk.fengmap.com:8443", AuthKey: credential.Secret, Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}
+		defer v.Close()
+		status, e := v.Up(ctx)
+		if e != nil || status.Self == nil || status.Self.PublicKey.String() != vk {
+			return errors.New("verifier identity mismatch")
+		}
+		for _, ip := range status.TailscaleIPs {
+			if ip.Is4() {
+				d.VerifierIP = ip.String()
+			}
+		}
+		if d.VerifierIP == "" {
+			return invite.ErrDenied
+		}
+		d.Proof = func(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation) bool {
+			pub := controllerPub
+			if r.Device == g.Claims.Target {
+				pub = targetPub
+			}
+			return nodeproof.VerifyWithReport(ctx, v, r, o, pub, func(stage string) { proofStage.Store(stage) })
+		}
 	}
 	b := &invite.ProvisionBackend{Store: s, Driver: d}
+	interval := time.Minute // early fixture phases use explicit reconcile/zero.
+	if supervised {
+		b, d, e = sf.Start(s, interval)
+		if e != nil {
+			return e
+		}
+	}
 	var maintenance *invite.Maintenance
 	stopMaintenance := func(ctx context.Context) error {
+		if supervised {
+			return sf.Stop(ctx)
+		}
 		if maintenance == nil {
 			return nil
 		}
@@ -185,13 +221,22 @@ func run() error {
 		return e
 	}
 	authorityOffline := false
-	if b.Reconcile(ctx) != nil {
+	if !supervised && b.Reconcile(ctx) != nil {
 		return invite.ErrDenied
 	}
 	defer func() {
+		priorResult := result
+		if supervised {
+			// Any early return retains the scoped journal for operator recovery.
+			// Do not erase identities/resources merely because parent stdin ended.
+			retainFixture = true
+			result = invite.ErrDenied
+		}
 		join, joinCancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer joinCancel()
 		if stopMaintenance(join) != nil {
+			retainFixture = true
+			result = invite.ErrDenied
 			return
 		}
 		failPolicy.Store(false)
@@ -227,12 +272,24 @@ func run() error {
 		}
 		cleanup, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		b.Reconcile(cleanup)
+		if supervised {
+			if (&invite.ProvisionBackend{Store: s, Driver: d}).Reconcile(cleanup) != nil {
+				result = invite.ErrDenied
+				return
+			}
+			retainFixture = false
+			result = priorResult
+		} else {
+			b.Reconcile(cleanup)
+		}
 	}()
 	out := json.NewEncoder(os.Stdout)
 	var apiMu sync.RWMutex
 	admission := invite.NewAdmission()
 	apiHandler := admission.Wrap(invite.NetworkHandler(b))
+	if supervised {
+		apiHandler = admission.Wrap(sf.Handler())
+	}
 	api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiMu.RLock()
 		defer apiMu.RUnlock()
@@ -258,6 +315,7 @@ func run() error {
 	api.StartTLS()
 	defer api.Close()
 	ready := map[string]any{"status": "ready", "verifier": vk, "grant_id": g.Claims.ID, "grant": g, "api_port": api.Listener.Addr().(*net.TCPAddr).Port, "api_certificate": base64.StdEncoding.EncodeToString(api.Certificate().Raw), "issuer": hex.EncodeToString(s.PublicKey()), "target": hex.EncodeToString(targetPub), "controller": hex.EncodeToString(controllerPub)}
+	ready["supervised"] = supervised
 	if !native {
 		ready["target_key"] = hex.EncodeToString(target)
 		ready["controller_key"] = hex.EncodeToString(controller)
@@ -292,7 +350,7 @@ func run() error {
 			apiMu.Unlock()
 		case "proof_result":
 			apiMu.Lock()
-			result["proof_stage"] = proofStage
+			result["proof_stage"] = proofStage.Load()
 			for _, r := range s.ProvisionRecords() {
 				if r.ID == c.Ticket {
 					result["registration_expired"] = time.Now().Unix() >= r.Expires
@@ -300,11 +358,26 @@ func run() error {
 			}
 			apiMu.Unlock()
 		case "maintenance_start":
+			if supervised {
+				apiMu.Lock()
+				interval = 500 * time.Millisecond
+				b, d, e = sf.Start(s, interval)
+				result["passed"] = e == nil
+				apiMu.Unlock()
+				break
+			}
 			if maintenance == nil {
 				maintenance, e = b.StartMaintenance(context.Background(), 500*time.Millisecond, 2*time.Second)
 				result["passed"] = e == nil
 			}
 		case "maintenance_count":
+			if supervised {
+				result["passed"] = true
+				result["maintenance"] = sf.supervisor.MaintenanceStatus()
+				result["network_ready"] = sf.supervisor.Ready()
+				result["verifier_live"] = sf.runtime.Live()
+				break
+			}
 			if maintenance != nil {
 				result["passed"] = true
 				result["maintenance"] = maintenance.Status()
@@ -337,17 +410,27 @@ func run() error {
 			result["ticket"] = id
 			result["credential"] = cred
 		case "bind":
-			proofStage = "not_called"
+			proofStage.Store("not_called")
 			result["passed"] = b.Bind(callCtx, c.Ticket) == nil
-			result["proof_stage"] = proofStage
+			result["proof_stage"] = proofStage.Load()
 			for _, record := range s.ProvisionRecords() {
 				if record.ID == c.Ticket {
 					result["registration_expired"] = time.Now().Unix() >= record.Expires
 				}
 			}
 		case "reconcile":
+			if supervised && !sf.supervisor.Ready() {
+				apiMu.Lock()
+				b, d, e = sf.Start(s, interval)
+				result["passed"] = e == nil
+				apiMu.Unlock()
+				break
+			}
 			result["passed"] = b.Reconcile(callCtx) == nil
 		case "zero":
+			if supervised && sf.Stop(callCtx) != nil {
+				break
+			}
 			result["passed"] = d.ReplaceRules(callCtx, nil) == nil
 		case "rules":
 			rules, e := s.ProvisionRules()
@@ -399,6 +482,15 @@ func run() error {
 					return e
 				}
 				authorityOffline = false
+				if supervised {
+					b, d, e = sf.Start(s, interval)
+					if e != nil {
+						return e
+					}
+					apiHandler = admission.Wrap(sf.Handler())
+					result["passed"] = true
+					return nil
+				}
 				d = &headscale.Driver{Run: policyRunner, PolicyDir: dir, PolicyMode: "database", VerifierIP: d.VerifierIP, Proof: d.Proof}
 				b = &invite.ProvisionBackend{Store: s, Driver: d}
 				apiHandler = admission.Wrap(invite.NetworkHandler(b))
@@ -414,12 +506,32 @@ func run() error {
 				return restartErr
 			}
 		case "authority_unavailable":
+			if supervised {
+				failPolicy.Store(true)
+			} // preserve old ACL during fault.
 			if stopMaintenance(callCtx) != nil {
 				stop()
 				return invite.ErrDenied
 			}
 			result["passed"] = s.Close() == nil // actual closed durable authority, keep the policy and nodes unchanged
 			authorityOffline = true
+			if supervised {
+				failPolicy.Store(false)
+			}
+		case "verifier_unavailable":
+			if supervised {
+				result["passed"] = sf.runtime.Stop(callCtx) == nil
+			}
+		case "verifier_resume":
+			if supervised {
+				apiMu.Lock()
+				// The runtime outlives this private management command's deadline.
+				if sf.ResumeVerifier(context.Background()) == nil {
+					b, d, e = sf.Start(s, interval)
+					result["passed"] = e == nil
+				}
+				apiMu.Unlock()
+			}
 		case "stop":
 			stop()
 			return nil

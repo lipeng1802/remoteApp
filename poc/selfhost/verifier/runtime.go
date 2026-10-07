@@ -73,6 +73,11 @@ func (r *Runtime) Done() <-chan struct{} { return r.done }
 // Verify uses this runtime's isolated overlay and a trusted Store-bound key.
 // Caller must not use control-plane rows or client-selected keys as proof.
 func (r *Runtime) Verify(ctx context.Context, record invite.ProvisionRecord, o invite.ProvisionObservation, pub ed25519.PublicKey) bool {
+	return r.VerifyWithReport(ctx, record, o, pub, nil)
+}
+
+// Report emits only nodeproof fixed diagnostic labels, never bootstrap secrets.
+func (r *Runtime) VerifyWithReport(ctx context.Context, record invite.ProvisionRecord, o invite.ProvisionObservation, pub ed25519.PublicKey, report func(string)) bool {
 	r.proofMu.Lock()
 	p, ok := r.node.(interface {
 		Verify(context.Context, invite.ProvisionRecord, invite.ProvisionObservation, ed25519.PublicKey) bool
@@ -88,7 +93,13 @@ func (r *Runtime) Verify(ctx context.Context, record invite.ProvisionRecord, o i
 	defer cancel()
 	stop := context.AfterFunc(r.ctx, cancel)
 	defer stop()
-	return p.Verify(work, record, o, append(ed25519.PublicKey(nil), pub...)) && work.Err() == nil && r.Live()
+	key := append(ed25519.PublicKey(nil), pub...)
+	if reporter, ok := r.node.(interface {
+		VerifyWithReport(context.Context, invite.ProvisionRecord, invite.ProvisionObservation, ed25519.PublicKey, func(string)) bool
+	}); ok {
+		return reporter.VerifyWithReport(work, record, o, key, report) && work.Err() == nil && r.Live()
+	}
+	return p.Verify(work, record, o, key) && work.Err() == nil && r.Live()
 }
 func (r *Runtime) Stop(ctx context.Context) error {
 	r.live.Store(false)

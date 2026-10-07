@@ -19,6 +19,7 @@ import threading
 import base64
 import socket
 from native_bootstrap import NativeIdentities
+from supervised_checks import signed_refresh_denied, recovery_still_latched, revocation_not_active
 
 spec=importlib.util.spec_from_file_location("transport",Path(__file__).with_name("cross-network.py"))
 t=importlib.util.module_from_spec(spec)
@@ -73,10 +74,11 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"],["--native"]):
+    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"],["--native"],["--supervised"]):
         raise RuntimeError("invalid_arguments")
     streams=bool(sys.argv[1:])
-    native=sys.argv[1:]==["--native"]
+    supervised=sys.argv[1:]==["--supervised"]
+    native=supervised or sys.argv[1:]==["--native"]
     managedmode=native or sys.argv[1:]==["--managed"]
     identitymode=sys.argv[1:] in (["--identity"],["--managed"])
     deviceflow=sys.argv[1:] in (["--device-flow"],["--identity"],["--managed"])
@@ -122,10 +124,11 @@ def main():
         if values and values[-1].get("status")=="failed":
             print("FAIL mode_switch_"+values[-1].get("reason","internal_error"),flush=True)
         t.check(switched.returncode==0 and values[-1].get("status")=="db_deny_ready","isolated_db_policy_ready")
-        authority=Pipe(t.SERVER+[remote+(" --native" if native else " --device-flow" if deviceflow else "")],
+        authority=Pipe(t.SERVER+[remote+(" --native-supervised" if supervised else " --native" if native else " --device-flow" if deviceflow else "")],
                        {"Target":identities.target["ExpectedPublic"],"Controller":identities.controller["ExpectedPublic"]} if native else None)
         ready=authority.read()
         t.check(ready.get("status")=="ready","real_backend_verifier_prepared_key_matched")
+        if supervised:t.check(ready.get("supervised") is True,"runtime_kernel_broker_supervisor_entry_required")
         if native:
             t.check("target_key" not in ready and "controller_key" not in ready and
                     ready["target"]==identities.target["ExpectedPublic"] and ready["controller"]==identities.controller["ExpectedPublic"],
@@ -528,7 +531,10 @@ def main():
                 wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Failures"]>failures,
                          "periodic_policy_failure_observed",10)
                 denied=network_request("network_state")
-                t.check(denied["passed"] and not denied["network_state"]["claims"]["active"],"policy_failure_fences_active_state")
+                if supervised:
+                    t.check(signed_refresh_denied(denied),"supervisor_policy_failure_denies_signed_refresh")
+                else:
+                    t.check(denied["passed"] and not denied["network_state"]["claims"]["active"],"policy_failure_fences_active_state")
                 for helper in (server,controller):
                     if not managedmode:
                         t.check(helper.request("state",State=denied["network_state"])["passed"],"policy_failure_inactive_delivered")
@@ -536,7 +542,10 @@ def main():
                 t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
                         "policy_failure_tls_closes_with_old_acl_present")
                 t.check(authority.request("policy_available")["passed"],"privileged_policy_service_recovered")
-                wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Ready"],"periodic_retry_recovers_without_manual_reconcile",12)
+                if supervised:
+                    t.check(recovery_still_latched(authority.request("maintenance_count"),network_request("network_state")),"recovered_provider_still_denies_without_explicit_restart")
+                else:
+                    wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Ready"],"periodic_retry_recovers_without_manual_reconcile",12)
                 t.check(authority.request("restart")["passed"],"authority_restart_joins_old_worker_and_starts_new")
                 wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Ready"],"cold_periodic_startup_recovers_projection",12)
                 restored=authority.request("network_state")
@@ -565,7 +574,10 @@ def main():
             revoked=target_api.request("device",Device={"action":"revoke","grant_id":ready["grant_id"]}) if apimode else authority.request("revoke_only")
             t.check(revoked["passed"],"grant_revoked_without_node_or_acl_cleanup")
             inactive=network_request("network_state")
-            t.check(inactive["passed"] and not inactive["network_state"]["claims"]["active"],"revocation_signed_inactive_with_original_binding")
+            if supervised:
+                t.check(revocation_not_active(inactive),"supervised_revocation_never_issues_active_state")
+            else:
+                t.check(inactive["passed"] and not inactive["network_state"]["claims"]["active"],"revocation_signed_inactive_with_original_binding")
             if managedmode:
                 wait_for(lambda:all(helper.request("count")["managed_done"] and not helper.request("count")["managed_active"] for helper in (server,controller)),
                          "both_helpers_observe_revocation_without_parent_state_relay",2)
@@ -575,8 +587,12 @@ def main():
                 replay=helper.request("state",State=old)
                 t.check(not replay["passed"] and replay["fresh"],"still_valid_positive_cannot_unlatch_revocation")
             ended()
-            t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
-                    "revoked_stream_closed_while_network_rule_present")
+            if supervised:
+                t.check(t.admin("policy","get") in ({"acls":[]},{"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]}),
+                        "supervised_revocation_keeps_only_managed_rule_or_zero")
+            else:
+                t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
+                        "revoked_stream_closed_while_network_rule_present")
             if periodic:
                 t.check(authority.request("maintenance_start")["passed"],"periodic_revoked_resource_cleanup_started")
                 def reclaimed():
@@ -594,6 +610,13 @@ def main():
             t.check(authority.request("revoke")["passed"],"grant_revoke_withdraws_rules_and_nodes")
         t.check(authority.request("restart")["passed"],"restart_does_not_resurrect_revoked_grant")
         t.check(not authority.request("network_state")["passed"],"cleaned_revoked_pair_cannot_receive_new_signed_binding")
+        if supervised:
+            t.check(authority.request("verifier_unavailable")["passed"],"persistent_verifier_sdk_stopped_and_joined")
+            status=authority.request("maintenance_count")
+            t.check(status["verifier_live"] is False and status["network_ready"] is False,"verifier_shutdown_fences_supervised_authority")
+            t.check(not network_request("network_state")["passed"],"stopped_verifier_cannot_issue_new_state")
+            t.check(authority.request("verifier_resume")["passed"],"explicit_same_identity_verifier_resume_and_new_supervisor")
+            t.check(not authority.request("network_state")["passed"],"verifier_resume_does_not_resurrect_revoked_grant")
         time.sleep(1)
         t.check(not controller.request("probe",Peer=target_ip)["passed"],"revoked_data_path_rejected")
         controller.stop()

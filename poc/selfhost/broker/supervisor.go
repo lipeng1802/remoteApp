@@ -117,6 +117,10 @@ stopped:
 // Stop success means workers joined; it does NOT imply provider ACL withdrawal.
 func (s *NetworkSupervisor) DenyAllConfirmed() bool { return s.withdrawn.Load() }
 
+func (s *NetworkSupervisor) MaintenanceStatus() invite.MaintenanceStatus {
+	return s.maintenance.Status()
+}
+
 func (s *NetworkSupervisor) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	s.closed.Store(true)

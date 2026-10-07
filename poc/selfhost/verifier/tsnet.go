@@ -58,3 +58,7 @@ func (n *overlay) Close() error { return n.s.Close() }
 func (n *overlay) Verify(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation, pub ed25519.PublicKey) bool {
 	return nodeproof.Verify(ctx, n.s, r, o, pub)
 }
+
+func (n *overlay) VerifyWithReport(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation, pub ed25519.PublicKey, report func(string)) bool {
+	return nodeproof.VerifyWithReport(ctx, n.s, r, o, pub, report)
+}
