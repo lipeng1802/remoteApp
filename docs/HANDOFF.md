@@ -1,6 +1,18 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-07 真实注册与动态策略闭环通过（当前入口）
+## 2026-10-07 动态注册签名状态前置通过（当前入口）
+
+上一切片 `4d08bdd` 已推送到 `origin/codex/connection-architecture-poc`。本轮先消除旧签名状态 target=.1/controller=.2 假设，不误报产品 TLS 已完成。
+
+新增私有 `ProvisionBackend.NetworkState(grant)`：不接受调用者指定 IP/节点公钥，只从同一完整 grant 的两个唯一 bound 记录派生绑定。地址限定 canonical `100.120.0.0/24` 主机地址、不同 IP/非零不同节点公钥。只有最后成功 Reconcile 的最小规则包含该绑定且共享策略栅栏就绪，才签 active=true；刚绑定未投影只能签 inactive。策略失败、Healthy=false、撤销/过期不签新有效状态；缺失/已清理/歧义记录、存储损坏或时钟回退拒绝。就绪/投影缓存不落盘，磁盘重开先 inactive，成功 Reconcile 后恢复。
+
+绝对 3 秒 lease/签名域不变；故障前下发状态最多仍有原租期，session 另核 grant 到期。inactive 锁住该 grant 的当前 StateCache，不可重放旧正向状态解锁，恢复需重建 cache/连接。旧 Store 手工绑定签名口仅历史管理员 fixture 使用，新接入禁止使用。
+
+全量 `go test -race ./...`、`go vet ./...` 通过，新增定向竞态再次通过。真实 Linux/Windows/Mac 注册脚本零退出：未证明双方拒签、刚绑定未投影 inactive、投影后签名节点/IP 与真实动态分配完全一致、冷驱动重开同步恢复同一绑定、撤销清理后拒签。原正向/反向/零 ACL/恢复/退出/清理全通过；服务恢复原 file 策略且 active，业务 Nginx 哈希保持。
+
+尚未把动态签名状态送入 helper 活动流，未接 Swift/C# 产品 TLS；无安装包/GUI/屏幕/输入变化。投影缓存是受控后端最后同步结果，不是每次签名实时查询 Headscale；管理员绕过驱动手改 ACL 不会自动更新缓存。下一切片：动态双机固定载荷活动流的状态刷新与撤销/停止刷新/故障关闭，再桥接真实产品 TLS framing、证书 pin、认证。之后周期 Reconcile/故障恢复、公开设备码/防滥用、GUI/安装包。下方为历史。
+
+## 2026-10-07 真实注册与动态策略闭环通过
 
 新增 nodeidentity 版本敏感的离线私有 profile 适配（公开 StateStore/Prefs/Persist/Profile 类型，没有 fake 注册 NodeID，不用测试专用 hooks）；helper 在无凭据/未注册时自己签名节点公钥意图。真实 Linux 验证节点、Windows target 和 Mac controller 注册后公钥与准备值一致；Mac 重启后原身份/地址一致。SDK 仍固定 1.102.5，升级必须回归实际公钥一致性，不能当官方稳定注册前 API。已有状态损坏/符号链接/控制入口变化拒绝且不重生身份。
 

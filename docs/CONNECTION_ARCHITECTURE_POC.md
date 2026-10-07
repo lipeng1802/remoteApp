@@ -5,6 +5,8 @@
 
 ## 目标与当前结论
 
+最新前置：`ProvisionBackend.NetworkState(grant)` 从两个唯一 bound 记录派生动态签名绑定，消除旧 `.1/.2` 假设；未投影/故障不签有效状态。真实双机绑定一致性/冷驱动恢复通过。动态 helper 活动流与产品 TLS 尚未桥接，下一步刷新/撤销/故障关闭验收；详见 [当前交接](HANDOFF.md)。
+
 2026-10-07 真实注册闭环：helper 离线公钥与自签注册意图、实际 WhoIs/新鲜 challenge 的应用与网络身份证明、单向动态策略、零 ACL 实际拒绝/恢复正向对照、撤销及磁盘/冷驱动重开已双机实测。版本敏感状态适配仍固定 tsnet，Headscale 配置修正为 database，测试后恢复原 file 策略。边界见 [完整验收](../poc/selfhost/public-server/ENROLLMENT_TEST.md)。下一步产品 TLS/签名状态与动态注册桥接，不把私有 fixture 当公网设备码产品。
 
 2026-10-07 真实管理驱动：Headscale 私有服务器 CLI 适配器已实现并实测工单隔离的短期单次凭据和精确幂等回收；边界见 [驱动记录](../poc/selfhost/headscale/README.md)。动态策略仍待真实通道验收（当前服务保持 file 模式），实时持有证明与 helper 注册前节点公钥仍待接入，缺失证明默认拒绝，不把管理观察当作节点所有权或最终免登录闭环。下方历史未实现驱动描述指此前状态。

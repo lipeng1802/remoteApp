@@ -1,5 +1,7 @@
 # 设备码与一次性邀请授权核心
 
+最新签名桥接前置：私有 `ProvisionBackend.NetworkState(grant)` 从两个唯一已验证 bound 记录派生动态节点/IP，成功 Reconcile 的规则与共享就绪状态才允许 active。真实双机核对动态绑定与冷驱动恢复通过。未投影、重开未同步、撤销/过期或已知策略故障不签有效状态；仅隔离 /24 主机地址，不接受调用者 binding。原 Store 手工绑定仅历史 fixture 用，绝对 3 秒 lease 与 inactive 重放锁定不变。未接动态 helper 活动流或产品 TLS；外部手改策略不自动被缓存感知，周期 Reconcile 待实现。
+
 2026-10-07 真实闭环进展：已接 [Headscale 驱动](../headscale/README.md) 与 helper 自签意图/实时网络持有证明，动态单向策略、零规则拒绝、撤销及磁盘/冷驱动重开在真实 Mac/Windows/隔离服务器通过；[复测与边界](../public-server/ENROLLMENT_TEST.md)。Bind 网络证明预算现为 12 秒，其他管理操作保持 5 秒；原 key/grant 绝对期限不延长。真实驱动 Healthy 故障同步共享 Store 的禁发栅栏。下方“尚无真实驱动”是此前核心切片记录；公开接口/产品桥接仍未完成。
 
 ## 2026-10-07 私有受控注册后端核心

@@ -181,6 +181,12 @@ func run() error {
 			rules, e := s.ProvisionRules()
 			result["passed"] = e == nil
 			result["rules"] = rules
+		case "network_state":
+			n, e := b.NetworkState(g)
+			result["passed"] = e == nil && invite.VerifyNetworkState(s.PublicKey(), n, time.Now())
+			if e == nil {
+				result["network_state"] = n
+			}
 		case "records":
 			result["passed"] = true
 			result["records"] = s.ProvisionRecords()

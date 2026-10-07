@@ -91,8 +91,9 @@ type snapshot struct {
 	Provisions map[string]ProvisionRecord `json:",omitempty"`
 }
 type Store struct {
-	provisionOps   sync.Mutex // serialize privileged side effects across backend wrappers
-	provisionReady bool       // guarded by provisionOps; policy failure fences all wrappers
+	provisionOps   sync.Mutex    // serialize privileged side effects across backend wrappers
+	provisionReady bool          // guarded by provisionOps; policy failure fences all wrappers
+	provisionRules []NetworkRule // last successfully reconciled projection; never restored from disk
 	mu             sync.Mutex
 	root           string
 	clock          func() time.Time

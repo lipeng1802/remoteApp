@@ -6,6 +6,8 @@ helper/验证节点清除其本进程继承的系统登录/OAuth 环境、禁托
 
 ## 当前证据（2026-10-07）
 
+新增动态签名绑定实测：私有 `ProvisionBackend.NetworkState(grant)` 的完整节点/IP 与真实注册分配一致，不要求 .1/.2；未证明双方拒签，刚绑定未投影 inactive，成功 Reconcile 后 active，冷驱动重开同步恢复同一绑定，撤销清理后拒签。全量 Go 竞态/静态检查通过。只接受同一 grant 的两个唯一 bound 记录，不接受调用者 binding；有效签发受共享策略栅栏和最后成功投影缓存约束。缓存不落盘，不自动感知绕过后端的管理员手改 ACL。尚未把该状态刷新到动态 helper 活动流，不据此宣称产品 TLS 或活动流撤销通过。
+
 真实 Linux x64 验证节点、Windows x64 被控 helper、Mac Intel 控制 helper，通过同一已批准 grant 的真实 ProvisionBackend/Headscale Driver 闭环：
 
 - helper 在获取网络凭据前，离线创建私有节点身份并自己签名注册意图。此时不发网络注册；真实注册后的 Self 公钥必须逐字一致，否则停止。三平台实际一致，Mac 进程重启后也一致、地址不增生。

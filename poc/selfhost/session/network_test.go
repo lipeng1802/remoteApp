@@ -11,7 +11,7 @@ import (
 
 func TestSignedStateExpiresAndRevokeReplayCannotRestore(t *testing.T) {
 	f := setup(t)
-	b := invite.NetworkBinding{TargetNode: "nodekey:" + strings.Repeat("a", 64), ControllerNode: "nodekey:" + strings.Repeat("b", 64), TargetIP: "100.120.0.1", ControllerIP: "100.120.0.2"}
+	b := invite.NetworkBinding{TargetNode: "nodekey:" + strings.Repeat("a", 64), ControllerNode: "nodekey:" + strings.Repeat("b", 64), TargetIP: "100.120.0.42", ControllerIP: "100.120.0.93"}
 	g := f.server.Grant
 	n, e := f.s.NetworkState(g, b)
 	if e != nil {

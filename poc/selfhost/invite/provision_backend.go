@@ -166,5 +166,51 @@ func (b *ProvisionBackend) Reconcile(ctx context.Context) error {
 	}
 	b.ready = true
 	b.Store.provisionReady = true
+	b.Store.provisionRules = append([]NetworkRule(nil), rules...)
 	return nil
+}
+
+// NetworkState accepts only a grant, never a caller-selected address or node key.
+// The binding comes from two live-proof-verified durable records for that exact
+// grant. Only the last successful policy projection can authorize a snapshot.
+// It is private plumbing for the transport bridge, not a public HTTP endpoint.
+func (b *ProvisionBackend) NetworkState(g Grant) (NetworkState, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.Store == nil || b.Driver == nil {
+		return NetworkState{}, ErrDenied
+	}
+	s := b.Store
+	s.provisionOps.Lock()
+	defer s.provisionOps.Unlock()
+	if health, ok := b.Driver.(interface{ Healthy() bool }); ok && !health.Healthy() {
+		b.ready = false
+		s.provisionReady = false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var binding NetworkBinding
+	targets, controllers := 0, 0
+	for _, r := range s.state.Provisions {
+		if r.Status != "bound" || r.Grant != g {
+			continue
+		}
+		if r.Device == g.Claims.Target {
+			targets++
+			binding.TargetNode, binding.TargetIP = r.NodeKey, r.IP
+		} else if r.Device == g.Claims.Controller {
+			controllers++
+			binding.ControllerNode, binding.ControllerIP = r.NodeKey, r.IP
+		}
+	}
+	if targets != 1 || controllers != 1 {
+		return NetworkState{}, ErrDenied
+	}
+	applied := false
+	for _, rule := range s.provisionRules {
+		if rule == (NetworkRule{binding.ControllerIP, binding.TargetIP + ":47476"}) {
+			applied = true
+		}
+	}
+	return s.networkStateLocked(g, binding, b.ready && s.provisionReady && applied)
 }

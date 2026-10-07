@@ -152,6 +152,7 @@ def main():
         counts=controller.request("count")
         t.check(counts["challenges"]==1 and counts["signed"]==0,"wrong_app_received_actual_challenge_without_signature")
         t.check(authority.request("rules")["rules"] in (None,[]),"failed_proof_cannot_create_payload_rule")
+        t.check(not authority.request("network_state")["passed"],"unverified_pair_cannot_receive_signed_binding")
         controller.stop()
         controller,again_ip=join(local,folder,client_key,client,ready["controller_key"])
         t.check(again_ip==client_ip,"controller_restart_retains_network_identity")
@@ -159,15 +160,25 @@ def main():
         if not binding["passed"]:
             print("FAIL mac_bind_"+binding["proof_stage"]+"_expired_"+str(binding["registration_expired"]),flush=True)
         t.check(binding["passed"],"mac_live_network_and_app_possession_proof")
+        pending=authority.request("network_state")
+        t.check(pending["passed"] and not pending["network_state"]["claims"]["active"],"bound_pair_inactive_before_policy_reconcile")
         t.check(authority.request("reconcile")["passed"],"both_bound_minimum_rule_applied")
         rules=authority.request("rules")["rules"]
         t.check(rules==[{"source":client_ip,"destination":target_ip+":47476"}],"only_approved_pair_port_projected")
+        signed=authority.request("network_state")
+        claims=signed.get("network_state",{}).get("claims",{})
+        t.check(signed["passed"] and claims.get("active") and claims.get("binding")=={
+            "target_node":target_key,"controller_node":client_key,"target_ip":target_ip,"controller_ip":client_ip},
+            "signed_binding_matches_actual_dynamic_verified_pair")
         time.sleep(1)
         t.check(controller.request("probe",Peer=target_ip)["passed"],"real_cross_network_fixed_payload_allowed")
         reverse=server.request("probe",Peer=client_ip)
         t.check(not reverse["passed"] and reverse["reason"] in ("route_denied","dial_denied") and controller.request("count")["value"]==0,
                 "reverse_direction_cannot_use_approved_payload_rule")
         t.check(authority.request("restart")["passed"],"backend_restart_restores_approved_rule")
+        restored=authority.request("network_state")
+        t.check(restored["passed"] and restored["network_state"]["claims"]["active"] and
+                restored["network_state"]["claims"]["binding"]==claims["binding"],"reconciled_restart_restores_same_signed_binding")
         time.sleep(1)
         t.check(controller.request("probe",Peer=target_ip)["passed"],"restart_data_path_still_works")
         before=server.request("count")["value"]
@@ -183,6 +194,7 @@ def main():
         t.check(controller.request("probe",Peer=target_ip)["passed"],"positive_control_after_zero_test")
         t.check(authority.request("revoke")["passed"],"grant_revoke_withdraws_rules_and_nodes")
         t.check(authority.request("restart")["passed"],"restart_does_not_resurrect_revoked_grant")
+        t.check(not authority.request("network_state")["passed"],"cleaned_revoked_pair_cannot_receive_new_signed_binding")
         time.sleep(1)
         t.check(not controller.request("probe",Peer=target_ip)["passed"],"revoked_data_path_rejected")
         controller.stop()
