@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4A：后端 supervisor / runtime nodeproof 组件
+
+新增StartHeadscaleNetworkSupervisor固定CLI/RuntimeIP/Store.DevicePublicKey/runtime独立overlay nodeproof装配；Runtime Verify有12秒期限及生命周期取消，proof join后才能overlay.Close/解owner.lock。supervisor先同步Reconcile再维护，首成功周期前不可用；backend专用未运行。通过Supervisor.Authority接broker：fault锁闭、取消维护/请求、join/Fence、最佳努力显式零ACL；取消返回credential不回包。driver健康用原子latch，避免底层mutex阻塞fault观察，policy/proof故障不自动恢复；必须检查后显式新backend实例。
+
+组件race测试：policy故障/恢复仍关闭，verifier fault取消执行中Mint/secret不回包，Stop超时不假join，释放后join；最终零策略失败不报告成功。Runtime proof替身测试：取消未join保留lock/overlay，停后拒绝新proof，退出才close/unlock，取消后true拒绝。Stop成功=join，DenyAllConfirmed=driver最终投影成功而非真实网络拒绝；旧ACL/既发lease可能仍存，不宣称直接关闭全部TLS或100ms严格时延。
+
+完整Go race/vet和Linux三个服务入口构建通过，最终broker/verifier组件追加测试复测通过。未将构建等同Linux实机supervisor验收。
+
+**本轮无服务器修改/新verifier/Headscale ACL变化，线上保持4C-3D device-only，network404；整体4未完成。** 下一步隔离实验Store+临时真实verifier+kernel broker+签名客户端+真实Headscale/nodeproof全链路，零ACL/故障/撤销/到期及旧ACL留存时TLS关闭验收后才推进长期daemon授权。见[组件与待验边界](../poc/selfhost/public-server/NETWORK_SUPERVISOR.md)。
+
 ## 2026-10-07 切片 4C-3D：服务器权威/前端受控迁移通过
 
 用户“继续”后完成线上检查与迁移。新增migrate-authority.sh：核对新binary哈希，正常停旧remoteapp-device、listener与writer.lock释放，root-only备份线上最新Store及旧binary/unit，再原状态移动至/var/lib/remoteapp-authority（root700/state600）；可信profile在/etc/remoteapp-authority root700。没有上传/覆盖本地初始snapshot，没有发布根/CA私钥上传。备份保留 /var/lib/remoteapp-authority-backup.WUGsLoM5，含在线issuer，禁止日志/外传；回滚不可恢复过时state/不兼容旧binary。

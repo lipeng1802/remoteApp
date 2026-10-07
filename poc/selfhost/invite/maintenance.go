@@ -102,3 +102,8 @@ func (b *ProvisionBackend) fence() {
 		b.Store.provisionOps.Unlock()
 	}
 }
+
+// Fence blocks all wrappers sharing this Store. Caller must first cancel and
+// join maintenance; otherwise a later successful Reconcile could reopen it.
+// It does not claim an unavailable provider has withdrawn existing ACLs.
+func (b *ProvisionBackend) Fence() { b.fence() }

@@ -5,6 +5,7 @@ package verifier
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -49,12 +50,16 @@ type snapshot struct {
 	Observation    invite.ProvisionObservation
 }
 type Runtime struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-	live   atomic.Bool
-	mu     sync.Mutex
-	err    error
-	info   Info
+	cancel  context.CancelFunc
+	done    chan struct{}
+	live    atomic.Bool
+	mu      sync.Mutex
+	err     error
+	info    Info
+	ctx     context.Context
+	node    Node
+	proofMu sync.Mutex
+	proofs  sync.WaitGroup
 }
 
 func (r *Runtime) Live() bool { return r.live.Load() }
@@ -64,6 +69,27 @@ func (r *Runtime) Info() Info {
 	return i
 }
 func (r *Runtime) Done() <-chan struct{} { return r.done }
+
+// Verify uses this runtime's isolated overlay and a trusted Store-bound key.
+// Caller must not use control-plane rows or client-selected keys as proof.
+func (r *Runtime) Verify(ctx context.Context, record invite.ProvisionRecord, o invite.ProvisionObservation, pub ed25519.PublicKey) bool {
+	r.proofMu.Lock()
+	p, ok := r.node.(interface {
+		Verify(context.Context, invite.ProvisionRecord, invite.ProvisionObservation, ed25519.PublicKey) bool
+	})
+	if !ok || !r.Live() || r.ctx.Err() != nil || len(pub) != ed25519.PublicKeySize {
+		r.proofMu.Unlock()
+		return false
+	}
+	r.proofs.Add(1)
+	r.proofMu.Unlock()
+	defer r.proofs.Done()
+	work, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	stop := context.AfterFunc(r.ctx, cancel)
+	defer stop()
+	return p.Verify(work, record, o, append(ed25519.PublicKey(nil), pub...)) && work.Err() == nil && r.Live()
+}
 func (r *Runtime) Stop(ctx context.Context) error {
 	r.live.Store(false)
 	r.cancel()
@@ -307,14 +333,17 @@ func Open(ctx context.Context, dir string, create bool, d Driver, f Factory) (*R
 		return nil, ErrVerifier
 	}
 	run, stop := context.WithCancel(ctx)
-	r := &Runtime{cancel: stop, done: make(chan struct{}), info: info}
+	r := &Runtime{cancel: stop, done: make(chan struct{}), info: info, ctx: run, node: n}
 	r.live.Store(true)
 	owned = false
 	closeNode = false
 	go func() {
 		defer close(r.done)
 		defer func() {
+			r.proofMu.Lock()
 			r.live.Store(false)
+			r.proofMu.Unlock()
+			r.proofs.Wait()
 			ce := n.Close()
 			le := release()
 			if ce != nil || le != nil {

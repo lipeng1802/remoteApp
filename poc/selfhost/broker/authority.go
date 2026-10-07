@@ -33,6 +33,7 @@ type Authority struct {
 	// flag cannot satisfy it. Future supervisor MUST cancel/fence backend on
 	// verifier failure; this component alone is not that lifecycle wiring.
 	NetworkReady func() bool
+	supervisor   *NetworkSupervisor
 }
 
 func (a *Authority) Execute(ctx context.Context, r Request) Reply {
@@ -75,11 +76,19 @@ func (a *Authority) Execute(ctx context.Context, r Request) Reply {
 		}
 		// A persisted, signature-bound device key is mandatory for nodeproof.
 		// ExecuteNetworkRequest still rechecks signature/nonce/grant/permission.
-		result, e := a.Backend.ExecuteNetworkRequest(ctx, *r.Network)
+		var result invite.NetworkReply
+		if a.supervisor != nil {
+			result, e = a.supervisor.execute(ctx, *r.Network)
+		} else {
+			result, e = a.Backend.ExecuteNetworkRequest(ctx, *r.Network)
+		}
 		if e == invite.ErrStorage {
 			return Reply{Status: 503}
 		}
 		if e != nil {
+			if a.supervisor != nil && !a.supervisor.Ready() {
+				return Reply{Status: 503}
+			}
 			return Reply{Status: 403}
 		}
 		return Reply{Status: 200, Issuer: hex.EncodeToString(a.Store.PublicKey()), Network: &result}

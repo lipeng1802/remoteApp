@@ -2,7 +2,10 @@ package verifier
 
 import (
 	"context"
+	"crypto/ed25519"
+	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/nodeidentity"
+	"remoteapp.local/selfhost-poc/nodeproof"
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/tsnet"
 )
@@ -51,3 +54,7 @@ func (n *overlay) Status(ctx context.Context) (Info, error) {
 	return status(st), nil
 }
 func (n *overlay) Close() error { return n.s.Close() }
+
+func (n *overlay) Verify(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation, pub ed25519.PublicKey) bool {
+	return nodeproof.Verify(ctx, n.s, r, o, pub)
+}
