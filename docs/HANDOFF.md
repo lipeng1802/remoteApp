@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-3A：持久 verifier 生命周期/真实服务器验收通过
+
+新增 verifier/verifier-owner；显式 create/resume/retire，planned-before-Mint/issued/ready/retired owner-only journal，不持久化注册 secret、不自动重试 unknown Mint；恢复同一 StateStore 节点及 user/node/IP 绑定，不新 Mint；缺失/损坏/已退休拒绝。独占 owner.lock，Stop/fault 先 Live/Info.Healthy=false，再监控取消/SDK关闭/join 后解锁；超时保留锁，崩溃遗留锁不自动接管。周期有界 SDK健康+CLI绑定异常 latch，不自动恢复/换身份；不把健康/控制行当节点实时证明，没有调用 ReplaceRules/Verify/批准。
+
+完整 Go race、专用 vet、Linux 静态构建通过。真实服务器两个隔离 verifier：第一份 create 正常 READY/STOPPED 0，同身份 resume READY/STOPPED 0、journal 哈希稳定，幂等 retire 通过；第二份 resume 后删除仅其 journal 的真实 NodeID，进程固定 FAIL/退出1（预期），不重建、释放锁，再 scoped retire。初次30秒窗口已正常停止导致删除前置锁检查失败，没有删除发生；90秒 resume 窗口完成实际故障注入。最终独立 nodes/users/preauthkeys 均0，Nginx基线通过，device与poc服务active，无ACL/业务443/系统Tailscale/用户密钥更改。已删除仅本轮 retired 随机身份/工具临时目录，测试节点私钥不可复用；预发布服务材料未删除。
+
+**未正式部署长期 verifier，未接通设备服务网络授权**；/v1/network 仍404。健康检测不代表严格1秒控制新鲜度，实际 Bind 仍须 nodeproof+设备签名。下一子切片固定操作 server-local broker/Unix OS peer credentials 与单 Store owner（frontend 不得获 root/HeadscaleDB）；补设备公钥可信持久绑定，再接 verifier/maintenance/fence 和真实backend/零规则验收。安装根/floor/HMAC/GUI/安装继续待收口，整体4未完成。见 [verifier边界及实际结果](../poc/selfhost/public-server/PERSISTENT_VERIFIER.md)。
+
 ## 2026-10-07 切片 4C-2C：用户授权在线私钥上传，独立回环服务部署/HTTPS/重启通过
 
 用户明确回复“允许上传”，授权将预发布 TLS 私钥和在线 issuer 状态上传其 182.92.117.114；**发布根/CA 私钥未上传**。scp 仅 server-private/client-public/二进制/unit/部署脚本。实际执行首次隔离部署，新增专用 remoteapp-pre（nologin）及 remoteapp-device；/opt/remoteapp-prerelease 程序和 /var/lib/remoteapp-prerelease 状态独立于原 PoC。服务 active、disabled（未开机启用）、仅 127.0.0.1:8444，无公网监听/代理/安全组改动。
