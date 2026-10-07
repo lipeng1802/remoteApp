@@ -87,7 +87,9 @@ func handle(conn net.Conn, signer Identity, scope, public string) {
 	}
 	for {
 		var req struct{ Op, Message string }
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		// Device API signer can be idle while the product is built or while a
+		// different helper owns refresh. Owner stop still closes it immediately.
+		conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
 		if read(&req) != nil {
 			return
 		}

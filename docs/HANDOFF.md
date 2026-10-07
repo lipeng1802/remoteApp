@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4B-4B：真实 OS 双机协调代码完成，网络实测待新 READY
+
+用户确认前一轮按 Enter 后 STOPPED，桌面 owner 正常退出与随机测试身份清理验收闭环。新增 `enrollment-network.py --native`、`native_bootstrap.py` 及 `enrollment-fixture --native`。Windows 先 SSH pinned probe，严格匹配本机公开 bootstrap/包路径，helper/API 使用 relay+固定 scope/public；Mac 创建随机 controller/独立错误身份两份 OS 凭据，helper 重开 signer，最后 join 后删除。authority 只接两端 public，不生成/输出应用私钥，不预注册/批准 OS 设备，native 模式拒绝特权代签 enroll/revoke；正常授权与撤销均走 OS 签名 HTTPS。父管道不调用 OS sign 或刷新 state。异常特权 fixture teardown 先零 ACL 再清理自己 journal 节点，不伪造设备 revoke。
+
+Bridge 原 30 秒空闲期限会影响较长协调验收，改为有界 10 分钟空闲读取，stop 仍立即关闭连接，不延长在线 gate/grant。新增独立 `windows-native-network.zip` 保留 UTF-8 修复和严格 hash/no-SKIP 脚本。Go 全量 race/vet、native 公钥拒绝测试、Python 两组角色/bootstrap 回归及 Mac/Windows helper/API/bridge、Linux fixture 编译通过。**未实际运行 --native 或部署服务/改服务器策略；Windows owner 已停止，待用户新包保持启动 READY 后由 Mac 执行完整网络验收。** 不得合并之前 fixture 与 OS 本机结果宣称通过。步骤/边界见 [native 双机入口](../poc/selfhost/public-server/NATIVE_NETWORK_TEST.md)。正式 API/issuer 信任分发、HMAC 投递、GUI/安装与整体切片 4 仍未完成。
+
 ## 2026-10-07 桌面保持启动与同用户 SSH 桥接探针实际通过
 
 用户在中文路径 `H:\chatgpt\远程软件开发\测试安装包\windows-interactive-bridge` 使用更新脚本，截图确认 READY 并保持正常桌面会话。随后通过既有 jarvis SSH 执行本包 `probe-interactive-vault.ps1`：`TestPinnedInteractiveVaultFromBootstrap` 真正 PASS（0.02s），无 SKIP，`PROBE PASSED`，SSH 进程退出码 0。两次重开同一 pinned 桌面 native 身份及 HTTPS/enrollment/node/TLS 域签名通过，无 SSH 内新建身份/导出私钥。首次直接调用脚本被执行策略阻止；使用子 PowerShell `-ExecutionPolicy Bypass -File` 通过，不改变永久策略。

@@ -18,6 +18,7 @@ import time
 import threading
 import base64
 import socket
+from native_bootstrap import NativeIdentities
 
 spec=importlib.util.spec_from_file_location("transport",Path(__file__).with_name("cross-network.py"))
 t=importlib.util.module_from_spec(spec)
@@ -72,15 +73,17 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"]):
+    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"],["--native"]):
         raise RuntimeError("invalid_arguments")
     streams=bool(sys.argv[1:])
-    managedmode=sys.argv[1:]==["--managed"]
+    native=sys.argv[1:]==["--native"]
+    managedmode=native or sys.argv[1:]==["--managed"]
     identitymode=sys.argv[1:] in (["--identity"],["--managed"])
     deviceflow=sys.argv[1:] in (["--device-flow"],["--identity"],["--managed"])
     apimode=sys.argv[1:] in (["--api"],["--device-flow"],["--identity"],["--managed"])
     periodic=sys.argv[1:] in (["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"])
     tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"])
+    if native: identitymode=deviceflow=apimode=periodic=tlsmode=True
     os.umask(0o077)
     if tlsmode:
         env=dict(os.environ,COPYFILE_DISABLE="1")
@@ -104,6 +107,7 @@ def main():
     tunnels=[]
     target_api=None
     controller_api=None
+    identities=None
     def network_request(op,role="target",**values):
         if apimode:return (target_api if role=="target" else controller_api).request(op,**values)
         if op=="enroll":return authority.request(op,Role=role,**values)
@@ -111,15 +115,23 @@ def main():
     root="C:\\Users\\jarvis\\remoteapp-enrollment-"+stamp
     work=root+"\\poc\\selfhost"
     try:
+        if native: identities=NativeIdentities(t,Pipe)
         switched=subprocess.run(t.SERVER+["python "+script+" prepare"],capture_output=True,timeout=40)
         values=[json.loads(line) for line in switched.stdout.splitlines()]
         backup=next((v["backup"] for v in values if "backup" in v),None)
         if values and values[-1].get("status")=="failed":
             print("FAIL mode_switch_"+values[-1].get("reason","internal_error"),flush=True)
         t.check(switched.returncode==0 and values[-1].get("status")=="db_deny_ready","isolated_db_policy_ready")
-        authority=Pipe(t.SERVER+[remote+(" --device-flow" if deviceflow else "")])
+        authority=Pipe(t.SERVER+[remote+(" --native" if native else " --device-flow" if deviceflow else "")],
+                       {"Target":identities.target["ExpectedPublic"],"Controller":identities.controller["ExpectedPublic"]} if native else None)
         ready=authority.read()
         t.check(ready.get("status")=="ready","real_backend_verifier_prepared_key_matched")
+        if native:
+            t.check("target_key" not in ready and "controller_key" not in ready and
+                    ready["target"]==identities.target["ExpectedPublic"] and ready["controller"]==identities.controller["ExpectedPublic"],
+                    "authority_receives_only_pinned_os_public_identities")
+            # Local dispatch labels, not app keys. Never sent as AppKey.
+            ready["target_key"]="native-target";ready["controller_key"]="native-controller"
         # Private test keys only; production enrollment must receive signatures,
         # not device private keys. This privileged fixture emulates both devices.
         token=secrets.token_hex(32)
@@ -136,6 +148,7 @@ def main():
         actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\enrollment-helper.exe').Hash")
         t.check(actual.lower()==hashlib.sha256(binary.read_bytes()).hexdigest(),"windows_enrollment_binary_verified")
         win=t.WIN+[f'cmd.exe /d /c "cd /d {work} && enrollment-helper.exe"']
+        if native: win=identities.command(work,"enrollment-helper.exe")
         if apimode:
             # Management tunnels expose only private loopback TLS; not a final
             # product dependency and no new firewall/public nginx route.
@@ -159,9 +172,11 @@ def main():
             actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\device-api-client.exe').Hash")
             t.check(actual.lower()==hashlib.sha256(api_binary.read_bytes()).hexdigest(),"device_api_client_binary_verified")
             def api_client(command,port,key):
-                p=Pipe(command,{"Endpoint":f"https://127.0.0.1:{port}","Certificate":ready["api_certificate"],"AppKey":key,"Grant":ready["grant"],"Issuer":ready["issuer"],"Target":hashlib.sha256(bytes.fromhex(ready["target"])).hexdigest(),"Controller":hashlib.sha256(bytes.fromhex(ready["controller"])).hexdigest()});helpers.append(p)
+                cfg={"Endpoint":f"https://127.0.0.1:{port}","Certificate":ready["api_certificate"],"Grant":ready["grant"],"Issuer":ready["issuer"],"Target":hashlib.sha256(bytes.fromhex(ready["target"])).hexdigest(),"Controller":hashlib.sha256(bytes.fromhex(ready["controller"])).hexdigest()}
+                cfg.update(identities.config(key,key=="native-target") if native else {"AppKey":key})
+                p=Pipe(command,cfg);helpers.append(p)
                 t.check(p.read()["status"]=="ready","device_owned_http_signer_ready");return p
-            target_api=api_client(t.WIN+[f'cmd.exe /d /c "cd /d {work} && device-api-client.exe"'],remote_port,ready["target_key"])
+            target_api=api_client(identities.command(work,"device-api-client.exe") if native else t.WIN+[f'cmd.exe /d /c "cd /d {work} && device-api-client.exe"'],remote_port,ready["target_key"])
             controller_api=api_client([str(t.ARTIFACTS/"device-api-client")],local_port,ready["controller_key"])
             for device in (target_api,controller_api):
                 t.check(device.request("device",Device={"action":"register"})["passed"],"device_signed_https_registration_passed")
@@ -243,7 +258,9 @@ def main():
         win_dir="../../artifacts/connection-poc/nodes/enrollment-target"
 
         def prepare(command,folder,app_key):
-            p=Pipe(command,{"Op":"prepare","StateDir":str(folder),"AppKey":app_key,"GrantID":ready["grant_id"]})
+            cfg={"Op":"prepare","StateDir":str(folder),"GrantID":ready["grant_id"]}
+            cfg.update(identities.config(app_key,command==win) if native else {"AppKey":app_key})
+            p=Pipe(command,cfg)
             value=p.read()
             p.proc.stdin.close()
             p.proc.wait(timeout=8)
@@ -261,7 +278,8 @@ def main():
 
         def join(command,folder,node_key,enrollment,app_key,autonomous=False):
             cfg={"Op":"join","StateDir":str(folder),"AuthKey":enrollment["credential"]["Secret"],
-                 "NodeKey":node_key,"AppKey":app_key,"Verifier":ready["verifier"],"Token":"" if autonomous else token,"GrantID":ready["grant_id"]}
+                 "NodeKey":node_key,"Verifier":ready["verifier"],"Token":"" if autonomous else token,"GrantID":ready["grant_id"]}
+            cfg.update(identities.config(app_key,command==win) if native else {"AppKey":app_key})
             if autonomous:
                 cfg.update(Endpoint=f"https://127.0.0.1:{remote_port if command==win else local_port}",Certificate=ready["api_certificate"],Issuer=ready["issuer"])
             p=Pipe(command,cfg)
@@ -600,10 +618,14 @@ def main():
         for folder in folders:
             shutil.rmtree(folder)
         # Only this run's exact private node-state directory; binaries remain.
-        t.powershell(f"if (Test-Path '{root}\\artifacts\\connection-poc\\nodes') {{Remove-Item -LiteralPath '{root}\\artifacts\\connection-poc\\nodes' -Recurse -Force}}")
-        if backup is not None:
-            p=subprocess.run(t.SERVER+["python "+script+" restore "+backup],capture_output=True,timeout=40)
-            t.check(p.returncode==0,"original_file_policy_mode_restored")
+        try:
+            t.powershell(f"if (Test-Path '{root}\\artifacts\\connection-poc\\nodes') {{Remove-Item -LiteralPath '{root}\\artifacts\\connection-poc\\nodes' -Recurse -Force}}")
+            if backup is not None:
+                p=subprocess.run(t.SERVER+["python "+script+" restore "+backup],capture_output=True,timeout=40)
+                t.check(p.returncode==0,"original_file_policy_mode_restored")
+        finally:
+            if identities is not None:
+                identities.close()
     t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":["100.120.0.2"],"dst":["100.120.0.1:47476"]}]},"original_poc_policy_unchanged")
     p=subprocess.run(t.SERVER+["systemctl is-active remoteapp-poc && sha256sum --check /tmp/remoteapp-poc-deploy.hbMUEVFe/existing-config.sha256"],capture_output=True,timeout=15)
     t.check(p.returncode==0,"service_active_business_nginx_hashes_unchanged")

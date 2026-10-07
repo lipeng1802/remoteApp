@@ -29,6 +29,7 @@ import (
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/nodeidentity"
 	"remoteapp.local/selfhost-poc/nodeproof"
+	"remoteapp.local/selfhost-poc/privatepipe"
 	"tailscale.com/tsnet"
 )
 
@@ -65,23 +66,45 @@ func run() error {
 			s.Close()
 		}
 	}()
-	_, target, _ := ed25519.GenerateKey(rand.Reader)
-	_, controller, _ := ed25519.GenerateKey(rand.Reader)
-	deviceFlow := len(os.Args) == 2 && os.Args[1] == "--device-flow"
+	native := len(os.Args) == 2 && os.Args[1] == "--native"
+	deviceFlow := native || len(os.Args) == 2 && os.Args[1] == "--device-flow"
 	if len(os.Args) > 1 && !deviceFlow {
 		return invite.ErrDenied
 	}
+	var target, controller ed25519.PrivateKey
+	var targetPub, controllerPub ed25519.PublicKey
+	if native {
+		var bootstrap struct{ Target, Controller string }
+		if privatepipe.NewReader(os.Stdin).Read(&bootstrap) != nil {
+			return invite.ErrDenied
+		}
+		targetPub, controllerPub, e = nativePublics(bootstrap.Target, bootstrap.Controller)
+		if e != nil {
+			return e
+		}
+	} else {
+		targetPub, target, _ = ed25519.GenerateKey(rand.Reader)
+		controllerPub, controller, _ = ed25519.GenerateKey(rand.Reader)
+	}
 	execute := func(k ed25519.PrivateKey, b invite.Body) (invite.Result, error) {
+		if native || len(k) != ed25519.PrivateKeySize {
+			return invite.Result{}, invite.ErrDenied
+		}
 		b.Nonce = random(16)
 		b.IssuedAt = time.Now().Unix()
 		return s.Execute(invite.Sign(k, b))
 	}
-	t, e := execute(target, invite.Body{Action: "register"})
-	if e != nil {
-		return e
-	}
-	if _, e = execute(controller, invite.Body{Action: "register"}); e != nil {
-		return e
+	var t invite.Result
+	if native {
+		t.DeviceID = hexDeviceID(targetPub)
+	} else {
+		t, e = execute(target, invite.Body{Action: "register"})
+		if e != nil {
+			return e
+		}
+		if _, e = execute(controller, invite.Body{Action: "register"}); e != nil {
+			return e
+		}
 	}
 	var g invite.Grant
 	if !deviceFlow {
@@ -143,9 +166,9 @@ func run() error {
 	}
 	proofStage := "not_called"
 	d.Proof = func(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation) bool {
-		pub := controller.Public().(ed25519.PublicKey)
+		pub := controllerPub
 		if r.Device == g.Claims.Target {
-			pub = target.Public().(ed25519.PublicKey)
+			pub = targetPub
 		}
 		return nodeproof.VerifyWithReport(ctx, v, r, o, pub, func(stage string) { proofStage = stage })
 	}
@@ -182,7 +205,26 @@ func run() error {
 			}
 			b.Store = s
 		}
-		execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
+		if native {
+			// Privileged fixture teardown only: deny routes before reclaiming its
+			// own journaled nodes. Never forge an OS device revocation signature.
+			if d.ReplaceRules(join, nil) != nil {
+				return
+			}
+			for _, r := range s.ProvisionRecords() {
+				if r.Status == "cleaned" {
+					continue
+				}
+				if s.ProvisionCleanup(r.ID, false) != nil || d.Cleanup(join, r) != nil {
+					return
+				}
+				if s.ProvisionCleanup(r.ID, true) != nil {
+					return
+				}
+			}
+		} else {
+			execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
+		}
 		cleanup, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 		b.Reconcile(cleanup)
@@ -215,7 +257,12 @@ func run() error {
 	api.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: apiKey}}}
 	api.StartTLS()
 	defer api.Close()
-	out.Encode(map[string]any{"status": "ready", "verifier": vk, "target_key": hex.EncodeToString(target), "controller_key": hex.EncodeToString(controller), "grant_id": g.Claims.ID, "grant": g, "api_port": api.Listener.Addr().(*net.TCPAddr).Port, "api_certificate": base64.StdEncoding.EncodeToString(api.Certificate().Raw), "issuer": hex.EncodeToString(s.PublicKey()), "target": hex.EncodeToString(target.Public().(ed25519.PublicKey)), "controller": hex.EncodeToString(controller.Public().(ed25519.PublicKey))})
+	ready := map[string]any{"status": "ready", "verifier": vk, "grant_id": g.Claims.ID, "grant": g, "api_port": api.Listener.Addr().(*net.TCPAddr).Port, "api_certificate": base64.StdEncoding.EncodeToString(api.Certificate().Raw), "issuer": hex.EncodeToString(s.PublicKey()), "target": hex.EncodeToString(targetPub), "controller": hex.EncodeToString(controllerPub)}
+	if !native {
+		ready["target_key"] = hex.EncodeToString(target)
+		ready["controller_key"] = hex.EncodeToString(controller)
+	}
+	out.Encode(ready)
 	reader := bufio.NewReaderSize(os.Stdin, 8194)
 	for {
 		line, e := reader.ReadSlice('\n')
@@ -238,7 +285,7 @@ func run() error {
 		switch c.Op {
 		case "adopt_grant":
 			apiMu.Lock()
-			if deviceFlow && g == (invite.Grant{}) && c.Grant.Claims.Target == t.DeviceID && c.Grant.Claims.Controller == hexDeviceID(controller.Public().(ed25519.PublicKey)) && s.Authorized(c.Grant, c.Grant.Claims.Target, c.Grant.Claims.Controller) {
+			if deviceFlow && g == (invite.Grant{}) && c.Grant.Claims.Target == t.DeviceID && c.Grant.Claims.Controller == hexDeviceID(controllerPub) && s.Authorized(c.Grant, c.Grant.Claims.Target, c.Grant.Claims.Controller) {
 				g = c.Grant
 				result["passed"] = true
 			}
@@ -271,6 +318,9 @@ func run() error {
 			failPolicy.Store(false)
 			result["passed"] = true
 		case "enroll":
+			if native {
+				break
+			}
 			key := target
 			if c.Role == "controller" {
 				key = controller
@@ -319,9 +369,15 @@ func run() error {
 			result["passed"] = true
 			result["records"] = s.ProvisionRecords()
 		case "revoke":
+			if native {
+				break
+			}
 			_, e := execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
 			result["passed"] = e == nil && b.Reconcile(callCtx) == nil
 		case "revoke_only":
+			if native {
+				break
+			}
 			_, e := execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
 			result["passed"] = e == nil // keep nodes/ACL until explicit reconcile; test application gate, not route withdrawal
 		case "restart":
