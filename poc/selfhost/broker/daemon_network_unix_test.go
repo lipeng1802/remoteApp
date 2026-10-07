@@ -111,27 +111,29 @@ func TestDaemonNetworkConfigStrictAndSeparated(t *testing.T) {
 }
 
 type testDaemonOwner struct {
-	store     *invite.Store
-	done      chan struct{}
-	stopped   atomic.Bool
-	stopError bool
+	store       *invite.Store
+	done        chan struct{}
+	stopped     atomic.Bool
+	stopError   bool
+	joinedFault bool
 }
 
 func (o *testDaemonOwner) Authority() *Authority { return &Authority{Store: o.store} }
 func (o *testDaemonOwner) Done() <-chan struct{} { return o.done }
+func (o *testDaemonOwner) Joined() bool          { return o.stopped.Load() && !o.stopError }
 func (o *testDaemonOwner) Stop(context.Context) error {
 	if !o.store.Available() {
 		return ErrBroker
 	}
 	o.stopped.Store(true)
-	if o.stopError {
+	if o.stopError || o.joinedFault {
 		return ErrBroker
 	}
 	return nil
 }
 
 func TestDaemonNetworkLifecycleAndFailedJoinRetainsStore(t *testing.T) {
-	for _, mode := range []string{"normal", "fault", "startup_failure", "failed_join"} {
+	for _, mode := range []string{"normal", "fault", "startup_failure", "failed_join", "joined_fault"} {
 		t.Run(mode, func(t *testing.T) {
 			c, _ := networkDaemonFixture(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -140,7 +142,7 @@ func TestDaemonNetworkLifecycleAndFailedJoinRetainsStore(t *testing.T) {
 			ready := make(chan struct{}, 1)
 			done := make(chan error, 1)
 			start := func(ctx context.Context, s *invite.Store, n DaemonNetworkConfig) (daemonNetworkOwner, error) {
-				o := &testDaemonOwner{store: s, done: make(chan struct{}), stopError: mode == "failed_join"}
+				o := &testDaemonOwner{store: s, done: make(chan struct{}), stopError: mode == "failed_join", joinedFault: mode == "joined_fault"}
 				ownerReady <- o
 				if mode == "startup_failure" {
 					return o, ErrBroker

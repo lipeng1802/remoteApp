@@ -101,7 +101,7 @@ func runDaemon(ctx context.Context, c DaemonConfig, ready func(), start networkS
 				defer stopCancel()
 				if owner.Stop(stopCtx) != nil {
 					// Never release Store ownership under unjoined network workers.
-					closeStore = false
+					closeStore = owner.Joined()
 					result = ErrBroker
 				}
 			}()

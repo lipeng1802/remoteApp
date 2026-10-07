@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4E：真实独立daemon跨UID/故障恢复验收通过
+
+新增daemon-network-check Linux程序及daemon-network.py协调入口；上传check/最新daemon/mode工具并验哈希，在空的PoC控制面临时切database后运行。服务器随机生成隔离材料，未使用或上传本地发布根/CA私钥、未复制线上Store。独立root daemon，nobody为准许peer、root作为错误peer；nobody核对root kernel UID与精确issuer，network无grant403非503、不能读现有Store/profile/node私有文件，root客户端内核UID拒绝。
+
+最新完整实机退出0：真实verifier创建后Stop，daemon只重开→Ready/精确零ACL；正常TERM与STOPPED/零退出，同key/IP恢复；再次启动后真实systemctl stop remoteapp-poc触发Runtime健康故障，daemon FAIL/非零并join，恢复provider不自动重启broker；同verifier身份恢复、显式第三次启动成功，私有IPC仍通过，issuer/设备Store字节不变。最终正常退出零ACL，精确Retire本轮ticket，实验节点/users/preauthkeys零，临时目录与上传程序删除，原file模式/100.120.0.2→100.120.0.1:47476恢复。
+
+前两轮失败不计PASS：实验目录位于既有PoC 0700私有父目录导致非root无入口，改独立/tmp，不放宽既有目录；真实控制面故障暴露4C-4D以Runtime.Stop健康错误判定未join，保留writer.lock导致显式重启拒绝。新增Joined独立原子标记：supervisor+Runtime确认退出后，健康/ACL错误仍报非零但Close Store；只有实际未join才保留writer锁。补joined_fault回归；writer.lock为O_EXCL持久文件，不会随OS退出自动删除，下方4C-4D旧判断已被本记录更正。失败轮确认进程退出，无socket/verifier owner后按精确journal Retire并恢复原模式，清理孤立测试目录/持久测试writer标记；没有自动删除线上锁。
+
+本轮全量Go race、vet及Linux构建复测；Linux专用零ACL纯断言拒绝缺字段/null/额外规则。独立SSH三服务active，线上State哈希仍5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca，Nginx全部OK，控制资源零。未改线上binary/unit/Store/profile、业务443或公网路由。
+
+本轮不涉及Windows/设备grant/真实客户端nodeproof/产品TLS，不把4C-4C fixture结果算新daemon全链路结果。下一步受控前端私有network路由与跨进程可信HTTPS/故障503验收，再安排独立daemon双机授权/nodeproof/TLS与部署；公网admission、安装根/floor/轮换、HMAC安全投递、GUI/安装仍待。整体4未完成。见 [实际记录](../poc/selfhost/public-server/DAEMON_NETWORK.md)。
+
 ## 2026-10-07 切片 4C-4D：daemon可选网络装配与Linux组件通过，未部署
 
 用户确认本轮Windows已STOPPED，4C-4C最终桌面停止确认闭环（无额外退出码/详细清理输出），下方待确认记录为历史。

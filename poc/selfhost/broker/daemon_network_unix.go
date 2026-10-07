@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -91,11 +92,13 @@ type daemonNetworkOwner interface {
 	Authority() *Authority
 	Done() <-chan struct{}
 	Stop(context.Context) error
+	Joined() bool
 }
 type networkStarter func(context.Context, *invite.Store, DaemonNetworkConfig) (daemonNetworkOwner, error)
 type daemonNetwork struct {
 	runtime    *verifier.Runtime
 	supervisor *NetworkSupervisor
+	joined     atomic.Bool
 }
 
 func startDaemonNetwork(ctx context.Context, st *invite.Store, c DaemonNetworkConfig) (daemonNetworkOwner, error) {
@@ -134,6 +137,7 @@ func startDaemonNetwork(ctx context.Context, st *invite.Store, c DaemonNetworkCo
 }
 func (n *daemonNetwork) Authority() *Authority { return n.supervisor.Authority() }
 func (n *daemonNetwork) Done() <-chan struct{} { return n.supervisor.Done() }
+func (n *daemonNetwork) Joined() bool          { return n.joined.Load() }
 func (n *daemonNetwork) Stop(ctx context.Context) error {
 	withdrawn := true
 	if n.supervisor != nil {
@@ -143,7 +147,14 @@ func (n *daemonNetwork) Stop(ctx context.Context) error {
 		withdrawn = n.supervisor.DenyAllConfirmed()
 	}
 	// Stop, not Retire: keep the exact journal and identity for explicit reopen.
-	if n.runtime.Stop(ctx) != nil || !withdrawn {
+	err := n.runtime.Stop(ctx)
+	select {
+	case <-n.runtime.Done():
+		n.joined.Store(true)
+	default:
+		return ErrBroker
+	}
+	if err != nil || !withdrawn {
 		return ErrBroker
 	}
 	return nil
