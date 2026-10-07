@@ -13,7 +13,7 @@ public static class TlsProbeServer
     // no JPEG source, input sink or clipboard callbacks can be supplied.
     public static async Task RunFixedPayloadBridgeAsync(int port, X509Certificate2 certificate,
         byte[] deviceKey, byte[] agentIdentifier, Action reportPong, CancellationToken cancellationToken,
-        Action<string>? reportRejection = null)
+        Action<string>? reportRejection = null, Action? reportSessionClosed = null)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -24,6 +24,7 @@ public static class TlsProbeServer
             catch (AuthenticationException) { reportRejection?.Invoke("authentication"); }
             catch (ProtocolException ex) { reportRejection?.Invoke(ex.Error.ToString()); }
             catch (IOException) { }
+            finally { reportSessionClosed?.Invoke(); }
         }
     }
     public static async Task RunContinuousAsync(

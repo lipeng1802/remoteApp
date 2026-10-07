@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"remoteapp.local/selfhost-poc/headscale"
@@ -77,7 +78,17 @@ func run() error {
 		return e
 	}
 	g := *approved.Grant
-	d := &headscale.Driver{Run: headscale.LocalRunner(), PolicyDir: dir, PolicyMode: "database"}
+	var failPolicy atomic.Bool
+	runner := headscale.LocalRunner()
+	// Private fault injection: reject privileged policy commands, retain the
+	// last actual ACL, and exercise the real driver's poisoned-state recovery.
+	policyRunner := func(ctx context.Context, args ...string) ([]byte, error) {
+		if failPolicy.Load() && len(args) > 0 && args[0] == "policy" {
+			return nil, headscale.ErrDriver
+		}
+		return runner(ctx, args...)
+	}
+	d := &headscale.Driver{Run: policyRunner, PolicyDir: dir, PolicyMode: "database"}
 	verifierDir := filepath.Join(dir, "verifier")
 	vk, e := nodeidentity.Prepare(verifierDir, "https://mk.fengmap.com:8443")
 	if e != nil {
@@ -118,11 +129,28 @@ func run() error {
 		return nodeproof.VerifyWithReport(ctx, v, r, o, pub, func(stage string) { proofStage = stage })
 	}
 	b := &invite.ProvisionBackend{Store: s, Driver: d}
+	var maintenance *invite.Maintenance
+	stopMaintenance := func(ctx context.Context) error {
+		if maintenance == nil {
+			return nil
+		}
+		e := maintenance.Stop(ctx)
+		if e == nil {
+			maintenance = nil
+		}
+		return e
+	}
 	authorityOffline := false
 	if b.Reconcile(ctx) != nil {
 		return invite.ErrDenied
 	}
 	defer func() {
+		join, joinCancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer joinCancel()
+		if stopMaintenance(join) != nil {
+			return
+		}
+		failPolicy.Store(false)
 		// Fault injection must not strand live registration resources if the
 		// parent aborts before explicitly reopening the authority.
 		if authorityOffline {
@@ -159,6 +187,24 @@ func run() error {
 		callCtx, stop := context.WithTimeout(context.Background(), 25*time.Second)
 		result := map[string]any{"status": c.Op, "passed": false}
 		switch c.Op {
+		case "maintenance_start":
+			if maintenance == nil {
+				maintenance, e = b.StartMaintenance(context.Background(), 500*time.Millisecond, 2*time.Second)
+				result["passed"] = e == nil
+			}
+		case "maintenance_count":
+			if maintenance != nil {
+				result["passed"] = true
+				result["maintenance"] = maintenance.Status()
+			}
+		case "maintenance_stop":
+			result["passed"] = stopMaintenance(callCtx) == nil
+		case "policy_unavailable":
+			failPolicy.Store(true)
+			result["passed"] = true
+		case "policy_available":
+			failPolicy.Store(false)
+			result["passed"] = true
 		case "enroll":
 			key := target
 			if c.Role == "controller" {
@@ -214,6 +260,11 @@ func run() error {
 			_, e := execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
 			result["passed"] = e == nil // keep nodes/ACL until explicit reconcile; test application gate, not route withdrawal
 		case "restart":
+			periodic := maintenance != nil
+			if stopMaintenance(callCtx) != nil {
+				stop()
+				return invite.ErrDenied
+			}
 			if s.Close() != nil {
 				stop()
 				return invite.ErrStorage
@@ -224,10 +275,19 @@ func run() error {
 				return e
 			}
 			authorityOffline = false
-			d = &headscale.Driver{Run: headscale.LocalRunner(), PolicyDir: dir, PolicyMode: "database", VerifierIP: d.VerifierIP, Proof: d.Proof}
+			d = &headscale.Driver{Run: policyRunner, PolicyDir: dir, PolicyMode: "database", VerifierIP: d.VerifierIP, Proof: d.Proof}
 			b = &invite.ProvisionBackend{Store: s, Driver: d}
-			result["passed"] = b.Reconcile(callCtx) == nil
+			if periodic {
+				maintenance, e = b.StartMaintenance(context.Background(), 500*time.Millisecond, 2*time.Second)
+				result["passed"] = e == nil
+			} else {
+				result["passed"] = b.Reconcile(callCtx) == nil
+			}
 		case "authority_unavailable":
+			if stopMaintenance(callCtx) != nil {
+				stop()
+				return invite.ErrDenied
+			}
 			result["passed"] = s.Close() == nil // actual closed durable authority, keep the policy and nodes unchanged
 			authorityOffline = true
 		case "stop":

@@ -71,10 +71,11 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:] not in ([],["--streams"],["--tls"]):
+    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"]):
         raise RuntimeError("invalid_arguments")
     streams=bool(sys.argv[1:])
-    tlsmode=sys.argv[1:]==["--tls"]
+    periodic=sys.argv[1:]==["--maintenance"]
+    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"])
     os.umask(0o077)
     if tlsmode:
         env=dict(os.environ,COPYFILE_DISABLE="1")
@@ -309,8 +310,10 @@ def main():
                             if mode=="preauth":t.check(product.request("count")["preauth_rejected"]>before["preauth_rejected"],"actual_product_preauth_ping_rejected")
                             negative.stop()
                         authorize.negatives_done=True
-                        wait_for(lambda:server.request("count")["stream_closed"]>=3,"negative_tls_tunnels_fully_closed")
+                        wait_for(lambda:server.request("count")["stream_closed"]>=3 and product.request("count")["sessions_closed"]>=3,
+                                 "negative_tls_tunnels_fully_closed")
                     authorize.baseline=server.request("count")["stream_closed"]
+                    authorize.product_baseline=product.request("count")["sessions_closed"]
                     tlsclient=launch()
                     wait_for(lambda:tlsclient.request("count")["pongs"]>=3,"actual_product_tls_hmac_framed_pongs")
                 else:
@@ -322,11 +325,14 @@ def main():
 
             def ended():
                 if tlsmode:
-                    wait_for(lambda:tlsclient.request("count")["ended"] and server.request("count")["stream_closed"]==authorize.baseline+1,
+                    wait_for(lambda:tlsclient.request("count")["ended"] and server.request("count")["stream_closed"]==authorize.baseline+1 and
+                             product.request("count")["sessions_closed"]==authorize.product_baseline+1,
                              "actual_product_active_tls_stream_closed",6)
                     a=ticks();p=product.request("count")["pongs"];time.sleep(0.5)
-                    t.check(a==ticks() and p==product.request("count")["pongs"] and tlsclient.request("count")["result"]!="timeout",
-                            "product_tls_closure_no_new_pongs_or_client_timeout")
+                    final=tlsclient.request("count");product_final=product.request("count")["pongs"]
+                    closed=a==final["pongs"] and p==product_final and final["result"]!="timeout"
+                    if not closed:print("TLS_CLOSURE_DIAGNOSTIC",{"client_before":a,"client_after":final["pongs"],"product_before":p,"product_after":product_final,"result":final["result"]},flush=True)
+                    t.check(closed,"product_tls_closure_no_new_pongs_or_client_timeout")
                     return
                 wait_for(lambda:not controller.request("count")["probing"] and server.request("count")["stream_closed"]==1,
                          "same_dynamic_active_stream_closed",6)
@@ -354,6 +360,33 @@ def main():
                 refresh.close()
             ended()
             t.check(not server.request("state",State=refresh.last)["passed"],"expired_positive_state_replay_rejected")
+
+            if periodic:
+                restart_helpers()
+                t.check(authority.request("maintenance_start")["passed"],"serial_periodic_maintenance_started")
+                wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Ready"],"periodic_startup_projection_ready")
+                authorize()
+                start=ticks();time.sleep(5)
+                t.check(ticks()>start+10 and server.request("count")["stream_closed"]==authorize.baseline,
+                        "periodic_maintenance_preserves_refreshed_active_tls")
+                active_refresh.close()
+                failures=authority.request("maintenance_count")["maintenance"]["Failures"]
+                t.check(authority.request("policy_unavailable")["passed"],"privileged_policy_failure_injected")
+                wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Failures"]>failures,
+                         "periodic_policy_failure_observed",10)
+                denied=authority.request("network_state")
+                t.check(denied["passed"] and not denied["network_state"]["claims"]["active"],"policy_failure_fences_active_state")
+                for helper in (server,controller):
+                    t.check(helper.request("state",State=denied["network_state"])["passed"],"policy_failure_inactive_delivered")
+                ended()
+                t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
+                        "policy_failure_tls_closes_with_old_acl_present")
+                t.check(authority.request("policy_available")["passed"],"privileged_policy_service_recovered")
+                wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Ready"],"periodic_retry_recovers_without_manual_reconcile",12)
+                t.check(authority.request("restart")["passed"],"authority_restart_joins_old_worker_and_starts_new")
+                wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Ready"],"cold_periodic_startup_recovers_projection",12)
+                restored=authority.request("network_state")
+                t.check(restored["passed"] and restored["network_state"]["claims"]["active"],"periodic_restart_verified_binding_restored")
 
             restart_helpers()
             authorize()
@@ -384,7 +417,18 @@ def main():
             ended()
             t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
                     "revoked_stream_closed_while_network_rule_present")
-            t.check(authority.request("reconcile")["passed"],"revoked_resources_reconciled_after_gate_test")
+            if periodic:
+                t.check(authority.request("maintenance_start")["passed"],"periodic_revoked_resource_cleanup_started")
+                def reclaimed():
+                    records=authority.request("records")["records"]
+                    return len(records)==2 and all(r["Status"]=="cleaned" for r in records)
+                wait_for(reclaimed,
+                         "revoked_resources_automatically_reclaimed",12)
+                wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Ready"],"periodic_zero_rule_projection_ready",12)
+                t.check(t.admin("policy","get")=={"acls":[]},"periodic_cleanup_explicit_zero_acl")
+                t.check(authority.request("maintenance_stop")["passed"],"maintenance_cancel_and_join_completed")
+            else:
+                t.check(authority.request("reconcile")["passed"],"revoked_resources_reconciled_after_gate_test")
             if tlsmode:tlsclient.stop();product.stop()
         else:
             t.check(authority.request("revoke")["passed"],"grant_revoke_withdraws_rules_and_nodes")
@@ -396,7 +440,7 @@ def main():
         server.stop()
         authority.stop(helper=False)
         authority=None
-        t.check(not t.admin("nodes","list") and not t.admin("users","list"),"all_owned_control_resources_reclaimed")
+        t.check(not t.admin("nodes","list") and not t.admin("users","list") and not t.admin("preauthkeys","list"),"all_owned_control_resources_reclaimed")
     finally:
         if active_refresh is not None:
             active_refresh.done.set();active_refresh.thread.join(timeout=45)

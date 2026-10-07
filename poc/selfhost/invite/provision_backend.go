@@ -3,6 +3,7 @@ package invite
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,10 +25,11 @@ type ProvisionDriver interface {
 	ReplaceRules(context.Context, []NetworkRule) error
 }
 type ProvisionBackend struct {
-	Store  *Store
-	Driver ProvisionDriver
-	mu     sync.Mutex
-	ready  bool
+	Store       *Store
+	Driver      ProvisionDriver
+	mu          sync.Mutex
+	ready       bool
+	maintenance atomic.Bool
 }
 
 func bounded(ctx context.Context) (context.Context, context.CancelFunc) {

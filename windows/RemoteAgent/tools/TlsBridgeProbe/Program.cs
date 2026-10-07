@@ -22,9 +22,11 @@ var identity = RandomNumberGenerator.GetBytes(16);
 using var stop = new CancellationTokenSource(TimeSpan.FromMinutes(5));
 long pongs = 0;
 long preauthRejected = 0;
+long sessionsClosed = 0;
 var server = TlsProbeServer.RunFixedPayloadBridgeAsync(47478, certificate, key, identity,
     () => Interlocked.Increment(ref pongs), stop.Token,
-    reason => { if (reason == "AuthRequired") Interlocked.Increment(ref preauthRejected); });
+    reason => { if (reason == "AuthRequired") Interlocked.Increment(ref preauthRejected); },
+    () => Interlocked.Increment(ref sessionsClosed));
 Output(new { status = "ready", Key = Convert.ToBase64String(key),
     Fingerprint = CertificateFingerprint.FromCertificateDer(certificate.RawData).Hexadecimal });
 try
@@ -36,7 +38,7 @@ try
         var op = d.RootElement.GetProperty("Op").GetString();
         if (op == "stop") break;
         if (op != "count") throw new InvalidDataException();
-        Output(new { status = "count", pongs = Interlocked.Read(ref pongs), preauth_rejected = Interlocked.Read(ref preauthRejected) });
+        Output(new { status = "count", pongs = Interlocked.Read(ref pongs), preauth_rejected = Interlocked.Read(ref preauthRejected), sessions_closed = Interlocked.Read(ref sessionsClosed) });
     }
     stop.Cancel();
     try { await server.WaitAsync(TimeSpan.FromSeconds(5)); }

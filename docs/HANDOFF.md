@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 1：周期维护与故障恢复通过（当前入口）
+
+新增私有 `ProvisionBackend.StartMaintenance`：同步关闭就绪栅栏，立即后台完整 Reconcile；每 Backend 一个串行任务，工作结束后再等待，不重叠/不积压。失败按间隔翻倍退避至配置上限，成功恢复正常间隔；完整规则投影/回读及精确回收完成才恢复就绪，不重试 Mint。原驱动 5 秒预算、签名状态 3 秒租期及 grant 期限不变。Stop 取消并 join，退出再次关闭共享 Store 的签发栅栏；必须成功 join 后才关闭/替换 Store、Driver。状态只有固定计数/近期结果，不是授权依据，也无驱动原始错误或凭据。
+
+本机五组新增竞态测试与全量 Go race/vet 通过：策略失败、退避恢复与停止栅栏；grant 到期规则先撤回、回收失败重试且不重发；未绑定凭据到期自动回收而不撤销仍有效 grant；活动 driver 取消、冷 Store 重开后先同步才恢复；重复任务/非法配置拒绝。
+
+真实 `enrollment-network.py --maintenance` 完整零退出，保留注册/动态 ACL/零规则/真实 TLS 负向和授权关闭门禁。周期同步与状态刷新并行时 TLS 持续；可信 runner 拒绝真实 Driver 的 policy 命令后停止签 active、保留旧 ACL 时 TLS 关闭；恢复命令后由周期任务自动重试成功，无手工 Reconcile。持久后端重开先停止旧任务，新任务自动启动同步恢复同一绑定。Store 关闭、保留 ACL 的撤销/重放拒绝继续通过；两份已撤销工单由周期任务自动 cleaned，回读显式零 ACL，任务正常取消/join。所有进程零退出，节点/用户/注册 key 清空，原 file 策略、服务 active、业务 Nginx 哈希保持。Windows SSH profile 65/65 与自包含发布通过；默认 DPAPI 交互式人工待验保留。
+
+两次早期实测在旧“helper 已关即检查产品计数”的断言失败：Mac 无新 PONG，但 C# 已读入的最后 PING 可稍后完成一次发送计数。新增开发 TLS 服务会话结束计数，等待 Mac/helper/C# 任务全部退出后再断言双方计数不增长；未放宽增长断言，未用客户端超时作为通过。最终完整实机通过。细节见 [周期维护验收](../poc/selfhost/public-server/MAINTENANCE_TEST.md)。
+
+边界：周期任务已接私有后端/实机 fixture，未部署公开生产守护服务；policy 故障是可信 CLI runner 拒绝，不是关闭整个 Headscale；后端重开不是杀进程/断电演练。自然到期本轮为真实 Store/可控时钟测试，不算新一轮公网 300 秒到期验收。无 GUI/安装包/屏幕/输入/系统 Tailscale/防火墙变化。下一切片 2：正式设备注册与认证状态接口，替代私有 SSH/父脚本初始化与刷新；仍须正式证书身份分发/安全 IPC 后再开放产品能力。下方为历史。
+
 ## 2026-10-07 真实产品 TLS 桥接通过（当前入口）
 
 动态 gate 已桥接真实 Swift `TLSControllerClient` ↔ C# `TlsProbeServer`，通过独立 tsnet/Headscale/DERP 传输 TLS 密文；不是 Go 模拟认证。仅连续固定 8 字节 PING/PONG，不接屏幕/输入/剪贴板/GUI/安装包。Mac 仅监听回环临时端口，Windows 产品开发服务只监听 `127.0.0.1:47478`；目标固定不可由 peer 选择。原 Self/IP、WhoIs、签名绑定和新鲜应用互证保留，TLS 桥接有独立签名域，旧固定载荷证明不能打开上游。

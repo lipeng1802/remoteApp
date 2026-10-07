@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-最新切片：独立双机动态 gate 已桥接真实 Swift/C# 产品 TLS，证书 pin、应用认证、连续固定载荷与停止刷新/后端故障/撤销关闭及恢复均已实测。Go 只转发密文；未接 GUI/安装包/屏幕/输入，见 [TLS 桥接验收](poc/selfhost/public-server/TLS_BRIDGE_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
+最新切片：私有后端周期维护、策略失败禁止签发、退避自动恢复、冷启动同步和撤销资源自动回收已双机验收；真实 TLS 门禁回归通过。未部署公开生产服务或接入 GUI/安装包，见 [周期维护验收](poc/selfhost/public-server/MAINTENANCE_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
 
 从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前产品基线仍使用系统 Tailscale；独立连接 PoC 验证自托管 Headscale/DERP，数据通道不依赖 Tailscale 托管账号，SSH 仅用于测试管理。
 
