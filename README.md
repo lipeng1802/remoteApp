@@ -4,7 +4,7 @@
 
 另提供 [Windows 本机原生生命周期独立入口](poc/selfhost/public-server/NATIVE_WINDOWS_ENTRY_TEST.md)：无需旧安装包/SDK，Windows 交互式实际验收已通过；此入口不是完整跨网双机 OS signer 启动验收。
 
-下一入口为 [Windows 桌面 OS 身份私有桥接（4B-4A）](poc/selfhost/public-server/INTERACTIVE_VAULT_BRIDGE_TEST.md)：独立新包，桌面桥接验收已获用户确认通过，同一用户的 SSH 探针仍待验；完整跨网双机协调器尚未补齐。
+下一入口为 [Windows 桌面 OS 身份私有桥接（4B-4A）](poc/selfhost/public-server/INTERACTIVE_VAULT_BRIDGE_TEST.md)：独立新包，桌面验收、中文路径保持启动与同用户 SSH pinned 探针已通过；本轮保持进程正常停止回传待确认，完整跨网双机协调器尚未补齐。
 
 从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前产品基线仍使用系统 Tailscale；独立连接 PoC 验证自托管 Headscale/DERP，数据通道不依赖 Tailscale 托管账号，SSH 仅用于测试管理。
 

@@ -1,12 +1,18 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 桌面保持启动与同用户 SSH 桥接探针实际通过
+
+用户在中文路径 `H:\chatgpt\远程软件开发\测试安装包\windows-interactive-bridge` 使用更新脚本，截图确认 READY 并保持正常桌面会话。随后通过既有 jarvis SSH 执行本包 `probe-interactive-vault.ps1`：`TestPinnedInteractiveVaultFromBootstrap` 真正 PASS（0.02s），无 SKIP，`PROBE PASSED`，SSH 进程退出码 0。两次重开同一 pinned 桌面 native 身份及 HTTPS/enrollment/node/TLS 域签名通过，无 SSH 内新建身份/导出私钥。首次直接调用脚本被执行策略阻止；使用子 PowerShell `-ExecutionPolicy Bypass -File` 通过，不改变永久策略。
+
+用户尚需在保持启动窗口按 Enter，回传 `STOPPED` 确认该次实际持有进程退出/随机测试身份回收；本次 SSH 探针只关闭自己的 relay，未停止桌面 owner。Windows 桌面与 SSH 桥接功能验收通过，**完整 Headscale 双机 OS signer 协调器/真实产品 TLS 联合验收仍未实现或通过**。后续须改 authority 只接公开 OS 身份及网络 runner，不合并 fixture 证据。下方待验描述为历史。
+
 ## 2026-10-07 桌面启动脚本中文路径编码修复
 
 桌面桥接测试用户已确认通过，但保持启动脚本报 `Interactive vault unavailable`。只读实机诊断确认 Windows PowerShell 的 Process.StandardInput 默认编码为 gb2312；原 WriteLine 将中文 VaultExecutable 路径写成非 UTF-8，native JSON 读入后路径损坏。改为直接 BaseStream 写入显式 UTF-8/no-BOM/换行并 Flush，初始化与 stop 共用函数；增加固定阶段/状态/退出码诊断及避免启动退出竞态的二次 broken-pipe 掩盖。不改 exe/身份存储策略，不导出私钥、不重置凭据。
 
 实际 Windows PowerShell 加载新脚本的 writer 函数，发送中文/空格字符串到临时子进程并逐字节核对 UTF-8+换行通过；该检查不执行 broker、不创建凭据或写远端文件。新增 `test-launcher-utf8.ps1` 保存中文 JSON 路径传输回归。独立 zip 更新同一启动脚本，四份 exe/hash 不变。用户需替换脚本后复试 `start-interactive-vault.ps1`；READY/SSH 探针与完整 OS 双机验收仍待，不能用编码回归宣布通过。
 
-## 2026-10-07 切片 4B-4A：Windows 桌面 OS 身份桥接入口（桌面通过，SSH 待验）
+## 2026-10-07 切片 4B-4A：Windows 桌面 OS 身份桥接入口（桌面与 SSH 通过）
 
 为跨网 OS signer 启动补上 Windows SSH/交互式安全存储的会话隔离桥：桌面 `interactive-vault` 显式创建并持有本轮随机 native 身份，同用户 SSH helper 使用 `vault-relay` 重开固定 scope/public，私钥不导出、不退回 fixture/明文。仅随机本机 named pipe、当前用户 protected DACL、拒绝 remote client/名称碰撞，四连接上限、严格 8 KiB JSON/期限；拒绝 create/delete/export/任意消息，不让非法消息毒化持有进程。停止关闭连接/join 后精确删除测试身份；不抵抗同用户恶意代码或代替业务门禁。
 
