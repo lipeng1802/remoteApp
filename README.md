@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-最新切片 4B-1：Windows 4A 原生存储人工验收通过；网络 helper 的注册/节点持有/会话及产品 TLS 隧道互证接入 OS signer 接口，禁止混入私钥和静默创建。新双机 OS signer 验收、正式信任锚/HMAC 分发及自主生命周期仍待收口，整体切片 4 未完成。仍为私有 PoC，未改 GUI/安装包。见 [helper 签名验收](poc/selfhost/public-server/HELPER_SIGNER_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
+最新切片 4B-2：Windows 4B-1 安全存储/签名域人工验收通过；helper 新增自主签名 HTTPS 校准/状态刷新与失败关闭，不依赖父管道状态授权。真实双机 OS signer/自主链路、正式信任锚/HMAC 分发仍待收口，整体切片 4 未完成。仍为私有 PoC，未改 GUI/安装包。见 [自主 helper 验收](poc/selfhost/public-server/MANAGED_HELPER_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
 
 从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前产品基线仍使用系统 Tailscale；独立连接 PoC 验证自托管 Headscale/DERP，数据通道不依赖 Tailscale 托管账号，SSH 仅用于测试管理。
 

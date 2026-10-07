@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -27,6 +28,26 @@ import (
 type config struct {
 	Op, StateDir, AuthKey, NodeKey, AppKey, Verifier, Peer, Token, GrantID string
 	VaultExecutable, VaultScope, ExpectedPublic                            string
+	Endpoint, Certificate, Issuer                                          string
+}
+
+func openNetwork(c config, signer invite.DeviceSigner) (*invite.NetworkClient, error) {
+	if c.Endpoint == "" {
+		if c.Certificate != "" || c.Issuer != "" {
+			return nil, invite.ErrDenied
+		}
+		return nil, nil
+	}
+	issuer, e := hex.DecodeString(c.Issuer)
+	grantID, ge := hex.DecodeString(c.GrantID)
+	if e != nil || len(issuer) != 32 || hex.EncodeToString(issuer) != c.Issuer || ge != nil || len(grantID) != 16 || hex.EncodeToString(grantID) != c.GrantID {
+		return nil, invite.ErrDenied
+	}
+	cert, e := base64.StdEncoding.DecodeString(c.Certificate)
+	if e != nil || base64.StdEncoding.EncodeToString(cert) != c.Certificate {
+		return nil, invite.ErrDenied
+	}
+	return invite.NewNetworkClientWithSigner(c.Endpoint, cert, signer)
 }
 
 func openSigner(c config) (invite.DeviceSigner, func(), error) {
@@ -72,6 +93,13 @@ func run() error {
 		return e
 	}
 	defer closeSigner()
+	networkClient, e := openNetwork(c, app)
+	if e != nil {
+		return e
+	}
+	if networkClient != nil {
+		defer networkClient.Close()
+	}
 	root, e := filepath.Abs("../../artifacts/connection-poc/nodes")
 	if e != nil {
 		return e
@@ -104,16 +132,20 @@ func run() error {
 		return io.ErrUnexpectedEOF
 	}
 	tokenBytes, e := hex.DecodeString(c.Token)
-	if e != nil || len(tokenBytes) != 32 || len(c.Verifier) != 72 {
+	if len(c.Verifier) != 72 || (networkClient == nil && (e != nil || len(tokenBytes) != 32)) || (networkClient != nil && c.Token != "") {
 		return io.ErrUnexpectedEOF
 	}
 	nodeidentity.ConfigureOnline()
 	s := &tsnet.Server{Dir: dir, Hostname: "poc-enrollment", AuthKey: c.AuthKey, ControlURL: "https://mk.fengmap.com:8443", Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	var workers sync.WaitGroup
+	var managed *streamgate.ManagedGate
 	defer cancel()
 	defer func() {
 		cancel()
+		if managed != nil {
+			managed.Stop()
+		}
 		done := make(chan error, 1)
 		go func() { err := s.Close(); workers.Wait(); done <- err }()
 		select {
@@ -185,6 +217,10 @@ func run() error {
 				streamClosed.Add(1)
 				continue
 			}
+			if networkClient != nil {
+				conn.Close()
+				continue
+			} // no pre-activation token fallback
 			conn.SetDeadline(time.Now().Add(2 * time.Second))
 			b := make([]byte, len(c.Token))
 			if _, e = io.ReadFull(conn, b); e == nil && string(b) == c.Token {
@@ -223,6 +259,14 @@ func run() error {
 		go func() { readDone <- decode(&request) }()
 		select {
 		case <-ctx.Done():
+			// This executable owns its inherited stdin pipe. Unblock and join
+			// the outstanding decoder rather than abandoning a read goroutine.
+			os.Stdin.Close()
+			select {
+			case <-readDone:
+			case <-time.After(2 * time.Second):
+				return io.ErrClosedPipe
+			}
 			return nil
 		case e := <-readDone:
 			if e == io.EOF {
@@ -246,7 +290,23 @@ func run() error {
 			gateMu.Lock()
 			ok := false
 			if gate == nil && (clockIssuer == "" || clockIssuer == request.Issuer) && e1 == nil && e2 == nil && e3 == nil && (request.Role == "target" || request.Role == "controller") {
-				g, e := streamgate.NewWithSigner(issuer, target, controller, app, request.State, request.Role == "target", clockNow)
+				var g *streamgate.Gate
+				var e error
+				if networkClient != nil {
+					if request.Issuer != c.Issuer || request.State.Claims.Grant.Claims.ID != c.GrantID {
+						e = invite.ErrDenied
+					} else {
+						clockNow, e = streamgate.Calibrate(ctx, networkClient, issuer, request.State.Claims.Grant)
+						if e == nil {
+							managed, e = streamgate.StartManaged(ctx, networkClient, issuer, target, controller, app, request.State.Claims.Grant, request.State.Claims.Binding, request.Role == "target", clockNow)
+							if e == nil {
+								g = managed.Gate()
+							}
+						}
+					}
+				} else {
+					g, e = streamgate.NewWithSigner(issuer, target, controller, app, request.State, request.Role == "target", clockNow)
+				}
 				if e == nil {
 					gate = g
 					tlsBridge = request.Bridge
@@ -286,6 +346,9 @@ func run() error {
 			continue
 		}
 		if request.Op == "clock_challenge" {
+			if networkClient != nil {
+				return invite.ErrDenied
+			}
 			gateMu.Lock()
 			enabled := gate != nil
 			gateMu.Unlock()
@@ -302,6 +365,9 @@ func run() error {
 			continue
 		}
 		if request.Op == "clock" {
+			if networkClient != nil {
+				return invite.ErrDenied
+			}
 			issuer, e := hex.DecodeString(request.Issuer)
 			gateMu.Lock()
 			enabled := gate != nil
@@ -326,10 +392,12 @@ func run() error {
 			ok := false
 			fresh := false
 			if g != nil && request.Op == "state" {
-				fresh = g.Fresh(request.State)
-				ok = g.Update(request.State)
-				if !ok {
-					g.Deny()
+				if networkClient == nil {
+					fresh = g.Fresh(request.State)
+					ok = g.Update(request.State)
+					if !ok {
+						g.Deny()
+					}
 				}
 			}
 			if g != nil && request.Op == "stream" && probing.CompareAndSwap(false, true) {
@@ -347,6 +415,9 @@ func run() error {
 		}
 		if request.Op != "probe" {
 			return io.ErrUnexpectedEOF
+		}
+		if networkClient != nil {
+			return invite.ErrDenied
 		}
 		ip, e := netip.ParseAddr(request.Peer)
 		if e != nil || !netip.MustParsePrefix("100.120.0.0/24").Contains(ip) {

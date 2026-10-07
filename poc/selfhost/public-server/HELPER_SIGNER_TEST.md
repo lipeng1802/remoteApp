@@ -1,5 +1,7 @@
 # 切片 4B-1：网络 helper 的 OS 签名器接入
 
+更新：用户使用本轮两份 `-4b.exe` 新制品，在正常 Windows PowerShell 实际执行测试，PASS（0.35s）且退出码 0。新增域的 Windows native 人工验收通过；未扩张为双机 OS signer 验收。下一子切片见 [4B-2](MANAGED_HELPER_TEST.md)。
+
 本轮是 4B 子切片，不是完整最终连接架构交付。4A Windows 原生存储已由用户交互式截图验收 PASS/退出码 0；旧 SSH 缺登录会话不再是这项人工验收的阻塞。
 
 ## 实现与边界

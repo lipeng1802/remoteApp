@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4B-2：helper 自主授权状态生命周期（当前入口）
+
+用户提供 4B 新制品实际输出：`TestNativeVaultIdentityAndIsolation` PASS（0.35s），`$LASTEXITCODE=0`。**Windows 4B-1 的安全存储/新增六个签名域人工验收通过**，不是 SKIP；不是 Windows/Headscale 双机 OS signer 全链路验收，也不等于默认产品 DPAPI 66 项测试。
+
+新增 `streamgate.ManagedGate` 与 helper 私有自主模式：可信初始化提供回环 HTTPS Endpoint/API 证书/独立 issuer/固定 GrantID。helper 用同一个设备 signer 自生成挑战、查询 `grant_clock` 验签/保守校准，并自行启动 StateWatch。必须从 HTTPS 获取匹配完整 grant/真实绑定的首个有效 active 状态，才创建 gate，不把父管道给的状态当初始网络授权。随后自主串行签名查询，不接父脚本状态刷新；保留绝对 lease/grant watchdog。
+
+错误响应/签名或绑定错误/服务故障/撤销 inactive/到期/取消均永久 Deny；关闭 gate 先于等待 HTTP watch join，Stop 可重复/并发调用。关闭后旧正向状态不可复活、没有自动 enrollment/Mint/重连。helper 正常退出先 cancel、Stop/join watch，再关闭网络和 workers，最后关闭 API client 和 signer；取消时关闭自身继承 stdin、等待尚在读取的 decoder。自主模式禁止父管道 clock/state 授权注入、激活前 token 服务及旧 token probe；旧 fixture 模式仅保留兼容。
+
+本轮完整 Go race/vet 通过，managed 新增门禁两轮竞态重复通过；真实 Mac Keychain→签名 HTTPS→自主管理 gate/Stop 实测通过并精确删除随机凭据。私有 opaque 隧道集成证实已获准连接在服务故障后关闭双向 worker、后续数据失败；不等于真实 Swift/C# TLS。Windows helper 交叉构建/vet 通过，没有本轮 Windows 新实机结果。本轮测试边界与复测见 [4B-2 验收](../poc/selfhost/public-server/MANAGED_HELPER_TEST.md)。未更新双机 Python runner（仍为父脚本转发模式），**未宣布真实 Headscale 双机自主链路通过**。无服务器部署/端口、安装包/已安装 GUI/现有 Tailscale/生产密钥更改；正式信任锚/HMAC 投递、完整启动配置与公开注册/GUI 仍未交付，不进入切片 5。
+
 ## 2026-10-07 切片 4B-1：OS signer 接入网络 helper（当前入口）
 
 用户提供 Windows 正常交互式 PowerShell 截图：设置 vault 环境变量后，`TestNativeVaultIdentityAndIsolation` 真正 PASS（0.35s），退出码 0。之前未设置变量的 SKIP 不计通过。**4A Windows Credential Manager 创建/签名/重开/身份隔离人工验收已闭环**；这不等于产品默认 DPAPI 66 项验收，也不替代本轮新增签名域的 Windows 复测。下方 4A 的“未通过”是此前 SSH 上下文历史。

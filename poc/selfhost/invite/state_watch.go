@@ -78,3 +78,6 @@ func (w *StateWatch) Stop() {
 	w.latest = nil
 	w.mu.Unlock()
 }
+
+// Done closes on cancellation, query failure or an authenticated inactive state.
+func (w *StateWatch) Done() <-chan struct{} { return w.done }
