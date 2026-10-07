@@ -4,6 +4,7 @@ package broker
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net"
@@ -163,10 +164,16 @@ func (c Client) Call(ctx context.Context, r Request) (Reply, error) {
 	if result.Status != 200 && result.Status != 403 && result.Status != 503 {
 		return Reply{}, ErrBroker
 	}
-	if result.Status != 200 && (result.Device != nil || result.Network != nil) {
+	if result.Status != 200 && (result.Device != nil || result.Network != nil || result.Issuer != "") {
 		return Reply{}, ErrBroker
 	}
-	if result.Status == 200 && ((r.Operation == "device" && (result.Device == nil || result.Network != nil)) || (r.Operation == "network" && (result.Network == nil || result.Device != nil)) || (r.Operation != "device" && r.Operation != "network")) {
+	if result.Status == 200 {
+		pub, e := hex.DecodeString(result.Issuer)
+		if e != nil || len(pub) != 32 || hex.EncodeToString(pub) != result.Issuer {
+			return Reply{}, ErrBroker
+		}
+	}
+	if result.Status == 200 && ((r.Operation == "device" && (result.Device == nil || result.Network != nil)) || (r.Operation == "network" && (result.Network == nil || result.Device != nil)) || (r.Operation == "identity" && (result.Device != nil || result.Network != nil)) || (r.Operation != "device" && r.Operation != "network" && r.Operation != "identity")) {
 		return Reply{}, ErrBroker
 	}
 	return result, nil

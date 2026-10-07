@@ -19,6 +19,7 @@ type Request struct {
 }
 type Reply struct {
 	Status  int                  `json:"status"`
+	Issuer  string               `json:"issuer,omitempty"`
 	Device  *invite.Result       `json:"device,omitempty"`
 	Network *invite.NetworkReply `json:"network,omitempty"`
 }
@@ -35,10 +36,15 @@ type Authority struct {
 }
 
 func (a *Authority) Execute(ctx context.Context, r Request) Reply {
-	if a == nil || a.Store == nil || ctx.Err() != nil {
+	if a == nil || a.Store == nil || !a.Store.Available() || ctx.Err() != nil {
 		return Reply{Status: 503}
 	}
 	switch r.Operation {
+	case "identity":
+		if r.Device != nil || r.Network != nil {
+			return Reply{Status: 403}
+		}
+		return Reply{Status: 200, Issuer: hex.EncodeToString(a.Store.PublicKey())}
 	case "device":
 		if r.Device == nil || r.Network != nil {
 			return Reply{Status: 403}
@@ -50,7 +56,7 @@ func (a *Authority) Execute(ctx context.Context, r Request) Reply {
 		if e != nil {
 			return Reply{Status: 403}
 		}
-		return Reply{Status: 200, Device: &result}
+		return Reply{Status: 200, Issuer: hex.EncodeToString(a.Store.PublicKey()), Device: &result}
 	case "network":
 		if r.Network == nil || r.Device != nil {
 			return Reply{Status: 403}
@@ -76,7 +82,7 @@ func (a *Authority) Execute(ctx context.Context, r Request) Reply {
 		if e != nil {
 			return Reply{Status: 403}
 		}
-		return Reply{Status: 200, Network: &result}
+		return Reply{Status: 200, Issuer: hex.EncodeToString(a.Store.PublicKey()), Network: &result}
 	default:
 		return Reply{Status: 403}
 	}

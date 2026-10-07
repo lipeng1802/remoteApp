@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-3C：daemon/frontend 入口及迁移前置
+
+新增 authority-daemon 和 device-frontend：前者核验固定 root/service/floor/签名 profile/既有 Store issuer，独占已有状态、到期关闭，不创建新 issuer，无 TLS 和 network backend；后者仅 TLS/严格JSON/预算与固定IPC，不打开 Store，启动和成功回包核对 issuer，缺权威服务503，不回退。identity IPC仅公钥；双向kernel UID边界沿用4C-3B。
+
+新增 Unix + HTTPS 联调：前端目录已移除authority，注册/重放/重复JSON、两进程分别停止/重启、单writer、authority退出503、不重建state、错误server UID及缺state拒绝。单UID Mac测试不能等同Linux root/non-root部署验收。新增两份未安装unit模板与受控迁移/备份/回滚说明；Store必须移出frontend可写父目录，使用线上最新状态，不得用本地初始snapshot覆盖；写入后不可回滚旧snapshot/不兼容旧binary。
+
+完整 Go race 回归与 vet 通过，Linux amd64 两个新入口构建通过。首次联调暴露Mac socket路径过长，改用短路径后复测通过；没有将此失败误记为权限拒绝验收。尚无本轮Linux新unit/实际进程隔离证据。
+
+**尚未切换线上服务或迁移Store，当前remoteapp-device保留；network404、整体4未完成。** 下一步在CentOS核对材料/权限，正常停机释放锁、备份最新线上state、迁移至root独占目录、渲染unit，实机非root读写拒绝+HTTPS/重启/503+Nginx基线验收。详见 [迁移边界](../poc/selfhost/public-server/AUTHORITY_MIGRATION.md)。
+
 ## 2026-10-07 切片 4C-3B：固定操作 broker/设备公钥绑定组件完成
 
 新增 broker typed device/network authority/client/server，仅固定签名操作，无命令/路径/任意脚本。Authority 单 Store 重验签，network 默认503，需同一 Store backend+可信 NetworkReady+已绑定公钥再验 network signature/grant。NetworkReady 不替代 supervisor cancellation/fence；尚未接 verifier/maintenance/Headscale，不宣称故障自动关闭产品链路。Store device 新增可选 PublicKey，成功签名 register 后绑定并保存；getter 校验 deviceID hash/返回副本/关闭与旧记录拒绝，重开错误绑定拒绝。旧设备需明确 re-register（设备码不变）；旧二进制不兼容新字段，不能盲目降级。

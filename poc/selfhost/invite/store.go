@@ -258,6 +258,8 @@ func (s *Store) PublicKey() ed25519.PublicKey {
 	return append(ed25519.PublicKey(nil), ed25519.PrivateKey(key).Public().(ed25519.PublicKey)...)
 }
 
+func (s *Store) Available() bool { s.mu.Lock(); defer s.mu.Unlock(); return !s.broken }
+
 // DevicePublicKey returns only the key bound by a successful signed register.
 // A deviceID hash, frontend assertion or legacy row is not a public key.
 func (s *Store) DevicePublicKey(id string) (ed25519.PublicKey, error) {

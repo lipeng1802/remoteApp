@@ -1,5 +1,7 @@
 # 切片 4C-3B：固定操作本机 broker 与可信设备公钥绑定
 
+后续 4C-3C 已新增 daemon/frontend 入口、只返回 public issuer 的 identity 操作及回环联调；部署与迁移仍未执行，见 [迁移前置](AUTHORITY_MIGRATION.md)。下方保留4C-3B原验收记录。
+
 本项是 IPC/权限边界组件与验证，**未将线上服务拆成 frontend/broker、未迁移线上 Store owner、未接 verifier/维护/Headscale 或打开网络 API**。整体切片 4 尚未完成。已部署 remoteapp-device 仍是原 device-only 回环服务。
 
 ## 权威操作

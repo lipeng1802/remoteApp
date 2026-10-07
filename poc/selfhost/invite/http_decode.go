@@ -29,3 +29,17 @@ func decodeHTTP(r io.Reader, value any) error {
 	}
 	return nil
 }
+
+// DecodeDeviceRequest is bounded independently of the HTTP caller. No store
+// operation occurs here; the authority must still verify the device signature.
+func DecodeDeviceRequest(r io.Reader) (Envelope, error) {
+	var e Envelope
+	b, err := io.ReadAll(io.LimitReader(r, 4097))
+	if err != nil || len(b) > 4096 {
+		return e, ErrDenied
+	}
+	if decodeHTTP(bytes.NewReader(b), &e) != nil {
+		return Envelope{}, ErrDenied
+	}
+	return e, nil
+}

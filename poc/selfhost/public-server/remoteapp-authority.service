@@ -1,0 +1,26 @@
+[Unit]
+Description=RemoteApp sole device authority (network disabled)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/remoteapp-prerelease/authority-daemon /etc/remoteapp-authority/service-profile.json @RELEASE_ROOT@ remoteapp-prerelease 1 /var/lib/remoteapp-authority /run/remoteapp-authority/authority.sock @FRONTEND_UID@ @FRONTEND_GID@
+Restart=no
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=full
+ReadOnlyDirectories=/var/lib/remoteapp-prerelease /etc/remoteapp-authority
+ReadWriteDirectories=/var/lib/remoteapp-authority /run/remoteapp-authority
+CapabilityBoundingSet=CAP_CHOWN
+LimitNOFILE=128
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

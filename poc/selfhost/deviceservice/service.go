@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"remoteapp.local/selfhost-poc/broker"
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
@@ -28,6 +29,7 @@ var ErrService = errors.New("device_service_unavailable")
 type Config struct {
 	Directory, ReleaseRoot, Service, Listen string
 	MinimumEpoch                            uint64
+	Broker                                  *broker.Client
 }
 
 func read(path string, limit int64, private bool) ([]byte, error) {
@@ -58,7 +60,11 @@ func load(c Config) (trustprofile.Profile, tls.Certificate, error) {
 	if e != nil || real != c.Directory {
 		return fail()
 	}
-	for _, sub := range []string{"server-private", "server-private/authority", "client-public"} {
+	subs := []string{"server-private", "client-public"}
+	if c.Broker == nil {
+		subs = append(subs, "server-private/authority")
+	}
+	for _, sub := range subs {
 		i, e := os.Lstat(filepath.Join(c.Directory, sub))
 		if e != nil || !i.IsDir() || i.Mode()&os.ModeSymlink != 0 || i.Mode().Perm()&0077 != 0 {
 			return fail()
@@ -110,8 +116,10 @@ func load(c Config) (trustprofile.Profile, tls.Certificate, error) {
 	if _, e = leaf.Verify(x509.VerifyOptions{DNSName: u.Hostname(), Roots: roots}); e != nil || leaf.NotAfter.Before(time.Unix(p.Claims.ExpiresAt, 0)) {
 		return fail()
 	}
-	if _, e = read(filepath.Join(c.Directory, "server-private/authority/state.json"), 1<<20, true); e != nil {
-		return fail()
+	if c.Broker == nil {
+		if _, e = read(filepath.Join(c.Directory, "server-private/authority/state.json"), 1<<20, true); e != nil {
+			return fail()
+		}
 	}
 	return p, pair, nil
 }
@@ -150,17 +158,29 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 	if e != nil || ctx.Err() != nil {
 		return ErrService
 	}
-	s, e := invite.Open(filepath.Join(c.Directory, "server-private/authority"), time.Now)
-	if e != nil {
-		return ErrService
-	}
-	defer func() {
-		if s.Close() != nil {
-			result = ErrService
+	var device http.Handler
+	if c.Broker != nil {
+		check, cancel := context.WithTimeout(ctx, 4*time.Second)
+		identity, e := c.Broker.Call(check, broker.Request{Operation: "identity"})
+		cancel()
+		if e != nil || identity.Status != 200 || identity.Issuer != p.Claims.Issuer {
+			return ErrService
 		}
-	}()
-	if hex.EncodeToString(s.PublicKey()) != p.Claims.Issuer {
-		return ErrService
+		device = broker.DeviceHandler(*c.Broker, p.Claims.Issuer)
+	} else {
+		s, e := invite.Open(filepath.Join(c.Directory, "server-private/authority"), time.Now)
+		if e != nil {
+			return ErrService
+		}
+		defer func() {
+			if s.Close() != nil {
+				result = ErrService
+			}
+		}()
+		if hex.EncodeToString(s.PublicKey()) != p.Claims.Issuer {
+			return ErrService
+		}
+		device = invite.NetworkHandler(&invite.ProvisionBackend{Store: s})
 	}
 	l, e := net.Listen("tcp", c.Listen)
 	if e != nil {
@@ -169,7 +189,6 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 	defer l.Close()
 	// Reuse the four-work-slot device dispatcher, but do not route privileged
 	// network operations at all. A signed grant is not a network authorization.
-	device := invite.NetworkHandler(&invite.ProvisionBackend{Store: s})
 	h := invite.NewAdmission().Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().Unix()
 		if r.Context().Err() != nil || now < p.Claims.IssuedAt || now >= p.Claims.ExpiresAt {

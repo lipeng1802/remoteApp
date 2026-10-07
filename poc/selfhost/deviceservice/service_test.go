@@ -46,7 +46,7 @@ func fixture(t *testing.T) Config {
 	if json.Unmarshal(b, &a) != nil {
 		t.Fatal("anchor")
 	}
-	return Config{dir, a.ReleaseRoot, a.Service, address, 1}
+	return Config{Directory: dir, ReleaseRoot: a.ReleaseRoot, Service: a.Service, Listen: address, MinimumEpoch: 1}
 }
 
 func start(t *testing.T, c Config) (context.CancelFunc, <-chan error) {
