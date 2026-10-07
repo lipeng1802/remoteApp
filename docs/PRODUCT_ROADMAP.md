@@ -1,5 +1,7 @@
 # 独立远程桌面产品路线
 
+最新 4C-3B：固定操作本机 broker/双向kernel UID与可信设备公钥持久绑定组件完成，Mac race及Linux跨nobody用户拒绝实测通过。尚未做线上Store owner迁移/authority daemon/frontend接入，network仍404。下一步受控迁移/备份回滚，再接verifier/nodeproof/reconcile/fence与真实网络拒绝验收；整体4未完成。
+
 最新 4C-3A：持久 verifier 生命周期与真实 Headscale 首次注册/同身份重启/节点删除故障关闭/精确回收通过。没有长期 verifier 部署，设备服务仍 device-only；下一步 server-local 固定操作 broker/OS peer credentials/单 authority Store owner 及设备公钥可信持久绑定，然后接真实 backend、maintenance/fence、新鲜节点证明/零规则。公网、安装锚/floor/HMAC/GUI/安装仍待，整体4未完成。
 
 最新 4C-2C：用户明确授权上传在线 TLS/issuer 后，独立无特权 device-only 服务已实际回环部署，发布签名 profile/真实 HTTPS、正常停止/身份稳定重启和原 Nginx 不变验收通过。未开放公网/开机启用，发布根/CA 私钥未上传。下一步服务自身 verifier/Headscale backend，network 路径仍 404；之后公网开放、客户端信任/floor 持久化及产品凭据/GUI/安装。见 [设备服务](../poc/selfhost/public-server/DEVICE_SERVICE.md)。整体 4 尚未完成。

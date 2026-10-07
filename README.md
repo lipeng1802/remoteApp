@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+最新 4C-3B：[权限隔离 broker 与设备公钥绑定](poc/selfhost/public-server/AUTHORITY_BROKER.md) 组件完成，Mac race、Linux 实际跨 UID 拒绝与签名/取消边界通过。尚未部署接管线上 Store 或启用网络接口；下一步 authority daemon/frontend 适配与受控迁移，再接真实后端。整体切片 4 未完成。
+
 最新 4C-3A：[持久 verifier](poc/selfhost/public-server/PERSISTENT_VERIFIER.md) 的明确创建/同身份重启/故障停止/精确回收代码与真实 Headscale 验收通过，测试资源已回收。尚未部署长期 verifier 或接通设备服务网络接口；下一步是固定权限 broker/可信设备公钥绑定，再接实际后端。整体切片 4 未完成。
 
 最新 4C-2C：用户授权在线服务私钥上传后，[独立设备-only 服务](poc/selfhost/public-server/DEVICE_SERVICE.md) 已实际部署到服务器回环 127.0.0.1:8444，首次/重启后 profile HTTPS 拒绝探针通过，状态稳定、停止释放锁与监听，最小权限及原 Nginx 配置哈希核对通过。服务 active，未开机启用/开放公网或网络授权，不改业务 443；整体切片 4 仍未完成。

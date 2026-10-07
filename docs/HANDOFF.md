@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-3B：固定操作 broker/设备公钥绑定组件完成
+
+新增 broker typed device/network authority/client/server，仅固定签名操作，无命令/路径/任意脚本。Authority 单 Store 重验签，network 默认503，需同一 Store backend+可信 NetworkReady+已绑定公钥再验 network signature/grant。NetworkReady 不替代 supervisor cancellation/fence；尚未接 verifier/maintenance/Headscale，不宣称故障自动关闭产品链路。Store device 新增可选 PublicKey，成功签名 register 后绑定并保存；getter 校验 deviceID hash/返回副本/关闭与旧记录拒绝，重开错误绑定拒绝。旧设备需明确 re-register（设备码不变）；旧二进制不兼容新字段，不能盲目降级。
+
+Unix 双向真实 kernel UID（Linux SO_PEERCRED、Mac LOCAL_PEERCRED）在解析前核对，不信任客户端UID字段；真实绝对 broker-owned 目录、固定GID、无group/world写、0660 socket、碰撞拒绝。8连接/4工作槽、单帧8KiB+半关闭/EOF、重复别名未知尾随/超长拒绝、期限/取消关闭连接与worker join。其他平台 fail unavailable，不回退TCP。未来 root socket group仅供frontend连接，仍匹配精确UID。
+
+Mac race IPC/签名/公钥/饱和取消及完整Go race/vet通过，Linux/Windows专用vet和Linux制品通过。真实服务器固定四父测试均PASS无SKIP，其中root->nobody跨用户：实际组权限能连接socket、kernel确认root server，但请求UID不符、executor0。仅临时fixture Store，未触线上Store/Headscale/ACL。清理本轮测试制品stage及fixture，Nginx基线通过、device/poc active。Linux制品非race，不伪称Linux race或Windows新增broker实测。
+
+**组件还未部署接管线上服务/未迁移Store owner，网络仍404，整体4未完成**。下一项authority daemon/无特权HTTPfrontend适配+单Store停机迁移/备份回滚；frontend不得读issuer/state或访问HeadscaleDB。再接verifier/nodeproof/maintenance/fence，回环真实网络与零规则验收后部署network；公网/安装根floor/HMAC/GUI安装仍待。见 [broker验收边界](../poc/selfhost/public-server/AUTHORITY_BROKER.md)。
+
 ## 2026-10-07 切片 4C-3A：持久 verifier 生命周期/真实服务器验收通过
 
 新增 verifier/verifier-owner；显式 create/resume/retire，planned-before-Mint/issued/ready/retired owner-only journal，不持久化注册 secret、不自动重试 unknown Mint；恢复同一 StateStore 节点及 user/node/IP 绑定，不新 Mint；缺失/损坏/已退休拒绝。独占 owner.lock，Stop/fault 先 Live/Info.Healthy=false，再监控取消/SDK关闭/join 后解锁；超时保留锁，崩溃遗留锁不自动接管。周期有界 SDK健康+CLI绑定异常 latch，不自动恢复/换身份；不把健康/控制行当节点实时证明，没有调用 ReplaceRules/Verify/批准。

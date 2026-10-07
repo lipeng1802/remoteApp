@@ -68,7 +68,10 @@ type Result struct {
 	Grant        *Grant `json:"grant,omitempty"`
 	ControllerID string `json:"controller_id,omitempty"`
 }
-type device struct{ Code, ActiveInvite string }
+type device struct {
+	Code, ActiveInvite string
+	PublicKey          string `json:",omitempty"`
+}
 type invitation struct {
 	Owner, CodeHash, RequestID string
 	Expires                    int64
@@ -192,6 +195,15 @@ func Open(root string, clock func() time.Time) (*Store, error) {
 	if subtle.ConstantTimeCompare(key, ed25519.NewKeyFromSeed(key[:32])) != 1 {
 		return fail()
 	}
+	for id, d := range s.state.Devices {
+		if d.PublicKey == "" {
+			continue
+		} // Legacy devices must explicitly re-register.
+		pub, e := hex.DecodeString(d.PublicKey)
+		if e != nil || len(pub) != ed25519.PublicKeySize || hex.EncodeToString(pub) != d.PublicKey || deviceID(pub) != id {
+			return fail()
+		}
+	}
 	if !validProvisions(s.state.Provisions) {
 		return fail()
 	}
@@ -244,6 +256,19 @@ func (s *Store) PublicKey() ed25519.PublicKey {
 	defer s.mu.Unlock()
 	key, _ := hex.DecodeString(s.state.PrivateKey)
 	return append(ed25519.PublicKey(nil), ed25519.PrivateKey(key).Public().(ed25519.PublicKey)...)
+}
+
+// DevicePublicKey returns only the key bound by a successful signed register.
+// A deviceID hash, frontend assertion or legacy row is not a public key.
+func (s *Store) DevicePublicKey(id string) (ed25519.PublicKey, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.state.Devices[id]
+	pub, e := hex.DecodeString(d.PublicKey)
+	if s.broken || !ok || e != nil || len(pub) != 32 || deviceID(pub) != id {
+		return nil, ErrDenied
+	}
+	return append(ed25519.PublicKey(nil), pub...), nil
 }
 func (s *Store) save(next snapshot) error {
 	raw, err := json.Marshal(next)
@@ -361,6 +386,11 @@ func (s *Store) Execute(e Envelope) (Result, error) {
 		v.Count++
 		next.Attempts[budget] = v
 		result, opErr = s.apply(&next, id, e.Body, now)
+		if opErr == nil && e.Body.Action == "register" {
+			d := next.Devices[id]
+			d.PublicKey = e.PublicKey
+			next.Devices[id] = d
+		}
 	}
 	if s.save(next) != nil {
 		s.broken = true
