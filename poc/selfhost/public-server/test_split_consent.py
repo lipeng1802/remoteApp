@@ -22,6 +22,10 @@ class SplitConsentTests(unittest.TestCase):
         self.assertEqual(split.checked_ready(node_ready,"a"*64,"b"*64,True),node_ready)
         with self.assertRaises(Exception): split.checked_ready(ready,"a"*64,"b"*64,True)
         with self.assertRaises(Exception): split.checked_ready(node_ready,"a"*64,"b"*64)
+        fault_ready=dict(node_ready,fault_phase=True)
+        self.assertEqual(split.checked_ready(fault_ready,"a"*64,"b"*64,True,True),fault_ready)
+        with self.assertRaises(Exception): split.checked_ready(node_ready,"a"*64,"b"*64,True,True)
+        with self.assertRaises(Exception): split.checked_ready(fault_ready,"a"*64,"b"*64,True)
 
     def test_consent_never_accepts_self_approval_or_auto_grant(self):
         class Client:

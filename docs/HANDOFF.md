@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片4C-4J：旧ACL留存TLS故障关闭入口准备，待READY
+
+用户确认4C-4I Windows STOPPED，上一轮桌面停止闭环。新增--tls-fault/--os-tls-fault及fault_phase公共marker；私有stdio严格freeze→recover→stop一轮，拒乱序/扩展/重复/代批准，普通模式只stop。仅实际隔离daemon PID SIGSTOP并核对内核T态，不改线上服务/provider，不清规则/删节点；私有frontend真HTTPS/network在broker预算后必须503，控制policy暂停前后精确同一非零语义。异常仍暂停则先SIGCONT再正常stop，join/cleaned未确认保留journal。
+
+双机计划核对精确旧controller→target:47476规则关闭前后留存，helper自主HTTPS watch/lease关闭实际Swift/C#TLS且无新pong/非timeout；recover只先CONT→正常TERM/STOPPED/join再原Store/verifier key/IP显式新daemon，fresh active signed binding同原pair。旧gate保持done/不active、fresh parent state不能复活、旧TLS不再增pong；显式新helper/clock/watch/gate/新TLS才恢复。split_nodes重复managed restart修正捕获引用更新；split_tls复用既有C#证书/HMAC、不重复publish/负向测试，fresh descriptor仍必须核对。最终OS撤销与30秒日志提交屏障/精确回收原策略恢复。
+
+本轮Linux构建/vet、实际Linux8项组件PASS无SKIP（仅自建sleep暂停，不触控制面）、Python5项纯断言/diff通过，测试binary已删。没有运行新双机TLS故障、没有本轮Windows编译/服务器配置或节点/ACL修改；Go服务未改、未重跑全量race。不把模拟进程暂停等同磁盘故障/provider断网/硬崩溃/自然到期。HMAC/trust/SSH仍test边界，整体4未完成。
+
+下一步请Windows正常桌面重跑现有windows-native-network start-interactive-vault.ps1保持READY，实际probe后 `REMOTEAPP_WINDOWS_INTERACTIVE_DIR='H:\chatgpt\远程软件开发\测试安装包\windows-native-network' python3 -B poc/selfhost/public-server/split-consent.py --tls-fault`；需要最新daemon-network-check已构建。完整实机零退出/独立复核/用户最终STOPPED才记通过。见[新入口](../poc/selfhost/public-server/SPLIT_TLS_FAULT.md)。
+
 ## 2026-10-07 切片4C-4I：独立进程真实产品TLS完整复测通过
 
 用户重新READY后实际pinned Windows probe通过，执行 split-consent.py --tls。最新完整复测退出0：本轮源码archive哈希、Windows65/65 bridge协议测试和publish通过（DPAPI明确SKIP，非凭证持久化）；真实OS consent/nodeproof/最小规则流程仍通过。两端同node/IP正常重开managed helper，旧Token fallback拒绝、自主HTTPS校时/watch/gate active，父state不能授权。实际C#证书私钥证明由Windows OS签名HTTPS发布，Mac取得fresh issuer描述符且指纹匹配实际C#证书；真实Swift错pin/错HMAC/认证前PING各结束且零protected pong。正常TLS至少3pong再持续5秒增加>10，原连接跨初始lease；Windows OS签名撤销后双端watch done/join，Swift connection_closed非timeout/cancelled，helper tunnel与C#session各关闭一次，后续pong无增长。

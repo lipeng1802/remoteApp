@@ -27,7 +27,7 @@ enrollment = load("split_transport", "enrollment-network.py")
 t, Pipe = enrollment.t, enrollment.Pipe
 uploads = load("split_uploads", "daemon-network.py")
 
-def checked_ready(value, target, controller, nodes=False):
+def checked_ready(value, target, controller, nodes=False, fault=False):
     import base64
     import re
     expected = {"status", "split_process", "target", "controller", "issuer", "api_certificate", "api_port"}
@@ -35,6 +35,9 @@ def checked_ready(value, target, controller, nodes=False):
         expected.update(("node_phase","verifier"))
         if value.get("node_phase") is not True or not re.fullmatch(r"nodekey:[0-9a-f]{64}",value.get("verifier","")):
             raise RuntimeError("invalid_split_node_bootstrap")
+    if fault:
+        expected.add("fault_phase")
+        if not nodes or value.get("fault_phase") is not True: raise RuntimeError("invalid_fault_bootstrap")
     if (set(value) != expected or value["status"] != "ready" or value["split_process"] is not True
             or value["target"] != target or value["controller"] != controller
             or not re.fullmatch(r"[0-9a-f]{64}", value["issuer"])
@@ -116,8 +119,9 @@ class Coordinator(Pipe):
         return self.proc.returncode
 
 def main():
-    if sys.argv[1:] not in ([],["--nodes"],["--tls"]): raise RuntimeError("invalid_arguments")
-    tls=sys.argv[1:]==["--tls"]
+    if sys.argv[1:] not in ([],["--nodes"],["--tls"],["--tls-fault"]): raise RuntimeError("invalid_arguments")
+    fault=sys.argv[1:]==["--tls-fault"]
+    tls=fault or sys.argv[1:]==["--tls"]
     nodes=tls or sys.argv[1:]==["--nodes"]
     os.umask(0o077)
     identities = NativeIdentities(t, Pipe)  # Actual pinned desktop probe before mutations.
@@ -151,8 +155,8 @@ def main():
         if prepared.stdout.splitlines():
             backup = json.loads(prepared.stdout.splitlines()[0]).get("backup")
         t.check(prepared.returncode == 0 and backup is not None, "split_database_deny_prepared")
-        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+(" --os-nodes " if nodes else " --os-consent ")+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
-        ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"],nodes)
+        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+(" --os-tls-fault " if fault else " --os-nodes " if nodes else " --os-consent ")+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
+        ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"],nodes,fault)
         t.check(True, "split_independent_daemon_nonroot_frontend_ready_public_only")
         local_socket = socket.socket(); local_socket.bind(("127.0.0.1",0)); local_port = local_socket.getsockname()[1]; local_socket.close()
         forward = subprocess.Popen(t.SERVER[:-1]+["-N","-o","ExitOnForwardFailure=yes","-L",f"127.0.0.1:{local_port}:127.0.0.1:{ready['api_port']}",t.SERVER[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -187,7 +191,9 @@ def main():
                 node=split_nodes.run(t,Pipe,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders)
                 node_result.append(node)
                 if tls:
-                    active_tls.append(split_tls.run(t,Pipe,ready,clients,node,grant,product_command,node_helpers))
+                    active=split_tls.run(t,Pipe,ready,clients,node,grant,product_command,node_helpers)
+                    if fault: active=split_tls.fault_round(t,Pipe,ready,clients,node,grant,product_command,node_helpers,coordinator,active)
+                    active_tls.append(active)
             consent(*clients,node_phase=node_phase)
             if tls: active_tls[0].revoked()
             split_nodes.reclaimed(t)

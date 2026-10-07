@@ -204,10 +204,19 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 	d := &headscale.Driver{Run: headscale.LocalRunner()}
 	var current *child
 	var front *child
+	frozen := false
 	providerStopped := false
 	vd := filepath.Join(base, "verifier")
 	verifierPlanned := false
 	defer func() {
+		if frozen && current != nil && !current.joined {
+			if current.cmd.Process.Signal(syscall.SIGCONT) != nil {
+				result = denied
+				fmt.Println("PRESERVED " + base)
+				return
+			}
+			frozen = false
+		}
 		if providerStopped {
 			if provider("start") != nil {
 				result = denied
@@ -439,7 +448,58 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 		if consent != nil {
 			// The coordinator receives public bootstrap only. It cannot register,
 			// approve, enroll or sign on behalf of either OS-owned identity.
-			if consentSession(os.Stdin, os.Stdout, *consent, signed.Claims.Issuer, der, listen, 5*time.Minute, initial.Key) != nil {
+			var actions *faultActions
+			if consent.Fault {
+				actions = &faultActions{
+					freeze: func() error {
+						ctx, cancel := bounded()
+						before, err := d.Run(ctx, "policy", "get")
+						cancel()
+						if err != nil || policyZero(d) {
+							return denied
+						}
+						if current.cmd.Process.Signal(syscall.SIGSTOP) != nil {
+							return denied
+						}
+						frozen = true
+						if waitStopped(current.cmd.Process.Pid) != nil {
+							return denied
+						}
+						r, err := hc.Post(endpoint+"/v1/network", "application/json", strings.NewReader(`{}`))
+						if err != nil {
+							return denied
+						}
+						io.Copy(io.Discard, io.LimitReader(r.Body, 8193))
+						r.Body.Close()
+						ctx, cancel = bounded()
+						after, err := d.Run(ctx, "policy", "get")
+						cancel()
+						if err != nil || r.StatusCode != 503 || !samePolicy(before, after) {
+							return denied
+						}
+						return nil
+					},
+					recover: func() error {
+						if !frozen || current.cmd.Process.Signal(syscall.SIGCONT) != nil {
+							return denied
+						}
+						frozen = false
+						if current.stop() != nil {
+							return denied
+						}
+						i, err := info(vd, d)
+						if err != nil || i.Key != initial.Key || i.IP != initial.IP {
+							return denied
+						}
+						current, err = launch(binary, args)
+						if err != nil || current.ready() != nil {
+							return denied
+						}
+						return nil
+					},
+				}
+			}
+			if consentSessionOps(os.Stdin, os.Stdout, *consent, signed.Claims.Issuer, der, listen, 5*time.Minute, actions, initial.Key) != nil {
 				return denied
 			}
 			if consent.Nodes {
@@ -584,12 +644,13 @@ func main() {
 		e = run(os.Args[1], "", nil)
 	} else if len(os.Args) == 4 && os.Args[2] == "--frontend" {
 		e = run(os.Args[1], os.Args[3], nil)
-	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && (os.Args[4] == "--os-consent" || os.Args[4] == "--os-nodes") {
+	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && (os.Args[4] == "--os-consent" || os.Args[4] == "--os-nodes" || os.Args[4] == "--os-tls-fault") {
 		pins, err := parseConsentPins(os.Args[5], os.Args[6])
 		if err != nil {
 			e = denied
 		} else {
-			pins.Nodes = os.Args[4] == "--os-nodes"
+			pins.Fault = os.Args[4] == "--os-tls-fault"
+			pins.Nodes = pins.Fault || os.Args[4] == "--os-nodes"
 			e = run(os.Args[1], os.Args[3], &pins)
 		}
 	} else {

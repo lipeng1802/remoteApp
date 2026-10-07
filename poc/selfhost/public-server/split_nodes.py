@@ -76,12 +76,14 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
     reverse=server.request("probe",Peer=controller_ip)
     t.check(not reverse["passed"] and reverse.get("reason") in ("route_denied","dial_denied") and peer.request("count")["value"]==0,"split_reverse_payload_denied")
     def restart_managed():
+        nonlocal peer,server
         peer.stop(); helpers.remove(peer)
         server.stop(); helpers.remove(server)
         managed_server,ip=join(win,win_dir,target,tickets[0],True,managed=True)
         managed_peer,cip=join(local,folder,controller,tickets[1],False,managed=True)
         t.check(ip==target_ip and cip==controller_ip,"split_managed_restart_same_node_binding")
         t.check(not managed_peer.request("probe",Peer=target_ip)["passed"],"split_managed_has_no_token_fallback")
+        server,peer=managed_server,managed_peer
         return managed_server,managed_peer
     return {"peer":peer,"target_ip":target_ip,"binding":binding,"restart_managed":restart_managed}
 

@@ -1,7 +1,14 @@
 import unittest
-from split_tls import negative_ok,closed_ok
+from split_tls import negative_ok,closed_ok,fault_ack
 
 class TLSAssertions(unittest.TestCase):
+    def test_fault_ack_requires_explicit_verified_markers(self):
+        frozen={"status":"frozen","old_policy_retained":True,"https_503":True}
+        restored={"status":"recovered","explicit_restart":True,"same_verifier":True}
+        self.assertTrue(fault_ack(frozen,"frozen"));self.assertTrue(fault_ack(restored,"recovered"))
+        for bad in ({"status":"frozen"},dict(frozen,https_503=False),dict(frozen,extra=True),dict(frozen,old_policy_retained=1)):
+            self.assertFalse(fault_ack(bad,"frozen"))
+        self.assertFalse(fault_ack(dict(restored,same_verifier=False),"recovered"))
     def test_negatives_require_specific_rejection_and_no_protected_payload(self):
         before={"pongs":4,"preauth_rejected":0}
         cases=[("pin",{"ended":True,"pongs":0,"pin_rejected":True},dict(before)),

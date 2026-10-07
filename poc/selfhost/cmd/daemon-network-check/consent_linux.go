@@ -16,6 +16,7 @@ import (
 type consentPins struct {
 	Target, Controller string
 	Nodes              bool
+	Fault              bool
 }
 
 func clientJournalsCleaned(raw []byte) bool {
@@ -71,6 +72,12 @@ func parseConsentPins(target, controller string) (consentPins, error) {
 // Private operator protocol: public readiness and stop only. No Store access,
 // device signature, consent shortcut or network mutation is accepted here.
 func consentSession(input io.Reader, output io.Writer, pins consentPins, issuer string, ca []byte, listen string, timeout time.Duration, verifierKey ...string) error {
+	return consentSessionOps(input, output, pins, issuer, ca, listen, timeout, nil, verifierKey...)
+}
+
+type faultActions struct{ freeze, recover func() error }
+
+func consentSessionOps(input io.Reader, output io.Writer, pins consentPins, issuer string, ca []byte, listen string, timeout time.Duration, actions *faultActions, verifierKey ...string) error {
 	host, port, e := net.SplitHostPort(listen)
 	p, pe := strconv.Atoi(port)
 	if e != nil || pe != nil || host != "127.0.0.1" || p < 1 || p > 65535 {
@@ -85,30 +92,76 @@ func consentSession(input io.Reader, output io.Writer, pins consentPins, issuer 
 		ready["node_phase"] = true
 		ready["verifier"] = verifierKey[0]
 	}
+	if pins.Fault {
+		if !pins.Nodes || actions == nil || actions.freeze == nil || actions.recover == nil {
+			return denied
+		}
+		ready["fault_phase"] = true
+	}
 	if json.NewEncoder(output).Encode(ready) != nil {
 		return denied
 	}
 	lines := make(chan []byte, 1)
+	finished := make(chan struct{})
+	defer close(finished)
 	go func() {
 		s := bufio.NewScanner(input)
 		s.Buffer(make([]byte, 128), 128)
-		if s.Scan() {
-			lines <- append([]byte(nil), s.Bytes()...)
-		} else {
-			lines <- nil
+		for s.Scan() {
+			select {
+			case lines <- append([]byte(nil), s.Bytes()...):
+			case <-finished:
+				return
+			}
 		}
+		close(lines)
 	}()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
-	select {
-	case line := <-lines:
-		// Exact fixed command excludes aliases, duplicate fields and any grant
-		// or private-key input. A closed pipe is failure, not completed consent.
-		if !bytes.Equal(line, []byte(`{"Op": "stop"}`)) && !bytes.Equal(line, []byte(`{"Op":"stop"}`)) {
+	stage := 0
+	for {
+		select {
+		case line, ok := <-lines:
+			if !ok {
+				return denied
+			}
+			if pins.Fault {
+				if fixedOperatorCommand(line, "freeze") && stage == 0 {
+					if actions.freeze() != nil {
+						return denied
+					}
+					stage = 1
+					if json.NewEncoder(output).Encode(map[string]any{"status": "frozen", "old_policy_retained": true, "https_503": true}) != nil {
+						return denied
+					}
+					continue
+				}
+				if fixedOperatorCommand(line, "recover") && stage == 1 {
+					if actions.recover() != nil {
+						return denied
+					}
+					stage = 2
+					if json.NewEncoder(output).Encode(map[string]any{"status": "recovered", "explicit_restart": true, "same_verifier": true}) != nil {
+						return denied
+					}
+					continue
+				}
+				if stage != 2 {
+					return denied
+				}
+			}
+			// Exact fixed command excludes aliases, duplicate fields and any grant
+			// or private-key input. A closed pipe is failure, not completed consent.
+			if !fixedOperatorCommand(line, "stop") {
+				return denied
+			}
+			return nil
+		case <-timer.C:
 			return denied
 		}
-		return nil
-	case <-timer.C:
-		return denied
 	}
+}
+
+func fixedOperatorCommand(raw []byte, op string) bool {
+	return bytes.Equal(raw, []byte(`{"Op": "`+op+`"}`)) || bytes.Equal(raw, []byte(`{"Op":"`+op+`"}`))
 }
