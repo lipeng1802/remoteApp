@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-最新切片 3：设备码/一次性验证码、被控请求发现与明确确认流程已接设备签名 HTTPS；新增有界 IP/全局入口门禁、持久注册/轮换预算及批准后的签名时间校准。仍是私有协议验证，不是公开生产服务或 GUI/安装集成。见 [流程与防滥用验收](poc/selfhost/public-server/DEVICE_FLOW_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
+最新切片 4A：issuer 签名 TLS 身份已接真实双机 TLS，Mac Keychain 不导出私钥的签名、严格私有管道与设备自主状态刷新通过。Windows native 存储需交互式登录验收；正式信任锚/HMAC 分发与 helper 全链路接入仍待收口，整体切片 4 未完成。仍为私有 PoC，未改 GUI/安装包。见 [身份与 IPC 验收](poc/selfhost/public-server/IDENTITY_IPC_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
 
 从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前产品基线仍使用系统 Tailscale；独立连接 PoC 验证自托管 Headscale/DERP，数据通道不依赖 Tailscale 托管账号，SSH 仅用于测试管理。
 

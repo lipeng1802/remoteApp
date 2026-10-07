@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4A：身份/存储签名/私有 IPC 核心通过，整体切片 4 未闭环（当前入口）
+
+新增受设备签名保护的 `publish_tls`/`tls_identity`：目标必须属于真实绑定、策略 ready、在线批准授权，并证明持有其 RSA 服务器证书私钥；PSS/SHA-256 独立域绑定 grant/目标/指纹/挑战。仅持久化公开证书，不能让控制方发布/无 TLS 私钥发布/静默换证书；重开校验关联授权与历史证书结构。issuer 签名描述包含完整 grant、真实节点/IP、指纹、设备自生成挑战及绝对最多 3 秒期限（不超 grant），设备客户端以独立 issuer/校准时间逐项验签。真实 TLS 的 pin 改来自已验证描述，不再直接取父脚本观察的 Windows 指纹，每次新连接重新查询。活动流仍由原状态/grant watchdog 约束。
+
+新增 `DeviceSigner` 与两个不返回私钥的独立辅助进程：Mac Keychain/Curve25519 Ed25519、Windows 当前用户 Credential Manager/Go Ed25519。明确首次创建、重开 expected-public 校验、缺失/损坏/权限拒绝停止，不明文替代。新 namespace 与旧产品配对凭据分离；Mac 非交互 LAContext，atomic add 不覆盖竞争获胜者；Windows mutex 串行初始化、清理内存 seed。客户端可配置可信 vault 可执行文件，不接受同时 AppKey；这是协议不导出私钥，不是硬件不可导出，也不抵抗同用户恶意代码。完整双机 helper 仍用私有 fixture 测试钥匙，尚未贯穿 nodeproof。
+
+Go 私有管道新增 8 KiB、换行、严格未知/尾随 JSON、嵌套重复键/大小写别名拒绝；签名桥接不经 shell/密钥参数/公开监听，签名结果再验，超时只终止自己启动的辅助进程、正常关闭 join。新增设备 API 自主 StateWatch 串行每 500ms 签名 HTTPS 查询并验 issuer/grant/绑定/绝对期限，失败清缓存、inactive 终止；Stop 取消/join，无自动复活或重试 Mint。实机父脚本取缓存再发 helper，未完成父脚本消除/所有旧 helper、Swift/C# IPC 收口。
+
+Go 全量 race/vet 与 Windows vault 交叉构建/专用 Windows vet 通过；Mac Swift 126/126 与 ConnectionIdentityVault Release 通过。两项显式 Mac native Keychain 测试通过：真实 HTTPS 签名注册、跨进程同公钥/设备码、缺失/错身份拒绝、域限制和精确测试删除。默认 Go suite skip native，不作为 OS 实机证据。真实 `--identity` 已完整零退出，证书私钥证明/issuer 描述进入真实 Swift/C# TLS、设备 watch/取消、原申请/确认、动态 ACL/零规则、TLS 正负向、周期恢复/Store 故障/撤销/旧状态拒绝与回收通过；Windows 产品 SSH profile 65/65，默认 DPAPI 人工验收仍待。测试资源清空、file 策略恢复、业务 Nginx 哈希一致/active，独立复核三类资源全 0。
+
+Windows native **未通过**：早期 PowerShell 把未引用 `-test.run` 拆成 `-test`，未真正执行测试；补充非私钥启动诊断后已修正为引用 `'-test.run=...'`。真正运行明确得到 `interactive_logon_required`，Credential Manager 在 SSH 登录上下文没有可用登录会话，失败在创建阶段。不能将早期无结果归因于 DPAPI，也不能把最终未通过记成功。各轮上传 hash 核对、精确临时文件清理完成；未改生产存储/权限或转明文。需用户正常交互式 Windows 会话复测，命令及产物构建在 [切片 4A 验收](../poc/selfhost/public-server/IDENTITY_IPC_TEST.md)。
+
+尚未收口：正式安装 issuer/API TLS 信任锚及轮换/恢复、产品 HMAC/身份包可信投递、OS signer 贯穿网络证明 helper、所有本机 IPC/整个连接生命周期接入。GUI/安装/现有系统 Tailscale/业务 443 未改；旧 RemoteController Keychain 密码弹窗不能因新增辅助进程就宣布修复。当前仍仅私有回环 API/SSH 测试转发，禁止公开 fixture。下一步仍是切片 4B，不自动进入切片 5；先 Windows 交互式存储验收和剩余信任/全链路接入。下方为历史。
+
 ## 2026-10-07 切片 3：设备码/确认与有界防滥用通过（当前入口）
 
 新增设备签名 `incoming`，被控设备只能发现自己当前邀请未过期的 pending 请求和申请方应用身份哈希；不给公共目录/任意目标查询，不回验证码或 grant。已有 12 位设备码、8 位一次显示验证码/120 秒期限、单次原子兑换、明确 approve 后 300 秒固定载荷 grant 协议已进入实际设备 HTTPS 流程。控制方不能自批，pending/拒绝/过期/新邀请替换不授予控制，批准后控制方签名 status 获取同一 grant。有人值守“确认动作”仍由父测试脚本模拟，尚非 GUI 人工弹窗；身份哈希不是可信姓名。

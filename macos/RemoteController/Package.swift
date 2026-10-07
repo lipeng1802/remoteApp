@@ -10,11 +10,13 @@ let package = Package(
         .executable(name: "RemoteController", targets: ["RemoteController"]),
         .executable(name: "TLSProbeClient", targets: ["TLSProbeClient"]),
         .executable(name: "TLSBridgeProbe", targets: ["TLSBridgeProbe"]),
+        .executable(name: "ConnectionIdentityVault", targets: ["ConnectionIdentityVault"]),
         .executable(name: "TailscaleInputMockClient", targets: ["TailscaleInputMockClient"]),
         .executable(name: "InputPreview", targets: ["InputPreview"])
     ],
     targets: [
         .target(name: "RemoteProtocol"),
+        .executableTarget(name: "ConnectionIdentityVault", dependencies: ["RemoteProtocol"]),
         .executableTarget(name: "TLSBridgeProbe", dependencies: ["RemoteProtocol"]),
         .executableTarget(
             name: "RemoteController",

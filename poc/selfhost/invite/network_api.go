@@ -13,13 +13,15 @@ import (
 // Signed protocol for unprivileged device clients. Deployment remains private
 // until Internet admission/abuse controls and issuer distribution are complete.
 type NetworkRequestBody struct {
-	Action    string            `json:"action"`
-	Nonce     string            `json:"nonce"`
-	IssuedAt  int64             `json:"issued_at"`
-	Grant     Grant             `json:"grant"`
-	Ticket    string            `json:"ticket"`
-	Challenge string            `json:"challenge"`
-	Intent    ProvisionEnvelope `json:"intent"`
+	Action           string            `json:"action"`
+	Nonce            string            `json:"nonce"`
+	IssuedAt         int64             `json:"issued_at"`
+	Grant            Grant             `json:"grant"`
+	Ticket           string            `json:"ticket"`
+	Challenge        string            `json:"challenge"`
+	Intent           ProvisionEnvelope `json:"intent"`
+	Certificate      string            `json:"certificate,omitempty"`
+	CertificateProof string            `json:"certificate_proof,omitempty"`
 }
 type NetworkRequest struct {
 	PublicKey string             `json:"public_key"`
@@ -31,6 +33,7 @@ type NetworkReply struct {
 	Credential *RegistrationCredential `json:"credential,omitempty"`
 	State      *NetworkState           `json:"network_state,omitempty"`
 	Proof      *ClockProof             `json:"proof,omitempty"`
+	TLS        *TLSIdentity            `json:"tls_identity,omitempty"`
 }
 
 func networkRequestBytes(b NetworkRequestBody) []byte {
@@ -105,6 +108,9 @@ func (s *Store) authorizeNetworkRequest(e NetworkRequest) error {
 		return err
 	}
 	g := e.Body.Grant
+	if len(e.Body.Certificate) > 5500 || len(e.Body.CertificateProof) > 1024 || (e.Body.Action != "publish_tls" && (e.Body.Certificate != "" || e.Body.CertificateProof != "")) {
+		return ErrDenied
+	}
 	if denied || id != g.Claims.Target && id != g.Claims.Controller || !VerifyGrant(s.publicKeyLocked(), g, g.Claims.Target, g.Claims.Controller, time.Unix(now, 0)) {
 		return ErrDenied
 	}
@@ -118,6 +124,16 @@ func (s *Store) authorizeNetworkRequest(e NetworkRequest) error {
 		return ErrDenied
 	}
 	switch e.Body.Action {
+	case "publish_tls":
+		nonce, err := hex.DecodeString(e.Body.Challenge)
+		if id != g.Claims.Target || err != nil || len(nonce) != 32 || hex.EncodeToString(nonce) != e.Body.Challenge || e.Body.Ticket != "" || e.Body.Intent != (ProvisionEnvelope{}) {
+			return ErrDenied
+		}
+	case "tls_identity":
+		nonce, err := hex.DecodeString(e.Body.Challenge)
+		if err != nil || len(nonce) != 32 || hex.EncodeToString(nonce) != e.Body.Challenge || e.Body.Ticket != "" || e.Body.Intent != (ProvisionEnvelope{}) {
+			return ErrDenied
+		}
 	case "enroll":
 		if e.Body.Ticket != "" || e.Body.Challenge != "" || e.Body.Intent.PublicKey != e.PublicKey {
 			return ErrDenied
@@ -152,6 +168,14 @@ func (b *ProvisionBackend) ExecuteNetworkRequest(ctx context.Context, e NetworkR
 		return NetworkReply{}, err
 	}
 	switch e.Body.Action {
+	case "publish_tls":
+		return NetworkReply{}, b.publishTLS(e)
+	case "tls_identity":
+		d, err := b.TLSIdentity(e.Body.Grant, e.Body.Challenge)
+		if err != nil {
+			return NetworkReply{}, err
+		}
+		return NetworkReply{TLS: &d}, nil
 	case "enroll":
 		id, c, err := b.Enroll(ctx, e.Body.Grant, e.Body.Intent)
 		if err != nil {

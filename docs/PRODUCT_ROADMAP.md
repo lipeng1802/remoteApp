@@ -1,5 +1,7 @@
 # 独立远程桌面产品路线
 
+切片 4 当前：4A 签名 TLS 身份进入真实产品 TLS、Mac OS 存储签名、私有管道与 API 自主刷新已验证；Windows native SSH 明确缺登录会话，交互式验收待完成。4B 仍需正式信任锚/HMAC 投递、OS signer 贯穿 helper 和全链路生命周期/IPC，不能跳到 GUI 或宣布最终免登录产品完成。见 [最新验收](../poc/selfhost/public-server/IDENTITY_IPC_TEST.md)。下方切片 3/“下一切片 4”描述为历史。
+
 当前切片 3：设备码/一次性验证码、被控发现申请/明确确认与设备查询已接 HTTPS，入口与持久有界预算、签名时间校准已实现。仅私有验证，尚无真实 GUI 人工确认、公开代理/多实例/DDoS 防护或最终信任分发。下一切片 4 正式 issuer/TLS 身份分发、平台安全存储与 IPC、客户端自主生命周期，再 GUI/安装。详见 [流程记录](../poc/selfhost/public-server/DEVICE_FLOW_TEST.md) 和 [当前交接](HANDOFF.md)。下方切片 2/下一步切片 3 为历史。
 
 当前入口：切片 1 周期维护与切片 2 设备签名 HTTPS 注册/认证状态接口已真实双机闭环，真实产品 TLS 门禁回归通过；API 仍仅私有回环测试，初始信任/批准/helper 刷新调度尚由 fixture 提供。后续按：设备码/验证码与防滥用（切片 3）→ 证书身份/本机安全存储与 IPC → 真实画面/输入/剪贴板及 GUI → 独立安装/升级/干净机器验收 → 性能及多平台。见 [接口验收](../poc/selfhost/public-server/DEVICE_API_TEST.md) 和 [当前交接](HANDOFF.md)。下方旧“下一步 TLS/周期 Reconcile/注册接口”为历史记录。

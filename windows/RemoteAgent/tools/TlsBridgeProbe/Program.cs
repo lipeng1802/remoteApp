@@ -1,5 +1,6 @@
 // Private development pipe. No production credentials/keychain/native actions.
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using RemoteProtocol;
 
@@ -37,6 +38,20 @@ try
         using var d = JsonDocument.Parse(line);
         var op = d.RootElement.GetProperty("Op").GetString();
         if (op == "stop") break;
+		if (op == "certificate_proof")
+		{
+			var grant = d.RootElement.GetProperty("GrantID").GetString()!;
+			var target = d.RootElement.GetProperty("Target").GetString()!;
+			var nonce = d.RootElement.GetProperty("Challenge").GetString()!;
+			static bool Hex(string s, int n) => s.Length == n && s.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+			if (!Hex(grant,32) || !Hex(target,64) || !Hex(nonce,64)) throw new InvalidDataException();
+			var fingerprint = CertificateFingerprint.FromCertificateDer(certificate.RawData).Hexadecimal;
+			var message = System.Text.Encoding.UTF8.GetBytes("remoteapp-tls-certificate-proof-v1\n"+grant+"\n"+target+"\n"+fingerprint+"\n"+nonce);
+			using var rsa = certificate.GetRSAPrivateKey() ?? throw new InvalidDataException();
+			var proof = rsa.SignData(message, HashAlgorithmName.SHA256, RSASignaturePadding.Pss);
+			Output(new {status="certificate_proof",Certificate=Convert.ToBase64String(certificate.RawData),CertificateProof=Convert.ToHexString(proof).ToLowerInvariant()});
+			continue;
+		}
         if (op != "count") throw new InvalidDataException();
         Output(new { status = "count", pongs = Interlocked.Read(ref pongs), preauth_rejected = Interlocked.Read(ref preauthRejected), sessions_closed = Interlocked.Read(ref sessionsClosed) });
     }

@@ -7,6 +7,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -81,15 +83,16 @@ type bucket struct {
 	Expires int64
 }
 type snapshot struct {
-	Version    int
-	PrivateKey string
-	LastTime   int64
-	Devices    map[string]device
-	Invites    map[string]invitation
-	Requests   map[string]request
-	Replay     map[string]int64
-	Attempts   map[string]bucket
-	Provisions map[string]ProvisionRecord `json:",omitempty"`
+	Version       int
+	PrivateKey    string
+	LastTime      int64
+	Devices       map[string]device
+	Invites       map[string]invitation
+	Requests      map[string]request
+	Replay        map[string]int64
+	Attempts      map[string]bucket
+	Provisions    map[string]ProvisionRecord   `json:",omitempty"`
+	TLSIdentities map[string]TLSIdentityRecord `json:",omitempty"`
 }
 type Store struct {
 	provisionOps   sync.Mutex    // serialize privileged side effects across backend wrappers
@@ -191,6 +194,34 @@ func Open(root string, clock func() time.Time) (*Store, error) {
 	}
 	if !validProvisions(s.state.Provisions) {
 		return fail()
+	}
+	if len(s.state.TLSIdentities) > 512 {
+		return fail()
+	}
+	for id, r := range s.state.TLSIdentities {
+		if id != r.GrantID || len(id) != 32 {
+			return fail()
+		}
+		raw, e := base64.StdEncoding.DecodeString(r.Certificate)
+		if e != nil || len(raw) > 4096 {
+			return fail()
+		}
+		cert, e := x509.ParseCertificate(raw)
+		if e != nil {
+			return fail()
+		}
+		if _, _, e = tlsCertificate(r.Certificate, cert.NotBefore); e != nil {
+			return fail()
+		}
+		known := false
+		for _, req := range s.state.Requests {
+			if req.Grant != nil && req.Grant.Claims.ID == id {
+				known = true
+			}
+		}
+		if !known {
+			return fail()
+		}
 	}
 	return s, nil
 }

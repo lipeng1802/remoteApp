@@ -5,6 +5,8 @@
 
 ## 目标与当前结论
 
+切片 4A：签名 TLS 身份、Mac Keychain 签名与严格私有 IPC/API 自主刷新已通过私有验证；Windows native 需要交互式验收，正式信任锚/HMAC 投递及 OS signer/helper 全链路仍未闭环。下一步继续切片 4B，不提前进入 GUI/公网，见 [当前边界](../poc/selfhost/public-server/IDENTITY_IPC_TEST.md)。下方切片 3 当前描述为历史。
+
 当前切片 3：设备码/验证码与被控发现/明确确认的设备签名 HTTPS 流程已接通，新增入口和持久有界防滥用、批准后签名时间校准；尚未公开部署或接 GUI。下一步正式信任分发、平台存储、安全 IPC 与客户端自主生命周期。详见 [流程与边界](../poc/selfhost/public-server/DEVICE_FLOW_TEST.md)，下方切片 2 当前描述为历史。
 
 当前：切片 2 设备签名 HTTPS 注册/网络注册/状态/时间/撤销接口已双机闭环，真实 TLS 与周期恢复门禁通过。只在私有回环部署，SSH 转发仅用于 API 测试访问；初始信任/批准和 helper 调度仍由 fixture 提供，不是公开设备码产品。下一步切片 3 设备码/验证码与防滥用。见 [接口记录](../poc/selfhost/public-server/DEVICE_API_TEST.md) 和 [当前交接](HANDOFF.md)，以下待完成描述为历史。

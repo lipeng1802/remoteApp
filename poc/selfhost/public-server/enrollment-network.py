@@ -72,13 +72,14 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"]):
+    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"]):
         raise RuntimeError("invalid_arguments")
     streams=bool(sys.argv[1:])
-    deviceflow=sys.argv[1:]==["--device-flow"]
-    apimode=sys.argv[1:] in (["--api"],["--device-flow"])
-    periodic=sys.argv[1:] in (["--maintenance"],["--api"],["--device-flow"])
-    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"],["--api"],["--device-flow"])
+    identitymode=sys.argv[1:]==["--identity"]
+    deviceflow=sys.argv[1:] in (["--device-flow"],["--identity"])
+    apimode=sys.argv[1:] in (["--api"],["--device-flow"],["--identity"])
+    periodic=sys.argv[1:] in (["--maintenance"],["--api"],["--device-flow"],["--identity"])
+    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"])
     os.umask(0o077)
     if tlsmode:
         env=dict(os.environ,COPYFILE_DISABLE="1")
@@ -320,15 +321,17 @@ def main():
         t.check(controller.request("probe",Peer=target_ip)["passed"],"positive_control_after_zero_test")
         if streams:
             class Refresh:
-                def __init__(self):
+                def __init__(self,binding):
                     self.done=threading.Event()
                     self.failed=False
                     self.authority_denied=False
                     self.last=None
+                    if identitymode:
+                        t.check(controller_api.request("watch_start",Binding=binding)["passed"],"device_owned_autonomous_state_watch_started")
                     def work():
                         try:
                             while not self.done.wait(0.5):
-                                n=network_request("network_state")
+                                n=controller_api.request("watch_state") if identitymode else network_request("network_state")
                                 if not n["passed"]:
                                     self.authority_denied=True
                                     return
@@ -344,6 +347,8 @@ def main():
                     self.done.set()
                     self.thread.join(timeout=45)
                     t.check(not self.thread.is_alive() and not self.failed,"dynamic_state_refresh_joined")
+                    if identitymode:
+                        t.check(controller_api.request("watch_stop")["passed"],"device_state_watch_cancelled_and_joined")
 
             def wait_for(check,label,timeout=8):
                 end=time.monotonic()+timeout
@@ -366,12 +371,25 @@ def main():
                 for helper,role in ((server,"target"),(controller,"controller")):
                     t.check(helper.request("authorize",Role=role,Issuer=ready["issuer"],Target=ready["target"],
                         Controller=ready["controller"],State=n["network_state"],Bridge=tlsmode)["passed"],"helper_dynamic_gate_enabled")
-                active_refresh=Refresh()
+                active_refresh=Refresh(n["network_state"]["claims"]["binding"])
                 if tlsmode:
+                    fingerprint=product_ready["Fingerprint"]
+                    if identitymode:
+                        if not getattr(authorize,"identity_published",False):
+                            challenge=secrets.token_hex(32)
+                            certificate=product.request("certificate_proof",GrantID=ready["grant_id"],Target=ready["grant"]["claims"]["target"],Challenge=challenge)
+                            published=target_api.request("publish_tls",Challenge=challenge,Certificate=certificate["Certificate"],CertificateProof=certificate["CertificateProof"])
+                            t.check(published["passed"],"target_publishes_app_signed_tls_private_key_possession")
+                            authorize.identity_published=True
                     port=controller.request("bridge",Role="controller")["port"]
                     executable=t.HERE.parents[1]/"macos/RemoteController/.build/release/TLSBridgeProbe"
                     def launch(**changes):
-                        cfg=dict(Port=port,Key=product_ready["Key"],Fingerprint=product_ready["Fingerprint"],Target=n["network_state"]["claims"]["grant"]["claims"]["target"])
+                        pin=fingerprint
+                        if identitymode:
+                            descriptor=controller_api.request("tls_identity",Binding=n["network_state"]["claims"]["binding"])
+                            t.check(descriptor["passed"],"controller_verifies_fresh_issuer_tls_identity")
+                            pin=descriptor["tls_identity"]["claims"]["fingerprint"]
+                        cfg=dict(Port=port,Key=product_ready["Key"],Fingerprint=pin,Target=n["network_state"]["claims"]["grant"]["claims"]["target"])
                         cfg.update(changes)
                         p=Pipe([str(executable)],cfg);helpers.append(p)
                         t.check(p.read()["status"]=="ready","actual_product_tls_controller_ready")

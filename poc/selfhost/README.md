@@ -1,5 +1,7 @@
 # 自托管连接最小实验
 
+切片 4 当前：[签名 TLS 身份、native 存储签名、私有 IPC/API 自主刷新](public-server/IDENTITY_IPC_TEST.md) 的 4A 私有验证通过；Windows 存储需要交互式登录，正式信任锚/HMAC/全链路 helper 接入仍属 4B，整体切片未完成。不公开当前 fixture，不改现有产品安装。下方切片 3 当前描述为历史。
+
 切片 3 当前入口：[设备码/一次性验证码、确认及防滥用](public-server/DEVICE_FLOW_TEST.md)。设备签名 HTTPS 申请/发现/拒绝/明确批准/查询，不再预先批准测试 grant；仍由私有父脚本模拟用户动作，未接 GUI 或公开服务。下一步正式身份分发、平台安全存储/IPC 与客户端自主生命周期；下方“下一步设备码”为历史。
 
 当前：新增 [设备签名 HTTPS 接口](public-server/DEVICE_API_TEST.md)，真实 Mac/Windows 注册、网络注册/绑定、状态/时间查询和撤销，以及周期恢复/真实 TLS 门禁通过。接口仍只在私有回环测试，未公开生产部署或接 GUI；初始信任/批准/helper 调度仍由 fixture 提供。下一步设备码/验证码与防滥用；下方未实现接口/周期维护的内容为历史。

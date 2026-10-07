@@ -1,5 +1,7 @@
 # 设备码与一次性邀请授权核心
 
+切片 4A 当前：新增目标 TLS 证书私钥持有/公开证书持久绑定、issuer 签名短期指纹描述、外部 `DeviceSigner` 和串行 `StateWatch`。私有双机 TLS/刷新及 Mac native 签名验证通过；Windows 存储交互式验收、正式信任与 helper 全链路尚未完成。见 [验收与剩余任务](../public-server/IDENTITY_IPC_TEST.md)，下方切片 3 当前描述为历史。
+
 切片 3 当前入口：新增仅设备本人查询的 `incoming`，完整设备侧 HTTPS 邀请/申请/拒绝/明确批准/查询流程、有界入口/持久注册与轮换预算、未绑定已批准 grant 的签名时间证明。见 [流程记录与上线限制](../public-server/DEVICE_FLOW_TEST.md)。这是协议与私有实机验证，不是最终设备码 GUI 或可直接公开的服务；下面“设备码/入口防滥用全部待完成”为历史。正式信任分发/安全存储/IPC 和公开部署防护仍待完成。
 
 当前：新增设备签名 HTTPS handler/client，原设备注册/撤销与网络 enroll/bind/state/clock 均已通过实际双机调用；认证范围、持久重放和预算、TLS 信任/严格请求测试通过。详见 [接口与私有部署边界](../public-server/DEVICE_API_TEST.md)。周期维护与真实产品 TLS 回归通过，接口仅私有回环测试，不是公开生产服务；匿名/IP admission、设备码 UX、正式身份分发/存储/安全 IPC 和 helper 自主刷新仍待完成。以下“接口/周期待实现/未接 TLS”为历史状态。
