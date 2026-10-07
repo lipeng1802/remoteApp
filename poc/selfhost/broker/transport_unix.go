@@ -37,7 +37,10 @@ func receive(c *net.UnixConn, v any) error {
 	return nil
 }
 func deadline(ctx context.Context) time.Time {
-	d := time.Now().Add(5 * time.Second)
+	return operationDeadline(ctx, 5*time.Second)
+}
+func operationDeadline(ctx context.Context, budget time.Duration) time.Time {
+	d := time.Now().Add(budget)
 	if cd, ok := ctx.Deadline(); ok && cd.Before(d) {
 		d = cd
 	}
@@ -126,7 +129,12 @@ func Serve(ctx context.Context, cfg Config, ready func()) error {
 				send(conn, Reply{Status: 503})
 				return
 			}
-			work, stop := context.WithTimeout(run, 4*time.Second)
+			budget := 4 * time.Second
+			if r.Operation == "network" {
+				budget = 14 * time.Second
+			}
+			conn.SetDeadline(operationDeadline(run, budget+time.Second))
+			work, stop := context.WithTimeout(run, budget)
 			defer stop()
 			if work.Err() != nil {
 				return
@@ -158,6 +166,9 @@ func (c Client) Call(ctx context.Context, r Request) (Reply, error) {
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
 	defer stop()
 	conn.SetDeadline(deadline(ctx))
+	if r.Operation == "network" {
+		conn.SetDeadline(operationDeadline(ctx, 15*time.Second))
+	}
 	if send(conn, r) != nil || conn.CloseWrite() != nil || receive(conn, &result) != nil {
 		return Reply{}, ErrBroker
 	}

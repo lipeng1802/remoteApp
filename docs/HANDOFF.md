@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4B：私有HTTP/broker验收前置与实机组件
+
+接续4C-4A发现StartHeadscaleNetworkSupervisor漏PolicyDir/Mode，实际driver会首Reconcile拒绝；新增可信真实绝对0700 policyDir参数+database配置，不自动改Headscale模式。broker仅network固定14秒工作/15秒I/O，解析仍5秒、其他操作4秒，兼容12秒nodeproof，不放宽槽/帧。新增PrivateNetworkHandler device/network均kernel IPC、严格JSON/完整包8191限、issuer核对/503无回退；生产device-frontend不接此路由。
+
+Mac新HTTP/期限race测试通过。实际Linux五项隔离组件测试均PASS无SKIP：PrivateNetworkHTTPSViaKernelBroker、NetworkBudgetBoundedWithoutChangingDeviceBudget、SupervisorPolicyFailureLatchesNoRecovery、SupervisorVerifierFaultCancelsMintNoCredentialAndJoins、SupervisorFailedWithdrawalNeverReportedAsACLSuccess。替身driver/verifier+临时Store，不调用Headscale，不冒称真实proof/双机TLS。三个线上服务active、state既有哈希不变、Nginx全部OK。
+
+用户提供 Windows H:\chatgpt\远程软件开发\测试安装包\windows-native-network\interactive-bootstrap.json，存在324字节。实际同用户pinned probe PASS无SKIP，确认桌面OS signer可用；初次Get-Process按旧名称未匹配不能推断进程未运行，最终以实际probe为准。本轮没停止用户桌面owner/删除Windows身份。
+
+**真实双机新版runner尚未完成/运行**：旧--native直接backend且期待自动恢复，不得原样重跑当新证据。下一步改隔离fixture为Runtime+kernel broker+supervisor，协调流程policy故障后显式重建新backend/supervisor、join后恢复，再零ACL/TLS/撤销/到期完整验收；不改线上device-only。Windows可能需要重新READY再probe，不擅自重建/代签或沿用过期scope。整体4未完成。详见[新入口边界](../poc/selfhost/public-server/NETWORK_SUPERVISOR.md)。
+
 ## 2026-10-07 切片 4C-4A：后端 supervisor / runtime nodeproof 组件
 
 新增StartHeadscaleNetworkSupervisor固定CLI/RuntimeIP/Store.DevicePublicKey/runtime独立overlay nodeproof装配；Runtime Verify有12秒期限及生命周期取消，proof join后才能overlay.Close/解owner.lock。supervisor先同步Reconcile再维护，首成功周期前不可用；backend专用未运行。通过Supervisor.Authority接broker：fault锁闭、取消维护/请求、join/Fence、最佳努力显式零ACL；取消返回credential不回包。driver健康用原子latch，避免底层mutex阻塞fault观察，policy/proof故障不自动恢复；必须检查后显式新backend实例。

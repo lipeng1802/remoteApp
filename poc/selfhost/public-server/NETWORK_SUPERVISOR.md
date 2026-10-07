@@ -6,6 +6,8 @@
 
 StartHeadscaleNetworkSupervisor 接受可信单Store和已运行的 verifier.Runtime，固定使用 server-local Headscale CLI。driver的VerifierIP来自runtime，Proof从Store.DevicePublicKey取成功签名注册的绑定公钥，再调用runtime.Verify。客户端不能提供就绪标志、公钥替代、控制命令或地址。真实overlay.Verify复用nodeproof.Verify，包含新鲜挑战、独立overlay peer身份及应用签名；不把健康行/节点记录当持有证明。
 
+4C-4B修正前置：构造函数新增可信policyDir参数，必须真实绝对非symlink的0700目录，driver显式PolicyDir/PolicyMode=database。4C-4A漏配这些字段会在首Reconcile拒绝启动（不是错误放行），此前没有真实driver装配实机成功证据。服务端必须在独立控制平面确认database模式，不能只靠此字段声明改变线上配置。
+
 Runtime记录其独立Node，验证期间关联runtime取消、12秒操作期限，停止后不再接收proof。停止时先取消/Live=false，等待proof退出，之后关闭overlay、释放owner.lock；阻塞的非合作worker不能假装join。默认系统Tailscale不参与。
 
 Supervisor要求**专用且尚未被其他worker使用的backend/driver**。先同步完整Reconcile，随后维护worker启动，首个维护周期成功前不Ready。使用Supervisor.Authority生成broker路径，不直接构造NetworkReady=true。后台出现任意维护失败、verifier退出/不健康、Store关闭或driver proof/policy健康故障后锁闭；不可自动恢复，需检查状态后显式创建新的backend/supervisor实例。不能共享同一driver或在运行中替换driver。
@@ -23,3 +25,15 @@ Mac race测试通过：周期policy失败后锁闭且provider恢复不自动开�
 ## 下一项
 
 在隔离服务端实验Store/临时verifier中接通该装配（不要改线上device-only Store/ACL）。经kernel UID broker完成签名device/network全链路，使用真实Headscale/nodeproof，验收故障/撤销/到期/维护失败、旧ACL遗留时TLS关闭，以及真实零ACL双向拒绝与重启。通过后再设计daemon长期拥有verifier/backend与权限配置；上线network、公网端口、客户端信任锚/floor、产品HMAC投递及GUI安装仍待。
+
+## 4C-4B：私有验证HTTP入口与Linux组件验收
+
+新增PrivateNetworkHandler，仅供受信TLS/admission包裹的隔离集成，不被线上device-frontend路由。设备与network都通过kernel UID broker，前端无Store；严格JSON/未知别名尾随/超长拒绝、4槽、有界14秒请求、完整IPC包必须<=8191字节、issuer匹配、权威丢失503无回退。安装中device-frontend仍只处理/v1/request，network404。
+
+broker保持请求解析5秒上限；解析后仅固定network操作14秒工作/15秒I/O，设备和未知操作保持4秒工作。客户端期限依然可缩短所有预算。修正旧4秒执行期限无法覆盖12秒节点证明的问题，不扩大单帧/连接/工作槽数。
+
+Mac race新HTTP路径与期限测试通过。实际Linux静态非race测试五项PASS、无SKIP：PrivateNetworkHTTPSViaKernelBroker、NetworkBudgetBoundedWithoutChangingDeviceBudget、SupervisorPolicyFailureLatchesNoRecovery、SupervisorVerifierFaultCancelsMintNoCredentialAndJoins、SupervisorFailedWithdrawalNeverReportedAsACLSuccess。真实HTTPS+kernel通道，但临时Store/替身driver与LiveVerifier，**没有本轮真实Headscale/节点proof/双机TLS验收**。线上三个服务active，state哈希仍为5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca，Nginx基线全部OK；测试未调用Headscale或更新线上服务。
+
+用户提供Windows bootstrap路径 H:\chatgpt\远程软件开发\测试安装包\windows-native-network\interactive-bootstrap.json；实际SSH执行该bundle的pinned probe PASS（无SKIP），仅同用户桌面OS签名验收，不等同网络通过。用户拥有桌面进程，本轮未代为停止或删除身份。
+
+后续仍需新版协调fixture/runner：旧enrollment-network.py --native直接调用旧backend并期望policy自动恢复，不能原样运行后当supervisor新验收。新版必须真实Runtime+broker HTTP，并将故障恢复改为显式新supervisor/backend实例，先确认退出join；再做零ACL/故障/TLS闭环。没有把用户提供路径或旧流程PASS冒充该步骤完成。

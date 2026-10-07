@@ -43,3 +43,13 @@ func DecodeDeviceRequest(r io.Reader) (Envelope, error) {
 	}
 	return e, nil
 }
+
+// DecodeNetworkRequest does not authorize; only the Store may do so.
+func DecodeNetworkRequest(r io.Reader) (NetworkRequest, error) {
+	var e NetworkRequest
+	b, err := io.ReadAll(io.LimitReader(r, 8193))
+	if err != nil || len(b) > 8192 || decodeHTTP(bytes.NewReader(b), &e) != nil {
+		return NetworkRequest{}, ErrDenied
+	}
+	return e, nil
+}
