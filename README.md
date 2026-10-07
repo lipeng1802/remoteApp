@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-当前收口 4C-1：[发布签名服务信任配置](poc/selfhost/public-server/SERVICE_TRUST_TEST.md) 核心及 Mac 原生 HTTPS 回归通过，Windows 独立验证包已生成、实际待回传；正式发布根/安装锚与持久化、HMAC 投递、产品 GUI/安装尚未完成。需要确定独立预发布或既有正式配置，整体切片 4 仍未完成。
+当前收口 4C-2A：Windows [发布签名服务信任配置](poc/selfhost/public-server/SERVICE_TRUST_TEST.md) 实际验证通过；用户选择独立自托管预发布，隔离本地配置材料已生成并验证。尚未部署公网设备 API、安装可信锚或完成整体切片 4。密钥保管、候选端口 8444 与下一步边界见 [预发布配置](poc/selfhost/public-server/PRERELEASE_BOOTSTRAP.md)。
 
 最新切片 4B-4B：两端真实 OS 身份贯穿设备 HTTPS、Headscale 持有证明、自主刷新与真实产品 TLS 故障/撤销关闭，完整双机验收零退出，资源回收及策略恢复通过。用户确认本轮 Windows STOPPED/随机测试身份清理通过，本轮验收闭环；正式信任锚/HMAC 分发、产品 GUI/安装仍待，整体切片 4 未完成。见 [OS 双机验收](poc/selfhost/public-server/NATIVE_NETWORK_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
 

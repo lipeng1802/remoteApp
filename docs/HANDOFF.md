@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-2A：选择独立自托管预发布，材料已生成（未部署）
+
+用户回传 Windows `VALIDATION PASSED: signed release profile + OS signer HTTPS. NOT production trust installation or full product acceptance.`，据此闭环 4C-1 Windows 四项实际测试，不记录未提供的耗时。用户选择“使用独立托管”，按独立自托管预发布推进。新增 `prerelease`/`cmd/prerelease-bootstrap`，拒绝已有目录、符号链接父目录、443/无端口/不合法 URL；0700/0600、CreateNew/Sync/READY-last，失败保留状态、不默默重生成身份。分别生成本地发布根和 API CA 私钥、server-private TLS/真实持久 issuer Store、client-public 签名配置与公开安装锚，测试确认实际 TLS/签名/issuer 一致和无覆盖。race 专用测试/trustprofile/vet 通过。
+
+实际本机创建 Git ignored `artifacts/connection-poc/prerelease-v1`，服务 remoteapp-prerelease、epoch 1、候选 API https://mk.fengmap.com:8444、profile/叶证书 30 天、CA 90 天。发布私钥仅本地文件，**未加密 owner-only PKCS#8，不是 OS vault/断网离线/硬件保护**；绝不上传 release-local-only，也不压入用户包，生产前需保管备份恢复流程。server-private 含在线私钥；client-public 仅公开字段但不能自证安装信任。只读服务器 ss 确认 8443 占用、8444 未见监听，无上传/服务部署/端口放行/Nginx/Headscale/业务443变更。现有 invite-api 是回环 fixture，不能直接公开反代。
+
+下一步先实现有界独立设备 API+真实 backend+最小权限持久服务，再部署 server-private/8444；同时收口可信安装锚与 floor 持久化、轮换恢复/HMAC 受保护投递/产品 IPC GUI 安装。整体 4 仍未完成，不让旧 fixture 测试充当新预发布实际验收。详见 [预发布材料边界](../poc/selfhost/public-server/PRERELEASE_BOOTSTRAP.md)。下方“待用户选择/Windows待回传”为历史。
+
 ## 2026-10-07 切片 4C-1：服务信任配置核心完成，整体 4 未完成
 
 用户要求继续整体 4。新增发布根签名 `trustprofile`（域 remoteapp-service-trust-v1），绑定 HTTPS endpoint/API CA/独立 online issuer/service/epoch/有效期；8 KiB 严格解析，篡改/未知根/回退/同 epoch 换配置/到期拒绝。`Advance` 仅验证，**不等于安装锚/floor 持久化或跨重启防回退**。新增 `NewProfileNetworkClient`，原构造器仍限制回环；profile 到期拒绝请求并以独立单调期限取消 HTTP/ManagedGate，Deny/join。helper 和 device-api-client 私有 ServiceProfile/ReleaseRoot/Service/MinimumEpoch 模式只允许 OS signer，拒绝 raw endpoint/cert/issuer override、AppKey、孤立配置。
