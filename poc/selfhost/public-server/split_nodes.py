@@ -38,10 +38,13 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
         t.check(not api.request("enroll",Intent=prepared["intent"])["passed"],"split_enrollment_intent_single_use")
         tickets.append(issued)
     token=secrets.token_hex(32)  # Private fixed-payload test only, not product HMAC distribution.
-    def join(command,directory,prepared,ticket,windows,wrong=False):
+    def join(command,directory,prepared,ticket,windows,wrong=False,managed=False):
         cfg={"Op":"join","StateDir":str(directory),"AuthKey":ticket["credential"]["Secret"],
              "NodeKey":prepared["node_key"],"Verifier":ready["verifier"],"Token":token,"GrantID":grant["claims"]["id"]}
         cfg.update(identities.config("native-target" if windows or wrong else "native-controller",windows))
+        if managed:
+            cfg.update(Token="",Endpoint=f"https://127.0.0.1:{ports[0] if windows else ports[1]}",
+                       Certificate=ready["api_certificate"],Issuer=ready["issuer"])
         p=Pipe(command,cfg); helpers.append(p)
         registered=p.read()
         t.check(registered.get("status")=="registered" and registered["node_key"]==prepared["node_key"],"split_join_key_matches_prepared")
@@ -72,7 +75,15 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
     t.check(peer.request("probe",Peer=target_ip)["passed"],"split_forward_actual_fixed_payload_allowed")
     reverse=server.request("probe",Peer=controller_ip)
     t.check(not reverse["passed"] and reverse.get("reason") in ("route_denied","dial_denied") and peer.request("count")["value"]==0,"split_reverse_payload_denied")
-    return peer,target_ip
+    def restart_managed():
+        peer.stop(); helpers.remove(peer)
+        server.stop(); helpers.remove(server)
+        managed_server,ip=join(win,win_dir,target,tickets[0],True,managed=True)
+        managed_peer,cip=join(local,folder,controller,tickets[1],False,managed=True)
+        t.check(ip==target_ip and cip==controller_ip,"split_managed_restart_same_node_binding")
+        t.check(not managed_peer.request("probe",Peer=target_ip)["passed"],"split_managed_has_no_token_fallback")
+        return managed_server,managed_peer
+    return {"peer":peer,"target_ip":target_ip,"binding":binding,"restart_managed":restart_managed}
 
 def reclaimed(t, timeout=20):
     end=time.monotonic()+timeout

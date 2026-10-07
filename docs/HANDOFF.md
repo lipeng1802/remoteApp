@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4I：独立进程产品TLS入口准备，待READY实测
+
+用户确认4C-4H Windows STOPPED，上一轮最终桌面退出确认闭环。新增 split-consent.py --tls/split_tls.py；split_nodes返回实际binding与显式同node/IP重开managed helper能力。产品源码archive/Windows65协议验证（DPAPI明确SKIP）与publish安排在创建短期grant及启动隔离daemon前，不消耗grant编译。实际C#与Swift探针，OS target发布证书私钥证明，controller fresh issuer描述符指纹核对；helper自主HTTPS校时/watch/gate，无父进程刷新线程/state授予，无旧Token fallback。
+
+计划负向错pin/错HMAC/认证前PING分别结束且零protected pong；正常TLS3个pong后再运行5秒增加>10、同连接跨lease；OS撤销后两端watch done/join、真实TLS connection_closed而非timeout/cancelled，helper/C#各关闭一次且后续pong不增，再节点回收/原策略恢复。失败仍OS签名撤销，沿用cleaned journal保守清理，不修改线上Store/服务或用fixture代签。HMAC为私有测试注入，非最终秘密分发；无旧ACL残留故障/自然300s到期/硬崩溃/GUI证据。
+
+本轮Python4项纯断言PASS（新增负向/关闭计数严格测试）；Swift release TLSBridgeProbe构建成功；diff检查通过。没有运行新双机TLS、没有本轮Windows编译/服务器修改/新ACL证据，Go服务未改、未重跑全量race。下一步Windows正常桌面重跑现有windows-native-network start-interactive-vault.ps1保持READY，实际probe后运行 `REMOTEAPP_WINDOWS_INTERACTIVE_DIR='H:\chatgpt\远程软件开发\测试安装包\windows-native-network' python3 -B poc/selfhost/public-server/split-consent.py --tls`。完整实机退出0后独立复核/用户EnterSTOPPED才记通过。整体4未完成。见[入口和边界](../poc/selfhost/public-server/SPLIT_PRODUCT_TLS.md)。
+
 ## 2026-10-07 切片 4C-4H：独立进程真实客户端 nodeproof/最小ACL通过
 
 新增 split-consent.py --nodes / split_nodes.py，check --os-nodes只额外公开verifier节点公钥与node_phase标记，无admin enroll/bind/批准/签名。沿用实际独立root daemon/nobody frontend+kernel broker+真实Runtime/Headscale supervisor，enroll/bind全部走两端OS签名HTTPS；无旧fixture。用户继续时实际Windows pinned probe仍通过，因此没有远程重建桌面owner。

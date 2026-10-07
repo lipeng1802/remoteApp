@@ -116,13 +116,16 @@ class Coordinator(Pipe):
         return self.proc.returncode
 
 def main():
-    if sys.argv[1:] not in ([],["--nodes"]): raise RuntimeError("invalid_arguments")
-    nodes=sys.argv[1:]==["--nodes"]
+    if sys.argv[1:] not in ([],["--nodes"],["--tls"]): raise RuntimeError("invalid_arguments")
+    tls=sys.argv[1:]==["--tls"]
+    nodes=tls or sys.argv[1:]==["--nodes"]
     os.umask(0o077)
     identities = NativeIdentities(t, Pipe)  # Actual pinned desktop probe before mutations.
     coordinator = None
     clients, tunnels = [], []
     node_helpers, folders, node_result = [], [], []
+    active_tls=[]
+    product_command=None
     node_cleanup_confirmed = not nodes
     backup = None
     joined = False
@@ -130,8 +133,17 @@ def main():
     prefix = "/tmp/remoteapp-split-consent-"+secrets.token_hex(8)
     program, daemon, frontend, mode = [prefix+x for x in ("-check", "-daemon", "-frontend", "-mode.py")]
     work = "C:\\Users\\jarvis\\remoteapp-split-consent-"+secrets.token_hex(8)
+    def create_work():
+        nonlocal work_created
+        t.powershell("$ErrorActionPreference='Stop'; "+f"if (Test-Path -LiteralPath '{work}') {{throw 'exists'}}; New-Item -ItemType Directory -Path '{work}' | Out-Null")
+        work_created = True
+        t.powershell("$ErrorActionPreference='Stop'; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; "+f"icacls '{work}' /inheritance:r /grant:r \"*${{sid}}:(OI)(CI)F\" '*S-1-5-18:(OI)(CI)F' | Out-Null; if ($LASTEXITCODE -ne 0) {{throw 'acl_failed'}}")
     try:
         t.check(not t.admin("nodes", "list") and not t.admin("users", "list") and not t.admin("preauthkeys", "list"), "split_empty_isolated_control_plane")
+        if tls:
+            import split_tls
+            create_work()
+            product_command=split_tls.prepare(t,work)
         for source, destination in [(t.ARTIFACTS/"daemon-network-check",program), (t.ARTIFACTS/"authority-daemon-network",daemon),
                 (t.ARTIFACTS/"device-frontend-private",frontend), (Path(__file__).with_name("enrollment-mode.py"),mode)]:
             uploads.upload(source, destination)
@@ -156,9 +168,7 @@ def main():
         reverse = subprocess.Popen(t.WIN[:-1]+["-N","-o","ExitOnForwardFailure=yes","-R",f"127.0.0.1:{remote_port}:127.0.0.1:{local_port}",t.WIN[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         tunnels.append(reverse); time.sleep(1)
         t.check(reverse.poll() is None,"split_private_windows_api_tunnel")
-        t.powershell("$ErrorActionPreference='Stop'; "+f"if (Test-Path -LiteralPath '{work}') {{throw 'exists'}}; New-Item -ItemType Directory -Path '{work}' | Out-Null")
-        work_created = True
-        t.powershell("$ErrorActionPreference='Stop'; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; "+f"icacls '{work}' /inheritance:r /grant:r \"*${{sid}}:(OI)(CI)F\" '*S-1-5-18:(OI)(CI)F' | Out-Null; if ($LASTEXITCODE -ne 0) {{throw 'acl_failed'}}")
+        if not work_created: create_work()
         binary=t.ARTIFACTS/"device-api-client-win.exe"
         uploaded=subprocess.run(["scp","-O","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(binary),"jarvis@100.73.4.118:"+work.replace("\\","/")+"/device-api-client.exe"],capture_output=True,timeout=60)
         t.check(uploaded.returncode==0,"split_windows_api_client_uploaded")
@@ -174,12 +184,17 @@ def main():
         if nodes:
             import split_nodes
             def node_phase(grant):
-                node_result.append(split_nodes.run(t,Pipe,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders))
+                node=split_nodes.run(t,Pipe,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders)
+                node_result.append(node)
+                if tls:
+                    active_tls.append(split_tls.run(t,Pipe,ready,clients,node,grant,product_command,node_helpers))
             consent(*clients,node_phase=node_phase)
+            if tls: active_tls[0].revoked()
             split_nodes.reclaimed(t)
             node_cleanup_confirmed=True
-            peer,target_ip=node_result[0]
-            t.check(not peer.request("probe",Peer=target_ip)["passed"],"split_revocation_actual_network_payload_denied")
+            if not tls:
+                node=node_result[0]
+                t.check(not node["peer"].request("probe",Peer=node["target_ip"])["passed"],"split_revocation_actual_network_payload_denied")
             for helper in reversed(node_helpers): helper.stop()
             node_helpers.clear()
         else: consent(*clients)
@@ -206,7 +221,7 @@ def main():
         for tunnel in reversed(tunnels):
             tunnel.terminate(); tunnel.wait(timeout=5)
         identities.close()  # Only this run's random Mac identities, never Windows owner.
-        if work_created and node_cleanup_confirmed:
+        if work_created and (node_cleanup_confirmed or coordinator is None):
             t.powershell(f"Remove-Item -LiteralPath '{work}' -Recurse -Force -ErrorAction Stop")
         if node_cleanup_confirmed:
             for folder in folders: shutil.rmtree(folder)
@@ -222,7 +237,8 @@ def main():
     t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":["100.120.0.2"],"dst":["100.120.0.1:47476"]}]},"split_original_policy_unchanged")
     status=subprocess.run(t.SERVER+["systemctl is-active remoteapp-authority remoteapp-frontend remoteapp-poc && sha256sum --check /opt/remoteapp-prerelease/nginx-baseline.sha256 && sha256sum /var/lib/remoteapp-authority/state.json"],capture_output=True,timeout=15)
     t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
-    print("VALIDATION PASSED: split-process OS consent"+(" + real nodeproof/minimum ACL/revoked payload" if nodes else " only")+". NOT product TLS/installed trust acceptance.",flush=True)
+    scope=" + real nodeproof + actual product TLS/autonomous refresh/revocation" if tls else " + real nodeproof/minimum ACL/revoked payload" if nodes else " only"
+    print("VALIDATION PASSED: split-process OS consent"+scope+". NOT installed trust/public product acceptance.",flush=True)
 
 if __name__=="__main__":
     try: main()
