@@ -2,7 +2,6 @@ package invite
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 )
 
@@ -50,15 +49,8 @@ func Handler(s *Store) http.Handler {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		defer r.Body.Close()
-		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
 		var env Envelope
-		if dec.Decode(&env) != nil {
-			fail(400, "invalid_request")
-			return
-		}
-		var extra any
-		if dec.Decode(&extra) != io.EOF {
+		if decodeHTTP(r.Body, &env) != nil {
 			fail(400, "invalid_request")
 			return
 		}

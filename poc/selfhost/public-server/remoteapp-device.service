@@ -1,0 +1,26 @@
+[Unit]
+Description=RemoteApp independent pre-release device-only API
+After=network.target
+
+[Service]
+Type=simple
+User=remoteapp-pre
+Group=remoteapp-pre
+ExecStart=/opt/remoteapp-prerelease/device-service /var/lib/remoteapp-prerelease @RELEASE_ROOT@ remoteapp-prerelease 1 127.0.0.1:8444
+Restart=no
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=full
+ReadOnlyDirectories=/var/lib/remoteapp-prerelease
+ReadWriteDirectories=/var/lib/remoteapp-prerelease/server-private/authority
+CapabilityBoundingSet=
+LimitNOFILE=128
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

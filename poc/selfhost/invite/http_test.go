@@ -40,6 +40,8 @@ func TestHTTPBoundariesAndReplay(t *testing.T) {
 		{"POST", "/v1/request", string(raw), "https://untrusted.example", 400},
 		{"POST", "/v1/request", string(raw) + "{}", "", 400},
 		{"POST", "/v1/request", `{"unknown":"SECRET"}`, "", 400},
+		{"POST", "/v1/request", `{"body":{"action":"register","action":"invite"}}`, "", 400},
+		{"POST", "/v1/request", `{"body":{"action":"register","Action":"invite"}}`, "", 400},
 		{"POST", "/v1/request", strings.Repeat("x", 5000), "", 400},
 	}
 	for _, c := range cases {

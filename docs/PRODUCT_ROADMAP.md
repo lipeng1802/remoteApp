@@ -1,5 +1,7 @@
 # 独立远程桌面产品路线
 
+最新 4C-2B：独立设备-only TLS 服务与严格 HTTP 解码/限流/正常退出/持久重启回归完成，Linux 部署模板与只读 SSH-forward HTTPS 探针已补齐。具体在线 TLS/issuer 私钥上传目的地授权待用户确认，因此未部署；服务自身 verifier/Headscale backend 待接，network 路径仍 404。之后再公网开放、客户端信任/floor 持久化与产品凭据/GUI/安装。见 [设备服务](../poc/selfhost/public-server/DEVICE_SERVICE.md)。整体 4 尚未完成。
+
 切片 4 当前：4B-4B 真实 OS 双机网络与产品 TLS 验收闭环；4C-1 Windows 签名服务配置/OS signer HTTPS 已由用户确认通过。用户选择独立自托管预发布，4C-2A 隔离本地发布/API 信任材料生成与回归完成，未部署公网 API/未安装可信锚。下一步独立有界设备服务及最小权限部署、安装锚/floor 持久化轮换恢复、HMAC 安全投递、产品 IPC/GUI/安装；整体 4 未完成。见 [预发布材料](../poc/selfhost/public-server/PRERELEASE_BOOTSTRAP.md) 和 [当前交接](HANDOFF.md)。下方为历史。
 
 当前切片 3：设备码/一次性验证码、被控发现申请/明确确认与设备查询已接 HTTPS，入口与持久有界预算、签名时间校准已实现。仅私有验证，尚无真实 GUI 人工确认、公开代理/多实例/DDoS 防护或最终信任分发。下一切片 4 正式 issuer/TLS 身份分发、平台安全存储与 IPC、客户端自主生命周期，再 GUI/安装。详见 [流程记录](../poc/selfhost/public-server/DEVICE_FLOW_TEST.md) 和 [当前交接](HANDOFF.md)。下方切片 2/下一步切片 3 为历史。

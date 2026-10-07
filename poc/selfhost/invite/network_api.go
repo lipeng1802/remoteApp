@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
-	"io"
 	"net/http"
 	"time"
 )
@@ -247,11 +246,8 @@ func NetworkHandler(b *ProvisionBackend) http.Handler {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 8192)
 		defer r.Body.Close()
-		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
 		var e NetworkRequest
-		var extra any
-		if dec.Decode(&e) != nil || dec.Decode(&extra) != io.EOF {
+		if decodeHTTP(r.Body, &e) != nil {
 			fail(400, "invalid_request")
 			return
 		}

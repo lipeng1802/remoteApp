@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-2B：独立设备服务代码完成，私钥上传需具体授权
+
+新增 deviceservice/device-service，固定运维 release root/service/floor 校验预发布 profile、TLS 证书/CA/域名/期限/私钥、实际 Store issuer；仅重开既有 state、缺失拒绝。TLS1.3/HTTP1.1、32 socket/4 work slots、process admission 与既有 durable 签名/预算/重放；到期/信号停止监听及正常 HTTP join 后 Close Store。设备-only，network/health 404，未挂 Headscale/Mint/Bind，不自动批准。HTTP 两个入口补重复/大小写别名/未知/尾随 JSON 拒绝，仍允许 pretty JSON。新增真实回环服务/重启保持 replay/Stop/到期/错误根 floor 端口与私钥权限/缺 state 不 rekey 测试；不代表安装/OS signer 新双机/公网验收。
+
+新增 Linux 无特权 systemd 与 fail-safe 首次部署脚本、只读 SSH-forward profile HTTPS 探针。尝试 scp 被安全审查拒绝（具体在线 TLS/issuer 私钥外发目的地授权不足），**上传/安装未执行**。本轮只创建服务器空 staging，然后用 rmdir 删除；无新账号/服务/Nginx/端口/Headscale/业务443变更，未删除任何密钥。需用户明确同意上传 `server-private` 中 TLS 私钥/在线 issuer 私钥至 182.92.117.114 专用服务；绝不上传本地 release-local-only 发布/CA 私钥，也不能通过其他传输绕过拒绝。此授权后才进行真实回环部署和服务停止重启/证书验证。
+
+后续服务 verifier 长期身份与真实 Headscale backend 尚未实现，网络授权继续关闭；再公网 admission/8444、安装根/floor 持久化轮换/HMAC 受保护投递/产品 GUI 安装。整体 4 未完成。详见 [设备服务边界](../poc/selfhost/public-server/DEVICE_SERVICE.md)。
+
 ## 2026-10-07 切片 4C-2A：选择独立自托管预发布，材料已生成（未部署）
 
 用户回传 Windows `VALIDATION PASSED: signed release profile + OS signer HTTPS. NOT production trust installation or full product acceptance.`，据此闭环 4C-1 Windows 四项实际测试，不记录未提供的耗时。用户选择“使用独立托管”，按独立自托管预发布推进。新增 `prerelease`/`cmd/prerelease-bootstrap`，拒绝已有目录、符号链接父目录、443/无端口/不合法 URL；0700/0600、CreateNew/Sync/READY-last，失败保留状态、不默默重生成身份。分别生成本地发布根和 API CA 私钥、server-private TLS/真实持久 issuer Store、client-public 签名配置与公开安装锚，测试确认实际 TLS/签名/issuer 一致和无覆盖。race 专用测试/trustprofile/vet 通过。
