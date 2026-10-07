@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-2C：用户授权在线私钥上传，独立回环服务部署/HTTPS/重启通过
+
+用户明确回复“允许上传”，授权将预发布 TLS 私钥和在线 issuer 状态上传其 182.92.117.114；**发布根/CA 私钥未上传**。scp 仅 server-private/client-public/二进制/unit/部署脚本。实际执行首次隔离部署，新增专用 remoteapp-pre（nologin）及 remoteapp-device；/opt/remoteapp-prerelease 程序和 /var/lib/remoteapp-prerelease 状态独立于原 PoC。服务 active、disabled（未开机启用）、仅 127.0.0.1:8444，无公网监听/代理/安全组改动。
+
+CentOS 7 实机确认 NoNewPrivileges=yes、CapabilityBoundingSet=0、专用 User/Group，ReadOnlyDirectories=/var/lib/remoteapp-prerelease，仅 authority 状态 ReadWriteDirectories；TLS 私钥/state 均 600 remoteapp-pre。通过临时 SSH forward 两次 device-service-probe（首次/重启后），发布根验证 profile/独立 CA/真实域名 TLS 和 malformed403/duplicate400/network404/health404 均 PASS，无注册/设备持久写入。此转发只是管理验证，不证明公网或最终 Headscale 数据通道。
+
+实际 systemctl stop 后监听消失、writer.lock 移除；状态哈希停止前/后/重启后相同；systemctl show 记录 Result=success/ExecMainCode=0/ExecMainStatus=0，随后显式 start 和二次 probe 通过。未用 journal 中缺失的 STOPPED 行杜撰输出。Nginx 主配置及所有 conf.d 哈希核对全部 OK，remoteapp-poc active；服务最终 active。Headscale 节点/策略未修改，也未进行本轮新网络授权测试。
+
+本轮新 staging /tmp/remoteapp-device-deploy.Jc4DTtmk 明确核对文件后删除（含冗余在线私钥副本；正式部署材料和本地原件保留）；非秘密 Nginx 基线另存 root-only /opt/remoteapp-prerelease/nginx-baseline.sha256。临时 SSH 转发已 Ctrl-C 关闭（SSH 255 为该主动结束，不是服务验证失败）。线上 Store 从此为 authority，严禁用本地初始 snapshot 覆盖线上 state。下方“上传授权待确认/未部署”为历史。
+
+下一步服务 verifier 的长期身份/重启恢复/故障撤销和真实 Headscale backend，network 路径继续 404，不能把设备 grant 当网络授权；再公网 admission/8444、可信安装根/floor 持久化轮换、HMAC 安全投递、产品 GUI/安装。整体切片 4 未完成。见 [设备服务实际部署](../poc/selfhost/public-server/DEVICE_SERVICE.md)。
+
 ## 2026-10-07 切片 4C-2B：独立设备服务代码完成，私钥上传需具体授权
 
 新增 deviceservice/device-service，固定运维 release root/service/floor 校验预发布 profile、TLS 证书/CA/域名/期限/私钥、实际 Store issuer；仅重开既有 state、缺失拒绝。TLS1.3/HTTP1.1、32 socket/4 work slots、process admission 与既有 durable 签名/预算/重放；到期/信号停止监听及正常 HTTP join 后 Close Store。设备-only，network/health 404，未挂 Headscale/Mint/Bind，不自动批准。HTTP 两个入口补重复/大小写别名/未知/尾随 JSON 拒绝，仍允许 pretty JSON。新增真实回环服务/重启保持 replay/Stop/到期/错误根 floor 端口与私钥权限/缺 state 不 rekey 测试；不代表安装/OS signer 新双机/公网验收。

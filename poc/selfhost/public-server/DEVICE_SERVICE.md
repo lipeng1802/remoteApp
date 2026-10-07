@@ -1,4 +1,12 @@
-# 切片 4C-2B：独立设备-only 服务入口（代码通过，未部署）
+# 切片 4C-2B/2C：独立设备-only 服务与回环实际部署
+
+## 2026-10-07 实际部署（当前）
+
+用户明确允许上传预发布在线 TLS 私钥与 issuer 状态至其服务器 182.92.117.114，随后完成独立部署。仅 server-private/client-public 与程序/unit/脚本上传；发布根和 CA 私钥没有离开本机。服务 remoteapp-device 使用 remoteapp-pre 专用无特权用户，最终 active，开机 disabled，仅 127.0.0.1:8444。CentOS 7 实机确认 capability 空、NoNewPrivileges、只写 authority 状态目录，在线 TLS 私钥/state 为 600。
+
+通过临时 SSH forward 首次及重启后两轮发布签名 profile/独立 CA/真实域名 HTTPS 探针均 PASS，malformed/重复/network/health 固定拒绝；不注册设备或写设备 state。实际停止后监听关闭/锁文件消失，systemd Result=success、ExecMainCode=0、ExecMainStatus=0，重启恢复同一身份。状态文件哈希前后相同。现有 Nginx 主配置/所有 conf.d 文件哈希核对通过，remoteapp-poc 保持 active；未修改 Headscale 策略或节点、业务443、公网端口、安装 GUI。
+
+明确核对并删除本轮 staging（含冗余上传私钥副本），正式材料及本地原件保留；Nginx 基线保存 /opt/remoteapp-prerelease/nginx-baseline.sha256。临时 SSH forward 已关闭。该验收不是公网可达/Headscale 全链路/客户端安装信任验收。服务仅 device-only，network 路径仍 404。
 
 新增 `deviceservice` 与 `cmd/device-service`，使用独立预发布材料。**不等于公网最终产品或整体切片 4 完成**。没有调用 fixture 特权自动审批，没有接入网络 Mint/Bind/Verifier；仅启用设备签名的注册、一次性邀请、明确批准/拒绝、状态与撤销路径。`/v1/network` 和 `/health` 不公开，返回 404。邀请产生的 signed grant 本身不能打开网络授权。
 
@@ -22,7 +30,7 @@
 
 完整 Go race 回归和专用 vet、Linux 静态构建为本轮验证项；本轮不代表 Windows 新服务实测、公网/Headscale 联合验收或安装 GUI 已完成。
 
-## 部署准备与审批阻塞
+## 部署准备与审批阻塞（下述阻塞为历史，已获准部署）
 
 新增 `remoteapp-device.service`（独立无特权用户 remoteapp-pre、无 capability、只写 authority 状态、无重启/开机自动启用）及 `deploy-device-service.sh`（拒绝既有安装/账号/端口，校验二进制哈希，部署失败停止新服务保留状态，校验 Nginx 配置哈希）。首轮仅 `127.0.0.1:8444`，不新增公网监听或 Nginx/安全组；CentOS 7 systemd 实际兼容性尚待部署验证，不用模板审查当实测。
 
@@ -34,4 +42,4 @@
 
 ## 下一步
 
-明确上传授权并完成回环部署/实际 HTTPS/停止重启验收，随后接服务自身的 verifier 长期身份/故障撤销与 Headscale backend；网络授权仍须保持关闭直到该生命周期通过。然后才评估公网 admission/开放 8444、客户端安装信任持久化与受保护产品凭据投递。不能因为设备 API 启动就开放尚未收口的网络能力。
+回环部署/实际 HTTPS/停止重启验收已通过。随后接服务自身的 verifier 长期身份/故障撤销与 Headscale backend；网络授权仍须保持关闭直到该生命周期通过。然后才评估公网 admission/开放 8444、客户端安装信任持久化与受保护产品凭据投递。不能因为设备 API 启动就开放尚未收口的网络能力。

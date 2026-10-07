@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-最新 4C-2B：[独立设备-only 服务](poc/selfhost/public-server/DEVICE_SERVICE.md) 的 TLS/限流/严格 JSON/持久重启/停止到期代码与回归完成；网络授权保持关闭。服务器部署因在线 TLS/issuer 私钥上传需要明确授权而未执行，未改业务 443。整体切片 4 仍未完成。
+最新 4C-2C：用户授权在线服务私钥上传后，[独立设备-only 服务](poc/selfhost/public-server/DEVICE_SERVICE.md) 已实际部署到服务器回环 127.0.0.1:8444，首次/重启后 profile HTTPS 拒绝探针通过，状态稳定、停止释放锁与监听，最小权限及原 Nginx 配置哈希核对通过。服务 active，未开机启用/开放公网或网络授权，不改业务 443；整体切片 4 仍未完成。
 
 当前收口 4C-2A：Windows [发布签名服务信任配置](poc/selfhost/public-server/SERVICE_TRUST_TEST.md) 实际验证通过；用户选择独立自托管预发布，隔离本地配置材料已生成并验证。尚未部署公网设备 API、安装可信锚或完成整体切片 4。密钥保管、候选端口 8444 与下一步边界见 [预发布配置](poc/selfhost/public-server/PRERELEASE_BOOTSTRAP.md)。
 
