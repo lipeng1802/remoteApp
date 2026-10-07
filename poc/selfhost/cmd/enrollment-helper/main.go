@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -147,6 +148,7 @@ func run() error {
 	var count atomic.Int64
 	var gateMu sync.Mutex
 	var gate *streamgate.Gate
+	var tlsBridge bool
 	var streamTicks, streamClosed, streamOpened atomic.Int64
 	var probing atomic.Bool
 	workers.Add(1)
@@ -159,10 +161,15 @@ func run() error {
 			}
 			gateMu.Lock()
 			g := gate
+			bridge := tlsBridge
 			gateMu.Unlock()
 			if g != nil {
 				streamOpened.Add(1)
-				g.Serve(ctx, s, conn)
+				if bridge {
+					g.ServeTLS(ctx, s, conn)
+				} else {
+					g.Serve(ctx, s, conn)
+				}
 				streamClosed.Add(1)
 				continue
 			}
@@ -187,11 +194,18 @@ func run() error {
 	clockNonce := ""
 	clockIssuer := ""
 	var clockStart time.Time
+	var bridgeListener net.Listener
+	defer func() {
+		if bridgeListener != nil {
+			bridgeListener.Close()
+		}
+	}()
 	for {
 		var request struct {
 			Op, Peer, Role, Issuer, Target, Controller string
 			State                                      invite.NetworkState
 			Proof                                      invite.ClockProof
+			Bridge                                     bool
 		}
 		readDone := make(chan error, 1)
 		go func() { readDone <- decode(&request) }()
@@ -223,11 +237,40 @@ func run() error {
 				g, e := streamgate.New(issuer, target, controller, app, request.State, request.Role == "target", clockNow)
 				if e == nil {
 					gate = g
+					tlsBridge = request.Bridge
 					ok = true
 				}
 			}
 			gateMu.Unlock()
 			output(map[string]any{"status": "authorize", "passed": ok})
+			continue
+		}
+		if request.Op == "bridge" {
+			gateMu.Lock()
+			g, enabled := gate, tlsBridge
+			gateMu.Unlock()
+			if g == nil || !enabled || request.Role != "controller" || bridgeListener != nil {
+				return io.ErrUnexpectedEOF
+			}
+			ln, e := net.Listen("tcp4", "127.0.0.1:0")
+			if e != nil {
+				return e
+			}
+			bridgeListener = ln
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				for {
+					conn, e := ln.Accept()
+					if e != nil {
+						return
+					}
+					streamOpened.Add(1)
+					g.ConnectTLS(ctx, s, conn)
+					streamClosed.Add(1)
+				}
+			}()
+			output(map[string]any{"status": "bridge", "port": ln.Addr().(*net.TCPAddr).Port})
 			continue
 		}
 		if request.Op == "clock_challenge" {

@@ -1,5 +1,5 @@
 // Package streamgate joins verified dynamic registration snapshots to the
-// existing fixed-payload session. This is not the product TLS protocol.
+// fixed-payload session and the opaque bridge to actual product TLS endpoints.
 package streamgate
 
 import (
@@ -170,4 +170,48 @@ func (g *Gate) Probe(ctx context.Context, s *tsnet.Server, received func()) erro
 		}
 	}()
 	return session.Probe(ctx, c, g.cfg, received)
+}
+
+func (g *Gate) check(ctx context.Context, grant invite.Grant, target, controller string) bool {
+	return grant == g.cfg.Grant && target == grant.Claims.Target && controller == grant.Claims.Controller && g.active(ctx)
+}
+
+// The only target is the development-only product fixed-payload TLS listener.
+// No caller/peer supplied destination and no product native actions are exposed.
+func (g *Gate) ServeTLS(ctx context.Context, s *tsnet.Server, conn net.Conn) error {
+	defer conn.Close()
+	if !g.server {
+		return session.ErrDenied
+	}
+	c, e := g.peer(ctx, s, conn)
+	if e != nil {
+		return e
+	}
+	return session.Tunnel(ctx, c, g.cfg, g.check, true, func(ctx context.Context) (net.Conn, error) {
+		return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp", "127.0.0.1:47478")
+	})
+}
+func (g *Gate) ConnectTLS(ctx context.Context, s *tsnet.Server, local net.Conn) error {
+	defer local.Close()
+	if g.server || !g.active(ctx) {
+		return session.ErrDenied
+	}
+	lc, e := s.LocalClient()
+	if e != nil {
+		return session.ErrDenied
+	}
+	dialCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	timer := time.AfterFunc(3*time.Second, stop)
+	conn, e := nodeproof.DialOnlyOverlay(dialCtx, lc, g.binding.TargetIP, 47476)
+	timer.Stop()
+	if e != nil {
+		return session.ErrDenied
+	}
+	defer conn.Close()
+	c, e := g.peer(ctx, s, conn)
+	if e != nil {
+		return e
+	}
+	return session.Tunnel(ctx, c, g.cfg, g.check, false, func(context.Context) (net.Conn, error) { return local, nil })
 }

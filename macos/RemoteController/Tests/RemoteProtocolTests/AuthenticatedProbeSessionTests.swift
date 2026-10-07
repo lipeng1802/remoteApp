@@ -7,8 +7,8 @@ final class AuthenticatedProbeSessionTests: XCTestCase {
     private let agentNonce = Data(repeating: 3, count: 32)
     private let ping = Data(repeating: 4, count: 8)
 
-    private func challenged() throws -> AuthenticatedProbeSession {
-        var session = try AuthenticatedProbeSession(deviceKey: key, nonce: nonce, ping: ping)
+    private func challenged(continuous: Bool = false) throws -> AuthenticatedProbeSession {
+        var session = try AuthenticatedProbeSession(deviceKey: key, nonce: nonce, ping: ping, continuous: continuous)
         let hello = try session.start()
         XCTAssertEqual(hello.type, .hello)
         XCTAssertEqual(hello.sequence, 1)
@@ -34,6 +34,18 @@ final class AuthenticatedProbeSessionTests: XCTestCase {
         XCTAssertTrue(try session.receive(Frame(type: .pong, sequence: 4, payload: ping)).isEmpty)
         XCTAssertTrue(session.isComplete)
         XCTAssertThrowsError(try session.receive(Frame(type: .pong, sequence: 5, payload: ping)))
+    }
+    func testContinuousProbeKeepsSequenceAndRejectsWrongPong() throws {
+        var session = try challenged(continuous: true)
+        _ = try session.receive(Frame(type: .authResult, sequence: 3,
+            payload: AuthResultPayload(status: .success, retryDelayMilliseconds: 0).encode()))
+        for seq in UInt32(4)...6 {
+            XCTAssertEqual(try session.receive(Frame(type: .pong, sequence: seq, payload: ping)),
+                [Frame(type: .ping, sequence: seq, payload: ping)])
+            XCTAssertFalse(session.isComplete)
+        }
+        XCTAssertThrowsError(try session.receive(Frame(type: .pong, sequence: 7, payload: Data(count: 8))))
+        XCTAssertThrowsError(try AuthenticatedProbeSession(deviceKey: key, streaming: true, continuous: true))
     }
     func testRejectedAuthDoesNotProducePing() throws {
         var session = try challenged()

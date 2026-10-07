@@ -43,6 +43,7 @@ public final class TLSControllerClient {
         sendPreAuthenticationPing: Bool = false,
         timeout: TimeInterval = 10,
         onJpegFrame: ((ScreenInfoPayload, CGImage) -> Void)? = nil,
+        onProtectedPong: (() -> Void)? = nil,
         onStatus: @escaping (String) -> Void = { _ in },
         approveFirstUse: @escaping FirstUseApproval,
         completion: @escaping Completion
@@ -53,20 +54,24 @@ public final class TLSControllerClient {
         }
 
         let session: AuthenticatedProbeSession
-        do { session = try AuthenticatedProbeSession(deviceKey: deviceKey, streaming: onJpegFrame != nil) }
+        do { session = try AuthenticatedProbeSession(deviceKey: deviceKey, streaming: onJpegFrame != nil, continuous: onProtectedPong != nil) }
         catch { completion(.failure(.invalidDeviceKey)); return {} }
         let tlsOptions = NWProtocolTLS.Options()
         sec_protocol_options_set_min_tls_protocol_version(
             tlsOptions.securityProtocolOptions,
             .TLSv12
         )
+        // Configure verification before NWConnection copies the options. The
+        // reference is populated before start; callbacks run on the same queue.
+        let reference = ProbeReference()
         sec_protocol_options_set_verify_block(
             tlsOptions.securityProtocolOptions,
-            { [trustCoordinator] _, trust, verifyComplete in
+            { [trustCoordinator, reference] _, trust, verifyComplete in
                 let secTrust = sec_trust_copy_ref(trust).takeRetainedValue()
                 guard let certificateChain = SecTrustCopyCertificateChain(secTrust) as? [SecCertificate],
                       let certificate = certificateChain.first else {
                     verifyComplete(false)
+                    reference.state?.finish(.failure(.connectionFailed))
                     return
                 }
                 let certificateDER = SecCertificateCopyData(certificate) as Data
@@ -79,11 +84,17 @@ public final class TLSControllerClient {
                     switch result {
                     case .approvedAndStored, .trusted:
                         verifyComplete(true)
-                    case .rejectedFirstUse, .rejectedFingerprintMismatch:
+                    case .rejectedFingerprintMismatch:
+                        onStatus("证书指纹不匹配")
                         verifyComplete(false)
+                        reference.state?.finish(.failure(.connectionFailed))
+                    case .rejectedFirstUse:
+                        verifyComplete(false)
+                        reference.state?.finish(.failure(.connectionFailed))
                     }
                 } catch {
                     verifyComplete(false)
+                    reference.state?.finish(.failure(.connectionFailed))
                 }
             },
             queue
@@ -93,12 +104,9 @@ public final class TLSControllerClient {
         tcpOptions.noDelay = true
         let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
         parameters.allowLocalEndpointReuse = false
-        let connection = NWConnection(
-            host: NWEndpoint.Host(host),
-            port: networkPort,
-            using: parameters
-        )
-        let state = ProbeState(connection: connection, session: session, onJpegFrame: onJpegFrame, onStatus: onStatus, completion: completion)
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: networkPort, using: parameters)
+        let state = ProbeState(connection: connection, session: session, onJpegFrame: onJpegFrame, onProtectedPong: onProtectedPong, onStatus: onStatus, completion: completion)
+        reference.state = state
 
         connection.stateUpdateHandler = { [weak self, weak state] newState in
             guard let self, let state else { return }
@@ -124,7 +132,7 @@ public final class TLSControllerClient {
         }
 
         queue.asyncAfter(deadline: .now() + timeout) { [state] in
-            if !state.session.streaming || !state.session.authenticated { state.finish(.failure(.timedOut)) }
+            if (!state.session.streaming && !state.session.continuous) || !state.session.authenticated { state.finish(.failure(.timedOut)) }
         }
         onStatus("正在连接 TLS" )
         connection.start(queue: queue)
@@ -157,6 +165,7 @@ public final class TLSControllerClient {
                 var replies: [Frame] = []
                 for frame in try state.decoder.append(data ?? Data()) {
                     replies += try state.session.receive(frame)
+                    if frame.type == .pong { state.onProtectedPong?() }
                     if frame.type == .authResult { state.onStatus("已认证，等待画面") }
                     if frame.type == .videoFrameJPEG, let screen = state.session.screen {
                         // Invalid images are dropped; the frame boundary and PING remain usable.
@@ -172,19 +181,25 @@ public final class TLSControllerClient {
         }
     }
 }
+private final class ProbeReference {
+    weak var state: ProbeState?
+}
+
 private final class ProbeState {
     var session: AuthenticatedProbeSession
     var decoder = ProbeFrameDecoder()
     var readGeneration = 0
     let onJpegFrame: ((ScreenInfoPayload, CGImage) -> Void)?
+    let onProtectedPong: (() -> Void)?
     let onStatus: (String) -> Void
     let connection: NWConnection
     private let completion: TLSControllerClient.Completion
     private let lock = NSLock()
     private var finished = false
 
-    init(connection: NWConnection, session: AuthenticatedProbeSession, onJpegFrame: ((ScreenInfoPayload, CGImage) -> Void)?, onStatus: @escaping (String) -> Void, completion: @escaping TLSControllerClient.Completion) {
+    init(connection: NWConnection, session: AuthenticatedProbeSession, onJpegFrame: ((ScreenInfoPayload, CGImage) -> Void)?, onProtectedPong: (() -> Void)?, onStatus: @escaping (String) -> Void, completion: @escaping TLSControllerClient.Completion) {
         self.onJpegFrame = onJpegFrame
+        self.onProtectedPong = onProtectedPong
         self.onStatus = onStatus
         self.session = session
         self.connection = connection

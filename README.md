@@ -1,10 +1,10 @@
 # Personal Remote Desktop MVP
 
-最新切片：动态注册签名绑定已接独立双机固定载荷活动流；持续刷新、停止刷新关闭、后端故障关闭、保留 ACL 的应用撤销及恢复均已实测。新增新鲜签名时间校准，不改机器时间或扩大租期。产品 TLS/GUI 仍未桥接，见 [当前 Handoff](docs/HANDOFF.md)。
+最新切片：独立双机动态 gate 已桥接真实 Swift/C# 产品 TLS，证书 pin、应用认证、连续固定载荷与停止刷新/后端故障/撤销关闭及恢复均已实测。Go 只转发密文；未接 GUI/安装包/屏幕/输入，见 [TLS 桥接验收](poc/selfhost/public-server/TLS_BRIDGE_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
 
 从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前产品基线仍使用系统 Tailscale；独立连接 PoC 验证自托管 Headscale/DERP，数据通道不依赖 Tailscale 托管账号，SSH 仅用于测试管理。
 
-2026-10-07 独立 PoC 进展：helper 注册前公钥与自签意图、真实网络/应用持有证明、单向动态策略、零 ACL 网络拒绝/正向恢复、撤销及磁盘/冷驱动重开已双机验收。仍未接产品 TLS/GUI 或公开注册服务，不把管理员 fixture 当最终安装体验。见 [验收记录](poc/selfhost/public-server/ENROLLMENT_TEST.md) 和 [当前交接](docs/HANDOFF.md)；下方保留早期 MVP 边界记录。
+2026-10-07 独立 PoC 进展：helper 注册前公钥与自签意图、真实网络/应用持有证明、单向动态策略、零 ACL 网络拒绝/正向恢复、撤销及磁盘/冷驱动重开已双机验收。产品 TLS 固定载荷桥接已通过，仍未接 GUI 或公开注册服务，不把管理员 fixture 当最终安装体验。见 [验收记录](poc/selfhost/public-server/ENROLLMENT_TEST.md) 和 [当前交接](docs/HANDOFF.md)；下方保留早期 MVP 边界记录。
 
 ## MVP 边界
 

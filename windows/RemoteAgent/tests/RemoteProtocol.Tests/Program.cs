@@ -59,6 +59,7 @@ var tests = new (string Name, Action Run)[]
     ("certificate match and mismatch decisions", CertificateMatchAndMismatchDecisions),
     ("self-signed agent certificate", SelfSignedAgentCertificate),
     ("authenticated loopback TLS probe", AuthenticatedTlsTests.Success),
+    ("continuous fixed-payload TLS bridge probe", AuthenticatedTlsTests.Continuous),
     ("TLS wrong key rejected", AuthenticatedTlsTests.WrongKey),
     ("TLS pre-auth business rejected", AuthenticatedTlsTests.BeforeAuth),
     ("TLS old response replay rejected", AuthenticatedTlsTests.Replay),
@@ -77,6 +78,14 @@ var tests = new (string Name, Action Run)[]
 };
 
 var failures = 0;
+// Explicit development profile: SSH logon may have no DPAPI logon session.
+// Default runs still include this unchanged credential-store test.
+if (args.Length > 0)
+{
+    if (args.Length != 1 || args[0] != "--bridge-validation") return 2;
+    Console.WriteLine("SKIP Windows credential persistence and cleanup: bridge SSH profile; run default suite interactively for DPAPI.");
+    tests = tests.Where(t => t.Name != "Windows credential persistence and cleanup").ToArray();
+}
 foreach (var test in tests)
 {
     try

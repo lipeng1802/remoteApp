@@ -9,6 +9,7 @@ using RemoteProtocol;
 internal static class AuthenticatedTlsTests
 {
     public static void Success() => Run("success");
+    public static void Continuous() => Run("continuous");
     public static void WrongKey() => Run("wrong-key");
     public static void BeforeAuth() => Run("preauth");
     public static void Replay()
@@ -33,7 +34,8 @@ internal static class AuthenticatedTlsTests
         reservation.Start();
         var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
         reservation.Stop();
-        var server = TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback,
+        var server = mode == "continuous" ? TlsProbeServer.RunFixedPayloadBridgeAsync(port, certificate,
+            key, identity, () => { }, timeout.Token) : TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback,
             port, certificate, key, identity, timeout.Token,
             mode == "timeout" ? TimeSpan.FromMilliseconds(150) : TimeSpan.FromSeconds(5));
         using var client = new TcpClient();
@@ -90,6 +92,20 @@ internal static class AuthenticatedTlsTests
         var pong = Read();
         if (pong.Type != MessageType.Pong || !ping.AsSpan().SequenceEqual(pong.Payload))
             throw new Exception("Missing authenticated PONG");
+        if (mode == "continuous")
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                Send(MessageType.Ping, ping);
+                var next = Read();
+                if (next.Type != MessageType.Pong || !ping.AsSpan().SequenceEqual(next.Payload))
+                    throw new Exception("Continuous fixed probe sequence failed");
+            }
+            timeout.Cancel();
+            try { server.GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { }
+            return;
+        }
         server.GetAwaiter().GetResult();
         Frame Read() => wire.ReadAsync(timeout.Token).GetAwaiter().GetResult();
         void Send(MessageType type, byte[] payload) => wire.WriteAsync(type, payload, timeout.Token).GetAwaiter().GetResult();

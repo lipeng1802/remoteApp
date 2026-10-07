@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import threading
+import base64
 
 spec=importlib.util.spec_from_file_location("transport",Path(__file__).with_name("cross-network.py"))
 t=importlib.util.module_from_spec(spec)
@@ -70,10 +71,18 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:] not in ([],["--streams"]):
+    if sys.argv[1:] not in ([],["--streams"],["--tls"]):
         raise RuntimeError("invalid_arguments")
     streams=bool(sys.argv[1:])
+    tlsmode=sys.argv[1:]==["--tls"]
     os.umask(0o077)
+    if tlsmode:
+        env=dict(os.environ,COPYFILE_DISABLE="1")
+        packed=subprocess.run(["tar","--format=ustar","--no-xattrs","--no-acls","--exclude=bin","--exclude=obj","--exclude=._*",
+            "-czf",str(t.ARTIFACTS/"product-tls-source.tar.gz"),"windows/RemoteAgent/Directory.Build.props",
+            "windows/RemoteAgent/src/RemoteProtocol","windows/RemoteAgent/tools/TlsBridgeProbe",
+            "windows/RemoteAgent/tests/RemoteProtocol.Tests","protocol/testdata"],cwd=t.HERE.parents[1],env=env,capture_output=True,timeout=15)
+        t.check(packed.returncode==0,"product_source_archive_without_macos_resource_forks")
     t.check(not t.admin("nodes","list") and not t.admin("users","list"),"isolated_control_plane_empty")
     stamp=time.strftime("%Y%m%d%H%M%S")+secrets.token_hex(3)
     remote="/tmp/remoteapp-enrollment-"+stamp
@@ -85,6 +94,7 @@ def main():
     helpers=[]
     authority=None
     folders=[]
+    active_refresh=None
     root="C:\\Users\\jarvis\\remoteapp-enrollment-"+stamp
     work=root+"\\poc\\selfhost"
     try:
@@ -113,6 +123,33 @@ def main():
         actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\enrollment-helper.exe').Hash")
         t.check(actual.lower()==hashlib.sha256(binary.read_bytes()).hexdigest(),"windows_enrollment_binary_verified")
         win=t.WIN+[f'cmd.exe /d /c "cd /d {work} && enrollment-helper.exe"']
+        product=None
+        tlsclient=None
+        product_ready=None
+        if tlsmode:
+            archive=t.ARTIFACTS/"product-tls-source.tar.gz"
+            dest=root.replace("\\","/")+"/product-source.tar.gz"
+            p=subprocess.run(["scp","-O","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes",
+                "-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(archive),"jarvis@100.73.4.118:"+dest],capture_output=True,timeout=60)
+            t.check(p.returncode==0,"product_tls_sources_uploaded")
+            script_text=(f"$ErrorActionPreference='Stop'; tar -xzf '{root}\\product-source.tar.gz' -C '{root}'; "
+                f"dotnet run --project '{root}\\windows\\RemoteAgent\\tests\\RemoteProtocol.Tests' -c Release -- --bridge-validation; "
+                "if ($LASTEXITCODE -ne 0) {throw 'protocol_tests_failed'}; "
+                f"dotnet publish '{root}\\windows\\RemoteAgent\\tools\\TlsBridgeProbe' -c Release -r win-x64 --self-contained true -o '{root}\\product-publish'; "
+                "if ($LASTEXITCODE -ne 0) {throw 'publish_failed'}")
+            encoded=base64.b64encode(script_text.encode("utf-16le")).decode()
+            built=subprocess.run(t.WIN+["powershell.exe -NoProfile -NonInteractive -EncodedCommand "+encoded],capture_output=True,timeout=120)
+            if built.returncode:
+                for line in (built.stdout+built.stderr).decode(errors="replace").splitlines():
+                    if ": error " in line or line.startswith("FAIL "): print(line[:240],flush=True)
+            t.check(built.returncode==0,"windows_product_protocol_build_succeeded")
+            result=built.stdout.decode(errors="replace")
+            t.check("FAIL " not in result and "65/65 tests passed" in result and "SKIP Windows credential persistence" in result,
+                    "windows_65_protocol_tests_passed_dpapi_explicitly_not_validated")
+            product=Pipe(t.WIN+[f'cmd.exe /d /c "{root}\\product-publish\\TlsBridgeProbe.exe"'])
+            helpers.append(product)
+            product_ready=product.read()
+            t.check(product_ready["status"]=="ready","actual_product_tls_agent_loopback_ready")
         local=[str(t.ARTIFACTS/"enrollment-helper")]
         nodes=t.ARTIFACTS/"nodes"
         nodes.mkdir(mode=0o700,exist_ok=True)
@@ -233,6 +270,7 @@ def main():
                 t.check(False,label)
 
             def authorize():
+                nonlocal tlsclient,active_refresh
                 for helper in (server,controller):
                     challenge=helper.request("clock_challenge")["challenge"]
                     proof=authority.request("clock_proof",Challenge=challenge)
@@ -242,11 +280,54 @@ def main():
                 t.check(n["passed"] and n["network_state"]["claims"]["active"],"current_dynamic_state_available")
                 for helper,role in ((server,"target"),(controller,"controller")):
                     t.check(helper.request("authorize",Role=role,Issuer=ready["issuer"],Target=ready["target"],
-                        Controller=ready["controller"],State=n["network_state"])["passed"],"helper_dynamic_gate_enabled")
-                t.check(controller.request("stream")["passed"],"dynamic_stream_requested")
-                wait_for(lambda:controller.request("count")["stream_ticks"]>=3,"mutual_device_proof_fixed_payload_ticks")
+                        Controller=ready["controller"],State=n["network_state"],Bridge=tlsmode)["passed"],"helper_dynamic_gate_enabled")
+                active_refresh=Refresh()
+                if tlsmode:
+                    port=controller.request("bridge",Role="controller")["port"]
+                    executable=t.HERE.parents[1]/"macos/RemoteController/.build/release/TLSBridgeProbe"
+                    def launch(**changes):
+                        cfg=dict(Port=port,Key=product_ready["Key"],Fingerprint=product_ready["Fingerprint"],Target=n["network_state"]["claims"]["grant"]["claims"]["target"])
+                        cfg.update(changes)
+                        p=Pipe([str(executable)],cfg);helpers.append(p)
+                        t.check(p.read()["status"]=="ready","actual_product_tls_controller_ready")
+                        return p
+                    if not getattr(authorize,"negatives_done",False):
+                        for mode in ("pin","key","preauth"):
+                            before=product.request("count")
+                            changes={"pin":{"Fingerprint":"00"*32},"key":{"Key":base64.b64encode(bytes(32)).decode()},"preauth":{"Preauth":True}}[mode]
+                            negative=launch(**changes)
+                            try:
+                                wait_for(lambda:negative.request("count")["ended"],"product_tls_negative_completed",6)
+                            except RuntimeError:
+                                # Only counters/fixed outcome labels; never bootstrap secrets.
+                                print("TLS_DIAGNOSTIC",mode,negative.request("count"),server.request("count"),controller.request("count"),product.request("count"),flush=True)
+                                raise
+                            counts=negative.request("count")
+                            t.check(counts["pongs"]==0 and product.request("count")["pongs"]==before["pongs"],"product_tls_negative_zero_protected_payload")
+                            if mode=="pin":t.check(counts["pin_rejected"],"actual_product_certificate_pin_mismatch_rejected")
+                            if mode=="key":t.check(counts["result"]=="authentication_rejected","actual_product_wrong_hmac_key_rejected")
+                            if mode=="preauth":t.check(product.request("count")["preauth_rejected"]>before["preauth_rejected"],"actual_product_preauth_ping_rejected")
+                            negative.stop()
+                        authorize.negatives_done=True
+                        wait_for(lambda:server.request("count")["stream_closed"]>=3,"negative_tls_tunnels_fully_closed")
+                    authorize.baseline=server.request("count")["stream_closed"]
+                    tlsclient=launch()
+                    wait_for(lambda:tlsclient.request("count")["pongs"]>=3,"actual_product_tls_hmac_framed_pongs")
+                else:
+                    t.check(controller.request("stream")["passed"],"dynamic_stream_requested")
+                    wait_for(lambda:controller.request("count")["stream_ticks"]>=3,"mutual_device_proof_fixed_payload_ticks")
+
+            def ticks():
+                return tlsclient.request("count")["pongs"] if tlsmode else controller.request("count")["stream_ticks"]
 
             def ended():
+                if tlsmode:
+                    wait_for(lambda:tlsclient.request("count")["ended"] and server.request("count")["stream_closed"]==authorize.baseline+1,
+                             "actual_product_active_tls_stream_closed",6)
+                    a=ticks();p=product.request("count")["pongs"];time.sleep(0.5)
+                    t.check(a==ticks() and p==product.request("count")["pongs"] and tlsclient.request("count")["result"]!="timeout",
+                            "product_tls_closure_no_new_pongs_or_client_timeout")
+                    return
                 wait_for(lambda:not controller.request("count")["probing"] and server.request("count")["stream_closed"]==1,
                          "same_dynamic_active_stream_closed",6)
                 a=controller.request("count")
@@ -257,18 +338,18 @@ def main():
 
             def restart_helpers():
                 nonlocal server,controller
+                if tlsmode:tlsclient.stop()
                 controller.stop(); server.stop()
                 server,ip=join(win,win_dir,target_key,target,ready["target_key"])
                 controller,cip=join(local,folder,client_key,client,ready["controller_key"])
                 t.check(ip==target_ip and cip==client_ip,"stream_restart_retains_verified_network_identity")
 
             authorize()
-            refresh=Refresh()
+            refresh=active_refresh
             try:
-                start=controller.request("count")["stream_ticks"]
+                start=ticks()
                 time.sleep(5)
-                t.check(controller.request("count")["stream_ticks"]>start+10 and
-                        server.request("count")["stream_closed"]==0,"refresh_keeps_same_connection_beyond_initial_lease")
+                t.check(ticks()>start+10 and server.request("count")["stream_closed"]==(authorize.baseline if tlsmode else 0),"refresh_keeps_same_connection_beyond_initial_lease")
             finally:
                 refresh.close()
             ended()
@@ -276,7 +357,7 @@ def main():
 
             restart_helpers()
             authorize()
-            refresh=Refresh()
+            refresh=active_refresh
             try:
                 t.check(authority.request("authority_unavailable")["passed"],"durable_authority_closed_without_acl_withdrawal")
                 wait_for(lambda:refresh.authority_denied,"unavailable_authority_cannot_refresh_signed_state",4)
@@ -289,6 +370,7 @@ def main():
 
             restart_helpers()
             authorize()
+            active_refresh.close()
             # No parallel refresh here: get a fresh positive, then an authenticated
             # inactive snapshot while actual nodes and payload ACL still exist.
             old=authority.request("network_state")["network_state"]
@@ -303,6 +385,7 @@ def main():
             t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
                     "revoked_stream_closed_while_network_rule_present")
             t.check(authority.request("reconcile")["passed"],"revoked_resources_reconciled_after_gate_test")
+            if tlsmode:tlsclient.stop();product.stop()
         else:
             t.check(authority.request("revoke")["passed"],"grant_revoke_withdraws_rules_and_nodes")
         t.check(authority.request("restart")["passed"],"restart_does_not_resurrect_revoked_grant")
@@ -315,6 +398,8 @@ def main():
         authority=None
         t.check(not t.admin("nodes","list") and not t.admin("users","list"),"all_owned_control_resources_reclaimed")
     finally:
+        if active_refresh is not None:
+            active_refresh.done.set();active_refresh.thread.join(timeout=45)
         for p in helpers:
             p.emergency()
         if authority is not None:

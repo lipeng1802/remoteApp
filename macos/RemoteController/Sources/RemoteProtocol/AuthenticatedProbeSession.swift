@@ -54,14 +54,17 @@ struct AuthenticatedProbeSession {
     private let ping: Data
     private var agentNonce: Data?
     let streaming: Bool
+    let continuous: Bool
     var authenticated: Bool { gate.phase == .authenticated }
     private(set) var screen: ScreenInfoPayload?
     private var started = false
     private(set) var isComplete = false
 
-    init(deviceKey: Data, nonce: Data? = nil, ping: Data? = nil, streaming: Bool = false) throws {
+    init(deviceKey: Data, nonce: Data? = nil, ping: Data? = nil, streaming: Bool = false, continuous: Bool = false) throws {
         guard deviceKey.count == 32 else { throw ProtocolError.invalidPayload }
+        guard !streaming || !continuous else { throw ProtocolError.invalidState }
         self.streaming = streaming
+        self.continuous = continuous
         self.deviceKey = deviceKey
         self.nonce = try nonce ?? SecureRandom.bytes(count: 32)
         self.ping = try ping ?? SecureRandom.bytes(count: 8)
@@ -106,6 +109,7 @@ struct AuthenticatedProbeSession {
         case .pong:
             guard !streaming else { throw ProtocolError.invalidState }
             guard frame.payload == ping else { throw ProtocolError.invalidPayload }
+            if continuous { return [outgoing(.ping, ping)] }
             isComplete = true
             return []
         default:

@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 真实产品 TLS 桥接通过（当前入口）
+
+动态 gate 已桥接真实 Swift `TLSControllerClient` ↔ C# `TlsProbeServer`，通过独立 tsnet/Headscale/DERP 传输 TLS 密文；不是 Go 模拟认证。仅连续固定 8 字节 PING/PONG，不接屏幕/输入/剪贴板/GUI/安装包。Mac 仅监听回环临时端口，Windows 产品开发服务只监听 `127.0.0.1:47478`；目标固定不可由 peer 选择。原 Self/IP、WhoIs、签名绑定和新鲜应用互证保留，TLS 桥接有独立签名域，旧固定载荷证明不能打开上游。
+
+两端 250ms watchdog 检查 grant 和绝对 3 秒签名状态，父管道每 500ms 刷新。失效关闭两向 socket、等待 copy worker 退出，无自动重连。Go 不解 TLS，不声称逐个加密 PONG 前查询授权。开发证书/产品 HMAC 密钥由 Windows 临时生成，通过捕获的可信 SSH 私有管道传给父测试和 Swift 内存 pin；绑定本轮批准目标，但不是正式 issuer 签名的 TLS 身份分发服务。无生产钥匙串/DPAPI 修改。
+
+真实 `enrollment-network.py --tls` 完整零退出：保留原注册/持有证明/动态 ACL/零规则与恢复；错误指纹明确拒绝、错误 HMAC 返回认证拒绝、认证前 PING 被真实 C# gate 拒绝，三者零保护 PONG；正确 TLS/framing/认证持续同一连接超过初始租期。停止刷新、真实 Store 关闭但 ACL 保留、撤销 inactive 但节点/ACL 保留都关闭真实 TLS 且双端 PONG 不增长，不以客户端超时替代授权关闭。Store 重开/Reconcile、同节点显式重启恢复；有效旧正向状态仍被 inactive 锁定拒绝；撤销精确回收、旧 grant 不复活、全部进程正常关闭。恢复原 file 策略、服务 active、业务 Nginx 哈希保持。
+
+Go 全量竞态/静态检查通过，Mac 126/126、TLSBridgeProbe 与 RemoteController Release 通过。Windows 自包含 win-x64 开发探针发布与 SSH profile 65/65 协议测试通过；**默认套件共 66 项，其中 DPAPI 凭据持久化在 SSH 登录上下文报“登录会话不存在”，仍需交互式 Windows 验证**。新增明确 `--bridge-validation` 只跳该项且打印 SKIP；默认测试及生产 DPAPI 未削弱。不能记为默认 66/66。
+
+主要问题：Mac tar 的 `._*.cs` 元数据被 Windows 当源码，已排除；错误证书指纹已经拒绝但 NWConnection 没有及时回报 failed，现于 verify 拒绝后明确结束并取消连接，并在创建连接前配置安全选项。三项真实负向复测通过。细节、复测命令和边界见 [TLS 桥接验收](../poc/selfhost/public-server/TLS_BRIDGE_TEST.md)。
+
+下一切片优先：周期受控 Reconcile/故障恢复，随后公开认证状态/设备码接口、防滥用、正式证书身份分发与本机安全 IPC/存储，最后 GUI/安装集成。现有产品仍依赖系统 Tailscale；没有宣布最终免登录安装体验完成。下方为历史记录。
+
 ## 2026-10-07 动态注册活动流闭环（当前入口）
 
 新增 `streamgate`，将真实注册账本派生的签名绑定/3 秒状态接到现有 session 固定载荷长连接；不是产品 TLS。helper 私有管道初始化 issuer/双方公钥、刷新状态、启动探针和读取固定计数，网络方不能自行选择绑定。握手验证 Self/IP、实际入站地址、WhoIs 对端节点公钥及双方应用 challenge 签名。控制端 LocalAPI 是本地代理 socket，先认证显式 overlay 目的节点，才提供认证地址给 session；不跟随 Dial-Self 到系统网络。

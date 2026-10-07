@@ -9,6 +9,23 @@ namespace RemoteProtocol;
 
 public static class TlsProbeServer
 {
+    // Development-only product protocol bridge: loopback, fixed PING/PONG,
+    // no JPEG source, input sink or clipboard callbacks can be supplied.
+    public static async Task RunFixedPayloadBridgeAsync(int port, X509Certificate2 certificate,
+        byte[] deviceKey, byte[] agentIdentifier, Action reportPong, CancellationToken cancellationToken,
+        Action<string>? reportRejection = null)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try { await RunCoreAsync(IPAddress.Loopback, IPAddress.Loopback, port, certificate,
+                deviceKey, agentIdentifier, cancellationToken, TimeSpan.FromMinutes(5),
+                continuousProbe: true, reportPong: reportPong).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { }
+            catch (AuthenticationException) { reportRejection?.Invoke("authentication"); }
+            catch (ProtocolException ex) { reportRejection?.Invoke(ex.Error.ToString()); }
+            catch (IOException) { }
+        }
+    }
     public static async Task RunContinuousAsync(
         IPAddress bindAddress, IPAddress expectedRemoteAddress, int port, X509Certificate2 certificate,
         byte[] deviceKey, byte[] agentIdentifier, CancellationToken cancellationToken = default,
@@ -89,7 +106,8 @@ public static class TlsProbeServer
         Func<IJpegFrameSource>? createJpegSource = null,
         Action<string>? reportStatus = null,
         Action<JpegTransferMetrics>? reportMetrics = null,
-        TimeSpan? frameTimeout = null, InputSimulationOptions? inputSimulation = null)
+        TimeSpan? frameTimeout = null, InputSimulationOptions? inputSimulation = null,
+        bool continuousProbe = false, Action? reportPong = null)
     {
         if (deviceKey.Length != 32 || agentIdentifier.Length != 16)
             throw new ArgumentException("Invalid device credential length.");
@@ -136,7 +154,7 @@ public static class TlsProbeServer
 
             using var sessionDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             sessionDeadline.CancelAfter(sessionTimeout ?? TimeSpan.FromSeconds(20));
-            await AuthenticateAndProbeAsync(tls, deviceKey, agentIdentifier, sessionDeadline.Token, sessionDeadline, createJpegSource, reportStatus, reportMetrics, frameTimeout ?? TimeSpan.FromSeconds(10), inputSimulation).ConfigureAwait(false);
+            await AuthenticateAndProbeAsync(tls, deviceKey, agentIdentifier, sessionDeadline.Token, sessionDeadline, createJpegSource, reportStatus, reportMetrics, frameTimeout ?? TimeSpan.FromSeconds(10), inputSimulation, continuousProbe, reportPong).ConfigureAwait(false);
         }
         finally
         {
@@ -147,7 +165,8 @@ public static class TlsProbeServer
     private static async Task AuthenticateAndProbeAsync(
         SslStream tls, byte[] deviceKey, byte[] agentIdentifier, CancellationToken cancellationToken,
         CancellationTokenSource sessionDeadline, Func<IJpegFrameSource>? createJpegSource, Action<string>? reportStatus,
-        Action<JpegTransferMetrics>? reportMetrics, TimeSpan frameTimeout, InputSimulationOptions? inputSimulation)
+        Action<JpegTransferMetrics>? reportMetrics, TimeSpan frameTimeout, InputSimulationOptions? inputSimulation,
+        bool continuousProbe, Action? reportPong)
     {
         var clipboardAvailable = inputSimulation?.ReadClipboardText is not null ||
             inputSimulation?.WriteClipboardText is not null;
@@ -248,10 +267,15 @@ public static class TlsProbeServer
                 if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken);
             }
         }
-        var ping = await Receive(MessageType.Ping);
-        if (ping.Payload.Length != 8)
-            throw new ProtocolException(ProtocolError.InvalidPayload, "PING must contain eight bytes.");
-        await wire.WriteAsync(MessageType.Pong, ping.Payload, cancellationToken);
+        do
+        {
+            var ping = await Receive(MessageType.Ping);
+            if (ping.Payload.Length != 8)
+                throw new ProtocolException(ProtocolError.InvalidPayload, "PING must contain eight bytes.");
+            await wire.WriteAsync(MessageType.Pong, ping.Payload, cancellationToken);
+            reportPong?.Invoke();
+            if (continuousProbe) await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+        } while (continuousProbe);
 
         async Task<Frame> Receive(MessageType expectedType)
         {

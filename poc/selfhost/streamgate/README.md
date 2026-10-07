@@ -1,5 +1,7 @@
 # 动态注册到固定载荷活动流
 
+2026-10-07：新增不透明 `session.Tunnel` 桥接真实产品 TLS，先核对当前 gate/双方新鲜独立域证明，才打开固定 Windows 回环上游；活动授权失效关闭两向 socket 并等待 copy worker。真实 Swift/C# framing、pin/HMAC 和三类授权关闭及恢复验收通过，见 [TLS 桥接](../public-server/TLS_BRIDGE_TEST.md)。以下是上一切片固定载荷门禁记录；GUI/安装包仍未接入。
+
 `streamgate` 将 `ProvisionBackend.NetworkState(grant)` 派生的动态绑定接到现有 `session`。仅独立 PoC，不是 Swift/C# 产品 TLS，不采集屏幕、不注入输入、不进入安装包。
 
 私有父子管道提供单独可信的 issuer 公钥、双方应用公钥和签名状态；不是由网络连接方声明身份。初始化核对签名、有效租期、完整 grant/双方身份、本机应用私钥和角色。后续状态只能刷新同一 grant/绑定，inactive 锁定不能用旧正向状态解锁；畸形/拒绝的控制更新使当前 gate 永久拒绝。初始化一次后不退回旧 token 模式。
