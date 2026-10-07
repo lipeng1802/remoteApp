@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-4C-4I：[独立 daemon/frontend 的真实产品 TLS 验证入口](poc/selfhost/public-server/SPLIT_PRODUCT_TLS.md) 已补齐：自主HTTPS gate、真实Swift/C#、证书私钥证明/新鲜描述符、错pin/错HMAC/认证前载荷、跨lease刷新与撤销关闭。Python4项断言及Swift构建通过；Windows新编译/真实双机待READY，不宣称产品TLS实机通过，整体4未完成。
+4C-4I：[独立 daemon/frontend 的真实产品 TLS](poc/selfhost/public-server/SPLIT_PRODUCT_TLS.md) 完整双机复测通过，退出0：真实Swift/C#、OS签名证书私钥证明/新鲜描述符、错pin/错HMAC/认证前载荷拒绝、自主HTTPS刷新跨lease、撤销关闭非timeout、精确回收恢复。修复先停daemon导致cleanup_pending尚未提交的清理竞争，Linux5项断言通过。Windows最终STOPPED待确认；旧ACL残留故障/正式信任安装等仍待，整体4未完成。
 
 4C-4H：独立 daemon/frontend 链路的[真实双机节点证明](poc/selfhost/public-server/SPLIT_OS_CONSENT.md) 完整复测通过，退出码0。注册前公钥/单次签名意图、两端真实节点与 OS 身份持有证明、错误身份拒绝、同节点恢复、单向最小 ACL 与正反载荷、撤销后回收/拒绝及精确清理通过。首轮日志清理断言失败已修正并完整重跑；产品 TLS 尚未接此新链路，整体4未完成。
 

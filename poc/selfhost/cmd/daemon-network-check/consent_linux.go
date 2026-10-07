@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -31,6 +32,27 @@ func clientJournalsCleaned(raw []byte) bool {
 		}
 	}
 	return true
+}
+
+// Node removal is not the final durable retirement confirmation. Leave the
+// live supervisor time to finish its journal commit before cancelling it.
+func awaitClientCleanup(ctx context.Context, read func() ([]byte, error)) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		b, e := read()
+		if e != nil {
+			return denied
+		}
+		if clientJournalsCleaned(b) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return denied
+		case <-ticker.C:
+		}
+	}
 }
 
 func parseConsentPins(target, controller string) (consentPins, error) {

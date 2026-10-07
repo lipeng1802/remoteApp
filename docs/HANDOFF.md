@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片4C-4I：独立进程真实产品TLS完整复测通过
+
+用户重新READY后实际pinned Windows probe通过，执行 split-consent.py --tls。最新完整复测退出0：本轮源码archive哈希、Windows65/65 bridge协议测试和publish通过（DPAPI明确SKIP，非凭证持久化）；真实OS consent/nodeproof/最小规则流程仍通过。两端同node/IP正常重开managed helper，旧Token fallback拒绝、自主HTTPS校时/watch/gate active，父state不能授权。实际C#证书私钥证明由Windows OS签名HTTPS发布，Mac取得fresh issuer描述符且指纹匹配实际C#证书；真实Swift错pin/错HMAC/认证前PING各结束且零protected pong。正常TLS至少3pong再持续5秒增加>10，原连接跨初始lease；Windows OS签名撤销后双端watch done/join，Swift connection_closed非timeout/cancelled，helper tunnel与C#session各关闭一次，后续pong无增长。
+
+首轮功能通过但清理失败不算完整PASS：节点已回收/ACL零但一条Store记录cleanup_pending，停止daemon取消了维护尚未完成的日志提交。原实验目录/tmp/remoteapp-daemon-check-2748000149/模式backup保留；只读确认无writer/socket/verifier owner，用原Store/同verifier恢复独立daemon首Reconcile，实际两条记录cleaned后正常STOPPED/零退出，精确Retire并恢复原模式/删除本轮已验证目录和程序。未伪造记录、未删线上writer锁。
+
+check新增30秒awaitClientCleanup：收到stop后先让活supervisor完成全部cleaned提交，再停frontend/daemon；终止后仍核对日志。超时/读取错误保留证据，不以节点消失代替日志确认。Linux5项真实组件PASS无SKIP（新屏障等commit/取消/读取错误）、Linux构建/vet、Python4项断言/diff通过；本轮Go服务逻辑未改，未重跑Mac全量race。
+
+最新整轮helper/API/产品进程均closed/正常零退出；确认cleaned后独立daemon/frontend正常STOPPED/join/零ACL、精确verifier Retire，所有本轮节点/目录/上传程序清理，原file配置/策略恢复，线上State原hash/Nginx与服务未变，控制资源零。**Windows桌面owner仍由用户持有，待最后Enter/STOPPED确认**，未远程停止/删除。
+
+不证明旧ACL残留时安全关闭、自然300秒到期、硬崩溃恢复；HMAC仍私有测试投递，root/CA/SSH为私有测试bootstrap，不是最终信任安装/公网API/GUI/安装。下一步旧ACL留存的权威故障503→自主TLS关闭、显式同身份恢复（先准备入口，不贸然改线上Store/业务443），随后正式trust/admission/HMAC产品化；整体4未完成。见[实机记录](../poc/selfhost/public-server/SPLIT_PRODUCT_TLS.md)。
+
 ## 2026-10-07 切片 4C-4I：独立进程产品TLS入口准备，待READY实测
 
 用户确认4C-4H Windows STOPPED，上一轮最终桌面退出确认闭环。新增 split-consent.py --tls/split_tls.py；split_nodes返回实际binding与显式同node/IP重开managed helper能力。产品源码archive/Windows65协议验证（DPAPI明确SKIP）与publish安排在创建短期grant及启动隔离daemon前，不消耗grant编译。实际C#与Swift探针，OS target发布证书私钥证明，controller fresh issuer描述符指纹核对；helper自主HTTPS校时/watch/gate，无父进程刷新线程/state授予，无旧Token fallback。

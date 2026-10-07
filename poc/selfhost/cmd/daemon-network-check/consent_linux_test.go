@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -70,5 +72,28 @@ func TestClientJournalCleanupRequiresConfirmedStatuses(t *testing.T) {
 		if clientJournalsCleaned([]byte(c.raw)) != c.ok {
 			t.Fatal("journal cleanup assertion mismatch")
 		}
+	}
+}
+
+func TestCleanupBarrierWaitsForCommitAndRejectsTimeoutOrReadError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	calls := 0
+	if awaitClientCleanup(ctx, func() ([]byte, error) {
+		calls++
+		if calls == 1 {
+			return []byte(`{"Version":1,"Provisions":{"a":{"Status":"cleanup_pending"}}}`), nil
+		}
+		return []byte(`{"Version":1,"Provisions":{"a":{"Status":"cleaned"}}}`), nil
+	}) != nil || calls != 2 {
+		t.Fatal("did not wait for durable cleanup")
+	}
+	closed, c := context.WithCancel(context.Background())
+	c()
+	if awaitClientCleanup(closed, func() ([]byte, error) { return []byte(`{"Version":1,"Provisions":{"a":{"Status":"bound"}}}`), nil }) == nil {
+		t.Fatal("unconfirmed cleanup accepted")
+	}
+	if awaitClientCleanup(ctx, func() ([]byte, error) { return nil, errors.New("read failed") }) == nil {
+		t.Fatal("read failure accepted")
 	}
 }

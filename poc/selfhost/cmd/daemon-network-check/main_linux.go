@@ -442,6 +442,14 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 			if consentSession(os.Stdin, os.Stdout, *consent, signed.Claims.Issuer, der, listen, 5*time.Minute, initial.Key) != nil {
 				return denied
 			}
+			if consent.Nodes {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				err := awaitClientCleanup(ctx, func() ([]byte, error) { return os.ReadFile(filepath.Join(state, "state.json")) })
+				cancel()
+				if check(err == nil, "client_journals_durably_cleaned_before_daemon_stop") != nil {
+					return denied
+				}
+			}
 			if front.stop() != nil || current.stop() != nil {
 				return denied
 			}
