@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4C-4C：新版真实双机验收通过，Windows最终STOPPED待确认
+
+用户重新READY后，使用现有windows-native-network包和实际pinned probe，执行新版 `enrollment-network.py --supervised`，最终完整退出码0；没有沿用旧--native结果。真实persistent Runtime、Unix kernel broker、supervisor、Store可信公钥/overlay nodeproof、两端OS signer设备注册/邀请/拒绝/明确批准及签名授权全链路通过。fixture同root/UID的kernel IPC不等同线上不同UID新后端部署，正式network接口仍未开启。
+
+实机通过：错误Mac应用身份真实challenge拒绝且不能投影规则；同节点重启；精确单向47476批准规则、正向载荷/反向拒绝、零ACL三轮真实拒绝且target无收到载荷；实际Swift/C#产品TLS错pin/错HMAC/认证前PING零保护载荷，正常TLS持续超过初始lease。周期维护保留正常TLS；policy命令故障时拒绝签名刷新，旧ACL仍在TLS关闭，provider恢复不自动开门，显式Stop/join并新backend/supervisor恢复。真实Store关闭同样拒绝刷新/旧ACL仍在TLS关闭。
+
+撤销经Windows真实OS签名HTTPS：双方立即拒绝仍有效positive父快照重放，自主观察撤销且watch退出；退出后的旧快照不能重开，TLS关闭不是client timeout。周期回收两份record并下发零规则、maintenance取消join；冷重启不能复活已撤销grant。真实verifier SDK stop/join后Live/Ready=false、拒绝新state；显式同key/IP resume+新supervisor仍不复活撤销grant。所有helper/API/TLS/fixture正常零退出，owned控制资源清零。
+
+本轮三个前置失败不记PASS：首次绑定后旧断言要求inactive，新supervisor可能已投影，改核对精确绑定与实际最小ACL（或inactive+零ACL）；后续撤销退出等待沿用2秒而真实HTTPS预算15秒，supervised验收改20秒且仍严格要求双端deny+join，不当生产时延指标；再后续3秒snapshot在join后过期，改撤销后立即验证fresh重放拒绝，退出后另验不能重开，不延长授权。最终完整复测通过，Python4+2测试通过、diff检查通过；本轮未改Go服务实现，先前race/vet证据不冒充新执行。
+
+独立SSH复核 nodes/users/preauthkeys均null（零），原file policy/100.120.0.2→100.120.0.1:47476恢复；authority/frontend/poc均active，线上state哈希仍5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca，Nginx基线全部OK。正常清理Mac随机身份/本轮节点目录，Windows桌面owner仍属于用户，未远程停止/删除；已请用户Enter并回传STOPPED，**尚无本轮Windows最终停止确认**。
+
+下一步先收Windows STOPPED，再推进独立权威daemon的持久verifier/真实backend装配与受控部署（先隔离验收，不直接公网开network）。公网admission/可信安装根与floor/轮换恢复、产品HMAC安全投递、GUI/安装仍待；300秒自然grant到期、断电/崩溃恢复、DERP/直连分类未新增证据。整体4未完成。下方“新版待验”为历史。
+
 ## 2026-10-07 切片 4C-4C：新版双机协调入口代码完成，实机待验
 
 用户确认Windows已停止，先改造入口，未改服务器。enrollment-network.py新增--supervised（native/managed/TLS仍真实OS），启动fixture --native-supervised并要求ready supervised=true。新supervisedFixture用persistent Runtime+kernel broker+PrivateNetworkHandler+supervisor；可信Store取pub、runtime proof/report固定标签。早期一分钟维护以显式控制zero/reconcile阶段；周期实验切500ms。Stop后显式新backend/supervisor才恢复，policy服务恢复不能自动开门；Store故障Stop临时policy不可用保留旧ACL，便于TLS关闭验收。撤销接受签名inactive或拒绝（周期可能已清binding），仍禁止active，旧ACL关闭证据由fault阶段区分。末尾真实SDK stop/join+same key/IP explicit resume，已撤销grant不可复活。

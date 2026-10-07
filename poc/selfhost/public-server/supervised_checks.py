@@ -13,3 +13,16 @@ def revocation_not_active(reply):
         return signed_refresh_denied(reply)
     return (reply.get("passed") is True and
             reply.get("network_state", {}).get("claims", {}).get("active") is False)
+
+def bound_projection_matches(reply, binding, policy):
+    if reply.get("passed") is not True:
+        return False
+    claims = reply.get("network_state", {}).get("claims", {})
+    if claims.get("binding") != binding:
+        return False
+    if claims.get("active") is False:
+        return policy == {"acls": []}
+    if claims.get("active") is True:
+        return policy == {"acls": [{"action": "accept", "src": [binding["controller_ip"]],
+                                    "dst": [binding["target_ip"] + ":47476"]}]}
+    return False

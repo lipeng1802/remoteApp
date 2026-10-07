@@ -19,7 +19,7 @@ import threading
 import base64
 import socket
 from native_bootstrap import NativeIdentities
-from supervised_checks import signed_refresh_denied, recovery_still_latched, revocation_not_active
+from supervised_checks import signed_refresh_denied, recovery_still_latched, revocation_not_active, bound_projection_matches
 
 spec=importlib.util.spec_from_file_location("transport",Path(__file__).with_name("cross-network.py"))
 t=importlib.util.module_from_spec(spec)
@@ -313,7 +313,11 @@ def main():
             print("FAIL mac_bind_"+binding["proof_stage"]+"_expired_"+str(binding["registration_expired"]),flush=True)
         t.check(binding["passed"],"mac_live_network_and_app_possession_proof")
         pending=authority.request("network_state")
-        t.check(pending["passed"] and not pending["network_state"]["claims"]["active"],"bound_pair_inactive_before_policy_reconcile")
+        if supervised:
+            t.check(bound_projection_matches(pending,{"target_node":target_key,"controller_node":client_key,"target_ip":target_ip,"controller_ip":client_ip},t.admin("policy","get")),
+                    "bound_pair_state_matches_verified_identity_and_actual_minimum_projection")
+        else:
+            t.check(pending["passed"] and not pending["network_state"]["claims"]["active"],"bound_pair_inactive_before_policy_reconcile")
         t.check(authority.request("reconcile")["passed"],"both_bound_minimum_rule_applied")
         rules=authority.request("rules")["rules"]
         t.check(rules==[{"source":client_ip,"destination":target_ip+":47476"}],"only_approved_pair_port_projected")
@@ -403,6 +407,7 @@ def main():
                         t.check(True,label)
                         return
                     time.sleep(0.2)
+                print("FAIL "+label+"_deadline",flush=True)
                 t.check(False,label)
 
             def authorize():
@@ -573,19 +578,37 @@ def main():
             old=network_request("network_state")["network_state"]
             revoked=target_api.request("device",Device={"action":"revoke","grant_id":ready["grant_id"]}) if apimode else authority.request("revoke_only")
             t.check(revoked["passed"],"grant_revoked_without_node_or_acl_cleanup")
+            if supervised:
+                # Network snapshots live for only 3s. Test fresh parent replay
+                # immediately, not after waiting up to 20s for watcher join.
+                for helper in (server,controller):
+                    replay=helper.request("state",State=old)
+                    if replay.get("fresh") is not True:
+                        print("FAIL revoked_replay_snapshot_already_expired",flush=True)
+                    t.check(replay.get("passed") is False and replay.get("fresh") is True,
+                            "fresh_positive_parent_replay_rejected_after_revoke")
             inactive=network_request("network_state")
             if supervised:
                 t.check(revocation_not_active(inactive),"supervised_revocation_never_issues_active_state")
             else:
                 t.check(inactive["passed"] and not inactive["network_state"]["claims"]["active"],"revocation_signed_inactive_with_original_binding")
             if managedmode:
+                # Real supervised requests may already be in flight through the
+                # 15s HTTPS / 14s broker budget when revocation is committed.
+                # Require BOTH the irreversible deny and worker join; the old
+                # 2s fixture wait is not a production revocation latency claim.
                 wait_for(lambda:all(helper.request("count")["managed_done"] and not helper.request("count")["managed_active"] for helper in (server,controller)),
-                         "both_helpers_observe_revocation_without_parent_state_relay",2)
+                         "both_helpers_observe_revocation_without_parent_state_relay",20 if supervised else 2)
             for helper in (server,controller):
                 if not managedmode:
                     t.check(helper.request("state",State=inactive["network_state"])["passed"],"inactive_state_delivered")
                 replay=helper.request("state",State=old)
-                t.check(not replay["passed"] and replay["fresh"],"still_valid_positive_cannot_unlatch_revocation")
+                if supervised:
+                    status=helper.request("count")
+                    t.check(replay.get("passed") is False and status.get("managed_done") is True and status.get("managed_active") is False,
+                            "positive_replay_cannot_reopen_joined_revoked_gate")
+                else:
+                    t.check(not replay["passed"] and replay["fresh"],"still_valid_positive_cannot_unlatch_revocation")
             ended()
             if supervised:
                 t.check(t.admin("policy","get") in ({"acls":[]},{"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]}),
