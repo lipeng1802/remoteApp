@@ -28,6 +28,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-interactive-vaul
 
 将 `READY` 路径回传。`interactive-bootstrap.json` 只含随机 pipe/scope、公钥和本包 relay 路径，无私钥/验证码。必须是本机操作者信任的包/路径；校验 manifest 并不是不可信文件的真实性保证。启动脚本使用 CreateNew，不覆盖已有 bootstrap；若遗留文件，先确认原进程已经结束，再仅删除该 bootstrap 文件，不删 Credential Manager 命名空间。
 
+中文目录兼容：启动脚本控制管道显式写 UTF-8/no-BOM，不使用 Windows PowerShell 默认 gb2312 的 StandardInput.WriteLine。早期版本在中文目录报 `Interactive vault unavailable`，已修复并通过实际 Windows 子进程字节回归；需使用更新脚本。此回归不是桌面保持启动或 SSH 探针验收。
+
 同一 Windows 用户的 SSH 会话可以执行：
 
 ```powershell

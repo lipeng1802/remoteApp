@@ -1,6 +1,14 @@
 # Keep this window open. Only a random test credential is created, never the
 # installed application's key. Bootstrap contains public fields, no secret.
 $ErrorActionPreference = 'Stop'
+function Write-VaultControlLine {
+    param([System.IO.Stream]$Stream, [string]$Line)
+    # Windows PowerShell's Process.StandardInput writer may use the system ANSI
+    # code page. Native privatepipe JSON is always UTF-8, including Chinese paths.
+    $taskLineBytes = [System.Text.Encoding]::UTF8.GetBytes($Line + "`n")
+    $Stream.Write($taskLineBytes, 0, $taskLineBytes.Length)
+    $Stream.Flush()
+}
 $taskFolder = $PSScriptRoot
 $taskManifest = Get-Content -LiteralPath (Join-Path $taskFolder 'SHA256.json') -Raw | ConvertFrom-Json
 foreach ($taskName in @('identity-vault.exe', 'interactive-vault.exe', 'vault-relay.exe')) {
@@ -19,13 +27,22 @@ $taskInfo.RedirectStandardOutput = $true
 $taskProcess = New-Object System.Diagnostics.Process
 $taskProcess.StartInfo = $taskInfo
 $taskCreatedBootstrap = $false
+$taskStarted = $false
 try {
     if (!$taskProcess.Start()) { throw 'Broker launch failed' }
-    $taskProcess.StandardInput.WriteLine((@{VaultExecutable=(Join-Path $taskFolder 'identity-vault.exe')} | ConvertTo-Json -Compress))
+    $taskStarted = $true
+    Write-VaultControlLine -Stream $taskProcess.StandardInput.BaseStream -Line (@{VaultExecutable=(Join-Path $taskFolder 'identity-vault.exe')} | ConvertTo-Json -Compress)
     $taskRead = $taskProcess.StandardOutput.ReadLineAsync()
     if (!$taskRead.Wait(10000)) { throw 'Broker startup timeout' }
     $taskReady = $taskRead.Result | ConvertFrom-Json
-    if ($taskReady.status -ne 'ready' -or $taskReady.scope -notmatch '^[0-9a-f]{32}$' -or $taskReady.public_key -notmatch '^[0-9a-f]{64}$') { throw 'Interactive vault unavailable' }
+    if ($taskReady.status -ne 'ready' -or $taskReady.scope -notmatch '^[0-9a-f]{32}$' -or $taskReady.public_key -notmatch '^[0-9a-f]{64}$') {
+        $taskStatus = 'invalid_reply'
+        if ($taskReady.status -eq 'failed') { $taskStatus = 'broker_failed' }
+        $taskExited = $taskProcess.WaitForExit(1000)
+        $taskExit = 'running'
+        if ($taskExited) { $taskExit = [string]$taskProcess.ExitCode }
+        throw "Interactive vault unavailable (stage=initialization, status=$taskStatus, exit=$taskExit). No plaintext fallback."
+    }
     $taskReady | Add-Member -NotePropertyName relay_executable -NotePropertyValue (Join-Path $taskFolder 'vault-relay.exe')
     # CreateNew rejects a competing launcher, rather than replacing its file.
     $taskStream = [System.IO.File]::Open($taskBootstrap, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read)
@@ -37,8 +54,10 @@ try {
     Write-Output "READY: $taskBootstrap (public identity only). Keep this desktop window open."
     [void](Read-Host 'Press Enter only when coordinated verification is finished, to stop and clean this test identity')
 } finally {
-    if ($taskProcess.Id -and !$taskProcess.HasExited) {
-        $taskProcess.StandardInput.WriteLine('{"Op":"stop"}')
+    if ($taskStarted -and !$taskProcess.HasExited) {
+        # Startup failure can race process exit. Do not mask its original
+        # diagnostic with a secondary broken-pipe exception.
+        try { Write-VaultControlLine -Stream $taskProcess.StandardInput.BaseStream -Line '{"Op":"stop"}' } catch { }
         $taskProcess.StandardInput.Close()
         if (!$taskProcess.WaitForExit(12000)) {
             $taskProcess.Kill()

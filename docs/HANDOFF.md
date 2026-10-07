@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 桌面启动脚本中文路径编码修复
+
+桌面桥接测试用户已确认通过，但保持启动脚本报 `Interactive vault unavailable`。只读实机诊断确认 Windows PowerShell 的 Process.StandardInput 默认编码为 gb2312；原 WriteLine 将中文 VaultExecutable 路径写成非 UTF-8，native JSON 读入后路径损坏。改为直接 BaseStream 写入显式 UTF-8/no-BOM/换行并 Flush，初始化与 stop 共用函数；增加固定阶段/状态/退出码诊断及避免启动退出竞态的二次 broken-pipe 掩盖。不改 exe/身份存储策略，不导出私钥、不重置凭据。
+
+实际 Windows PowerShell 加载新脚本的 writer 函数，发送中文/空格字符串到临时子进程并逐字节核对 UTF-8+换行通过；该检查不执行 broker、不创建凭据或写远端文件。新增 `test-launcher-utf8.ps1` 保存中文 JSON 路径传输回归。独立 zip 更新同一启动脚本，四份 exe/hash 不变。用户需替换脚本后复试 `start-interactive-vault.ps1`；READY/SSH 探针与完整 OS 双机验收仍待，不能用编码回归宣布通过。
+
 ## 2026-10-07 切片 4B-4A：Windows 桌面 OS 身份桥接入口（桌面通过，SSH 待验）
 
 为跨网 OS signer 启动补上 Windows SSH/交互式安全存储的会话隔离桥：桌面 `interactive-vault` 显式创建并持有本轮随机 native 身份，同用户 SSH helper 使用 `vault-relay` 重开固定 scope/public，私钥不导出、不退回 fixture/明文。仅随机本机 named pipe、当前用户 protected DACL、拒绝 remote client/名称碰撞，四连接上限、严格 8 KiB JSON/期限；拒绝 create/delete/export/任意消息，不让非法消息毒化持有进程。停止关闭连接/join 后精确删除测试身份；不抵抗同用户恶意代码或代替业务门禁。
