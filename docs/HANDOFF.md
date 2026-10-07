@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 4B-3：真实双机自主刷新/产品 TLS 门禁通过（当前入口）
+
+新增 `enrollment-network.py --managed` 并实际完整零退出。沿用真实设备 HTTPS 申请/明确确认、注册前节点 key、网络节点与应用持有证明、动态单向 ACL/真实零 ACL 拒绝；通过后同身份显式重启两端 helper 到自主模式，Token 为空，API TLS 根/issuer 固定私有 bootstrap。父脚本没有状态刷新线程，也不让独立 device-api-client 开启 watch；每个网络 helper 自生成挑战校准、自己签名 HTTPS 刷新并验证 gate。
+
+实机通过：两端自主 gate active；有效父管道 state 更新拒绝；旧 token probe 固定拒绝（不令进程崩溃）；真实 Swift/C# TLS 证书 pin/HMAC/认证前 PING 三项负向零保护 PONG，正确连接持续超过初始 3 秒 lease。可信私有 `watch_stop` 取消/join helper 自身 watch，真实 TLS 关闭且双方 PONG 不增长、不是客户端 timeout。新增固定 `managed_active`/`managed_done` 诊断不是授权依据；自主 state 请求只验签报告 fresh，不改变 gate。
+
+周期 policy 故障时最后网络 ACL 尚在，helper 自取 inactive 关闭 TLS；恢复 CLI/周期自动重试、冷后端重开后保留同网络身份并由显式重启恢复。真实 Store 关闭、保留 ACL 时，两端自身 watch 终止、真实 TLS 关闭；服务恢复后显式重启。设备 HTTPS 撤销后，没有父管道 inactive 投递；独立确认两端 managed_done 且 inactive，再将尚有效的旧正向状态交给两端都得到 fresh=true/passed=false，不能复活；数据 TLS 已关闭，PONG 不增长。周期精确回收、显式零规则、全部正常退出通过。
+
+Windows SSH 产品 profile 65/65（DPAPI 明确 SKIP，默认 66 项仍独立待验）；Go 全量 race/vet、managed 两轮竞态及诊断一致性回归通过。结束后节点/用户/preauthkeys 全部回收，独立 SSH 三类资源均 null（0）；原 file 策略/PoC 策略恢复，服务 active，业务 Nginx 哈希一致。无生产配置/安装包/系统 Tailscale/防火墙修改；仅删除本轮独立节点状态和临时授权资源，不保留测试身份供复用。
+
+**边界必须保留：本轮两端 AppKey 均是隔离 fixture 测试密钥，不是 Windows Credential Manager/双机 OS signer 全链路实测。** Windows SSH 登录缺 Credential Manager 会话，未改变安全策略、未导出用户 OS 私钥、未用明文替代生产存储；之前 Windows 交互式 native 通过是独立证据。API 入口仍是私有 HTTPS+SSH 管理转发，HMAC/信任锚仍由可信 fixture 提供，不是最终用户连接方案。故障是 policy runner/真实 Store，不是整个 daemon 断电；本轮没有新验证数据直连/DERP 路径或 300 秒 grant 自然到期。复测与边界见 [4B-3 验收](../poc/selfhost/public-server/MANAGED_NETWORK_TEST.md)。
+
+剩余 4B：正式安装 issuer/API 根信任与轮换/恢复，产品 HMAC/身份包可信投递，Windows 正常用户会话中的双机 OS signer 完整启动与真实网络验收，旧 Swift/C# IPC/GUI/安装收口。不能因为自主链路已通过就宣布整体 4 完成/进入公网发布。下方 4B-2 的双机待验为历史，OS signer 待验仍有效。
+
 ## 2026-10-07 切片 4B-2：helper 自主授权状态生命周期（当前入口）
 
 用户提供 4B 新制品实际输出：`TestNativeVaultIdentityAndIsolation` PASS（0.35s），`$LASTEXITCODE=0`。**Windows 4B-1 的安全存储/新增六个签名域人工验收通过**，不是 SKIP；不是 Windows/Headscale 双机 OS signer 全链路验收，也不等于默认产品 DPAPI 66 项测试。

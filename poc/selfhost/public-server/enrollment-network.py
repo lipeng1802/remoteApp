@@ -72,14 +72,15 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"]):
+    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"]):
         raise RuntimeError("invalid_arguments")
     streams=bool(sys.argv[1:])
-    identitymode=sys.argv[1:]==["--identity"]
-    deviceflow=sys.argv[1:] in (["--device-flow"],["--identity"])
-    apimode=sys.argv[1:] in (["--api"],["--device-flow"],["--identity"])
-    periodic=sys.argv[1:] in (["--maintenance"],["--api"],["--device-flow"],["--identity"])
-    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"])
+    managedmode=sys.argv[1:]==["--managed"]
+    identitymode=sys.argv[1:] in (["--identity"],["--managed"])
+    deviceflow=sys.argv[1:] in (["--device-flow"],["--identity"],["--managed"])
+    apimode=sys.argv[1:] in (["--api"],["--device-flow"],["--identity"],["--managed"])
+    periodic=sys.argv[1:] in (["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"])
+    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"],["--api"],["--device-flow"],["--identity"],["--managed"])
     os.umask(0o077)
     if tlsmode:
         env=dict(os.environ,COPYFILE_DISABLE="1")
@@ -258,9 +259,12 @@ def main():
         client=network_request("enroll",role="controller",Intent=client_prepared["intent"])
         t.check(target["passed"] and client["passed"],"real_backend_signed_intents_issued_once")
 
-        def join(command,folder,node_key,enrollment,app_key):
-            p=Pipe(command,{"Op":"join","StateDir":str(folder),"AuthKey":enrollment["credential"]["Secret"],
-                            "NodeKey":node_key,"AppKey":app_key,"Verifier":ready["verifier"],"Token":token,"GrantID":ready["grant_id"]})
+        def join(command,folder,node_key,enrollment,app_key,autonomous=False):
+            cfg={"Op":"join","StateDir":str(folder),"AuthKey":enrollment["credential"]["Secret"],
+                 "NodeKey":node_key,"AppKey":app_key,"Verifier":ready["verifier"],"Token":"" if autonomous else token,"GrantID":ready["grant_id"]}
+            if autonomous:
+                cfg.update(Endpoint=f"https://127.0.0.1:{remote_port if command==win else local_port}",Certificate=ready["api_certificate"],Issuer=ready["issuer"])
+            p=Pipe(command,cfg)
             helpers.append(p)
             registered=p.read()
             t.check(registered.get("status")=="registered" and registered["node_key"]==node_key,"actual_registered_key_matches_offline_key")
@@ -320,6 +324,27 @@ def main():
         time.sleep(1)
         t.check(controller.request("probe",Peer=target_ip)["passed"],"positive_control_after_zero_test")
         if streams:
+            if managedmode:
+                controller.stop();server.stop()
+                server,ip=join(win,win_dir,target_key,target,ready["target_key"],True)
+                controller,cip=join(local,folder,client_key,client,ready["controller_key"],True)
+                t.check(ip==target_ip and cip==client_ip,"autonomous_restart_keeps_network_identity")
+                t.check(not controller.request("probe",Peer=target_ip)["passed"],"autonomous_token_probe_disabled")
+
+            class ManagedRefresh:
+                # No thread/HTTP polling/state relay in the parent. Only fixed
+                # diagnostics and explicit test teardown of helper-owned watches.
+                def __init__(self,state):
+                    self.done=threading.Event();self.thread=None;self.last=state
+                @property
+                def authority_denied(self):
+                    return all(helper.request("count")["managed_done"] for helper in (server,controller))
+                def close(self,stop=True):
+                    self.done.set()
+                    if stop:
+                        for helper in (server,controller):
+                            t.check(helper.request("watch_stop")["passed"],"helper_owned_watch_stop_joined")
+
             class Refresh:
                 def __init__(self,binding):
                     self.done=threading.Event()
@@ -361,17 +386,24 @@ def main():
 
             def authorize():
                 nonlocal tlsclient,active_refresh
-                for helper in (server,controller):
-                    challenge=helper.request("clock_challenge")["challenge"]
-                    proof=network_request("clock_proof",role="target" if helper is server else "controller",Challenge=challenge)
-                    t.check(proof["passed"] and helper.request("clock",Issuer=ready["issuer"],Proof=proof["proof"])["passed"],
-                            "fresh_signed_authority_clock_calibrated")
+                if not managedmode:
+                    for helper in (server,controller):
+                        challenge=helper.request("clock_challenge")["challenge"]
+                        proof=network_request("clock_proof",role="target" if helper is server else "controller",Challenge=challenge)
+                        t.check(proof["passed"] and helper.request("clock",Issuer=ready["issuer"],Proof=proof["proof"])["passed"],
+                                "fresh_signed_authority_clock_calibrated")
                 n=network_request("network_state")
                 t.check(n["passed"] and n["network_state"]["claims"]["active"],"current_dynamic_state_available")
                 for helper,role in ((server,"target"),(controller,"controller")):
                     t.check(helper.request("authorize",Role=role,Issuer=ready["issuer"],Target=ready["target"],
                         Controller=ready["controller"],State=n["network_state"],Bridge=tlsmode)["passed"],"helper_dynamic_gate_enabled")
-                active_refresh=Refresh(n["network_state"]["claims"]["binding"])
+                if managedmode:
+                    for helper in (server,controller):
+                        t.check(helper.request("count")["managed_active"],"helper_owned_https_clock_watch_gate_active")
+                        t.check(not helper.request("state",State=n["network_state"])["passed"],"parent_state_cannot_authorize_managed_gate")
+                    active_refresh=ManagedRefresh(n["network_state"])
+                else:
+                    active_refresh=Refresh(n["network_state"]["claims"]["binding"])
                 if tlsmode:
                     fingerprint=product_ready["Fingerprint"]
                     if identitymode:
@@ -448,8 +480,8 @@ def main():
                 nonlocal server,controller
                 if tlsmode:tlsclient.stop()
                 controller.stop(); server.stop()
-                server,ip=join(win,win_dir,target_key,target,ready["target_key"])
-                controller,cip=join(local,folder,client_key,client,ready["controller_key"])
+                server,ip=join(win,win_dir,target_key,target,ready["target_key"],managedmode)
+                controller,cip=join(local,folder,client_key,client,ready["controller_key"],managedmode)
                 t.check(ip==target_ip and cip==client_ip,"stream_restart_retains_verified_network_identity")
 
             authorize()
@@ -471,7 +503,8 @@ def main():
                 start=ticks();time.sleep(5)
                 t.check(ticks()>start+10 and server.request("count")["stream_closed"]==authorize.baseline,
                         "periodic_maintenance_preserves_refreshed_active_tls")
-                active_refresh.close()
+                if managedmode:active_refresh.close(stop=False)
+                else:active_refresh.close()
                 failures=authority.request("maintenance_count")["maintenance"]["Failures"]
                 t.check(authority.request("policy_unavailable")["passed"],"privileged_policy_failure_injected")
                 wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Failures"]>failures,
@@ -479,7 +512,8 @@ def main():
                 denied=network_request("network_state")
                 t.check(denied["passed"] and not denied["network_state"]["claims"]["active"],"policy_failure_fences_active_state")
                 for helper in (server,controller):
-                    t.check(helper.request("state",State=denied["network_state"])["passed"],"policy_failure_inactive_delivered")
+                    if not managedmode:
+                        t.check(helper.request("state",State=denied["network_state"])["passed"],"policy_failure_inactive_delivered")
                 ended()
                 t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
                         "policy_failure_tls_closes_with_old_acl_present")
@@ -505,7 +539,8 @@ def main():
 
             restart_helpers()
             authorize()
-            active_refresh.close()
+            if managedmode:active_refresh.close(stop=False)
+            else:active_refresh.close()
             # No parallel refresh here: get a fresh positive, then an authenticated
             # inactive snapshot while actual nodes and payload ACL still exist.
             old=network_request("network_state")["network_state"]
@@ -513,8 +548,12 @@ def main():
             t.check(revoked["passed"],"grant_revoked_without_node_or_acl_cleanup")
             inactive=network_request("network_state")
             t.check(inactive["passed"] and not inactive["network_state"]["claims"]["active"],"revocation_signed_inactive_with_original_binding")
+            if managedmode:
+                wait_for(lambda:all(helper.request("count")["managed_done"] and not helper.request("count")["managed_active"] for helper in (server,controller)),
+                         "both_helpers_observe_revocation_without_parent_state_relay",2)
             for helper in (server,controller):
-                t.check(helper.request("state",State=inactive["network_state"])["passed"],"inactive_state_delivered")
+                if not managedmode:
+                    t.check(helper.request("state",State=inactive["network_state"])["passed"],"inactive_state_delivered")
                 replay=helper.request("state",State=old)
                 t.check(not replay["passed"] and replay["fresh"],"still_valid_positive_cannot_unlatch_revocation")
             ended()
@@ -547,7 +586,8 @@ def main():
         t.check(not t.admin("nodes","list") and not t.admin("users","list") and not t.admin("preauthkeys","list"),"all_owned_control_resources_reclaimed")
     finally:
         if active_refresh is not None:
-            active_refresh.done.set();active_refresh.thread.join(timeout=45)
+            active_refresh.done.set()
+            if active_refresh.thread is not None:active_refresh.thread.join(timeout=45)
         for p in helpers:
             p.emergency()
         for tunnel in reversed(tunnels):

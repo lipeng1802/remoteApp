@@ -280,7 +280,19 @@ func run() error {
 			return nil
 		}
 		if request.Op == "count" {
-			output(map[string]any{"status": "count", "value": count.Load(), "challenges": challenges.Load(), "signed": signed.Load(), "stream_ticks": streamTicks.Load(), "stream_closed": streamClosed.Load(), "stream_opened": streamOpened.Load(), "probing": probing.Load()})
+			active, done := false, false
+			if managed != nil {
+				active, done = managed.Status()
+			}
+			output(map[string]any{"status": "count", "value": count.Load(), "challenges": challenges.Load(), "signed": signed.Load(), "stream_ticks": streamTicks.Load(), "stream_closed": streamClosed.Load(), "stream_opened": streamOpened.Load(), "probing": probing.Load(), "managed_active": active, "managed_done": done})
+			continue
+		}
+		if request.Op == "watch_stop" {
+			ok := managed != nil
+			if ok {
+				managed.Stop()
+			}
+			output(map[string]any{"status": "watch_stop", "passed": ok})
 			continue
 		}
 		if request.Op == "authorize" {
@@ -392,8 +404,8 @@ func run() error {
 			ok := false
 			fresh := false
 			if g != nil && request.Op == "state" {
+				fresh = g.Fresh(request.State) // diagnostic verification only in autonomous mode
 				if networkClient == nil {
-					fresh = g.Fresh(request.State)
 					ok = g.Update(request.State)
 					if !ok {
 						g.Deny()
@@ -417,7 +429,8 @@ func run() error {
 			return io.ErrUnexpectedEOF
 		}
 		if networkClient != nil {
-			return invite.ErrDenied
+			output(map[string]any{"status": "probe", "passed": false, "reason": "autonomous_mode"})
+			continue
 		}
 		ip, e := netip.ParseAddr(request.Peer)
 		if e != nil || !netip.MustParsePrefix("100.120.0.0/24").Contains(ip) {

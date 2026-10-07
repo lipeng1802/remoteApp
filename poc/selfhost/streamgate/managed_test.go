@@ -178,6 +178,9 @@ func TestNativeVaultManagedHTTPSAndStop(t *testing.T) {
 	if f.queries.Load() < 3 || !m.Gate().active(context.Background()) {
 		t.Fatal("OS signer autonomous HTTPS refresh")
 	}
+	if active, done := m.Status(); !active || done {
+		t.Fatal("active diagnostics diverged from gate")
+	}
 	m.Stop()
 	terminal(t, m)
 }
@@ -244,6 +247,9 @@ func terminal(t *testing.T, m *ManagedGate) {
 	}
 	if m.Gate().active(context.Background()) {
 		t.Fatal("terminal lifecycle still authorized")
+	}
+	if active, done := m.Status(); active || !done {
+		t.Fatal("terminal diagnostics diverged from gate")
 	}
 	m.Stop()
 	m.Stop()

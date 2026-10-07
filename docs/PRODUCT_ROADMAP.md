@@ -1,6 +1,6 @@
 # 独立远程桌面产品路线
 
-切片 4 当前：Windows 4B-1 安全存储/新增签名域验收通过；4B-2 helper 自主校准/状态查询和失败关闭核心接入，Mac OS signer HTTPS 刷新已实测。真实双机 OS signer/自主管理链路、正式信任锚/HMAC 投递及剩余 IPC/启动生命周期仍待收口，不能跳到 GUI 或宣布最终免登录产品完成。见 [最新验收](../poc/selfhost/public-server/MANAGED_HELPER_TEST.md)。下方切片 3/“下一切片 4”描述为历史。
+切片 4 当前：4B-3 真实双机自主 helper/产品 TLS 故障及撤销关闭通过（隔离 fixture 密钥，无父端状态转发）；Windows native 人工与 Mac native HTTPS 测试为独立证据。双机 OS signer 正常用户启动链路、正式信任锚/HMAC 投递及剩余 IPC/安装仍待收口，不能宣布最终免登录产品完成。见 [最新验收](../poc/selfhost/public-server/MANAGED_NETWORK_TEST.md)。下方切片 3/“下一切片 4”描述为历史。
 
 当前切片 3：设备码/一次性验证码、被控发现申请/明确确认与设备查询已接 HTTPS，入口与持久有界预算、签名时间校准已实现。仅私有验证，尚无真实 GUI 人工确认、公开代理/多实例/DDoS 防护或最终信任分发。下一切片 4 正式 issuer/TLS 身份分发、平台安全存储与 IPC、客户端自主生命周期，再 GUI/安装。详见 [流程记录](../poc/selfhost/public-server/DEVICE_FLOW_TEST.md) 和 [当前交接](HANDOFF.md)。下方切片 2/下一步切片 3 为历史。
 

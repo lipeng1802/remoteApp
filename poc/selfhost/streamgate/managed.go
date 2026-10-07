@@ -105,3 +105,13 @@ func StartManaged(ctx context.Context, client *invite.NetworkClient, issuer, tar
 func (m *ManagedGate) Gate() *Gate           { return m.gate }
 func (m *ManagedGate) Done() <-chan struct{} { return m.done }
 func (m *ManagedGate) Stop()                 { m.gate.Deny(); m.cancel(); <-m.done }
+
+// Fixed local diagnostics, never a replacement for gate/session authorization.
+func (m *ManagedGate) Status() (active, done bool) {
+	select {
+	case <-m.done:
+		done = true
+	default:
+	}
+	return m.gate.active(context.Background()), done
+}
