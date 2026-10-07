@@ -1,6 +1,6 @@
 # 切片 4B-4B：双机真实 OS 身份协调入口
 
-代码/本地回归完成；**真实 OS 身份双机网络验收已完整运行通过，退出码 0**。这是独立实际证据，不是合并之前 fixture 网络和本机桥接 PASS。本轮 Windows 桌面保持进程最后的 STOPPED 仍待用户回传。
+代码/本地回归完成；**真实 OS 身份双机网络验收已完整运行通过，退出码 0**。这是独立实际证据，不是合并之前 fixture 网络和本机桥接 PASS。用户已确认本轮 Windows STOPPED/随机测试身份清理通过，本轮验收闭环。
 
 ## Windows 操作
 
@@ -39,6 +39,6 @@ Go 全量 race、公开身份 bootstrap 格式/同身份/私钥长度拒绝回�
 
 用户保持新 owner 后实际 `--native` 完整退出码 0。输出确认仅 OS public bootstrap、真实设备注册/邀请拒绝与批准、节点签名意图/实时持有证明及独立错误 OS 身份拒绝，单向 ACL/反向拒绝/真实零规则拒绝，同身份重启，两端自主 HTTPS gate 与父授权拒绝。真实产品 TLS 的 pin/HMAC/认证前 PING 负向、正确流持续超过初始 lease、watch stop、策略/Store 故障、设备 OS 签名 revoke、旧正向状态不可复活及 TLS 关闭无新增 PONG/非 timeout 均通过。Windows 产品 SSH profile 65/65，默认产品 DPAPI 明确 SKIP，不是 66/66。
 
-输出 `all_owned_control_resources_reclaimed`、`original_file_policy_mode_restored`、`original_poc_policy_unchanged`、`service_active_business_nginx_hashes_unchanged` 全通过。Mac 两份随机测试身份 teardown 收到 deleted 并零退出，helper/node 状态与管理转发均回收。另起独立 SSH 查 nodes/users/preauthkeys 均 0。服务器测试策略已恢复，不改业务 443/生产密钥/系统 Tailscale/安装包。用户桌面 owner 未由协调器停止；需按 Enter 回传 STOPPED，确认本轮 Windows 身份最终回收。
+输出 `all_owned_control_resources_reclaimed`、`original_file_policy_mode_restored`、`original_poc_policy_unchanged`、`service_active_business_nginx_hashes_unchanged` 全通过。Mac 两份随机测试身份 teardown 收到 deleted 并零退出，helper/node 状态与管理转发均回收。另起独立 SSH 查 nodes/users/preauthkeys 均 0。服务器测试策略已恢复，不改业务 443/生产密钥/系统 Tailscale/安装包。用户桌面 owner 未由协调器停止；随后要求用户按 Enter 并回传 STOPPED，用户回复“通过”，本轮 Windows 正常停止/随机测试身份最终回收记为用户确认通过。未附详细输出，不记录额外退出码或耗时。
 
 此结果不宣布整体切片 4 完成：正式 API/issuer 信任分发、HMAC 投递、GUI/IPC/独立安装仍待。仍由可信 SSH 协调 fixture/bootstrap 发起明确批准；没有新增直连/DERP 类型证明、整个 daemon 断电或 300 秒自然到期证据。
