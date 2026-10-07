@@ -1,6 +1,6 @@
 # 自托管连接最小实验
 
-当前：新增 [周期维护任务](public-server/MAINTENANCE_TEST.md)，真实双机策略失败栅栏/退避自动恢复/后端重开/撤销自动回收与 TLS 门禁通过。尚未公开生产接口或部署常驻维护服务，下一步正式注册/认证状态接口；下方未实现周期维护的内容为历史。
+当前：新增 [设备签名 HTTPS 接口](public-server/DEVICE_API_TEST.md)，真实 Mac/Windows 注册、网络注册/绑定、状态/时间查询和撤销，以及周期恢复/真实 TLS 门禁通过。接口仍只在私有回环测试，未公开生产部署或接 GUI；初始信任/批准/helper 调度仍由 fixture 提供。下一步设备码/验证码与防滥用；下方未实现接口/周期维护的内容为历史。
 
 最新：真实 Swift/C# 产品 TLS 固定载荷已通过动态 gate 桥接，错误 pin/密钥/认证前 PING 拒绝、持续授权与停止刷新/Store 故障/撤销关闭及恢复通过。见 [TLS 桥接验收](public-server/TLS_BRIDGE_TEST.md)。无 GUI/安装集成或公开注册；下面未接 TLS 的内容为历史。
 

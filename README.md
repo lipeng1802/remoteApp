@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-最新切片：私有后端周期维护、策略失败禁止签发、退避自动恢复、冷启动同步和撤销资源自动回收已双机验收；真实 TLS 门禁回归通过。未部署公开生产服务或接入 GUI/安装包，见 [周期维护验收](poc/selfhost/public-server/MAINTENANCE_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
+最新切片 2：设备签名 HTTPS 注册、网络 enroll/bind、认证状态/时间查询及撤销已真实 Mac/Windows 双机验收，周期恢复和真实 TLS 门禁回归通过。API 仍为私有回环测试，尚无公开接入、防滥用完整闭环或 GUI/安装集成；下一步设备码/验证码与防滥用。见 [接口验收](poc/selfhost/public-server/DEVICE_API_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
 
 从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前产品基线仍使用系统 Tailscale；独立连接 PoC 验证自托管 Headscale/DERP，数据通道不依赖 Tailscale 托管账号，SSH 仅用于测试管理。
 

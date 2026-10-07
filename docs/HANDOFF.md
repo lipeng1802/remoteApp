@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-07 切片 2：设备签名 HTTPS 接口通过（当前入口）
+
+新增正式设备侧 `POST /v1/request` 与 `POST /v1/network` 协议、受限 HTTPS handler/client、独立设备签名客户端。设备注册/撤销沿用原签名协议；网络 enroll/bind/state/clock 签名绑定路径、动作、时间、nonce、完整 grant 及注册意图。只有已注册且属于服务已知 grant 的设备可操作本人工单；第三设备、篡改、跨角色和持久重放拒绝。nonce 在特权操作前持久消费，失败注册调用也消费预算，未知设备不能耗用持久容量；网络注册每设备 6 次/分钟，状态等 240 次/分钟。TLS 验证独立可信根和 SAN，不跳过验证、不继承代理、不跟随重定向；固定错误不暴露驱动诊断。短期凭据单次返回，不提供再次取回。
+
+全量 Go race/vet 通过；新增认证/范围/重放重开、真实 HTTPS/客户端与双端注册、严格 HTTP/持久预算测试通过。最终真实 `enrollment-network.py --api` 完整零退出：Mac/Windows 设备进程各自签名 HTTPS 注册、enroll/bind/时间校准/状态刷新；实际持有证明、动态 ACL/零规则、真实 Swift/C# TLS 正负向、周期恢复/后端重开、Store 不可用停止刷新、设备 HTTPS 撤销/inactive/旧正向拒绝和 TLS 关闭全部通过。两端 API 客户端正常关闭，临时 SSH 转发退出，节点/用户/注册 key 清空，恢复原 file 策略、服务 active、业务 Nginx 哈希保持。独立复核三类资源数量均为 0。Windows SSH profile 65/65 门禁保留，默认 DPAPI 交互式人工待验不变；本轮无 Swift/C# 产品代码变化，不记作重新完成默认 66 项。
+
+边界：接口只部署测试服务器回环，用 SSH 回环转发私有访问；数据 TLS 仍走独立 tsnet/Headscale/DERP。不是公开生产入口，也不是最终用户需要 SSH 的方案。初始设备密钥/可信根/grant、有人值守批准及 helper 刷新调度仍由可信 fixture/父测试提供；正式身份分发、安全 IPC/平台存储、helper 自主刷新、GUI/安装包尚未交付。匿名/IP admission、容量滥用和防枚举不能由当前签名预算代替，禁止直接公开 fixture。后端重开保留 HTTPS listener/证书，未验证整个进程崩溃或证书轮换。详见 [接口与实测记录](../poc/selfhost/public-server/DEVICE_API_TEST.md)。
+
+下一切片 3：设备码/一次性验证码与有人值守确认的设备侧流程，以及公开接入前的防枚举、匿名/IP admission、容量与滥用防护；正式 issuer/证书分发及安全存储/IPC 按切片 4 收口。下方为历史。
+
 ## 2026-10-07 切片 1：周期维护与故障恢复通过（当前入口）
 
 新增私有 `ProvisionBackend.StartMaintenance`：同步关闭就绪栅栏，立即后台完整 Reconcile；每 Backend 一个串行任务，工作结束后再等待，不重叠/不积压。失败按间隔翻倍退避至配置上限，成功恢复正常间隔；完整规则投影/回读及精确回收完成才恢复就绪，不重试 Mint。原驱动 5 秒预算、签名状态 3 秒租期及 grant 期限不变。Stop 取消并 join，退出再次关闭共享 Store 的签发栅栏；必须成功 join 后才关闭/替换 Store、Driver。状态只有固定计数/近期结果，不是授权依据，也无驱动原始错误或凭据。

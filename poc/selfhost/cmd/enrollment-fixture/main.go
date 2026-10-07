@@ -6,12 +6,21 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
+	"math/big"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -167,7 +176,33 @@ func run() error {
 		b.Reconcile(cleanup)
 	}()
 	out := json.NewEncoder(os.Stdout)
-	out.Encode(map[string]string{"status": "ready", "verifier": vk, "target_key": hex.EncodeToString(target), "controller_key": hex.EncodeToString(controller), "grant_id": g.Claims.ID, "issuer": hex.EncodeToString(s.PublicKey()), "target": hex.EncodeToString(target.Public().(ed25519.PublicKey)), "controller": hex.EncodeToString(controller.Public().(ed25519.PublicKey))})
+	var apiMu sync.RWMutex
+	apiHandler := invite.NetworkHandler(b)
+	api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiMu.RLock()
+		defer apiMu.RUnlock()
+		apiHandler.ServeHTTP(w, r)
+	}))
+	api.Config.ReadHeaderTimeout = 2 * time.Second
+	api.Config.ReadTimeout = 5 * time.Second
+	api.Config.WriteTimeout = 15 * time.Second
+	api.Config.IdleTimeout = 15 * time.Second
+	api.Config.MaxHeaderBytes = 8192
+	api.Config.ErrorLog = log.New(io.Discard, "", 0)
+	_, apiKey, _ := ed25519.GenerateKey(rand.Reader)
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return err
+	}
+	template := &x509.Certificate{SerialNumber: serial, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, apiKey.Public(), apiKey)
+	if err != nil {
+		return err
+	}
+	api.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: apiKey}}}
+	api.StartTLS()
+	defer api.Close()
+	out.Encode(map[string]any{"status": "ready", "verifier": vk, "target_key": hex.EncodeToString(target), "controller_key": hex.EncodeToString(controller), "grant_id": g.Claims.ID, "grant": g, "api_port": api.Listener.Addr().(*net.TCPAddr).Port, "api_certificate": base64.StdEncoding.EncodeToString(api.Certificate().Raw), "issuer": hex.EncodeToString(s.PublicKey()), "target": hex.EncodeToString(target.Public().(ed25519.PublicKey)), "controller": hex.EncodeToString(controller.Public().(ed25519.PublicKey))})
 	reader := bufio.NewReaderSize(os.Stdin, 8194)
 	for {
 		line, e := reader.ReadSlice('\n')
@@ -187,6 +222,15 @@ func run() error {
 		callCtx, stop := context.WithTimeout(context.Background(), 25*time.Second)
 		result := map[string]any{"status": c.Op, "passed": false}
 		switch c.Op {
+		case "proof_result":
+			apiMu.Lock()
+			result["proof_stage"] = proofStage
+			for _, r := range s.ProvisionRecords() {
+				if r.ID == c.Ticket {
+					result["registration_expired"] = time.Now().Unix() >= r.Expires
+				}
+			}
+			apiMu.Unlock()
 		case "maintenance_start":
 			if maintenance == nil {
 				maintenance, e = b.StartMaintenance(context.Background(), 500*time.Millisecond, 2*time.Second)
@@ -260,28 +304,37 @@ func run() error {
 			_, e := execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
 			result["passed"] = e == nil // keep nodes/ACL until explicit reconcile; test application gate, not route withdrawal
 		case "restart":
-			periodic := maintenance != nil
-			if stopMaintenance(callCtx) != nil {
-				stop()
-				return invite.ErrDenied
-			}
-			if s.Close() != nil {
-				stop()
-				return invite.ErrStorage
-			}
-			s, e = invite.Open(state, time.Now)
-			if e != nil {
-				stop()
-				return e
-			}
-			authorityOffline = false
-			d = &headscale.Driver{Run: policyRunner, PolicyDir: dir, PolicyMode: "database", VerifierIP: d.VerifierIP, Proof: d.Proof}
-			b = &invite.ProvisionBackend{Store: s, Driver: d}
-			if periodic {
-				maintenance, e = b.StartMaintenance(context.Background(), 500*time.Millisecond, 2*time.Second)
-				result["passed"] = e == nil
-			} else {
-				result["passed"] = b.Reconcile(callCtx) == nil
+			restartErr := func() error {
+				apiMu.Lock()
+				defer apiMu.Unlock()
+				periodic := maintenance != nil
+				if stopMaintenance(callCtx) != nil {
+					stop()
+					return invite.ErrDenied
+				}
+				if s.Close() != nil {
+					stop()
+					return invite.ErrStorage
+				}
+				s, e = invite.Open(state, time.Now)
+				if e != nil {
+					stop()
+					return e
+				}
+				authorityOffline = false
+				d = &headscale.Driver{Run: policyRunner, PolicyDir: dir, PolicyMode: "database", VerifierIP: d.VerifierIP, Proof: d.Proof}
+				b = &invite.ProvisionBackend{Store: s, Driver: d}
+				apiHandler = invite.NetworkHandler(b)
+				if periodic {
+					maintenance, e = b.StartMaintenance(context.Background(), 500*time.Millisecond, 2*time.Second)
+					result["passed"] = e == nil
+				} else {
+					result["passed"] = b.Reconcile(callCtx) == nil
+				}
+				return nil
+			}()
+			if restartErr != nil {
+				return restartErr
 			}
 		case "authority_unavailable":
 			if stopMaintenance(callCtx) != nil {

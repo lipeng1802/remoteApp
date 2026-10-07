@@ -17,6 +17,7 @@ import tempfile
 import time
 import threading
 import base64
+import socket
 
 spec=importlib.util.spec_from_file_location("transport",Path(__file__).with_name("cross-network.py"))
 t=importlib.util.module_from_spec(spec)
@@ -71,11 +72,12 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"]):
+    if sys.argv[1:] not in ([],["--streams"],["--tls"],["--maintenance"],["--api"]):
         raise RuntimeError("invalid_arguments")
     streams=bool(sys.argv[1:])
-    periodic=sys.argv[1:]==["--maintenance"]
-    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"])
+    apimode=sys.argv[1:]==["--api"]
+    periodic=sys.argv[1:] in (["--maintenance"],["--api"])
+    tlsmode=sys.argv[1:] in (["--tls"],["--maintenance"],["--api"])
     os.umask(0o077)
     if tlsmode:
         env=dict(os.environ,COPYFILE_DISABLE="1")
@@ -96,6 +98,13 @@ def main():
     authority=None
     folders=[]
     active_refresh=None
+    tunnels=[]
+    target_api=None
+    controller_api=None
+    def network_request(op,role="target",**values):
+        if apimode:return (target_api if role=="target" else controller_api).request(op,**values)
+        if op=="enroll":return authority.request(op,Role=role,**values)
+        return authority.request(op,**values)
     root="C:\\Users\\jarvis\\remoteapp-enrollment-"+stamp
     work=root+"\\poc\\selfhost"
     try:
@@ -124,6 +133,35 @@ def main():
         actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\enrollment-helper.exe').Hash")
         t.check(actual.lower()==hashlib.sha256(binary.read_bytes()).hexdigest(),"windows_enrollment_binary_verified")
         win=t.WIN+[f'cmd.exe /d /c "cd /d {work} && enrollment-helper.exe"']
+        if apimode:
+            # Management tunnels expose only private loopback TLS; not a final
+            # product dependency and no new firewall/public nginx route.
+            local_socket=socket.socket();local_socket.bind(("127.0.0.1",0));local_port=local_socket.getsockname()[1];local_socket.close()
+            forward=subprocess.Popen(t.SERVER[:-1]+["-N","-o","ExitOnForwardFailure=yes","-L",f"127.0.0.1:{local_port}:127.0.0.1:{ready['api_port']}",t.SERVER[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            tunnels.append(forward)
+            end=time.monotonic()+10
+            while True:
+                try:
+                    connection=socket.create_connection(("127.0.0.1",local_port),timeout=0.5);connection.close();break
+                except OSError:
+                    if forward.poll() is not None or time.monotonic()>end:raise RuntimeError("private_api_forward_failed")
+                    time.sleep(0.1)
+            remote_port=int(t.powershell("$l=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,0);$l.Start();$p=$l.LocalEndpoint.Port;$l.Stop();$p"))
+            reverse=subprocess.Popen(t.WIN[:-1]+["-N","-o","ExitOnForwardFailure=yes","-R",f"127.0.0.1:{remote_port}:127.0.0.1:{local_port}",t.WIN[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            tunnels.append(reverse);time.sleep(1)
+            t.check(reverse.poll() is None,"private_windows_api_reverse_forward_ready")
+            api_binary=t.ARTIFACTS/"device-api-client-win.exe"
+            uploaded=subprocess.run(["scp","-O","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(api_binary),"jarvis@100.73.4.118:"+work.replace("\\","/")+"/device-api-client.exe"],capture_output=True,timeout=60)
+            t.check(uploaded.returncode==0,"device_api_client_uploaded")
+            actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\device-api-client.exe').Hash")
+            t.check(actual.lower()==hashlib.sha256(api_binary.read_bytes()).hexdigest(),"device_api_client_binary_verified")
+            def api_client(command,port,key):
+                p=Pipe(command,{"Endpoint":f"https://127.0.0.1:{port}","Certificate":ready["api_certificate"],"AppKey":key,"Grant":ready["grant"]});helpers.append(p)
+                t.check(p.read()["status"]=="ready","device_owned_http_signer_ready");return p
+            target_api=api_client(t.WIN+[f'cmd.exe /d /c "cd /d {work} && device-api-client.exe"'],remote_port,ready["target_key"])
+            controller_api=api_client([str(t.ARTIFACTS/"device-api-client")],local_port,ready["controller_key"])
+            for device in (target_api,controller_api):
+                t.check(device.request("device",Device={"action":"register"})["passed"],"device_signed_https_registration_passed")
         product=None
         tlsclient=None
         product_ready=None
@@ -168,11 +206,11 @@ def main():
 
         target_prepared=prepare(win,win_dir,ready["target_key"])
         target_key=target_prepared["node_key"]
-        target=authority.request("enroll",Role="target",Intent=target_prepared["intent"])
+        target=network_request("enroll",Intent=target_prepared["intent"])
         client_prepared=prepare(local,folder,ready["controller_key"])
         client_key=client_prepared["node_key"]
         t.check(not t.admin("nodes","list") or len(t.admin("nodes","list"))==1,"prepare_did_not_register_client_nodes")
-        client=authority.request("enroll",Role="controller",Intent=client_prepared["intent"])
+        client=network_request("enroll",role="controller",Intent=client_prepared["intent"])
         t.check(target["passed"] and client["passed"],"real_backend_signed_intents_issued_once")
 
         def join(command,folder,node_key,enrollment,app_key):
@@ -188,8 +226,9 @@ def main():
         controller,client_ip=join(local,folder,client_key,client,ready["target_key"])  # deliberately wrong app identity
         time.sleep(1)
         t.check(not controller.request("probe",Peer=target_ip)["passed"],"unbound_zero_policy_denies_payload")
-        t.check(authority.request("bind",Ticket=target["ticket"])["passed"],"windows_live_network_and_app_possession_proof")
-        bad=authority.request("bind",Ticket=client["ticket"])
+        t.check(network_request("bind",Ticket=target["ticket"])["passed"],"windows_live_network_and_app_possession_proof")
+        bad=network_request("bind",role="controller",Ticket=client["ticket"])
+        if apimode:bad.update(authority.request("proof_result",Ticket=client["ticket"]))
         t.check(not bad["passed"] and bad["proof_stage"]=="peer_rejected" and not bad["registration_expired"],"wrong_app_identity_live_challenge_rejected")
         counts=controller.request("count")
         t.check(counts["challenges"]==1 and counts["signed"]==0,"wrong_app_received_actual_challenge_without_signature")
@@ -198,8 +237,9 @@ def main():
         controller.stop()
         controller,again_ip=join(local,folder,client_key,client,ready["controller_key"])
         t.check(again_ip==client_ip,"controller_restart_retains_network_identity")
-        binding=authority.request("bind",Ticket=client["ticket"])
+        binding=network_request("bind",role="controller",Ticket=client["ticket"])
         if not binding["passed"]:
+            if apimode:binding.update(authority.request("proof_result",Ticket=client["ticket"]))
             print("FAIL mac_bind_"+binding["proof_stage"]+"_expired_"+str(binding["registration_expired"]),flush=True)
         t.check(binding["passed"],"mac_live_network_and_app_possession_proof")
         pending=authority.request("network_state")
@@ -244,7 +284,7 @@ def main():
                     def work():
                         try:
                             while not self.done.wait(0.5):
-                                n=authority.request("network_state")
+                                n=network_request("network_state")
                                 if not n["passed"]:
                                     self.authority_denied=True
                                     return
@@ -274,10 +314,10 @@ def main():
                 nonlocal tlsclient,active_refresh
                 for helper in (server,controller):
                     challenge=helper.request("clock_challenge")["challenge"]
-                    proof=authority.request("clock_proof",Challenge=challenge)
+                    proof=network_request("clock_proof",role="target" if helper is server else "controller",Challenge=challenge)
                     t.check(proof["passed"] and helper.request("clock",Issuer=ready["issuer"],Proof=proof["proof"])["passed"],
                             "fresh_signed_authority_clock_calibrated")
-                n=authority.request("network_state")
+                n=network_request("network_state")
                 t.check(n["passed"] and n["network_state"]["claims"]["active"],"current_dynamic_state_available")
                 for helper,role in ((server,"target"),(controller,"controller")):
                     t.check(helper.request("authorize",Role=role,Issuer=ready["issuer"],Target=ready["target"],
@@ -374,7 +414,7 @@ def main():
                 t.check(authority.request("policy_unavailable")["passed"],"privileged_policy_failure_injected")
                 wait_for(lambda:authority.request("maintenance_count")["maintenance"]["Failures"]>failures,
                          "periodic_policy_failure_observed",10)
-                denied=authority.request("network_state")
+                denied=network_request("network_state")
                 t.check(denied["passed"] and not denied["network_state"]["claims"]["active"],"policy_failure_fences_active_state")
                 for helper in (server,controller):
                     t.check(helper.request("state",State=denied["network_state"])["passed"],"policy_failure_inactive_delivered")
@@ -406,9 +446,10 @@ def main():
             active_refresh.close()
             # No parallel refresh here: get a fresh positive, then an authenticated
             # inactive snapshot while actual nodes and payload ACL still exist.
-            old=authority.request("network_state")["network_state"]
-            t.check(authority.request("revoke_only")["passed"],"grant_revoked_without_node_or_acl_cleanup")
-            inactive=authority.request("network_state")
+            old=network_request("network_state")["network_state"]
+            revoked=target_api.request("device",Device={"action":"revoke","grant_id":ready["grant_id"]}) if apimode else authority.request("revoke_only")
+            t.check(revoked["passed"],"grant_revoked_without_node_or_acl_cleanup")
+            inactive=network_request("network_state")
             t.check(inactive["passed"] and not inactive["network_state"]["claims"]["active"],"revocation_signed_inactive_with_original_binding")
             for helper in (server,controller):
                 t.check(helper.request("state",State=inactive["network_state"])["passed"],"inactive_state_delivered")
@@ -438,6 +479,7 @@ def main():
         t.check(not controller.request("probe",Peer=target_ip)["passed"],"revoked_data_path_rejected")
         controller.stop()
         server.stop()
+        if apimode:target_api.stop();controller_api.stop()
         authority.stop(helper=False)
         authority=None
         t.check(not t.admin("nodes","list") and not t.admin("users","list") and not t.admin("preauthkeys","list"),"all_owned_control_resources_reclaimed")
@@ -446,6 +488,11 @@ def main():
             active_refresh.done.set();active_refresh.thread.join(timeout=45)
         for p in helpers:
             p.emergency()
+        for tunnel in reversed(tunnels):
+            if tunnel.poll() is None:
+                tunnel.terminate()
+                try:tunnel.wait(timeout=5)
+                except subprocess.TimeoutExpired:tunnel.kill();tunnel.wait(timeout=5)
         if authority is not None:
             authority.emergency()
         for folder in folders:
