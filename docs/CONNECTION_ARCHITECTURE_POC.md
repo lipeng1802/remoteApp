@@ -5,6 +5,8 @@
 
 ## 目标与当前结论
 
+最新闭环：真实动态注册签名状态进入双机固定载荷活动流，持续刷新、停止刷新、实际持久 Store 关闭、保留 ACL 的应用撤销关闭和恢复实测通过。签名时间校准处理约 2 秒实机时差，不改系统时间/lease；不是产品 TLS 或公开认证后端。下一切片真实产品 TLS 桥接，见 [当前交接](HANDOFF.md)。
+
 最新前置：`ProvisionBackend.NetworkState(grant)` 从两个唯一 bound 记录派生动态签名绑定，消除旧 `.1/.2` 假设；未投影/故障不签有效状态。真实双机绑定一致性/冷驱动恢复通过。动态 helper 活动流与产品 TLS 尚未桥接，下一步刷新/撤销/故障关闭验收；详见 [当前交接](HANDOFF.md)。
 
 2026-10-07 真实注册闭环：helper 离线公钥与自签注册意图、实际 WhoIs/新鲜 challenge 的应用与网络身份证明、单向动态策略、零 ACL 实际拒绝/恢复正向对照、撤销及磁盘/冷驱动重开已双机实测。版本敏感状态适配仍固定 tsnet，Headscale 配置修正为 database，测试后恢复原 file 策略。边界见 [完整验收](../poc/selfhost/public-server/ENROLLMENT_TEST.md)。下一步产品 TLS/签名状态与动态注册桥接，不把私有 fixture 当公网设备码产品。

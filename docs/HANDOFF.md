@@ -1,6 +1,18 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-07 动态注册签名状态前置通过（当前入口）
+## 2026-10-07 动态注册活动流闭环（当前入口）
+
+新增 `streamgate`，将真实注册账本派生的签名绑定/3 秒状态接到现有 session 固定载荷长连接；不是产品 TLS。helper 私有管道初始化 issuer/双方公钥、刷新状态、启动探针和读取固定计数，网络方不能自行选择绑定。握手验证 Self/IP、实际入站地址、WhoIs 对端节点公钥及双方应用 challenge 签名。控制端 LocalAPI 是本地代理 socket，先认证显式 overlay 目的节点，才提供认证地址给 session；不跟随 Dial-Self 到系统网络。
+
+被控端每次响应前检查状态并有 watchdog，控制端也有 watchdog；inactive/畸形更新拒绝、停止刷新或后端不可用到期关闭。激活不可退回 token 模式，跨激活的旧 token 写入也被禁止。停止先取消并等待证明/数据/探针任务，沿用 8 秒正常关闭预算。
+
+实机初测发现 Linux 比 Mac 快约 2 秒，严格快照拒绝未来时间。新增绑定 helper 新鲜 nonce/单调请求起点的 issuer 签名 ClockProof，5 秒内核验并单次消费，应用时钟按“服务签名时间+请求起点完整单调经过时间”保守计时，不改系统时间、不扩大 3 秒 lease、不按接收重新计租期。原注册意图 ±30 秒、控制 HTTPS 系统时间要求仍保留；不是任意时钟错乱的通用注册方案。
+
+三平台构建、全量 Go 竞态/静态检查通过。真实 `enrollment-network.py --streams` 校准后完整两轮零退出，最后一轮加强为两端独立确认旧正向状态签名/租期仍有效却被 inactive 锁定拒绝，不用已过期状态代替重放负向。其余覆盖：动态身份互证载荷、刷新后同一连接持续超过初始租期、停止刷新后双端关闭且无载荷增长/自动重连；实际关闭 Store、规则仍存在时拒绝刷新并到期关闭；重开/Reconcile/同节点重启恢复；仅撤销 grant、节点与 ACL 尚在时 inactive 关闭活动流，再回收。服务恢复原 file 策略、active、资源回收且业务 Nginx 哈希保持。详见 [实现与校准边界](../poc/selfhost/streamgate/README.md)。
+
+尚未接 Swift/C# 产品 TLS framing/证书 pin/认证，不改安装包、GUI、屏幕、输入、系统 Tailscale、业务 443。状态刷新/设备私钥仍是私有管理 fixture，不能公开；故障为真实 Store 关闭而非断电/整个 daemon 崩溃。公开认证状态服务、周期 Reconcile、设备安全存储仍待实现。下一切片：桥接真实产品 TLS 固定载荷与此动态 gate，并验证无 token/地址旁路、活动 TLS 流撤销/停止刷新/故障关闭；之后周期 Reconcile/故障恢复与公开设备码。下方为历史记录。
+
+## 2026-10-07 动态注册签名状态前置通过
 
 上一切片 `4d08bdd` 已推送到 `origin/codex/connection-architecture-poc`。本轮先消除旧签名状态 target=.1/controller=.2 假设，不误报产品 TLS 已完成。
 

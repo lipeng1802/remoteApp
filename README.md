@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-最新切片：从已验证注册账本派生动态签名绑定，成功投影策略才签有效状态；真实 Mac/Windows 地址一致性和冷驱动恢复已验收。产品 TLS/动态活动流桥接仍未完成，见 [当前 Handoff](docs/HANDOFF.md)。
+最新切片：动态注册签名绑定已接独立双机固定载荷活动流；持续刷新、停止刷新关闭、后端故障关闭、保留 ACL 的应用撤销及恢复均已实测。新增新鲜签名时间校准，不改机器时间或扩大租期。产品 TLS/GUI 仍未桥接，见 [当前 Handoff](docs/HANDOFF.md)。
 
 从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前产品基线仍使用系统 Tailscale；独立连接 PoC 验证自托管 Headscale/DERP，数据通道不依赖 Tailscale 托管账号，SSH 仅用于测试管理。
 

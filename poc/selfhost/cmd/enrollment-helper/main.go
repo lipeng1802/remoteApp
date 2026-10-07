@@ -13,12 +13,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/nodeidentity"
 	"remoteapp.local/selfhost-poc/nodeproof"
+	"remoteapp.local/selfhost-poc/streamgate"
 	"tailscale.com/tsnet"
 )
 
@@ -95,10 +97,12 @@ func run() error {
 	nodeidentity.ConfigureOnline()
 	s := &tsnet.Server{Dir: dir, Hostname: "poc-enrollment", AuthKey: c.AuthKey, ControlURL: "https://mk.fengmap.com:8443", Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	var workers sync.WaitGroup
 	defer cancel()
 	defer func() {
+		cancel()
 		done := make(chan error, 1)
-		go func() { done <- s.Close() }()
+		go func() { err := s.Close(); workers.Wait(); done <- err }()
 		select {
 		case closeErr := <-done:
 			if closeErr != nil {
@@ -120,7 +124,9 @@ func run() error {
 	}
 	output(map[string]any{"status": "registered", "node_key": pub, "addresses": st.TailscaleIPs})
 	var challenges, signed atomic.Int64
+	workers.Add(1)
 	go func() {
+		defer workers.Done()
 		if nodeproof.ServeWithReport(ctx, s, app, c.Verifier, func(stage string) {
 			if stage == "challenge" {
 				challenges.Add(1)
@@ -139,25 +145,54 @@ func run() error {
 	defer ln.Close()
 	go func() { <-ctx.Done(); ln.Close() }()
 	var count atomic.Int64
+	var gateMu sync.Mutex
+	var gate *streamgate.Gate
+	var streamTicks, streamClosed, streamOpened atomic.Int64
+	var probing atomic.Bool
+	workers.Add(1)
 	go func() {
+		defer workers.Done()
 		for {
 			conn, e := ln.Accept()
 			if e != nil {
 				return
 			}
+			gateMu.Lock()
+			g := gate
+			gateMu.Unlock()
+			if g != nil {
+				streamOpened.Add(1)
+				g.Serve(ctx, s, conn)
+				streamClosed.Add(1)
+				continue
+			}
 			conn.SetDeadline(time.Now().Add(2 * time.Second))
 			b := make([]byte, len(c.Token))
 			if _, e = io.ReadFull(conn, b); e == nil && string(b) == c.Token {
-				if _, e = io.WriteString(conn, payload); e == nil {
-					count.Add(1)
+				gateMu.Lock()
+				// Activation is irreversible for this process. A token exchange
+				// accepted just before activation must not bypass the new gate.
+				if gate == nil {
+					if _, e = io.WriteString(conn, payload); e == nil {
+						count.Add(1)
+					}
 				}
+				gateMu.Unlock()
 			}
 			conn.Close()
 		}
 	}()
 	output(map[string]string{"status": "ready"})
+	clockNow := time.Now
+	clockNonce := ""
+	clockIssuer := ""
+	var clockStart time.Time
 	for {
-		var request struct{ Op, Peer string }
+		var request struct {
+			Op, Peer, Role, Issuer, Target, Controller string
+			State                                      invite.NetworkState
+			Proof                                      invite.ClockProof
+		}
 		readDone := make(chan error, 1)
 		go func() { readDone <- decode(&request) }()
 		select {
@@ -175,7 +210,84 @@ func run() error {
 			return nil
 		}
 		if request.Op == "count" {
-			output(map[string]any{"status": "count", "value": count.Load(), "challenges": challenges.Load(), "signed": signed.Load()})
+			output(map[string]any{"status": "count", "value": count.Load(), "challenges": challenges.Load(), "signed": signed.Load(), "stream_ticks": streamTicks.Load(), "stream_closed": streamClosed.Load(), "stream_opened": streamOpened.Load(), "probing": probing.Load()})
+			continue
+		}
+		if request.Op == "authorize" {
+			issuer, e1 := hex.DecodeString(request.Issuer)
+			target, e2 := hex.DecodeString(request.Target)
+			controller, e3 := hex.DecodeString(request.Controller)
+			gateMu.Lock()
+			ok := false
+			if gate == nil && (clockIssuer == "" || clockIssuer == request.Issuer) && e1 == nil && e2 == nil && e3 == nil && (request.Role == "target" || request.Role == "controller") {
+				g, e := streamgate.New(issuer, target, controller, app, request.State, request.Role == "target", clockNow)
+				if e == nil {
+					gate = g
+					ok = true
+				}
+			}
+			gateMu.Unlock()
+			output(map[string]any{"status": "authorize", "passed": ok})
+			continue
+		}
+		if request.Op == "clock_challenge" {
+			gateMu.Lock()
+			enabled := gate != nil
+			gateMu.Unlock()
+			if enabled || clockNonce != "" {
+				return io.ErrUnexpectedEOF
+			}
+			n := make([]byte, 32)
+			if _, e := rand.Read(n); e != nil {
+				return e
+			}
+			clockNonce = hex.EncodeToString(n)
+			clockStart = time.Now()
+			output(map[string]any{"status": "clock_challenge", "challenge": clockNonce})
+			continue
+		}
+		if request.Op == "clock" {
+			issuer, e := hex.DecodeString(request.Issuer)
+			gateMu.Lock()
+			enabled := gate != nil
+			gateMu.Unlock()
+			ok := false
+			if !enabled && clockNonce != "" && e == nil {
+				now, e := invite.AuthorityClock(issuer, request.Proof, c.GrantID, clockNonce, clockStart)
+				if e == nil {
+					clockNow = now
+					clockIssuer = request.Issuer
+					ok = true
+				}
+			}
+			clockNonce = ""
+			output(map[string]any{"status": "clock", "passed": ok})
+			continue
+		}
+		if request.Op == "state" || request.Op == "stream" {
+			gateMu.Lock()
+			g := gate
+			gateMu.Unlock()
+			ok := false
+			fresh := false
+			if g != nil && request.Op == "state" {
+				fresh = g.Fresh(request.State)
+				ok = g.Update(request.State)
+				if !ok {
+					g.Deny()
+				}
+			}
+			if g != nil && request.Op == "stream" && probing.CompareAndSwap(false, true) {
+				ok = true
+				workers.Add(1)
+				go func() {
+					defer workers.Done()
+					g.Probe(ctx, s, func() { streamTicks.Add(1) })
+					streamClosed.Add(1)
+					probing.Store(false)
+				}()
+			}
+			output(map[string]any{"status": request.Op, "passed": ok, "fresh": fresh})
 			continue
 		}
 		if request.Op != "probe" {

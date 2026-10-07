@@ -1,5 +1,7 @@
 # 签名授权到固定载荷连接的门禁
 
+最新已通过 [动态注册活动流](../streamgate/README.md)：真实已验证绑定、私有签名状态刷新/授权时钟校准、停止刷新/关闭 Store/保留网络 ACL 的应用撤销与正常退出。产品 TLS、公开认证查询和周期 Reconcile 仍待接入；下方是原本机模块阶段。
+
 2026-10-07：独立 `session` 包在真实本机 TCP 连接上接入 `invite.Store`，验证签名授权不只是后端记录，而是实际限制数据流。没有接入双机 tsnet helper、Headscale 注册/动态 ACL、HTTP 远程授权查询或产品安装包，也没有修改服务器。
 
 最新状态以 [双机授权验证](../public-server/AUTHORIZATION_TEST.md) 和 HANDOFF 顶部为准：后续切片已接入隔离 tsnet helper，并实测基础双机签名授权；本页下方“未接双机”的描述为最初本机模块阶段。新增 `RejectProof` 为独立负向探针，只对正确校验的目标 challenge 用临时第三私钥签名，必须零载荷 EOF 才成功；不是正常控制端 API，也不进入产品安装包。

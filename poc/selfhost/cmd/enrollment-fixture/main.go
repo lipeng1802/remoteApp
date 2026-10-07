@@ -118,17 +118,28 @@ func run() error {
 		return nodeproof.VerifyWithReport(ctx, v, r, o, pub, func(stage string) { proofStage = stage })
 	}
 	b := &invite.ProvisionBackend{Store: s, Driver: d}
+	authorityOffline := false
 	if b.Reconcile(ctx) != nil {
 		return invite.ErrDenied
 	}
 	defer func() {
+		// Fault injection must not strand live registration resources if the
+		// parent aborts before explicitly reopening the authority.
+		if authorityOffline {
+			var err error
+			s, err = invite.Open(state, time.Now)
+			if err != nil {
+				return
+			}
+			b.Store = s
+		}
 		execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
 		cleanup, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 		b.Reconcile(cleanup)
 	}()
 	out := json.NewEncoder(os.Stdout)
-	out.Encode(map[string]string{"status": "ready", "verifier": vk, "target_key": hex.EncodeToString(target), "controller_key": hex.EncodeToString(controller), "grant_id": g.Claims.ID})
+	out.Encode(map[string]string{"status": "ready", "verifier": vk, "target_key": hex.EncodeToString(target), "controller_key": hex.EncodeToString(controller), "grant_id": g.Claims.ID, "issuer": hex.EncodeToString(s.PublicKey()), "target": hex.EncodeToString(target.Public().(ed25519.PublicKey)), "controller": hex.EncodeToString(controller.Public().(ed25519.PublicKey))})
 	reader := bufio.NewReaderSize(os.Stdin, 8194)
 	for {
 		line, e := reader.ReadSlice('\n')
@@ -139,8 +150,8 @@ func run() error {
 			return e
 		}
 		var c struct {
-			Op, Role, NodeKey, Ticket string
-			Intent                    invite.ProvisionEnvelope
+			Op, Role, NodeKey, Ticket, Challenge string
+			Intent                               invite.ProvisionEnvelope
 		}
 		if json.Unmarshal(line, &c) != nil {
 			return invite.ErrDenied
@@ -187,12 +198,21 @@ func run() error {
 			if e == nil {
 				result["network_state"] = n
 			}
+		case "clock_proof":
+			proof, e := b.ClockProof(g, c.Challenge)
+			result["passed"] = e == nil
+			if e == nil {
+				result["proof"] = proof
+			}
 		case "records":
 			result["passed"] = true
 			result["records"] = s.ProvisionRecords()
 		case "revoke":
 			_, e := execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
 			result["passed"] = e == nil && b.Reconcile(callCtx) == nil
+		case "revoke_only":
+			_, e := execute(target, invite.Body{Action: "revoke", GrantID: g.Claims.ID})
+			result["passed"] = e == nil // keep nodes/ACL until explicit reconcile; test application gate, not route withdrawal
 		case "restart":
 			if s.Close() != nil {
 				stop()
@@ -203,9 +223,13 @@ func run() error {
 				stop()
 				return e
 			}
+			authorityOffline = false
 			d = &headscale.Driver{Run: headscale.LocalRunner(), PolicyDir: dir, PolicyMode: "database", VerifierIP: d.VerifierIP, Proof: d.Proof}
 			b = &invite.ProvisionBackend{Store: s, Driver: d}
 			result["passed"] = b.Reconcile(callCtx) == nil
+		case "authority_unavailable":
+			result["passed"] = s.Close() == nil // actual closed durable authority, keep the policy and nodes unchanged
+			authorityOffline = true
 		case "stop":
 			stop()
 			return nil

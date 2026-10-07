@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 
 spec=importlib.util.spec_from_file_location("transport",Path(__file__).with_name("cross-network.py"))
 t=importlib.util.module_from_spec(spec)
@@ -22,6 +23,7 @@ spec.loader.exec_module(t)
 
 class Pipe:
     def __init__(self, command, config=None):
+        self.lock=threading.Lock()
         self.proc=subprocess.Popen(command,cwd=t.HERE,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
                                    stderr=subprocess.DEVNULL,bufsize=0)
         if config is not None:
@@ -40,8 +42,9 @@ class Pipe:
             raise RuntimeError("helper_failed")
         return value
     def request(self, op, **values):
-        self.send(dict(Op=op,**values))
-        return self.read()
+        with self.lock:
+            self.send(dict(Op=op,**values))
+            return self.read()
     def stop(self, helper=True):
         if self.proc.poll() is None:
             self.send({"Op":"stop"})
@@ -67,8 +70,9 @@ def upload_server(source,target):
     t.check(p.returncode==0,"server_fixture_uploaded")
 
 def main():
-    if sys.argv[1:]:
+    if sys.argv[1:] not in ([],["--streams"]):
         raise RuntimeError("invalid_arguments")
+    streams=bool(sys.argv[1:])
     os.umask(0o077)
     t.check(not t.admin("nodes","list") and not t.admin("users","list"),"isolated_control_plane_empty")
     stamp=time.strftime("%Y%m%d%H%M%S")+secrets.token_hex(3)
@@ -135,7 +139,7 @@ def main():
 
         def join(command,folder,node_key,enrollment,app_key):
             p=Pipe(command,{"Op":"join","StateDir":str(folder),"AuthKey":enrollment["credential"]["Secret"],
-                            "NodeKey":node_key,"AppKey":app_key,"Verifier":ready["verifier"],"Token":token})
+                            "NodeKey":node_key,"AppKey":app_key,"Verifier":ready["verifier"],"Token":token,"GrantID":ready["grant_id"]})
             helpers.append(p)
             registered=p.read()
             t.check(registered.get("status")=="registered" and registered["node_key"]==node_key,"actual_registered_key_matches_offline_key")
@@ -192,7 +196,115 @@ def main():
         t.check(authority.request("reconcile")["passed"],"approved_rule_restored_after_zero_test")
         time.sleep(1)
         t.check(controller.request("probe",Peer=target_ip)["passed"],"positive_control_after_zero_test")
-        t.check(authority.request("revoke")["passed"],"grant_revoke_withdraws_rules_and_nodes")
+        if streams:
+            class Refresh:
+                def __init__(self):
+                    self.done=threading.Event()
+                    self.failed=False
+                    self.authority_denied=False
+                    self.last=None
+                    def work():
+                        try:
+                            while not self.done.wait(0.5):
+                                n=authority.request("network_state")
+                                if not n["passed"]:
+                                    self.authority_denied=True
+                                    return
+                                self.last=n["network_state"]
+                                for helper in (server,controller):
+                                    if not helper.request("state",State=self.last)["passed"]:
+                                        raise RuntimeError("refresh_rejected")
+                        except Exception:
+                            self.failed=True
+                    self.thread=threading.Thread(target=work,daemon=True)
+                    self.thread.start()
+                def close(self):
+                    self.done.set()
+                    self.thread.join(timeout=45)
+                    t.check(not self.thread.is_alive() and not self.failed,"dynamic_state_refresh_joined")
+
+            def wait_for(check,label,timeout=8):
+                end=time.monotonic()+timeout
+                while time.monotonic()<end:
+                    if check():
+                        t.check(True,label)
+                        return
+                    time.sleep(0.2)
+                t.check(False,label)
+
+            def authorize():
+                for helper in (server,controller):
+                    challenge=helper.request("clock_challenge")["challenge"]
+                    proof=authority.request("clock_proof",Challenge=challenge)
+                    t.check(proof["passed"] and helper.request("clock",Issuer=ready["issuer"],Proof=proof["proof"])["passed"],
+                            "fresh_signed_authority_clock_calibrated")
+                n=authority.request("network_state")
+                t.check(n["passed"] and n["network_state"]["claims"]["active"],"current_dynamic_state_available")
+                for helper,role in ((server,"target"),(controller,"controller")):
+                    t.check(helper.request("authorize",Role=role,Issuer=ready["issuer"],Target=ready["target"],
+                        Controller=ready["controller"],State=n["network_state"])["passed"],"helper_dynamic_gate_enabled")
+                t.check(controller.request("stream")["passed"],"dynamic_stream_requested")
+                wait_for(lambda:controller.request("count")["stream_ticks"]>=3,"mutual_device_proof_fixed_payload_ticks")
+
+            def ended():
+                wait_for(lambda:not controller.request("count")["probing"] and server.request("count")["stream_closed"]==1,
+                         "same_dynamic_active_stream_closed",6)
+                a=controller.request("count")
+                time.sleep(0.5)
+                b=controller.request("count")
+                t.check(a["stream_ticks"]==b["stream_ticks"] and b["stream_closed"]==1 and
+                        server.request("count")["stream_opened"]==1,"no_payload_or_connection_reopen_after_close")
+
+            def restart_helpers():
+                nonlocal server,controller
+                controller.stop(); server.stop()
+                server,ip=join(win,win_dir,target_key,target,ready["target_key"])
+                controller,cip=join(local,folder,client_key,client,ready["controller_key"])
+                t.check(ip==target_ip and cip==client_ip,"stream_restart_retains_verified_network_identity")
+
+            authorize()
+            refresh=Refresh()
+            try:
+                start=controller.request("count")["stream_ticks"]
+                time.sleep(5)
+                t.check(controller.request("count")["stream_ticks"]>start+10 and
+                        server.request("count")["stream_closed"]==0,"refresh_keeps_same_connection_beyond_initial_lease")
+            finally:
+                refresh.close()
+            ended()
+            t.check(not server.request("state",State=refresh.last)["passed"],"expired_positive_state_replay_rejected")
+
+            restart_helpers()
+            authorize()
+            refresh=Refresh()
+            try:
+                t.check(authority.request("authority_unavailable")["passed"],"durable_authority_closed_without_acl_withdrawal")
+                wait_for(lambda:refresh.authority_denied,"unavailable_authority_cannot_refresh_signed_state",4)
+                ended()
+            finally:
+                refresh.close()
+            t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
+                    "authority_outage_left_network_rule_present")
+            t.check(authority.request("restart")["passed"],"authority_recovers_via_reconcile")
+
+            restart_helpers()
+            authorize()
+            # No parallel refresh here: get a fresh positive, then an authenticated
+            # inactive snapshot while actual nodes and payload ACL still exist.
+            old=authority.request("network_state")["network_state"]
+            t.check(authority.request("revoke_only")["passed"],"grant_revoked_without_node_or_acl_cleanup")
+            inactive=authority.request("network_state")
+            t.check(inactive["passed"] and not inactive["network_state"]["claims"]["active"],"revocation_signed_inactive_with_original_binding")
+            for helper in (server,controller):
+                t.check(helper.request("state",State=inactive["network_state"])["passed"],"inactive_state_delivered")
+                replay=helper.request("state",State=old)
+                t.check(not replay["passed"] and replay["fresh"],"still_valid_positive_cannot_unlatch_revocation")
+            ended()
+            t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":[client_ip],"dst":[target_ip+":47476"]}]},
+                    "revoked_stream_closed_while_network_rule_present")
+            t.check(authority.request("reconcile")["passed"],"revoked_resources_reconciled_after_gate_test")
+        else:
+            t.check(authority.request("revoke")["passed"],"grant_revoke_withdraws_rules_and_nodes")
         t.check(authority.request("restart")["passed"],"restart_does_not_resurrect_revoked_grant")
         t.check(not authority.request("network_state")["passed"],"cleaned_revoked_pair_cannot_receive_new_signed_binding")
         time.sleep(1)
