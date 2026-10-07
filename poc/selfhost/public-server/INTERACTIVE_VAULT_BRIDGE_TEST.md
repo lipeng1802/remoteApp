@@ -44,4 +44,4 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "实际解压目录\prob
 
 ## 本轮结果
 
-Mac 全量 Go race/vet 通过；桥接固定身份/严格解析、禁止操作、四连接上限、取消 blocked reader/join 回归通过。Mac 原生 Keychain 经桥接 handler 的重复固定身份连接/签名通过并精确删除随机凭据（只用测试回环 TCP，Windows 实现无 TCP）。Windows x64 四制品交叉构建与专用 vet 通过。Windows 桌面 named pipe/Credential Manager 与 SSH 探针实际验收待用户配合，不能记为通过。
+Mac 全量 Go race/vet 通过；桥接固定身份/严格解析、禁止操作、四连接上限、取消 blocked reader/join 回归通过。Mac 原生 Keychain 经桥接 handler 的重复固定身份连接/签名通过并精确删除随机凭据（只用测试回环 TCP，Windows 实现无 TCP）。Windows x64 四制品交叉构建与专用 vet 通过。用户对指定的 `run-interactive-bridge-validation.ps1` 回复“验证通过”，Windows 桌面 named pipe/Credential Manager 桥接验收记为用户确认通过；本次未附详细测试输出，不记录耗时或逐项日志。同用户 SSH 探针仍待验，完整跨网 Headscale/TLS 验收未完成。

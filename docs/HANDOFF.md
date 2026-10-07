@@ -1,10 +1,10 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-07 切片 4B-4A：Windows 桌面 OS 身份桥接入口（当前，实际 Windows 待验）
+## 2026-10-07 切片 4B-4A：Windows 桌面 OS 身份桥接入口（桌面通过，SSH 待验）
 
 为跨网 OS signer 启动补上 Windows SSH/交互式安全存储的会话隔离桥：桌面 `interactive-vault` 显式创建并持有本轮随机 native 身份，同用户 SSH helper 使用 `vault-relay` 重开固定 scope/public，私钥不导出、不退回 fixture/明文。仅随机本机 named pipe、当前用户 protected DACL、拒绝 remote client/名称碰撞，四连接上限、严格 8 KiB JSON/期限；拒绝 create/delete/export/任意消息，不让非法消息毒化持有进程。停止关闭连接/join 后精确删除测试身份；不抵抗同用户恶意代码或代替业务门禁。
 
-提供独立 `windows-interactive-bridge.zip`、严格 hash/PASS/no-SKIP 包装脚本、桌面保持启动脚本及同用户 SSH pinned probe。不依赖旧安装包/SDK/管理员，公开 bootstrap 不含私钥，启动 CreateNew、不覆盖其他运行实例。Mac 全量 Go race/vet、边界/连接上限/取消 join 回归及真实 Keychain handler 两次连接/签名/精确删除通过；Windows x64 四制品交叉编译与专用 vet 通过。**Windows 桌面 named pipe + Credential Manager 以及 SSH 探针实际结果待用户配合**，不能写已通过。
+提供独立 `windows-interactive-bridge.zip`、严格 hash/PASS/no-SKIP 包装脚本、桌面保持启动脚本及同用户 SSH pinned probe。不依赖旧安装包/SDK/管理员，公开 bootstrap 不含私钥，启动 CreateNew、不覆盖其他运行实例。Mac 全量 Go race/vet、边界/连接上限/取消 join 回归及真实 Keychain handler 两次连接/签名/精确删除通过；Windows x64 四制品交叉编译与专用 vet 通过。用户回复“验证通过”，按上一条指定的 `run-interactive-bridge-validation.ps1` 将 **Windows 桌面 named pipe + Credential Manager 桥接验收记为用户确认通过**；本次没有附详细输出，不记录耗时或逐项日志。**同用户 SSH pinned probe 仍待验**，不得与桌面结果混为一项。
 
 这是联合入口的前置子切片，不是全部完成：`enrollment-network.py --managed` 仍用 fixture AppKey；下一子切片需改 authority 只接受两端 OS 公开身份，并接入显式邀请/确认、真实 Headscale 持有证明/自主 watch/真实产品 TLS。不得把已通过的 Windows 本机生命周期和此前 fixture 网络结果合并成 OS 双机验收。详见 [入口与步骤](../poc/selfhost/public-server/INTERACTIVE_VAULT_BRIDGE_TEST.md)。本轮无服务器部署/网络规则/安装 GUI/系统 Tailscale/生产凭据修改。正常 teardown 删除的仅是各次随机测试凭据，不可恢复，不涉及现有配对。
 
