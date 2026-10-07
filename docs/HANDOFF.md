@@ -4,7 +4,7 @@
 
 按用户“不使用旧安装包”要求新增便携 `TestNativeVaultPortableLifecycle` 和 `run-native-validation.ps1`，制品为独立 zip，不改安装产品。脚本核对两份 exe 的 hash，必须有指定测试 PASS、无 SKIP、退出码 0；设置 vault 绝对路径并恢复原环境变量，无需 SDK/管理员。两个应用身份必须真实 OS vault，临时 issuer 在测试内存中；不依赖 Unix Store，也不放宽生产存储权限。
 
-Mac 真实 OS 存储执行通过：两个身份重开、两端 HTTPS 自主刷新超过初始租期、签名撤销、双向会话证明/opaque 隧道、服务故障关闭与 worker join/无后续查询，正常精确清理随机身份。Go 完整 race/vet 通过；Windows x64 编译、包内 hash 核对清单/五文件 zip、Windows PowerShell 只读 ParseInput 语法检查通过。Windows 用户交互式实际验收待回传。本轮补齐的是 **Windows 本机 OS 集成入口，不是完整跨网双机 OS signer 联合启动入口**；那项仍待，不应宣布全部验证入口完成。详见 [入口清单与边界](../poc/selfhost/public-server/NATIVE_WINDOWS_ENTRY_TEST.md)。旧安装包、配对密钥、系统 Tailscale、服务器和防火墙未改。
+Mac 真实 OS 存储执行通过：两个身份重开、两端 HTTPS 自主刷新超过初始租期、签名撤销、双向会话证明/opaque 隧道、服务故障关闭与 worker join/无后续查询，正常精确清理随机身份。Go 完整 race/vet 通过；Windows x64 编译、包内 hash 核对清单/五文件 zip、Windows PowerShell 只读 ParseInput 语法检查通过。2026-10-07 用户回传 Windows 正常交互式实际验收截图：`TestNativeVaultPortableLifecycle` PASS（5.61s），四组 CHECK 均通过、无 SKIP，脚本输出 `VALIDATION PASSED`，确认内部测试退出码为 0、制品 hash 核对通过，测试凭据由 teardown 清理。Windows 本机原生生命周期项已闭环。本轮补齐的是 **Windows 本机 OS 集成入口，不是完整跨网双机 OS signer 联合启动入口**；那项仍待，不应宣布全部验证入口完成。详见 [入口清单与边界](../poc/selfhost/public-server/NATIVE_WINDOWS_ENTRY_TEST.md)。旧安装包、配对密钥、系统 Tailscale、服务器和防火墙未改。
 
 ## 2026-10-07 切片 4B-3：真实双机自主刷新/产品 TLS 门禁通过（当前入口）
 

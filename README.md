@@ -2,7 +2,7 @@
 
 最新切片 4B-3：真实 Mac/Windows helper 自主刷新与产品 TLS 撤销/故障关闭通过，无父端状态转发。此次双机使用隔离测试密钥；双机 OS signer 完整启动、正式信任锚/HMAC 分发仍待收口，整体切片 4 未完成。仍为私有 PoC，未改 GUI/安装包。见 [双机自主验收](poc/selfhost/public-server/MANAGED_NETWORK_TEST.md) 和 [当前 Handoff](docs/HANDOFF.md)。
 
-另提供 [Windows 本机原生生命周期独立入口](poc/selfhost/public-server/NATIVE_WINDOWS_ENTRY_TEST.md)：无需旧安装包/SDK，交互式结果待回传；此入口不是完整跨网双机 OS signer 启动验收。
+另提供 [Windows 本机原生生命周期独立入口](poc/selfhost/public-server/NATIVE_WINDOWS_ENTRY_TEST.md)：无需旧安装包/SDK，Windows 交互式实际验收已通过；此入口不是完整跨网双机 OS signer 启动验收。
 
 从个人使用 MVP 起步：在 macOS 控制端通过外网控制一台 Windows 电脑。最终面向其他用户提供接近 AnyDesk 的独立安装/连接体验，见 [产品路线](docs/PRODUCT_ROADMAP.md)。当前产品基线仍使用系统 Tailscale；独立连接 PoC 验证自托管 Headscale/DERP，数据通道不依赖 Tailscale 托管账号，SSH 仅用于测试管理。
 
