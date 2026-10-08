@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4U（联合验收准备）：补齐隔离双端可信构建、Windows 借用桌面身份入口、独立 session/identity scope 与一次性 bound-node 交接。构建时固定匹配的 CA/issuer/两端 SSH 回环端点，测试 root 只在内存生成，包均 Test=true；不替换正式信任。Mac 全量 race、双平台 vet、11 项 Python 回归、Windows 两项新信任材料测试和包校验/三脚本语法检查通过。双端包仅 build-only，**真实新 compiled Headscale/产品 TLS 联合会话与借用入口原生实测仍待**，整体 4 未完成。见 [交接](docs/HANDOFF.md)。
+
 4C-4T：新增 Windows **测试专用 compiled 桌面入口**，固定 root/配置/签名器/产品摘要，重开桌面测试身份并持有独占原生 journal，通过同用户本地命名管道协调启动、停止和升级；停止真正 join 后才确认，清理仅针对本轮测试数据。Mac 全量 Go race、双平台 vet 与 Windows 4 项管道测试/包校验/PowerShell 语法检查通过。用户已确认 r2 正常 Windows 桌面的初始化、原生签名/独占存储 probe 与 STOPPED 清理全部通过，**桌面原生入口验收闭环**；新 compiled 双机 Headscale/产品 TLS 尚未验，整体 4 未完成。结果见 [交接](docs/HANDOFF.md)。
 
 4C-4S：[产品进程进入 compiled owner 租约屏障](poc/selfhost/public-server/INSTALLED_PRODUCT_OWNER.md) 已接线：产品/网络/节点/watch/native signer 实际 join 后才能提交升级或释放；补取消错误传播、命令不因 Close 超时提前退出、同一编译配置客户端的 OS 签名证书发布/新鲜 TLS 描述符校验。Mac 全量回归、Windows 11 项局部验证及 Mac 原生 signer 严格退出测试通过；真实 Swift/C# 两端固定产品摘要包仅构建，未安装或跑新双机会话，整体 4 未完成。

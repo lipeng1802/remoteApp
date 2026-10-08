@@ -44,7 +44,7 @@ try {
     $taskVault=Launch-Control 'interactive-vault.exe' @{VaultExecutable=(Join-Path $PSScriptRoot 'identity-vault.exe')}
     $taskVault.Reply | Add-Member -NotePropertyName relay_executable -NotePropertyValue (Join-Path $PSScriptRoot 'vault-relay.exe')
     $taskSession=Launch-Control 'desktop-session.exe' @{Op='initialize';VaultScope=$taskVault.Reply.scope;VaultExpected=$taskVault.Reply.public_key}
-    if ($taskSession.Reply.scope -ne $taskVault.Reply.scope -or $taskSession.Reply.public_key -ne $taskVault.Reply.public_key -or $taskSession.Reply.channel -notmatch '^desktop-test-[0-9a-f]{32}$') { throw 'Desktop instance mismatch' }
+    if ($taskSession.Reply.identity_scope -ne $taskVault.Reply.scope -or $taskSession.Reply.public_key -ne $taskVault.Reply.public_key -or $taskSession.Reply.channel -notmatch '^desktop-test-[0-9a-f]{32}$' -or $taskSession.Reply.pipe -ne ('\\.\pipe\remoteapp-session-'+$taskSession.Reply.scope)) { throw 'Desktop instance mismatch' }
     $taskSession.Reply | Add-Member -NotePropertyName relay_executable -NotePropertyValue (Join-Path $PSScriptRoot 'desktop-relay.exe')
     Write-PublicBootstrap $taskVaultFile $taskVault.Reply
     Write-PublicBootstrap $taskSessionFile $taskSession.Reply

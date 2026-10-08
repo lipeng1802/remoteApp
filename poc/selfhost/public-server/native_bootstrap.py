@@ -23,22 +23,42 @@ def checked_windows_bootstrap(value, folder):
     return dict(VaultExecutable=expected, VaultScope=scope, ExpectedPublic=public)
 
 
+def checked_desktop_bootstrap(value, identity, folder):
+    required={"status","pipe","scope","public_key","channel","epoch","relay_executable"}
+    if (not required.issubset(value) or set(value)-required-{"identity_scope"}
+            or value.get("status")!="ready" or not re.fullmatch(r"[0-9a-f]{32}",value.get("scope",""))
+            or value.get("pipe")!="\\\\.\\pipe\\remoteapp-session-"+value["scope"]
+            or value.get("public_key")!=identity["ExpectedPublic"]
+            or value.get("identity_scope",value["scope"])!=identity["VaultScope"]
+            or not re.fullmatch(r"desktop-test-[0-9a-f]{32}",value.get("channel",""))
+            or type(value.get("epoch")) is not int or not 0<value["epoch"]<2**53
+            or value.get("relay_executable")!=folder.rstrip("\\")+"\\desktop-relay.exe"):
+        raise RuntimeError("invalid_compiled_desktop_bootstrap")
+    return dict(Scope=value["scope"],Expected=value["public_key"],Pipe=value["pipe"],Executable=value["relay_executable"])
+
+
 class NativeIdentities:
-    def __init__(self, transport, pipe):
+    def __init__(self, transport, pipe, compiled_desktop=False):
         self.owners = []
         self.transport = transport
         folder = os.environ.get("REMOTEAPP_WINDOWS_INTERACTIVE_DIR", "")
         if not re.match(r"^[A-Za-z]:\\", folder) or any(c in folder for c in "\r\n\0"):
             raise RuntimeError("trusted_windows_bundle_directory_required")
         literal = folder.replace("'", "''")
+        probe_name="probe-desktop-session.ps1" if compiled_desktop else "probe-interactive-vault.ps1"
         script = ("& powershell.exe -NoProfile -ExecutionPolicy Bypass -File '"+literal+
-                  "\\probe-interactive-vault.ps1'; if ($LASTEXITCODE -ne 0) {throw 'probe_failed'}")
+                  "\\"+probe_name+"'; if ($LASTEXITCODE -ne 0) {throw 'probe_failed'}")
         probe = transport.powershell(script)
-        transport.check("PROBE PASSED:" in probe and "--- SKIP:" not in probe, "desktop_os_identity_probe_before_server_mutation")
+        marker="VALIDATION PASSED: compiled desktop owner + reopened OS signature + exclusive native journal lease." if compiled_desktop else "PROBE PASSED:"
+        transport.check(marker in probe and "--- SKIP:" not in probe, "desktop_os_identity_probe_before_server_mutation")
         raw = transport.powershell("[Convert]::ToBase64String([IO.File]::ReadAllBytes('"+literal+"\\interactive-bootstrap.json'))")
         value = json.loads(base64.b64decode(raw, validate=True))
         self.target = checked_windows_bootstrap(value, folder)
         self.pipe_name = value["pipe"]
+        self.desktop=None
+        if compiled_desktop:
+            raw=transport.powershell("[Convert]::ToBase64String([IO.File]::ReadAllBytes('"+literal+"\\desktop-bootstrap.json'))")
+            self.desktop=checked_desktop_bootstrap(json.loads(base64.b64decode(raw,validate=True)),self.target,folder)
         exe = os.environ.get("REMOTEAPP_MAC_VAULT_EXECUTABLE", str(transport.HERE.parents[1] / "macos/RemoteController/.build/release/ConnectionIdentityVault"))
         if not Path(exe).is_absolute():
             raise RuntimeError("trusted_absolute_mac_vault_required")

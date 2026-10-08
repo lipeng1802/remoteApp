@@ -51,6 +51,16 @@ Windows 固定摘要入口 `C:\Users\jarvis\run-owned-product-validation-4s.ps1 
 
 ## 下一段
 
+### 4C-4U：联合验收的可信准备组件（不是联合实测通过）
+
+cmd/compiled-pair-build接显式受信管理bootstrap（version/certificate/issuer/target_endpoint/controller_endpoint），只允许HTTPS127.0.0.1规范端口（非443）、单一有界JSON，无root/private-key字段或在线TOFU。临时test root仅在内存生成，签20分钟两端epoch1与预签epoch2候选；只写公共材料，用新darwin-test/windows-desktop-borrowed-test模式强制真实产品/Test=true/random channel，构建后审计两端root/profile对应。不是生产发布root供应或持续签发服务，原生产构建不变。
+
+新borrower脚本先连接仍READY的creator，再直接reopen其native identity；无create/delete/stop creator。session pipe/hello Scope now取compiled journal Scope，公开identity_scope separately标识借用设备scope，防止与持有同设备key的旧入口管道碰撞。老4T r2保留不覆盖，native_bootstrap可用其probe/两份公共bootstrap为新阶段准入。先stop borrower（真实join/本测试journal清理），再stop creator；public bootstrap禁止authkey/HMAC/root覆盖。
+
+split_nodes新增一次性compiled_handoff；private inputs只在两旧node helper真实join后返回，失败锁闭不可重试；明确规范路径/node/IP、grant主体与设备key hash匹配、两票据、固定Windows target/Mac controller，不传CA/Endpoint/root/helper。只是可信整理，不替代compiled runtime自身的签名/watch/state与实际node检查。
+
+Macfull race、双平台vet、11项Python、Windows2项新crypto trust材料测试/4项旧管道测试/全包SHA及三脚本语法检查通过。两端完整构建仅fixture回环41001/41002，不监听、不联网、不初始化OS journal，公共CA/issuer来自既有公开文件，未读任何release/CA私钥。构建结果位于 artifacts/connection-poc/compiled-pair-build-only-4u；Windows副本仅作build验证，不给用户启动，profile20分钟后过期。仍需实现新完整协调命令/实时产品payload观测/明确server阶段期限与失败join/精确清理，然后用匹配真实隔离frontend的fresh pair跑双机；整体4未完成。
+
 ### 4C-4T：测试专用 Windows 桌面协调入口
 
 新增 `cmd/desktop-session`、`cmd/desktop-relay` 与 `desktopcontrol`。受信构建器 `installed-session-build` 的 target 可明确选择 `windows-desktop-test`（必须提供 standalone product）；生成随机 `desktop-test-<32hex>` channel，并把 Test=true 的固定安装锚/配置、journal/signer/product 摘要编译进入口。既有 darwin/windows 构建模式不变。桌面入口拒生产 journal、未编译版本、运行时路径/root/CA 覆盖与错误 target 身份。`build-public.json` 仅追溯，不是授权来源；包内摘要是传输完整性，仍不是发行者签名。

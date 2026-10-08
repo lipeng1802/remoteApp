@@ -85,7 +85,17 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
         t.check(not managed_peer.request("probe",Peer=target_ip)["passed"],"split_managed_has_no_token_fallback")
         server,peer=managed_server,managed_peer
         return managed_server,managed_peer
-    return {"peer":peer,"target_ip":target_ip,"binding":binding,"restart_managed":restart_managed}
+    from compiled_coordination import BoundHandoff, runtime_inputs
+    inputs=runtime_inputs(ready,binding,grant,work+"\\artifacts\\connection-poc\\nodes\\target",str(folder),tickets)
+    def stop_bound_helpers():
+        nonlocal peer,server
+        # No new tsnet owner may reopen either directory before actual join.
+        # Failed stop leaves its handle/evidence in the parent's cleanup list.
+        for helper in (peer,server):
+            helper.stop(); helpers.remove(helper)
+        peer,server=None,None
+    return {"peer":peer,"target_ip":target_ip,"binding":binding,"restart_managed":restart_managed,
+            "compiled_handoff":BoundHandoff(inputs,stop_bound_helpers)}
 
 def reclaimed(t, timeout=20):
     end=time.monotonic()+timeout

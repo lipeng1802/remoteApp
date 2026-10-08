@@ -6,3 +6,4 @@ DerivedData/
 bin/
 obj/
 artifacts/
+__pycache__/

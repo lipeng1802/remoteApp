@@ -178,13 +178,15 @@ func run() (result error) {
 	b := &backend{owner: owner, release: r, factory: factory, signer: signer, open: open, expected: first.VaultExpected, product: processowner.Spec{Executable: filepath.Join(dir, "tls-product.exe"), SHA256: embeddedProductDigest}}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	pipe := `\\.\pipe\remoteapp-session-` + first.VaultScope
+	// A matching new bundle borrows a still-READY creator without colliding
+	// with its previous compiled desktop session instance.
+	pipe := `\\.\pipe\remoteapp-session-` + r.Scope()
 	ln, e := desktopcontrol.Listen(pipe)
 	if e != nil {
 		return e
 	}
 	done := make(chan struct{})
-	go func() { defer close(done); desktopcontrol.Serve(ctx, ln, first.VaultScope, first.VaultExpected, b) }()
+	go func() { defer close(done); desktopcontrol.Serve(ctx, ln, r.Scope(), first.VaultExpected, b) }()
 	defer func() { cancel(); ln.Close(); <-done }()
 	commands := make(chan string)
 	readerDone := make(chan struct{})
@@ -200,7 +202,7 @@ func run() (result error) {
 		}
 	}()
 	defer func() { cancel(); os.Stdin.Close(); <-readerDone }()
-	if e = json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "ready", "pipe": pipe, "scope": first.VaultScope, "public_key": first.VaultExpected, "channel": r.Specification().Channel, "epoch": r.Specification().Bundled.Claims.Epoch}); e != nil {
+	if e = json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "ready", "pipe": pipe, "scope": r.Scope(), "identity_scope": first.VaultScope, "public_key": first.VaultExpected, "channel": r.Specification().Channel, "epoch": r.Specification().Bundled.Claims.Epoch}); e != nil {
 		return e
 	}
 	select {

@@ -62,7 +62,15 @@ func run() error {
 		}
 	}
 	goexe, module, target, dest := os.Args[1], os.Args[2], os.Args[3], os.Args[4]
-	desktop := target == "windows-desktop-test"
+	borrowed := target == "windows-desktop-borrowed-test"
+	macTest := target == "darwin-test"
+	if macTest {
+		if len(os.Args) != 11 {
+			return os.ErrInvalid
+		}
+		target = "darwin"
+	}
+	desktop := target == "windows-desktop-test" || borrowed
 	if desktop {
 		target = "windows"
 		if len(os.Args) != 11 {
@@ -105,12 +113,16 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	if desktop {
+	if desktop || macTest {
 		var nonce [16]byte
 		if _, e = rand.Read(nonce[:]); e != nil {
 			return e
 		}
-		s.Channel = "desktop-test-" + hex.EncodeToString(nonce[:])
+		prefix := "desktop-test-"
+		if macTest {
+			prefix = "compiled-mac-test-"
+		}
+		s.Channel = prefix + hex.EncodeToString(nonce[:])
 		s.Test = true
 	}
 	digest := sha256.Sum256(v)
@@ -160,6 +172,15 @@ func run() error {
 				return e
 			}
 			if e = write(filepath.Join(dest, name), raw, 0600); e != nil {
+				return e
+			}
+		}
+		if borrowed {
+			raw, e := read(filepath.Join(module, "public-server", "start-borrowed-desktop-session.ps1"), 32768)
+			if e != nil {
+				return e
+			}
+			if e = write(filepath.Join(dest, "start-borrowed-desktop-session.ps1"), raw, 0600); e != nil {
 				return e
 			}
 		}

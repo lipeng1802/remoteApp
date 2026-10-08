@@ -1,5 +1,29 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4U：匹配隔离服务的双端构建/借用入口/节点交接，联合实测仍待
+
+新增 trustinstall.NewTestPairMaterial 与 cmd/compiled-pair-build，明确是受信操作者从管理 SSH 得到公共 CA/issuer/两端管理回环端点后的 **test-only build**，不是在线TOFU/运行时root覆盖。input严格单一JSON，拒重复/额外root/private-key字段，允许文本尾换行；端点固定HTTPS127.0.0.1显式规范端口、非443。只在内存新生成一次性测试release root，签两端epoch1及预签epoch2候选（各自endpoint，同一CA/issuer、20分钟），只保存公共anchor/profiles；未读取既有release root/CA私钥，也没把签名器或root生成器加入运行时。构建器新增darwin-test/windows-desktop-borrowed-test，两端必须真实standalone产品，random测试channel/Test=true；构建后检查root/profile/Test与输入对应，拒用旧文件混搭。生产darwin/windows构建模式不变。
+
+新增 start-borrowed-desktop-session.ps1，只借用已有READY随机测试identity，先连接实际creator pipe确认身份，再启动固定新compiled desktop owner。不会create/delete/stop其creator。新session pipe/scope取compiled journal scope，identity_scope另行标注，避免同设备身份的旧4T桌面入口和新包碰撞。正常launcher已适配新scope；已通过的4T r2旧binary/脚本没被覆盖，native_bootstrap新compiled_desktop模式仍可读取旧r2公共bootstrap做桌面probe（不是在SSH直接打开凭据）。新borrower退出须真正join/close0并清理自己的测试journal，之后才能停creator。该新借用流程还没有桌面实测。
+
+compiled_coordination.runtime_inputs只整理已验证真实节点阶段的private Config（规范平台路径/节点键/IP/设备subject/hash/双ticket、固定角色）；不传Endpoint/CA/root/helper覆盖。split_nodes.run新增compiled_handoff，显式take仅在两旧node helper真实closed+exit0后才返回authkey/state/grant/binding；失败latch，不能重试自愈。无首次prepare/rekey/自动网络重开；compiled runtime仍自行检查state、实际node/IP、签名ACTIVE watch/绑定/grant。旧split流程未切换成新联合验收。
+
+证据：Mac全量Go race与Mac/Windows全量vet通过；输入尾换行首构建失败已修复，增加单测并重新实际构建成功。11项Python协调回归通过；Window两项 TestTestPairMatchingIssuerCAAndAdvance/TestTestPairRejectsBadTrustedBootstrap 全PASS/退出0无SKIP（纯crypto fixture，不是OS存储或真实API），exe SHA256 `af2b471d4a6bfdb393b8d643baafe1e358085174072f4a1a364ae6a612f7e8af`；再次实际运行4T四项Windows本地pipe测试全PASS。新的build-only Windows整包SHA与三脚本（含borrower）PowerShell语法检查通过。不要求用户重复这些局部测试。
+
+实际构建产物 artifacts/connection-poc/compiled-pair-build-only-4u/{mac,win}，用已有公共CA/issuer与不监听的回环41001/41002作 **build-only fixture**；已传Windows `C:\Users\jarvis\remoteapp-compiled-pair-build-only-4u\win`，没有运行trust-install/桌面启动、节点、TLS产品或修改服务器/Nginx/ACL/Tailscale/旧安装。该fixture不是可联网验收包，20分钟profile也会到期；不要让用户启动它或用它替代下一轮真实匹配包。旧4T r2在 `C:\Users\jarvis\windows-desktop-session-4t-r2` 保留可用，仅用来创建/持有测试identity。仅本地提交，未推送。
+
+### 下一步与尚未闭环
+
+整体4未完成；新compiled双机联合协调尚未跑通，仍需把这些组件串入独立协调命令：实际隔离frontend公共bootstrap+两端forward→fresh test pair build/upload→Windows桌面borrower READY→OS签名consent/enroll/bind→停止旧helper并重开bound state→private product_ready HMAC转交→真实TLS受保护payload/跨lease刷新/撤销及完整join→精确回收。还需新增产品状态/实际payload观测，不能用bridge ready代替TLS成功；协调端失败不能用旧Pipe.emergency强杀当join或删除不明状态。旧daemon-network-check operator阶段仍固定5分钟，须为新compiled协调提供明确的测试期限/超时清理，不能临时全局放宽。接入Mac测试journal的Initialize与session真实join后cleanup-test，同样不得自动reset。
+
+需要用户在Windows正常桌面重新启动 **已通过的4T r2身份入口**并保持READY（非重复验收，不按Enter、不跑本轮build-only包）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\jarvis\windows-desktop-session-4t-r2\start-desktop-session.ps1
+```
+
+得到READY后下一轮再从真实隔离服务公共材料编译新包，给用户新的borrower命令；本轮尚未启动隔离服务器等待用户，没有live grant/节点/私钥后台持有。先停新borrower再停identity窗口的顺序不能反转。
+
 ## 2026-10-08 4C-4T：新 compiled Windows 桌面入口，桌面原生验收通过
 
 用户已反馈 r2 正常桌面执行通过：窗口1正常启动；窗口2返回 `VALIDATION PASSED: compiled desktop owner + reopened OS signature + exclusive native journal lease. NOT Headscale/product TLS/GUI or signed installer acceptance.`；窗口1 Enter 后返回 `STOPPED: desktop workers and native signer joined; isolated test journal and random test identity cleaned.` 这是用户桌面实测证据，不是 SSH 推断。原生身份重开/验签、独占 journal、停止退出及精确清理这一段闭环，不再要求重复；没有真实网络/产品会话，不能据此验收 Headscale、TLS、GUI 或正式安装。
