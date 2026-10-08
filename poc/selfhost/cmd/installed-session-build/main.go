@@ -199,7 +199,7 @@ func run() error {
 	if e = write(filepath.Join(dest, "build-public.json"), b, 0600); e != nil {
 		return e
 	} // runtime ignores this sidecar
-	if desktop {
+	if desktop || macTest {
 		manifest := map[string]string{}
 		entries, e := os.ReadDir(dest)
 		if e != nil {

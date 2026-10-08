@@ -101,6 +101,9 @@ class Coordinator(Pipe):
             if line.startswith("PASS "):
                 print(line, flush=True)
                 continue
+            if line.startswith("FAIL "):
+                print(line, flush=True)
+                raise RuntimeError("split_server_declined")
             return json.loads(line)
         raise RuntimeError("split_readiness_failed")
 
@@ -165,6 +168,10 @@ def main():
         for source, destination in [(t.ARTIFACTS/"daemon-network-check",program), (t.ARTIFACTS/"authority-daemon-network",daemon),
                 (t.ARTIFACTS/"device-frontend-private",frontend), (Path(__file__).with_name("enrollment-mode.py"),mode)]:
             uploads.upload(source, destination)
+        # Public executables must be executable by the deliberately non-root
+        # probe/frontend. Never chmod material, config, journal or private keys.
+        permissions=subprocess.run(t.SERVER+["chmod 755 -- "+" ".join((program,daemon,frontend))],capture_output=True,timeout=15)
+        t.check(permissions.returncode==0,"split_public_binaries_nonroot_executable")
         prepared = subprocess.run(t.SERVER+["python "+mode+" prepare"], capture_output=True, timeout=45)
         if prepared.stdout.splitlines():
             backup = json.loads(prepared.stdout.splitlines()[0]).get("backup")
@@ -284,6 +291,10 @@ def main():
 
 if __name__=="__main__":
     try: main()
-    except Exception:
+    except Exception as error:
+        # Frame metadata only: raw errors/replies can contain private inputs.
+        import traceback
+        frame=traceback.extract_tb(error.__traceback__)[-1]
+        print("DIAGNOSTIC "+type(error).__name__+" "+Path(frame.filename).name+":"+str(frame.lineno),flush=True)
         print("FAIL split_os_consent_coordinator",flush=True)
         raise SystemExit(1)

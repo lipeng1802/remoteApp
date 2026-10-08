@@ -1,5 +1,25 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4W 首轮真实执行：服务与新包通过，borrower READY 超时，已回收
+
+用户再次确认旧4T r2身份READY。本轮真实启动 --compiled；首轮桌面探测未通过（泛化FAIL，未进入资源创建），单独SSH运行probe实际PASS；重试桌面probe和7个helper构建PASS，第二次服务上传阶段失败、临时上传程序精确移除，未切换策略/创建verifier。上传新增scp压缩与180秒上限（仅公共artifact），后续4个服务artifact均上传/摘要通过。不要将此前上传失败具体归因为认证或带宽，未单独复现其原因。
+
+第三次进入真实隔离策略/authority，verifier与daemon ready后server退出，所有verifier/临时目录已回收、原policy恢复。检查发现新构建artifact原有权限0700且scp保留它，刻意非root probe/frontend无法执行；修正仅对本轮3个**公共程序** chmod755，不放宽material/config/journal/key权限。Coordinator.read现在明确处理server固定FAIL标签，避免伪装为JSONDecodeError；主异常只输出类型及末帧basename/行号，不输出原异常/私有回复。
+
+第四次非root probe、错误root UID拒绝、frontend、公共bootstrap与双forward真实PASS，fresh pair构建成功后本地verify_bundle失败：darwin-test未生成SHA256.json（FileNotFoundError）。补齐installed-session-build条件desktop||macTest，生产模式行为不变。此失败没有上传Windows新包或申请grant/client enrollment；server实际退出、verifier回收与原policy还原完成。
+
+第五次全部服务前置真实PASS，fresh匹配Test=true双包构建成功，Mac清单核验成功；Windows上传到 **C:\Users\jarvis\remoteapp-split-consent-47431f15558e5e16\compiled-win** 并逐文件摘要核验PASS。已向用户在commentary与异步问题提供第二正常桌面窗口borrower命令，但240秒内未观察到desktop-bootstrap READY，也未收到用户第二窗口确认；最终RuntimeError compiled_products.py:185，即borrower_ready_deadline。
+
+超时结果：没有执行register/invite/claim/approve/enroll/bind/start产品；没有新客户端grant/节点或Mac信任journal初始化。两本轮随机Mac测试identity已按finally正常delete/exit回收；server verifier精确retire、隔离experiment目录移除、原policy恢复、上传server程序移除，所有管理forward已退出。Windows随机work/公开compiled包保留，未递归删除；日志PRESERVED_CLIENT_NODE_JOURNALS在本轮实际没有client-node目录创建，是保守work保留标签，不代表有活节点。旧身份creator及任何用户迟启动borrower的状态仍需STOPPED反馈，未擅自清理Windows原生凭据。
+
+结束后再次SSH只读核对：三个既有服务remoteapp-authority/remoteapp-frontend/remoteapp-poc active；Headscale nodes/users/preauthkeys均null（为空）；原policy `100.120.0.2 -> 100.120.0.1:47476` 一条accept；nginx-baseline.sha256所有项OK；正式Store SHA仍为`5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca`。未读取root/CA私钥。23项Python回归、compiled-pair-build Go测试PASS，installed-session-build编译PASS（无测试），git diff --check通过。
+
+### 用户当前操作与下次执行
+
+已通知用户**不要再启动本轮刚才的新包**。若第二borrower窗口已迟启动，先在它Enter并确认STOPPED，再在旧creator Enter并确认STOPPED；若没有第二窗口，只需creator停止。等待确认，不猜测已清理。当前所有临时服务已退出，本轮匹配CA/issuer端点不再在线，不能用保留包继续验；不要重复initialize或复用旧profile。下次在双方准备好能及时操作第二窗口的情况下重新运行，重新生成fresh匹配材料，不自动重连/延长grant。
+
+**本轮部分前置实测通过，但整体4和compiled双机TLS/正常join/撤销都未通过。** 后续仍需新borrower真实native probe、OS签名授权/真实node绑定、bound交接、产品持续TLS/正常join/post-stop撤销；live revoke/fault/upgrade仍按专门切片验证。代码/README/HANDOFF按既有授权本地提交，不推送。
+
 ## 2026-10-08 4C-4W：compiled 联合协调入口已开发，真实执行待 Windows READY
 
 用户已确认上一轮 Windows 返回 **STOPPED**，4V保留的4T r2测试身份/桌面journal按launcher正常清理闭环；不再记作仍READY。本轮继续代码开发，尚未运行新隔离服务、创建新grant/节点或生成可联网fresh pair，未修改线上服务/ACL/Nginx/旧产品/Tailscale，也未读取发布root/CA私钥。

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4W 首轮实测进展：真实非 root broker/frontend、匹配双端包构建与上传/摘要校验已通过；补齐公共程序执行权限及 Mac 测试包清单。等待 Windows borrower READY 超时后已回收 verifier/临时服务并还原原策略，节点/用户/票据为空、既有服务/Nginx/Store不变。**尚未进入客户端授权/节点绑定/TLS，不算联合验收通过；刚才包不能续跑。** 详见最新交接，等待 Windows 两窗口停止确认。
+
 4C-4W：新增 `split-consent.py --compiled` 联合协调入口，串接匹配真实服务的 fresh test pair、Windows 桌面 borrower、OS 签名授权与 bound-node 交接、实际产品计数持续增长、正常 join 后签名撤销。私有管道有界且不强杀冒充完成。23项 Python 回归与7个跨平台helper构建通过；**真实联合执行仍待 Windows READY，未验收活会话撤销/故障/升级，整体4未完成。** 操作与边界见 [交接](docs/HANDOFF.md)。
 
 4C-4V：补齐 compiled 两端实际产品的私有计数观测（不暴露 HMAC/证书），重复查询后仍走真实停止/升级 join 屏障；新增显式隔离 compiled 协调模式，旧模式期限不变。Mac全量race、双平台vet、11项Python、Windows5项局部测试与Linux3项纯协议测试通过。**完整新compiled双机协调、真实TLS持续payload与borrower桌面实测仍待，整体4未完成。** 见 [交接](docs/HANDOFF.md)。

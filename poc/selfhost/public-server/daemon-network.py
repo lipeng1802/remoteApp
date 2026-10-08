@@ -17,8 +17,8 @@ t=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(t)
 
 def upload(source, target):
-    cmd=["scp","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_poc_server_ed25519"),str(source),"root@182.92.117.114:"+target]
-    p=subprocess.run(cmd,capture_output=True,timeout=60)
+    cmd=["scp","-C","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_poc_server_ed25519"),str(source),"root@182.92.117.114:"+target]
+    p=subprocess.run(cmd,capture_output=True,timeout=180)
     t.check(p.returncode==0,"isolated_acceptance_artifact_uploaded")
     p=subprocess.run(t.SERVER+["sha256sum "+target],capture_output=True,timeout=15)
     t.check(p.returncode==0 and p.stdout.decode().split()[0]==hashlib.sha256(source.read_bytes()).hexdigest(),"uploaded_artifact_hash_verified")
