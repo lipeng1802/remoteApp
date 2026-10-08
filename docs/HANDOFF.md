@@ -1,5 +1,18 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4W 第二窗口实测：native probe 通过，首个 register 失败，服务器恢复完成
+
+用户确认第二窗口READY，本轮 compiled borrower真实原生身份与独占journal probe PASS；Windows API binary上传/摘要PASS，Windows/Mac两个API signer READY。首个OS签名register未通过；未创建客户端grant/enrollment/node，也未初始化Mac compiled信任journal或启动产品TLS。不能把borrower probe当作联合验收通过。原API仅返回passed=false，无法确定是签名器、传输还是响应拒绝；之后只读核对Windows/Mac当前UTC秒一致，但这不是失败时完整时钟证据。
+
+异常finally初次回收未确认，服务器仍有本轮check/daemon/frontend及verifier节点134，原策略备份保留；没有强杀或重注册。后续只读核对确认三个测试进程已自然退出，实验目录 `/tmp/remoteapp-daemon-check-4073748079` 不存在、nodes为空。管理端使用本轮准确备份 `/var/lib/remoteapp-poc/enrollment-mode-IQN_Rc` 恢复成功，随后nodes/users/preauthkeys均null、原accept策略恢复。三个既有服务active、Nginx基线全部OK、正式Store SHA仍为 `5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca`。本轮四个准确临时上传文件移除，不可恢复的仅这些可重新构建公共测试artifact；没有删除用户Windows包或凭据。
+
+Windows保留目录 `C:\Users\jarvis\remoteapp-split-consent-de5883471d2ae3e7\compiled-win`。已通知用户先borrower Enter确认STOPPED，再原4T r2 creator Enter确认STOPPED；尚待反馈。此包端点已退出，不可继续使用或重复initialize。Mac测试身份owner及API/relay在协调退出时走正常关闭；Windows身份和借用journal仍由桌面launcher按顺序回收，不代替用户断言STOPPED。
+
+修补：Coordinator.join不再把SSH wrapper退出当作远端资源回收，只接受服务器在实际child join、票据retire、实验目录移除后发出的精确STOPPED marker。缺marker时保留backup/program，禁止自动restore。非零验收退出即使有回收marker也不能宣称验收通过。首要异常在finally前输出脱敏类型/源码位置，避免策略恢复错误遮蔽原失败。DeviceRequest新增固定signer/transport/response分类，保留errors.Is(ErrDenied)，不输出raw error、HTTP响应体、密钥或签名；下一轮才能据此确定失败层。未自动重试或扩大权限/有效期。
+
+回归：24项Python测试PASS，包含SSH退出0但无marker拒绝、伪marker拒绝及有marker非零退出仍保留失败结果；Mac invite全量race PASS，新增三类失败仍为ErrDenied且不传播原材料；device-api-client编译PASS（无测试）。Linux daemon-network-check和Windows device-api-client交叉构建PASS，git diff --check PASS。测试回环监听首次被sandbox拒绝，授权后完整重跑PASS，不把首次失败当代码缺陷。仅本地提交，未推送；整体4仍未完成。
+
+
 ## 2026-10-08 4W 首轮真实执行：服务与新包通过，borrower READY 超时，已回收
 
 用户再次确认旧4T r2身份READY。本轮真实启动 --compiled；首轮桌面探测未通过（泛化FAIL，未进入资源创建），单独SSH运行probe实际PASS；重试桌面probe和7个helper构建PASS，第二次服务上传阶段失败、临时上传程序精确移除，未切换策略/创建verifier。上传新增scp压缩与180秒上限（仅公共artifact），后续4个服务artifact均上传/摘要通过。不要将此前上传失败具体归因为认证或带宽，未单独复现其原因。

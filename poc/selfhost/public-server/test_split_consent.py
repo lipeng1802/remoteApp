@@ -3,12 +3,30 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+import sys
 
 spec=importlib.util.spec_from_file_location("split_consent",Path(__file__).with_name("split-consent.py"))
 split=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(split)
 
 class SplitConsentTests(unittest.TestCase):
+    def test_remote_cleanup_requires_authoritative_marker_not_ssh_exit(self):
+        for text, code, accepted in [("",0,False),
+                ("STOPPED isolated_coordinator_resources_joined extra",0,False),
+                ("STOPPED isolated_coordinator_resources_joined",0,True),
+                ("STOPPED isolated_coordinator_resources_joined",1,True)]:
+            with self.subTest(text=text,code=code):
+                child=split.Coordinator([sys.executable,"-c",
+                    "import sys; sys.stdin.read(); print(sys.argv[1]); sys.exit(int(sys.argv[2]))",text,str(code)])
+                try:
+                    if accepted:
+                        self.assertEqual(child.join(),code)
+                    else:
+                        with self.assertRaises(RuntimeError): child.join()
+                finally:
+                    child.proc.wait(timeout=2)
+                    child.proc.stdout.close()
+
     def test_bootstrap_is_exact_public_split_marker(self):
         ready={"status":"ready","split_process":True,"target":"a"*64,"controller":"b"*64,
                "issuer":"c"*64,"api_certificate":base64.b64encode(b"public-ca").decode(),"api_port":12345}

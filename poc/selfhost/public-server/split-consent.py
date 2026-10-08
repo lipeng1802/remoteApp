@@ -53,6 +53,11 @@ def checked_ready(value, target, controller, nodes=False, fault=False, compiled=
 def consent(target, controller, node_phase=None):
     def call(client, **body):
         response = client.request("device", Device=body)
+        if response.get("passed") is not True:
+            stage = response.get("failure_stage")
+            if stage not in ("signer", "transport", "response", "protocol"):
+                stage = "unknown"
+            print("DIAGNOSTIC device_request_" + stage, flush=True)
         t.check(response.get("passed") is True, "split_os_signed_" + body["action"])
         return response["device"]
     owner = call(target, action="register")
@@ -88,6 +93,15 @@ def consent(target, controller, node_phase=None):
     t.check(final["status"] == "revoked" and "grant" not in final, "split_revocation_not_offline_signature_check")
 
 class Coordinator(Pipe):
+    cleanup_seen = False
+
+    def observe_cleanup(self, line):
+        if line == "STOPPED isolated_coordinator_resources_joined":
+            self.cleanup_seen = True
+            print(line, flush=True)
+            return True
+        return False
+
     def read(self, timeout=50):
         end = time.monotonic() + timeout
         import select
@@ -98,6 +112,8 @@ class Coordinator(Pipe):
             if not raw:
                 break
             line = raw.decode().strip()
+            if self.observe_cleanup(line):
+                continue
             if line.startswith("PASS "):
                 print(line, flush=True)
                 continue
@@ -120,9 +136,13 @@ class Coordinator(Pipe):
             if not raw:
                 break
             line = raw.decode().strip()
+            if self.observe_cleanup(line):
+                continue
             if line.startswith(("PASS ", "FAIL ", "PRESERVED /tmp/remoteapp-daemon-check-")):
                 print(line, flush=True)
         self.proc.wait(timeout=5)
+        if not self.cleanup_seen:
+            raise RuntimeError("split_remote_cleanup_unconfirmed")
         return self.proc.returncode
 
 def main():
@@ -239,6 +259,14 @@ def main():
         coordinator.send({"Op":"stop"})
         code=coordinator.join(); joined=True
         t.check(code==0,"split_consent_coordinator_zero_exit")
+    except Exception as original:
+        # Record the primary stage before finally can fail its independent
+        # teardown checks. Never print raw exceptions/private protocol replies.
+        import traceback
+        frame = traceback.extract_tb(original.__traceback__)[-1]
+        print("PRIMARY_DIAGNOSTIC " + type(original).__name__ + " " +
+              Path(frame.filename).name + ":" + str(frame.lineno), flush=True)
+        raise
     finally:
         if compiled and work_created:
             print("PRESERVED_WINDOWS_COMPILED_WORK "+work,flush=True)

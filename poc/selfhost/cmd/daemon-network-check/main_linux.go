@@ -264,6 +264,9 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 			return
 		}
 		fmt.Println("PASS isolated_experiment_directory_removed")
+		// Emitted only after actual child joins, durable ticket retirement and
+		// scoped directory removal; SSH exit alone is not teardown evidence.
+		fmt.Println("STOPPED isolated_coordinator_resources_joined")
 	}()
 	if os.Chmod(base, 0755) != nil {
 		return denied

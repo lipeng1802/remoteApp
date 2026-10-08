@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"remoteapp.local/selfhost-poc/invite"
@@ -202,6 +203,17 @@ func run() error {
 			value := map[string]any{"status": "device", "passed": e == nil}
 			if e == nil {
 				value["device"] = result
+			} else {
+				stage := "protocol"
+				switch {
+				case errors.Is(e, invite.ErrDeviceSigner):
+					stage = "signer"
+				case errors.Is(e, invite.ErrDeviceTransport):
+					stage = "transport"
+				case errors.Is(e, invite.ErrDeviceResponse):
+					stage = "response"
+				}
+				value["failure_stage"] = stage
 			}
 			if out.Encode(value) != nil {
 				return io.ErrClosedPipe

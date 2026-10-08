@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +17,14 @@ import (
 	"remoteapp.local/selfhost-poc/trustprofile"
 	"strconv"
 	"time"
+)
+
+// Fixed diagnostic categories only: never retain transport errors or response
+// bodies, which can contain private endpoint/credential material.
+var (
+	ErrDeviceSigner    = fmt.Errorf("device signer unavailable: %w", ErrDenied)
+	ErrDeviceTransport = fmt.Errorf("device transport unavailable: %w", ErrDenied)
+	ErrDeviceResponse  = fmt.Errorf("device response rejected: %w", ErrDenied)
 )
 
 type NetworkClient struct {
@@ -158,7 +167,7 @@ func (c *NetworkClient) DeviceRequest(ctx context.Context, b Body) (Result, erro
 	b.IssuedAt = c.now().Unix()
 	pub, sig, e := c.signed(requestBytes(b))
 	if e != nil {
-		return Result{}, e
+		return Result{}, ErrDeviceSigner
 	}
 	raw, _ := json.Marshal(Envelope{pub, b, sig})
 	if len(raw) > 4096 {
@@ -171,11 +180,11 @@ func (c *NetworkClient) DeviceRequest(ctx context.Context, b Body) (Result, erro
 	req.Header.Set("Content-Type", "application/json")
 	res, e := c.client.Do(req)
 	if e != nil {
-		return Result{}, ErrDenied
+		return Result{}, ErrDeviceTransport
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "application/json" {
-		return Result{}, ErrDenied
+		return Result{}, ErrDeviceResponse
 	}
 	data, e := io.ReadAll(io.LimitReader(res.Body, 8193))
 	if e != nil || len(data) > 8192 {
