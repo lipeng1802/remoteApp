@@ -407,6 +407,34 @@ func TestInitialAuthorityTimeoutAndMissingCheckDeny(t *testing.T) {
 	}
 }
 
+func TestAuthorityCheckDoesNotDetachAfterDeadline(t *testing.T) {
+	f := setup(t)
+	cancelled, release := make(chan struct{}), make(chan struct{})
+	finished := make(chan bool, 1)
+	go func() {
+		finished <- authorized(context.Background(), f.server, func(ctx context.Context, _ invite.Grant, _, _ string) bool {
+			<-ctx.Done()
+			close(cancelled)
+			<-release // broken adapter delays its own join
+			return true
+		})
+	}()
+	select {
+	case <-cancelled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("check deadline absent")
+	}
+	select {
+	case <-finished:
+		t.Fatal("callback detached before join")
+	default:
+	}
+	close(release)
+	if <-finished {
+		t.Fatal("expired check accepted")
+	}
+}
+
 func TestNewExplicitGrantRequiredAfterRevocation(t *testing.T) {
 	f := setup(t)
 	old := f.probe.Grant

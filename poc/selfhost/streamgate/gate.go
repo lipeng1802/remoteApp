@@ -160,7 +160,10 @@ func (g *Gate) Probe(ctx context.Context, s *tsnet.Server, received func()) erro
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	watchJoined := make(chan struct{})
+	defer func() { cancel(); <-watchJoined }()
 	go func() {
+		defer close(watchJoined)
 		t := time.NewTicker(250 * time.Millisecond)
 		defer t.Stop()
 		for {

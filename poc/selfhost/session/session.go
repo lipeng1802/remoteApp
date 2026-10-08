@@ -170,33 +170,31 @@ func write(conn net.Conn, value any) error {
 	return nil
 }
 
-// Each check has a hard local timeout even if a remote authority stalls. The
-// callback must observe cancellation so its worker does not leak on timeout.
+// Each check receives a local deadline and MUST honor cancellation. Do not
+// detach a callback on timeout: session completion is a join barrier. A broken
+// callback may delay return, in which case the outer owner times out closed and
+// retains its native lease instead of publishing a new configuration.
 func authorized(ctx context.Context, c Config, check Check) bool {
 	if check == nil || !invite.VerifyGrant(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now()) {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
-	result := make(chan bool, 1)
-	go func() { result <- check(ctx, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller)) }()
-	select {
-	case ok := <-result:
-		return ok && ctx.Err() == nil && invite.VerifyGrant(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now())
-	case <-ctx.Done():
-		return false
-	}
+	ok := check(ctx, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller))
+	return ok && ctx.Err() == nil && invite.VerifyGrant(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now())
 }
 func closeOnCancel(ctx context.Context, conn net.Conn) func() {
 	done := make(chan struct{})
+	joined := make(chan struct{})
 	go func() {
+		defer close(joined)
 		select {
 		case <-ctx.Done():
 			conn.Close()
 		case <-done:
 		}
 	}()
-	return func() { close(done) }
+	return func() { close(done); <-joined }
 }
 
 // Serve emits no payload until mutual possession proof AND an online grant
@@ -230,7 +228,10 @@ func Serve(ctx context.Context, conn net.Conn, c Config, check Check) error {
 	if read(conn, &p) != nil || !verifies(c.Binding.Controller, "controller", t, p.Signature) {
 		return ErrDenied
 	}
+	watchJoined := make(chan struct{})
+	defer func() { cancel(); <-watchJoined }()
 	go func() {
+		defer close(watchJoined)
 		tick := time.NewTicker(checkInterval)
 		defer tick.Stop()
 		for {

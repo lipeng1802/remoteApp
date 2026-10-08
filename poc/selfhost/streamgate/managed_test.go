@@ -32,6 +32,8 @@ type managedFixture struct {
 	fail, freeze, stall atomic.Bool
 	queries             atomic.Int64
 	initial             invite.NetworkState
+	endpoint            string
+	certificate         []byte
 }
 
 func managedSetup(t *testing.T) *managedFixture {
@@ -111,6 +113,7 @@ func managedSetupWithSigner(t *testing.T, signer invite.DeviceSigner) *managedFi
 		json.NewEncoder(w).Encode(reply)
 	}))
 	t.Cleanup(server.Close)
+	f.endpoint, f.certificate = server.URL, server.Certificate().Raw
 	f.client, e = invite.NewNetworkClientWithSigner(server.URL, server.Certificate().Raw, signer)
 	if e != nil {
 		t.Fatal(e)

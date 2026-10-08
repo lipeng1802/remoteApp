@@ -65,7 +65,10 @@ func Tunnel(ctx context.Context, conn net.Conn, c Config, check Check, server bo
 	defer local.Close()
 	defer closeOnCancel(ctx, local)()
 	conn.SetDeadline(time.Time{})
+	watchJoined := make(chan struct{})
+	defer func() { cancel(); <-watchJoined }()
 	go func() {
+		defer close(watchJoined)
 		t := time.NewTicker(checkInterval)
 		defer t.Stop()
 		for {

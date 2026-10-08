@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 切片4C-4P：live owner/真实退出屏障第一段，Mac通过/Windows待桌面
+
+新增clientowner.Owner/Handle/Group和streamgate.ProfileSession：只打开已初始化的compiled Release journal，不自动create；显式Start只取Current提交配置，一次一个runner/单调profile期限，Upgrade先验候选再cancel+JOIN，成功才提交/使用。超时或runner/commit故障锁闭，退出未完成不释放原生lease；Close重试只join/回收，恢复须显式可信状态重开。Runner/Factory仅可信本地注入，任意callback必须自行join嵌套节点/listener/子进程，借用signer须存活到runner退出。
+
+ProfileSession是真实ProfileNetworkClient/authority校时/签名StateWatch/ManagedGate适配，不接受raw端点/CA/issuer替代；先Deny/cancel、join watch+work，最后close client。补齐session连接关闭监视器、Serve/Tunnel和Gate.Probe watchdog的join。authorized原先deadline后可能脱离callback，现改同步等待（500ms context契约仍需遵守）；坏callback不假报退出，而由外层owner超时保留lease。新增负向测试锁住这条边界。
+
+Mac4项owner核心race PASS（内存journal）；新增1项真实Keychain/helper owner测试PASS/无SKIP：超时拒第二owner，join后Close/reopen/epoch2升级使用，精确随机测试channel清理。真实本地HTTPS校时/watch与opaque tunnel集成PASS：在途查询/流随升级关闭，故意延迟runner仍不commit，join后升级成功，旧watch无后续查询/流关闭、降级拒绝及显式新epoch启动。该集成的installation journal/overlay元数据/设备signer是fixture，不是实际Headscale/OS signer/产品TLS实测。新增授权callback测试和隧道回归通过；Mac全量race及Mac/Windows全量vet PASS。首次沙箱bind拒绝，许可本地监听后通过。普通全量未启用旧native环境项，勿称旧native全实测。
+
+Windows新版构建入口cmd/live-owner-validation-build生成3个test exe+原生helper+必需项零SKIP脚本，运行时内存测试root/signatures，不读取现有私钥。最终包 artifacts/connection-poc/windows-live-owner-4p-r2.zip，ZIP SHA256 `77dc07f52a9f5d4b2d778b1a093ca07a6a50874d1e70f7dcbfce9993e46023fa`。用r2，初构包保留但不用于验收；r2含启动前取消不误报故障竞争修正，集成重复3次通过。桌面新入口（不使用4o/4mn或旧安装包，无需READY/SDK/管理员）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-live-owner-4p-20261008-r2\run-live-owner-validation.ps1"
+```
+
+应为 `VALIDATION PASSED: native live owner lease + HTTPS watch/tunnel cancel and join. NOT cross-machine Headscale, product TLS/GUI or signed installer acceptance.`。r2已经既有SSH通道上传、ZIP hash核对、当前用户/SYSTEM隔离目录解压及PS语法检查通过，未在SSH里运行桌面凭据验收。本轮Windows桌面结果待用户回传。
+
+本轮**未切换旧enrollment-helper或GUI到新owner，没有完整实际节点启动owner入口**；这段先建立并验证关闭屏障，不宣称整个切片4完成。下一段收Windows结果，提供compiled锚/已安装配置绑定的新客户端启动入口，将OS signer、实际Headscale节点、watch、产品TLS工作进程纳入同一owner，再双机升级/退出/故障验收。线上服务/Nginx/ACL/发布根与CA/旧DMG和Setup均未改，正式发布认证、秘密分发、public admission、产品安装仍待。见[本轮说明](../poc/selfhost/public-server/LIVE_CONFIGURATION_OWNER.md)。本轮仅本地提交，不推送。
+
 ## 2026-10-08 切片4C-4O：Windows桌面通过，编译安装锚/离线升级闭环
 
 用户确认本轮新入口返回 `VALIDATION PASSED: compiled anchor + native first install + upgrade/floor/recovery. NOT signed product installer or live-session acceptance.`。记录为用户反馈的Windows桌面验收，不捏造逐项日志或退出码；不是上一轮4M/4N结果替代。本流程覆盖首次安装、升级/最低epoch/失败保留、防降级、固定根与helper拒绝及损坏锁闭，并执行精确测试凭据清理。本轮只更新验收记录，未重新运行程序或修改线上服务。
