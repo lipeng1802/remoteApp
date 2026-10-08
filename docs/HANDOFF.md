@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 切片4C-4K：可信安装与持久版本下限核心
+
+用户已确认上一轮4C-4J Windows STOPPED，桌面签名器停止闭环；下面历史段落中的待确认不再是当前状态。本轮不需要READY，未启动Windows桌面进程或修改线上服务。
+
+新增 trustprofile/installation.go 和 installation_test.go。安装锚必须来自可信安装器/二进制，不从网络或journal取根；首次初始化仅接受明确全新安装。恢复严格解析已提交的签名profile，缺失/损坏不能自动重置；历史过期配置可恢复用于显式轮换，但不能作为Current使用。MinimumEpoch可由可信软件提高，根轮换仍需另行设计。
+
+新配置先Advance验签/防降级/拒同epoch改写，再取消并join旧会话，重新检查时间/签名，原子持久CAS提交后才发布Current。join失败、提交失败（含写入后结果不确定）、外部状态变化均锁闭当前owner，不自动重连或重置。SessionQuiescer必须覆盖实际watch/TLS/tunnel全部worker，现阶段仅接口和测试，未接现有客户端。
+
+全量 go test -race ./... 通过；最后加固后 trustprofile race复测通过；go vet ./...、Linux amd64/Windows x64测试二进制交叉构建和diff检查通过。5项新增测试使用内存journal模拟持久字节、重开及CAS，不是实际OS安全存储测试；本轮没有Linux/Windows原生运行或真实双机验收。
+
+重要边界：没有生产TrustJournal适配；独占lease、durable CAS以及未授权重置/回滚保护是下一切片的平台责任。核心不能识别两个owner之间恢复整个旧journal，不宣称已具磁盘快照防回滚能力。没有信任锚正式安装、秘密分发、GUI/安装包集成、公网admission或整体4完成。
+
+下一切片先设计并实现平台保护journal和可信安装锚供应路径，再接客户端会话owner。需真实进程重开、缺失/损坏拒重置、并发owner拒绝和提交失败验证；系统权限/回滚威胁模型要明确，不能把普通JSON文件包装为安全存储。详见[核心说明](../poc/selfhost/public-server/TRUST_INSTALLATION_CORE.md)。本轮完成后只本地提交，未推送。
+
 ## 2026-10-07 切片4C-4J：旧ACL留存TLS故障关闭/显式恢复完整通过
 
 用户重新READY，实际Windows pinned probe通过，最新 split-consent.py --tls-fault 完整退出0。本轮Windows源码archive/hash、65/65协议测试/publish通过（DPAPI明确SKIP）；OS consent/nodeproof/最小规则与真实Swift/C#负向/正常跨lease仍通过，未使用旧fixture。
