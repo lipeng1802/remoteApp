@@ -13,15 +13,27 @@ import (
 
 var ErrProtocol = errors.New("private_protocol_denied")
 
-type Reader struct{ reader *bufio.Reader }
+type Reader struct {
+	reader *bufio.Reader
+	limit  int
+}
 
-func NewReader(r io.Reader) *Reader { return &Reader{bufio.NewReaderSize(r, 8194)} }
+func NewReader(r io.Reader) *Reader { return NewBoundedReader(r, 8192) }
+
+// Larger framing is reserved for local journal blobs, not network messages.
+// Existing callers retain the original 8KiB limit and strict JSON parsing.
+func NewBoundedReader(r io.Reader, limit int) *Reader {
+	if limit < 1 || limit > 16384 {
+		limit = 8192
+	}
+	return &Reader{bufio.NewReaderSize(r, limit+2), limit}
+}
 func (r *Reader) Read(v any) error {
 	line, e := r.reader.ReadSlice('\n')
 	if e == io.EOF && len(line) == 0 {
 		return io.EOF
 	}
-	if e != nil || len(line) > 8192 {
+	if e != nil || len(line) > r.limit {
 		return ErrProtocol
 	}
 	// encoding/json normally accepts duplicate keys. Reject at every nested

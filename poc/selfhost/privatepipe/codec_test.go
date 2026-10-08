@@ -28,3 +28,21 @@ func TestStrictBoundedFrames(t *testing.T) {
 		t.Fatal("EOF")
 	}
 }
+
+func TestExplicitLargerJournalFrameDoesNotWidenDefault(t *testing.T) {
+	raw := "{\"Data\":\"" + strings.Repeat("a", 10924) + "\"}\n"
+	var v struct{ Data string }
+	if NewReader(strings.NewReader(raw)).Read(&v) != ErrProtocol {
+		t.Fatal("default limit widened")
+	}
+	if NewBoundedReader(strings.NewReader(raw), 16384).Read(&v) != nil || len(v.Data) != 10924 {
+		t.Fatal("native record framing")
+	}
+	bad := "{\"Data\":\"" + strings.Repeat("a", 10924) + "\",\"data\":\"other\"}\n"
+	if NewBoundedReader(strings.NewReader(bad), 16384).Read(&v) != ErrProtocol {
+		t.Fatal("duplicate large frame")
+	}
+	if NewBoundedReader(strings.NewReader(strings.Repeat(" ", 16384)+"{}\n"), 16384).Read(&v) != ErrProtocol {
+		t.Fatal("unbounded large frame")
+	}
+}

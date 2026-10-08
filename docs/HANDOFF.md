@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 切片4C-4M/4N：两端原生journal代码完成，Mac通过/Windows待桌面
+
+新增nativejournal + cmd/trust-journal + trustprofile.DesktopJournal。Mac Keychain（不交互/不同步/ThisDeviceOnly）与Windows当前用户Credential Manager，命名空间独立于现有设备和配对密钥。原生manifest最后更新，2048字节内容寻址块/整条digest读回，精确旧块清理失败也锁闭；新安装明确create，open绝不转create。helper继承私有管道/无网络，Windows固定OS线程+同SID Global mutex；MacOS账户Home而非HOME环境变量、0700专属目录/0600单链接flock，权限异常拒绝。私有journal帧显式16KiB，既有默认8KiB不变。
+
+Mac开发ad-hoc签名helper实测4项Native全部PASS无SKIP：跨进程floor/独占/旧profile/错根拒绝；manifest缺失/损坏、分块丢失/等长篡改拒重置；8191字节原生持久重开；pending及CAS失败后关闭/明确旧状态重开。最终增补owner退出后create仍不能覆盖已提交记录复测通过。精确测试Keychain凭据清理；保留非敏感scope锁文件，避免删除锁导致双owner。旧RemoteController密码弹窗未改，不把ad-hoc成功当正式签名升级授权通过。
+
+共享Store3项race内存故障测试PASS（块/索引/写后不确定/旧块清理）；Mac全量race及Mac/Windows全量vet通过，Windows x64 helper/测试构建通过。本輪Windows SSH上传/hash及实际测试启动成功，但4项Native都在访问凭据库前置步骤返回interactive_logon_required，exit1，**不记通过或SKIP**。Empty失败发生在凭据写入前，临时SSH测试目录精确删除；必须正常登录桌面验收。
+
+全新Windows包已ZIP hash校验、解压到 C:\Users\jarvis\remoteapp-trust-journal-4mn-20261008，PS语法检查通过。本机 artifacts/connection-poc/windows-trust-journal-validation.zip。桌面PowerShell执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-trust-journal-4mn-20261008\run-trust-journal-validation.ps1"`；4项PASS无SKIP及VALIDATION PASSED才闭环。包helper hash 2d14dc64a28ec53ca7bd4c82f6425a8341c539dbeb714ee0552dc4820b2a9ca4、测试hash1468d299b418fa908c1ee8c4b57fb28421c429d1ab7cfe7bc4e446a7d4f02395。不要使用旧安装包，不需Windows READY/Tailscale/SDK。
+
+保护边界是其他OS用户/意外损坏/协作并发，不防当前用户恶意程序、管理员、完整快照回滚或删光namespace后再次明确create；没有原生断电/EIO/硬崩溃耐久验收。Windows凭据是用户级不是应用级隔离；Mac正式签名升级和Keychain访问授权仍待。可信锚供应、会话owner/GUI/安装包/秘密分发/public admission未接，整体4未完成。先收Windows桌面结果，再开始切片3/4；本轮本地提交不推送。详见[两端说明](../poc/selfhost/public-server/TRUST_DESKTOP_JOURNAL.md)。
+
 ## 2026-10-08 切片4C-4L：Linux保护journal实机通过
 
 新增linux-only LinuxRootJournal，接TrustJournal；可信root全新目录明确创建，恢复不创建文件、不重置pending/损坏/缺失状态。root所有安全祖先逐段openat/no-follow，专属0700/文件0600/单链接，flock生命周期独占；随机临时文件写入+文件fsync+rename+目录fsync完成后才提交成功。读/提交/CAS故障锁闭，Close无删除API，调用者必须先join会话。安装锚仍由可信调用方提供，未实现正式安装器供应路径。

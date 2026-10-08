@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4M/4N：[macOS、Windows原生信任存储](poc/selfhost/public-server/TRUST_DESKTOP_JOURNAL.md) 两端实现完成：Keychain/Credential Manager、独占helper、分块提交索引、防降级重开、异常拒重置。Mac4项原生验收/全量race通过；Windows构建/vet通过，SSH凭据库不可用，**桌面验收待执行**，新独立验证包已上传。未接可信安装锚供应/产品客户端，整体4未完成。
+
 4C-4L：[Linux root专属信任journal](poc/selfhost/public-server/TRUST_LINUX_JOURNAL.md) 已实现并通过4项Linux真实跨进程验收：独占owner、重开保留版本下限、非特权拒绝、缺失/损坏拒重置和故障锁闭。只保护非特权本地用户，不防root/整盘快照回滚；未接桌面存储、正式安装锚供应或客户端。整体4未完成。
 
 4C-4K：[可信安装与版本下限核心](poc/selfhost/public-server/TRUST_INSTALLATION_CORE.md) 已完成：先验证、等待旧会话退出、持久化提交，再允许使用新配置；拒绝降级/同版本改写，故障锁闭。全量 Go race/vet 和 Linux/Windows 测试构建通过，存储测试使用内存模拟，尚无生产 OS 存储适配或安装包接入。用户已确认4C-4J Windows STOPPED，整体4未完成。
