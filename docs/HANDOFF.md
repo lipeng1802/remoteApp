@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 切片4C-4M/4N：Windows桌面通过，两端存储闭环
+
+用户明确反馈本轮新包执行返回 `VALIDATION PASSED: Windows native trust journal + exclusive helper + persistent epoch floor. NOT installer trust provisioning or product acceptance.`。按验证脚本门禁，Windows4项必需Native均PASS、无SKIP才会输出此结果；记录为用户确认的正常桌面验收，不捏造逐项耗时/独立抓取日志。此前SSH interactive_logon_required是历史环境限制，不再阻塞本切片。
+
+macOS与Windows原生保护存储切片1/2已闭环。该脚本流程包括精确随机测试凭据清理和恢复环境变量；本轮没有重新运行测试、修改程序或服务。下一步切片3：可信安装锚与配置升级（首次安装、可信最低epoch、升级/拒降级及失败恢复），然后切片4：真实客户端会话owner接入。没有正式安装锚供应、GUI/安装包/公网产品验收或整体4完成；保护边界及包hash见下方与两端说明。本轮仅本地提交文档，不推送。
+
 ## 2026-10-08 切片4C-4M/4N：两端原生journal代码完成，Mac通过/Windows待桌面
 
 新增nativejournal + cmd/trust-journal + trustprofile.DesktopJournal。Mac Keychain（不交互/不同步/ThisDeviceOnly）与Windows当前用户Credential Manager，命名空间独立于现有设备和配对密钥。原生manifest最后更新，2048字节内容寻址块/整条digest读回，精确旧块清理失败也锁闭；新安装明确create，open绝不转create。helper继承私有管道/无网络，Windows固定OS线程+同SID Global mutex；MacOS账户Home而非HOME环境变量、0700专属目录/0600单链接flock，权限异常拒绝。私有journal帧显式16KiB，既有默认8KiB不变。

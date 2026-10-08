@@ -1,6 +1,6 @@
 # 4C-4M / 4C-4N：macOS、Windows 原生信任 journal
 
-两端代码与独立入口完成，**macOS原生验收通过，Windows桌面验收待用户执行**。Windows SSH 实测返回 `interactive_logon_required`，退出1，不记为通过或SKIP；并非安装成功或两端产品验收。
+两端代码与独立入口完成，**macOS原生验收通过，Windows桌面验收已由用户确认通过**。2026-10-08用户反馈本轮脚本返回下方完整VALIDATION PASSED；脚本要求4项必需Native全部PASS无SKIP。Windows SSH此前返回 `interactive_logon_required`、退出1仅为历史限制，不记其通过；当前结论不是安装成功或两端产品验收。
 
 ## 实现与边界
 
@@ -64,4 +64,4 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remotea
 
 当前包helper hash `2d14dc64a28ec53ca7bd4c82f6425a8341c539dbeb714ee0552dc4820b2a9ca4`；测试hash `1468d299b418fa908c1ee8c4b57fb28421c429d1ab7cfe7bc4e446a7d4f02395`。构建变动需新包/新hash，不能复用旧包的PASS。
 
-下一步先收Windows桌面结果，再做可信安装锚供应和产品会话owner接入。切片1 macOS已验收，切片2 Windows代码完成但原生验收未闭环，整体4未完成。
+用户已确认本轮Windows桌面返回上述成功提示，未提供逐项耗时日志，不另记耗时或声称本机独立复测。切片1 macOS、切片2 Windows均已验收闭环；下一步可信安装锚供应/配置升级，再接产品会话owner。整体4未完成。
