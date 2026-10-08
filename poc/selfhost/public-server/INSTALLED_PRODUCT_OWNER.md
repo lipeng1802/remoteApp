@@ -61,6 +61,6 @@ launcher 先由 interactive-vault 在正常 Windows 桌面创建随机测试身�
 
 `stop_session` 通过新 Owner.Stop 取消并实际 join，保留 journal 以等待显式下一 Start；超时锁闭不能自愈。升级仍用 Owner.Upgrade 的验证/旧会话退出/提交屏障，不自动重连。父窗口停止：先加入 stdin reader、控制连接/监视线程，再 Owner.Close 等产品/网络/node/watch；再 signer.CloseJoined；全成功才精确删除本 channel 测试 journal。launcher 等桌面 child 实际退出，再停身份 creator，只有两个 closed 回复与退出 0 才打印 STOPPED。失败保留公共 bootstrap/不明测试 journal，不以 kill 冒充清理。vaultbridge 同时补 monitor 的真实 join。
 
-4T r2 新包已构建/上传，但**桌面原生测试尚待用户**：Mac full Go race、双平台 full vet、Windows 四项协议/namespace collision 测试 PASS 无 SKIP（退出0）、全包 SHA 与两脚本语法检查通过。4T 没有启动真实 session、初始化 Windows OS journal 或更改服务器。固定预发布 profile 与旧 split-consent 隔离 frontend 的动态 CA/issuer 不一致，不能直接混用；后续联合验收需要从匹配的隔离 frontend 公共材料重新编译可信两端包，并准确接入已绑定 node state。整体4未完成。
+4T r2 新包已构建/上传，**用户已确认正常 Windows 桌面原生验收通过**：启动正常；probe 返回 compiled desktop owner + reopened OS signature + exclusive native journal lease 的 VALIDATION PASSED；Enter 后返回 desktop workers and native signer joined、isolated test journal and random test identity cleaned 的 STOPPED。无需重复本轮桌面测试。另 Mac full Go race、双平台 full vet、Windows 四项协议/namespace collision 测试 PASS 无 SKIP（退出0）、全包 SHA 与两脚本语法检查通过。4T 已由用户初始化并清理本轮 Windows 测试 OS journal，但没有启动真实 session 或更改服务器。固定预发布 profile 与旧 split-consent 隔离 frontend 的动态 CA/issuer 不一致，不能直接混用；后续联合验收需要从匹配的隔离 frontend 公共材料重新编译可信两端包，并准确接入已绑定 node state。整体4未完成。
 
 提供新的可信协调/Windows 桌面入口：隔离固定信任安装与设备身份 owner、准备/停止旧 node helper 并准确重开 bound state、新产品包上传核对、处理 product_ready 的测试 HMAC 私有转交。然后用新 compiled 产品模式验双机正常 TLS、OS 撤销/watch 故障、升级前全资源 join、显式新 profile 恢复及精确清理。不能继续用旧 split-consent.py 或以上 fixture 充当联合验收。

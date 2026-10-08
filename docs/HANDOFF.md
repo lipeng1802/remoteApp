@@ -1,6 +1,8 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-08 4C-4T：新 compiled Windows 桌面入口，桌面原生验收待
+## 2026-10-08 4C-4T：新 compiled Windows 桌面入口，桌面原生验收通过
+
+用户已反馈 r2 正常桌面执行通过：窗口1正常启动；窗口2返回 `VALIDATION PASSED: compiled desktop owner + reopened OS signature + exclusive native journal lease. NOT Headscale/product TLS/GUI or signed installer acceptance.`；窗口1 Enter 后返回 `STOPPED: desktop workers and native signer joined; isolated test journal and random test identity cleaned.` 这是用户桌面实测证据，不是 SSH 推断。原生身份重开/验签、独占 journal、停止退出及精确清理这一段闭环，不再要求重复；没有真实网络/产品会话，不能据此验收 Headscale、TLS、GUI 或正式安装。
 
 已开发 desktop-session/desktop-relay/desktopcontrol 及新 start/probe 脚本。trusted builder target=windows-desktop-test（必须提供 standalone TLS product）生成独立随机 Test=true channel，固定公开 anchor/profile/journal/signer/product 摘要；runtime 不接受路径、root/CA、helper digest 覆盖或生产 journal 初始化。桌面 interactive-vault 创建随机测试 key，desktop-session 只重开，明确初始化测试 journal并持有独占租约。protected SID-only 本地 pipe 分开控制与旧签名 relay，不是公网 peer API。
 
@@ -8,9 +10,9 @@ probe 对随机挑战执行 OS 签名/验签并确认第二 journal owner 被拒
 
 Mac全量Go race、Mac/Windows全量vet与新增role/未编译拒绝测试通过（旧native默认未开，不声称本轮实测）。Windows实际SSH下运行四项协议测试全PASS无SKIP退出0：启动两条私有ready、stop实际join之前不ack、错误身份/额外路径字段拒绝、取消空闲连接join，以及真实本地pipe namespace/首实例碰撞检查。`check-desktop-session-bundle.ps1`全包SHA和两脚本PowerShell5.1语法解析通过。没有在SSH下创建/读取Windows原生journal/设备key，没有更改服务器/ACL/旧GUI/安装或Tailscale，没有读取release root/CA私钥。
 
-新包已上传 **C:\Users\jarvis\windows-desktop-session-4t-r2**（本机 artifacts/connection-poc/windows-desktop-session-4t-r2），未初始化或启动。Windows protocol exe SHA256 `4266abe160f8333a8b40865fd139f7e9238c68bb7d642a4aea8f8971f229d47b`；只本地提交，不推送。r1仅本地早期构建，用户使用r2。
+新包已上传 **C:\Users\jarvis\windows-desktop-session-4t-r2**（本机 artifacts/connection-poc/windows-desktop-session-4t-r2），用户已执行桌面初始化/probe/停止清理。Windows protocol exe SHA256 `4266abe160f8333a8b40865fd139f7e9238c68bb7d642a4aea8f8971f229d47b`；只本地提交，不推送。r1仅本地早期构建，用户使用r2。
 
-### 用户下一步（正常 Windows 桌面，不在 SSH 会话中）
+### 已通过的操作记录（无需重复；正常 Windows 桌面，非 SSH）
 
 窗口1执行：
 
@@ -26,7 +28,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\jarvis\windows-
 
 应返回 `VALIDATION PASSED: compiled desktop owner + reopened OS signature + exclusive native journal lease. NOT Headscale/product TLS/GUI or signed installer acceptance.` 再窗口1Enter，应返回STOPPED，两个本轮公共bootstrap删除。任何失败提供错误，不手动删除系统凭据或反复initialize；局部/部分journal保留供精确诊断。
 
-**整体4未完成。** 本轮Windows桌面initialize/probe/STOPPED仍待用户验收；新compiled客户端实际Headscale+产品TLS/活会话升级/故障/撤销尚待。既有预发布profile绑定既有issuer/CA，旧split-consent.py动态隔离frontend材料不匹配，不能混用。下一段从匹配隔离frontend的公共anchor/profile构建两端可信包，再新协调准确接bound node state（先停旧helper）、签名grant/binding与private product_ready。当前probe与fixture不替代联合双机验收。详见[实现说明](../poc/selfhost/public-server/INSTALLED_PRODUCT_OWNER.md)。
+**整体4未完成。** 本轮Windows桌面initialize/probe/STOPPED已由用户确认通过；新compiled客户端实际Headscale+产品TLS/活会话升级/故障/撤销尚待。既有预发布profile绑定既有issuer/CA，旧split-consent.py动态隔离frontend材料不匹配，不能混用。下一段从匹配隔离frontend的公共anchor/profile构建两端可信包，再新协调准确接bound node state（先停旧helper）、签名grant/binding与private product_ready。当前probe与fixture不替代联合双机验收。详见[实现说明](../poc/selfhost/public-server/INSTALLED_PRODUCT_OWNER.md)。
 
 ## 2026-10-08 4C-4S：产品进入compiled owner屏障，联合实机仍待
 
