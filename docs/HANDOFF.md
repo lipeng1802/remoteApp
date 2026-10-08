@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4P Windows r2失败修复：r3可移植验证入口
+
+用户截图确认r2五项owner测试PASS（含Windows native lease/reopen）；接着TestInstalledOwnerJoinsRealHTTPSWatchAndOpaqueTunnelBeforeUpgrade在managedSetup的invite.Open报authorization_storage_unavailable。定位为测试错误复用服务器Unix文件Store：Open要求目录权限无group/other位，Windows Go权限语义无法满足，不是native journal或实际网络拒绝。后续4项session选中测试也依赖同Store，原交付前只cross-build未实际跑这些Windows入口，不能算Windows验收完成。
+
+修复只改_test夹具：新增profile_fixture_test.go和portable_fixture_test.go，仅内存生成临时issuer/grant/state/clock签名，保留真实HTTPS校时/自主watch/签名校验/流持有证明/升级JOIN/负向断流。服务器Store及生产权限检查未改，不新增Windows明文存储或放宽权限；fixture不验证持久化/注册/重放/admission，不能充当正式authority。原服务器存储测试与其余Store回归保留。
+
+Mac session/streamgate race与全量race PASS，Windows两包vet/新包cross-build PASS。通过既有SSH在真实Windows运行r3无需桌面凭据的入口：HTTPS/流升级集成1.11s PASS，callback不脱离join0.50s、opaque流/关闭0.25s、拒upstream0.00s、跨域proof拒绝0.00s全部PASS；退出0，无SKIP。未在SSH运行native验收，不以r2的native PASS冒充r3整轮PASS。
+
+r3包 artifacts/connection-poc/windows-live-owner-4p-r3.zip，SHA256 `21170dab857413e9cf0543d4edbb31019c5873e0a8e830fe152416d1c498ce81`，已上传核对、解压至当前用户/SYSTEM隔离目录、PS语法检查。**不再使用r2，保留旧包不覆盖安装。** 正常Windows桌面执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-live-owner-4p-20261008-r3\run-live-owner-validation.ps1"
+```
+
+预期仍为 `VALIDATION PASSED: native live owner lease + HTTPS watch/tunnel cancel and join. NOT cross-machine Headscale, product TLS/GUI or signed installer acceptance.`。等待r3整轮桌面结果，后续任务及产品接线边界不变。本轮只本地提交不推送，未改线上服务/旧GUI/发布私钥/安装。
+
 ## 2026-10-08 切片4C-4P：live owner/真实退出屏障第一段，Mac通过/Windows待桌面
 
 新增clientowner.Owner/Handle/Group和streamgate.ProfileSession：只打开已初始化的compiled Release journal，不自动create；显式Start只取Current提交配置，一次一个runner/单调profile期限，Upgrade先验候选再cancel+JOIN，成功才提交/使用。超时或runner/commit故障锁闭，退出未完成不释放原生lease；Close重试只join/回收，恢复须显式可信状态重开。Runner/Factory仅可信本地注入，任意callback必须自行join嵌套节点/listener/子进程，借用signer须存活到runner退出。

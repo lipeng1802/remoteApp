@@ -58,10 +58,10 @@ func TestInstalledOwnerJoinsRealHTTPSWatchAndOpaqueTunnelBeforeUpgrade(t *testin
 	}); e != nil {
 		t.Fatal("cancelled startup was not a joined normal shutdown", e)
 	}
-	f := managedSetup(t)
+	f := portableProfileSetup(t)
 	pub, key, _ := ed25519.GenerateKey(rand.Reader)
 	now := time.Now()
-	c := trustprofile.Claims{Version: 1, Service: "live-integration", Epoch: 1, Endpoint: f.endpoint, Certificate: base64.StdEncoding.EncodeToString(f.certificate), Issuer: hex.EncodeToString(f.store.PublicKey()), IssuedAt: now.Add(-time.Minute).Unix(), ExpiresAt: now.Add(time.Hour).Unix()}
+	c := trustprofile.Claims{Version: 1, Service: "live-integration", Epoch: 1, Endpoint: f.endpoint, Certificate: base64.StdEncoding.EncodeToString(f.certificate), Issuer: hex.EncodeToString(f.issuer), IssuedAt: now.Add(-time.Minute).Unix(), ExpiresAt: now.Add(time.Hour).Unix()}
 	p, _ := trustprofile.Sign(key, c)
 	spec := trustinstall.Specification{Version: 1, Channel: "live-integration", Root: hex.EncodeToString(pub), Service: c.Service, MinimumEpoch: 1, HelperDigest: strings.Repeat("a", 64), Bundled: p, Test: true}
 	encoded, e := trustinstall.EncodeForTrustedBuild(spec, now)
@@ -88,8 +88,8 @@ func TestInstalledOwnerJoinsRealHTTPSWatchAndOpaqueTunnelBeforeUpgrade(t *testin
 	c.Epoch = 2
 	next, _ := trustprofile.Sign(key, c)
 	targetSigner, _ := invite.NewMemorySigner(f.target)
-	state, _ := f.store.NetworkState(f.grant, f.binding)
-	target, e := NewWithSigner(f.store.PublicKey(), f.target.Public().(ed25519.PublicKey), f.signer.PublicKey(), targetSigner, state, true, time.Now)
+	state := f.networkState()
+	target, e := NewWithSigner(f.issuer, f.target.Public().(ed25519.PublicKey), f.signer.PublicKey(), targetSigner, state, true, time.Now)
 	if e != nil {
 		t.Fatal(e)
 	}

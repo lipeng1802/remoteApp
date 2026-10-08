@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4P Windows r2桌面反馈：5项owner（含原生）通过，但HTTPS集成初始化Unix服务器Store失败，不能算整轮通过。r3已将该入口及4项session回归改为仅内存临时授权签名fixture，未放宽正式Store权限；Windows SSH下1项HTTPS/流集成+4项session回归真实通过，r3完整桌面脚本仍待。最新命令见[交接](docs/HANDOFF.md)。
+
 4C-4P：[live配置owner与退出屏障](poc/selfhost/public-server/LIVE_CONFIGURATION_OWNER.md) 第一段开发完成：已安装配置与会话串行、cancel后真实join再commit、超时保留原生租约并锁闭；补齐连接/watchdog/授权callback退出等待。Mac新增原生实测、真实本地HTTPS/opaque tunnel升级集成、全量race及双平台vet通过；Windows新版桌面待验。未切换现有enrollment-helper/GUI或完成实际Headscale节点/产品TLS组合验收，整体4未完成。
 
 4C-4O：[编译固定安装锚/离线配置升级](poc/selfhost/public-server/TRUST_INSTALLATION_RELEASE.md) 已闭环：固定root/service/floor/channel/helper摘要、明确首次安装、原生升级与拒降级、失败保留原提交，换根不选择新存储。Mac编译产物真实验收/全量race通过；用户确认Windows新版桌面验收返回本轮VALIDATION PASSED。现有预发布公开材料已构建维护工具但未安装，未接实际客户端会话或修改产品包，整体4未完成。

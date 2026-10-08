@@ -408,7 +408,7 @@ func TestInitialAuthorityTimeoutAndMissingCheckDeny(t *testing.T) {
 }
 
 func TestAuthorityCheckDoesNotDetachAfterDeadline(t *testing.T) {
-	f := setup(t)
+	f := portableSetup(t)
 	cancelled, release := make(chan struct{}), make(chan struct{})
 	finished := make(chan bool, 1)
 	go func() {

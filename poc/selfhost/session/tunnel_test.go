@@ -13,10 +13,13 @@ import (
 )
 
 func TestTunnelOpaqueBytesAndAuthorityClosure(t *testing.T) {
-	f := setup(t)
-	testTunnel(t, f)
+	f := portableSetup(t)
+	testTunnelWithCheck(t, f, f.portableCheck)
 }
 func testTunnel(t *testing.T, f *fixture) {
+	testTunnelWithCheck(t, f, f.check)
+}
+func testTunnelWithCheck(t *testing.T, f *fixture, check Check) {
 	server, client := sockets(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -28,10 +31,10 @@ func testTunnel(t *testing.T, f *fixture) {
 	go func() { io.Copy(echo, echo) }()
 	done := make(chan error, 2)
 	go func() {
-		done <- Tunnel(ctx, server, f.server, f.check, true, func(context.Context) (net.Conn, error) { opens.Add(1); return upstream, nil })
+		done <- Tunnel(ctx, server, f.server, check, true, func(context.Context) (net.Conn, error) { opens.Add(1); return upstream, nil })
 	}()
 	go func() {
-		done <- Tunnel(ctx, client, f.probe, f.check, false, func(context.Context) (net.Conn, error) { return local, nil })
+		done <- Tunnel(ctx, client, f.probe, check, false, func(context.Context) (net.Conn, error) { return local, nil })
 	}()
 	payload := bytes.Repeat([]byte{0x16, 0x03, 0x03, 0x7f}, 17000)
 	app.SetDeadline(time.Now().Add(4 * time.Second))
@@ -55,7 +58,7 @@ func testTunnel(t *testing.T, f *fixture) {
 }
 
 func TestTunnelDenialNeverOpensProductUpstream(t *testing.T) {
-	f := setup(t)
+	f := portableSetup(t)
 	server, _ := sockets(t)
 	var opened atomic.Int64
 	check := func(context.Context, invite.Grant, string, string) bool { return false }
@@ -66,14 +69,14 @@ func TestTunnelDenialNeverOpensProductUpstream(t *testing.T) {
 }
 
 func TestFixedPayloadProofCannotEnterProductTunnel(t *testing.T) {
-	f := setup(t)
+	f := portableSetup(t)
 	server, client := sockets(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	var opened atomic.Int64
 	done := make(chan error, 1)
 	go func() {
-		done <- Tunnel(ctx, server, f.server, f.check, true, func(context.Context) (net.Conn, error) { opened.Add(1); return nil, nil })
+		done <- Tunnel(ctx, server, f.server, f.portableCheck, true, func(context.Context) (net.Conn, error) { opened.Add(1); return nil, nil })
 	}()
 	if Probe(ctx, client, f.probe, nil) == nil {
 		t.Fatal("fixed-payload proof entered TLS domain")
