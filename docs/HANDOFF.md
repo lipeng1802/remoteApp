@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 切片4C-4L：Linux保护journal实机通过
+
+新增linux-only LinuxRootJournal，接TrustJournal；可信root全新目录明确创建，恢复不创建文件、不重置pending/损坏/缺失状态。root所有安全祖先逐段openat/no-follow，专属0700/文件0600/单链接，flock生命周期独占；随机临时文件写入+文件fsync+rename+目录fsync完成后才提交成功。读/提交/CAS故障锁闭，Close无删除API，调用者必须先join会话。安装锚仍由可信调用方提供，未实现正式安装器供应路径。
+
+最终Linux amd64测试上传hash核对后，4项Native测试全部PASS无SKIP，含真实子进程重开floor/旧profile拒绝、同/跨进程owner冲突、UID65534拒绝、8类恢复异常拒重置、CAS失败旧状态保留及6类活owner/路径异常。随机/root测试目录由测试精确删除，上传程序精确删除；未接线上服务、未改Headscale/ACL/Store/Nginx或使用WindowsREADY。
+
+Mac全量 go test -race ./...通过（Linux适配不在其编译范围）；Linux全量vet/测试构建通过，真实Linux执行不是race。独立SSH复核三服务active、线上State仍5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca、Nginx基线全部OK。未验断电/磁盘EIO/ENOSPC或rename后目录sync失败，不宣称这些故障的实机耐久已闭环。
+
+保护非特权本地用户，不抵抗root/忽略协作锁的特权进程/原始磁盘或快照回滚；状态非加密保险箱。普通JSON文件无权限保护不能替代该适配，本组件也不是macOS/Windows桌面提权方案。下一步需两端原生保护存储、可信固定安装锚供应与会话owner接入；产品GUI/安装/秘密分发/public admission和整体4仍未完成。Windows保持STOPPED。本轮完成后仅本地提交，未推送。见[Linux说明](../poc/selfhost/public-server/TRUST_LINUX_JOURNAL.md)。
+
 ## 2026-10-08 切片4C-4K：可信安装与持久版本下限核心
 
 用户已确认上一轮4C-4J Windows STOPPED，桌面签名器停止闭环；下面历史段落中的待确认不再是当前状态。本轮不需要READY，未启动Windows桌面进程或修改线上服务。
