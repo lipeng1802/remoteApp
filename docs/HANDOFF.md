@@ -6,7 +6,9 @@
 
 异常finally初次回收未确认，服务器仍有本轮check/daemon/frontend及verifier节点134，原策略备份保留；没有强杀或重注册。后续只读核对确认三个测试进程已自然退出，实验目录 `/tmp/remoteapp-daemon-check-4073748079` 不存在、nodes为空。管理端使用本轮准确备份 `/var/lib/remoteapp-poc/enrollment-mode-IQN_Rc` 恢复成功，随后nodes/users/preauthkeys均null、原accept策略恢复。三个既有服务active、Nginx基线全部OK、正式Store SHA仍为 `5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca`。本轮四个准确临时上传文件移除，不可恢复的仅这些可重新构建公共测试artifact；没有删除用户Windows包或凭据。
 
-Windows保留目录 `C:\Users\jarvis\remoteapp-split-consent-de5883471d2ae3e7\compiled-win`。已通知用户先borrower Enter确认STOPPED，再原4T r2 creator Enter确认STOPPED；尚待反馈。此包端点已退出，不可继续使用或重复initialize。Mac测试身份owner及API/relay在协调退出时走正常关闭；Windows身份和借用journal仍由桌面launcher按顺序回收，不代替用户断言STOPPED。
+Windows保留目录 `C:\Users\jarvis\remoteapp-split-consent-de5883471d2ae3e7\compiled-win`。用户现已回复“两窗口已 STOPPED”，按用户反馈记录 borrower 与原4T r2 creator停止闭环，不再记作READY；未额外读取Windows凭据验证。此包端点已退出，不可继续使用或重复initialize。Mac测试身份owner及API/relay在协调退出时走正常关闭。
+
+下一轮先在正常Windows桌面用 `C:\Users\jarvis\windows-desktop-session-4t-r2\start-desktop-session.ps1` 创建新的随机测试身份并保持READY；此旧入口仅用作身份creator，可以复用，不是复用已失效的compiled连接包。收到READY后才运行带新诊断的 `split-consent.py --compiled`，构建匹配本轮服务的新borrower包并提供第二窗口命令；不得提前启动保留的旧borrower。当前还没有启动新服务、创建grant/节点或重跑验收。
 
 修补：Coordinator.join不再把SSH wrapper退出当作远端资源回收，只接受服务器在实际child join、票据retire、实验目录移除后发出的精确STOPPED marker。缺marker时保留backup/program，禁止自动restore。非零验收退出即使有回收marker也不能宣称验收通过。首要异常在finally前输出脱敏类型/源码位置，避免策略恢复错误遮蔽原失败。DeviceRequest新增固定signer/transport/response分类，保留errors.Is(ErrDenied)，不输出raw error、HTTP响应体、密钥或签名；下一轮才能据此确定失败层。未自动重试或扩大权限/有效期。
 
