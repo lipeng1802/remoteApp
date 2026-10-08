@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4R：专用管道/进程对和两角色启动适配
+
+新增processowner.Child/Pair/StartEndpoint。可信本地规范exe+SHA256，无shell/秘密argv；8KiB严格匿名JSON pipe、16回复上限；timeout锁闭且不复用迟到回复。Stop成功必须closed/零exit/EOF/reader join；超时留handle，重试只join，不kill/自动重启。Pair任一exit/管道故障停止另一端，双端与monitor全部join才Done；正常并发停防单端卡住继续服务，异常永远FAIL。StartEndpoint Target先product→同步准备证书回调→bridge；Controller先bridge port→签名descriptor配置回调→product。失败保留Launch/部分handle，best-effort8s停止，不删node/key/journal。回调是真实接线待实现的可信代码，不把测试counter当证书API；产品ready只验status。
+
+Mac新模块race、全量race及Mac/Windows模块vet PASS。真实Windows SSH执行10项行为测试全PASS/exit0，无SKIP，TestProcessFixture仅自举；最终测试exe C:\Users\jarvis\remoteapp-processowner-tests-4r-20261008-final.exe，hash a98aac065996db0978ef8b3ea7065c4c02062a9dcf67e9e5b798246644ff3258。测试是实际子进程/匿名pipe，但不是native signer/Headscale/Swift-C#产品验收。只上传测试exe，没有桌面READY/信任安装/线上节点操作，旧程序和服务未改，未读发布私钥。
+
+**不是完整协调命令，也未把独立产品生命周期纳入journal。** Pair只管process；installed-session目前自身runner退出后释放journal，可能早于product。因此下一段先把真实product启动/退出移入compiled owner runner的租约屏障，再补可信配置供应/正常Windows桌面入口和OS TLS回调，替换旧split bootstrap，实际双机正常/撤销/故障/升级/join/显式恢复/精确清理。子进程环境继承、没有Job Object/进程组封闭，不能宣称任意后代已退出或当前用户恶意隔离。详见[本轮说明](../poc/selfhost/public-server/INSTALLED_PROCESS_COORDINATION.md)。整体4未完成；本轮仅本地提交，不推送，不要求用户重复旧r3/READY。
+
 ## 2026-10-08 4C-4Q：compiled节点运行时入口，局部通过/实际组合待验
 
 新增clientruntime.Runner/NativeSigner、cmd/installed-session及可信installed-session-build、trustinstall.CompileSessionBridge。root/service/floor/channel/journal与signer摘要来自编译，不接受parent root/CA/state授权，普通空构建锁闭。命令只open既有journal，不安装/create/reset或创建/删设备key；first start使用已准备StateDir、signedGrant/Binding、role、公钥、VaultScope/Expected。先验profile/grant/设备公钥和nodekey，再真实HTTPS校时/watch ACTIVE，才实际tsnet.Up校验self/IP。运行时拥有OS signer、tsnet server、nodeproof与目标overlay47476/控制端loopback TLS桥接worker，grant撤销/故障或取消后join，再node.Close检查、最后signer.Close；整个runner返还前journal租约不释放。
