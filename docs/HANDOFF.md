@@ -1,5 +1,41 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4W：compiled 联合协调入口已开发，真实执行待 Windows READY
+
+用户已确认上一轮 Windows 返回 **STOPPED**，4V保留的4T r2测试身份/桌面journal按launcher正常清理闭环；不再记作仍READY。本轮继续代码开发，尚未运行新隔离服务、创建新grant/节点或生成可联网fresh pair，未修改线上服务/ACL/Nginx/旧产品/Tailscale，也未读取发布root/CA私钥。
+
+新增 split-consent.py --compiled，明确不是旧 --tls 的验收别名。首步必须旧4T r2正常桌面probe PASS后才创建两Mac随机测试身份；从当前可信源码离线构建7个Linux/Windows/Mac API/node/server helper，避免旧artifact不认识--os-compiled，Mac架构按当前host x86_64/arm64选择。原流程无参数/--nodes/--tls/--tls-fault保持不变。
+
+compiled_products.prepare接真实管理SSH公共frontend bootstrap与两端回环forward，调用可信compiled-pair-build生成匹配公共CA/issuer/endpoints的fresh Test=true两端包，临时test root仍只在Go构建器内存生成。核对包文件摘要、上传到独立随机Windows work的compiled-win，再核对所有远端文件摘要，公开输出正常桌面borrower命令（仅路径，不含HMAC/authkey/grant），最多等待240秒。不能在SSH启动借用入口。读取公共bootstrap必须匹配设备identity_scope/pub、新compiled channel/epoch=1、由channel推导的journal scope、固定relay路径；还必须通过真实本地desktop relay hello/probe，不能仅凭JSON认为READY。旧4U build-only包不使用。
+
+随后复用OS签名register/invite/claim/owner approve/enroll/bind/真实节点持有证明和最小ACL；先take单次bound handoff实际join旧helper，再Mac明确initialize隔离journal。target由同用户desktop relay启动固定compiled runtime，私有product_ready HMAC仅转交Mac installed-session stdin，父不替换指纹/root/CA/helper。严格验证两端product_count，要求两端至少3个pongs并在同一会话继续至少5秒、各再增长超过10，拒ready/零计数/失败结果/角色混用/计数倒退。此观测在真实执行后才是实际TLS证据；当前23项Python测试使用fixture，不能标实机通过。
+
+**本首轮联合切片的退出顺序是正常停止两产品/node/watch/signer→实际closed+exit0或Windows session_closed→返回consent后owner签名撤销→节点回收零ACL→Mac journal inspect证明租约释放后cleanup-test→API clients/协调server实际join→还原原隔离policy/检查既有store与Nginx。不能称为活会话撤销验收。** 现有ProfileSession将活watch拒绝锁闭为ErrDenied，Owner也会保留故障语义；不能把该错误或非零退出改判正常清理，本轮故障路径保留证据。下一切片需专门接故障join/锁闭journal报告与恢复，验证真正live revoke、升级与故障，不改弱原安全屏障。
+
+新增JoinedPipe仅用于compiled阶段，严格8192字节单帧/重复字段拒绝/部分行deadline/双帧缓冲/实际closed与exit0。stop失败保留handle，不kill；旧one-shot prepare只有prepared+已exit0才认可回收。compiled失败清理优先join新Pair；任何join不明就停止后续删除/密钥释放/policy恢复，不把旧Pipe.emergency强杀算完成。窗口creator只能在API签名worker全join之后停止；最终ACTION指令放在所有server/client清理及baseline检查后，而不是Pair刚停止时。
+
+Windows compiled包/整个随机work保留，不在借用桌面owner仍活着时递归删除；Mac公开构建包保留，节点state仅在所有owner已join且服务确认回收后才删。Windows borrower原生journal仍由其正常桌面launcher持有，最终需要用户**先borrower Enter→STOPPED，再creator Enter→STOPPED**。脚本最终通过消息明确不包含borrower STOPPED清理、live revoke/upgrade/fault/GUI/签名安装包；任何超时/失败必须原样记录，不能重复initialize或自动重连。
+
+证据：`python3 -B -m unittest discover -s poc/selfhost/public-server -p 'test_*.py'` **23项全部PASS**，含真实隔离Python子进程部分帧/双帧/退出协议、纯协调fixture的先join后initialize/双端持续增长/角色与secret过滤/故障阻止native清理/旧scope伪装拒绝；不含原生凭据或网络。实际离线构建Linux3、Windows2、Mac2个Go helper全部成功。没有更改Go/Swift/C#源，本轮不冒充重跑平台原生测试或真实产品传输。git diff --check通过；按既有授权本地提交，不推送。
+
+### 下一轮真实执行（本轮已询问用户启动，尚未收到READY确认）
+
+Windows正常桌面（身份creator窗口）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\jarvis\windows-desktop-session-4t-r2\start-desktop-session.ps1
+```
+
+收到READY后Mac管理端运行：
+
+```bash
+REMOTEAPP_WINDOWS_INTERACTIVE_DIR='C:\Users\jarvis\windows-desktop-session-4t-r2' python3 -B poc/selfhost/public-server/split-consent.py --compiled
+```
+
+该命令会运行隔离服务并构建/上传新匹配包，再输出第二Windows正常桌面窗口的具体borrower命令。用户看到该第二窗口READY后暂不Enter；协调端继续实际授权/node/TLS测试。保持管理脚本活着并及时沟通，server模式固定15分钟，不能离开活server跨turn等待到过期。失败只输出固定FAIL，秘密/原始异常不得打印；保留路径是公开诊断信息，不读取持有的秘密文件。全流程PASS后按最后ACTION顺序关闭两窗口，收集两条STOPPED再记录原生清理。
+
+**整体4仍未完成；新联合入口开发和回归完成，不代表跨机实测通过。**
+
 ## 2026-10-08 4C-4V：compiled 产品计数观测与显式协调窗口，联合实测仍待
 
 用户回复“已就绪”；通过 SSH 再次调用旧 4T r2 正常桌面 owner 的 probe，确认原生签名重开与独占 journal PASS。未直接在 SSH 下打开原生凭据，未启动新 borrower，也未创建新 grant/Headscale 节点。本轮结束时旧身份窗口仍由用户持有；请用户 Enter 并确认 STOPPED，不能未经反馈记录为已清理。

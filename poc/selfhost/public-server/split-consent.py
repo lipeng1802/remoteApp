@@ -123,17 +123,24 @@ class Coordinator(Pipe):
         return self.proc.returncode
 
 def main():
-    if sys.argv[1:] not in ([],["--nodes"],["--tls"],["--tls-fault"]): raise RuntimeError("invalid_arguments")
+    if sys.argv[1:] not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"]): raise RuntimeError("invalid_arguments")
+    compiled=sys.argv[1:]==["--compiled"]
     fault=sys.argv[1:]==["--tls-fault"]
     tls=fault or sys.argv[1:]==["--tls"]
-    nodes=tls or sys.argv[1:]==["--nodes"]
+    nodes=compiled or tls or sys.argv[1:]==["--nodes"]
+    pipe_type=Pipe
+    if compiled:
+        from joined_pipe import JoinedPipe
+        def pipe_type(command,config=None): return JoinedPipe(command,config,cwd=t.HERE)
     os.umask(0o077)
-    identities = NativeIdentities(t, Pipe)  # Actual pinned desktop probe before mutations.
+    identities = NativeIdentities(t, pipe_type,compiled_desktop=compiled)  # Actual desktop probe before mutations.
     coordinator = None
     clients, tunnels = [], []
     node_helpers, folders, node_result = [], [], []
     active_tls=[]
     product_command=None
+    compiled_pair=None
+    compiled_pair_joined=not compiled
     node_cleanup_confirmed = not nodes
     backup = None
     joined = False
@@ -147,6 +154,9 @@ def main():
         work_created = True
         t.powershell("$ErrorActionPreference='Stop'; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; "+f"icacls '{work}' /inheritance:r /grant:r \"*${{sid}}:(OI)(CI)F\" '*S-1-5-18:(OI)(CI)F' | Out-Null; if ($LASTEXITCODE -ne 0) {{throw 'acl_failed'}}")
     try:
+        if compiled:
+            import compiled_products
+            compiled_products.build_helpers(t)
         t.check(not t.admin("nodes", "list") and not t.admin("users", "list") and not t.admin("preauthkeys", "list"), "split_empty_isolated_control_plane")
         if tls:
             import split_tls
@@ -159,8 +169,8 @@ def main():
         if prepared.stdout.splitlines():
             backup = json.loads(prepared.stdout.splitlines()[0]).get("backup")
         t.check(prepared.returncode == 0 and backup is not None, "split_database_deny_prepared")
-        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+(" --os-tls-fault " if fault else " --os-nodes " if nodes else " --os-consent ")+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
-        ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"],nodes,fault)
+        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+(" --os-compiled " if compiled else " --os-tls-fault " if fault else " --os-nodes " if nodes else " --os-consent ")+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
+        ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"],nodes,fault,compiled)
         t.check(True, "split_independent_daemon_nonroot_frontend_ready_public_only")
         local_socket = socket.socket(); local_socket.bind(("127.0.0.1",0)); local_port = local_socket.getsockname()[1]; local_socket.close()
         forward = subprocess.Popen(t.SERVER[:-1]+["-N","-o","ExitOnForwardFailure=yes","-L",f"127.0.0.1:{local_port}:127.0.0.1:{ready['api_port']}",t.SERVER[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -177,6 +187,10 @@ def main():
         tunnels.append(reverse); time.sleep(1)
         t.check(reverse.poll() is None,"split_private_windows_api_tunnel")
         if not work_created: create_work()
+        if compiled:
+            import compiled_products
+            compiled_pair=compiled_products.prepare(t,identities,ready,(remote_port,local_port),work)
+            compiled_pair.attach(pipe_type)
         binary=t.ARTIFACTS/"device-api-client-win.exe"
         uploaded=subprocess.run(["scp","-O","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(binary),"jarvis@100.73.4.118:"+work.replace("\\","/")+"/device-api-client.exe"],capture_output=True,timeout=60)
         t.check(uploaded.returncode==0,"split_windows_api_client_uploaded")
@@ -187,13 +201,15 @@ def main():
                 "Target":hashlib.sha256(bytes.fromhex(ready["target"])).hexdigest(),"Controller":hashlib.sha256(bytes.fromhex(ready["controller"])).hexdigest()}
             config.update(identities.config(role,windows))
             command=identities.command(work,"device-api-client.exe") if windows else [str(t.ARTIFACTS/"device-api-client")]
-            client=Pipe(command,config); clients.append(client)
+            client=pipe_type(command,config); clients.append(client)
             t.check(client.read()["status"]=="ready","split_device_os_signer_ready")
         if nodes:
             import split_nodes
             def node_phase(grant):
-                node=split_nodes.run(t,Pipe,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders)
+                node=split_nodes.run(t,pipe_type,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders)
                 node_result.append(node)
+                if compiled:
+                    compiled_pair.run(pipe_type,node["compiled_handoff"])
                 if tls:
                     active=split_tls.run(t,Pipe,ready,clients,node,grant,product_command,node_helpers)
                     if fault: active=split_tls.fault_round(t,Pipe,ready,clients,node,grant,product_command,node_helpers,coordinator,active)
@@ -202,11 +218,14 @@ def main():
             if tls: active_tls[0].revoked()
             split_nodes.reclaimed(t)
             node_cleanup_confirmed=True
-            if not tls:
+            if not tls and not compiled:
                 node=node_result[0]
                 t.check(not node["peer"].request("probe",Peer=node["target_ip"])["passed"],"split_revocation_actual_network_payload_denied")
             for helper in reversed(node_helpers): helper.stop()
             node_helpers.clear()
+            if compiled:
+                compiled_pair.close()
+                compiled_pair_joined=True
         else: consent(*clients)
         for client in reversed(clients): client.stop()
         clients.clear()
@@ -214,6 +233,15 @@ def main():
         code=coordinator.join(); joined=True
         t.check(code==0,"split_consent_coordinator_zero_exit")
     finally:
+        if compiled and work_created:
+            print("PRESERVED_WINDOWS_COMPILED_WORK "+work,flush=True)
+            if compiled_pair is None:
+                print("ACTION: if a borrower was started, stop it FIRST and confirm STOPPED before stopping the identity creator. No compiled session acceptance was reached.",flush=True)
+        if compiled and compiled_pair is not None and not compiled_pair_joined:
+            # If this cannot join, deliberately stop teardown here: keep
+            # signers/tunnels/state/policy evidence. Never emergency-kill them.
+            compiled_pair.close()
+            compiled_pair_joined=True
         for helper in reversed(node_helpers): helper.emergency()
         for client in reversed(clients): client.emergency()
         if coordinator is not None and not joined:
@@ -231,7 +259,7 @@ def main():
         for tunnel in reversed(tunnels):
             tunnel.terminate(); tunnel.wait(timeout=5)
         identities.close()  # Only this run's random Mac identities, never Windows owner.
-        if work_created and (node_cleanup_confirmed or coordinator is None):
+        if work_created and not compiled and (node_cleanup_confirmed or coordinator is None):
             t.powershell(f"Remove-Item -LiteralPath '{work}' -Recurse -Force -ErrorAction Stop")
         if node_cleanup_confirmed:
             for folder in folders: shutil.rmtree(folder)
@@ -247,6 +275,10 @@ def main():
     t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":["100.120.0.2"],"dst":["100.120.0.1:47476"]}]},"split_original_policy_unchanged")
     status=subprocess.run(t.SERVER+["systemctl is-active remoteapp-authority remoteapp-frontend remoteapp-poc && sha256sum --check /opt/remoteapp-prerelease/nginx-baseline.sha256 && sha256sum /var/lib/remoteapp-authority/state.json"],capture_output=True,timeout=15)
     t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
+    if compiled:
+        print("ACTION: verification and server/client teardown finished. Enter in BORROWER window FIRST and confirm its STOPPED, then Enter in identity creator and confirm STOPPED.",flush=True)
+        print("VALIDATION PASSED: compiled native pair + real Headscale binding + product TLS payload/autonomous refresh + normal join + post-stop signed revoke. NOT live-session revocation, borrower STOPPED cleanup, upgrade/fault, GUI or signed installer acceptance.",flush=True)
+        return
     scope=" + real nodeproof + actual product TLS/autonomous refresh/revocation" if tls else " + real nodeproof/minimum ACL/revoked payload" if nodes else " only"
     print("VALIDATION PASSED: split-process OS consent"+scope+". NOT installed trust/public product acceptance.",flush=True)
 

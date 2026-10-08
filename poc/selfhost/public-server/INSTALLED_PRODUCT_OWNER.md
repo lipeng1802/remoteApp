@@ -51,6 +51,14 @@ Windows 固定摘要入口 `C:\Users\jarvis\run-owned-product-validation-4s.ps1 
 
 ## 下一段
 
+### 4C-4W：--compiled 首轮正常联合协调
+
+独立模式先验证仍READY的桌面identity，再从当前源码离线重建协调helper；真实frontend公共bootstrap/两端forward→fresh匹配test pair→全包SHA上传核对→正常桌面新borrower READY与真实probe→OS签名consent/enroll/bind→旧node helper join后的单次handoff→Mac native Initialize→固定产品runtime/HMAC私有转交→两端至少3pongs且跨5秒继续增长超过10。旧4U fixture不可代用。borrower不仅匹配设备public，还须对应新channel推导的session scope及固定relay路径。
+
+当前设计正常Stop两端实际join，**之后**才owner签名revoke并等节点/ACL/authority durable cleanup。因此不声称live revocation/fault/upgrade已验；现有watch ErrDenied/Owner锁闭错误仍保留，失败不判正常退出。JoinedPipe有界部分帧deadline/重复字段拒绝，绝不强杀当join，任何未知生命周期阻止后续identity/state/native journal/policy删除。Mac inspect证明lease释放后才cleanup；Windows包/随机work保留，原生borrower journal最后由用户先Enter borrower STOPPED再Enter creator STOPPED。完整server/API清理后才发停止creator指令。
+
+23项Python回归通过（协议真实Python child，产品/协调fixture），7个Linux/Windows/Mac helper实际构建成功。用户确认前轮STOPPED；当前新入口真实Headscale/Swift-C# TLS及新borrower桌面执行尚待，没有新grant/节点或服务改动。运行入口与待验边界详见根目录HANDOFF；整体4未完成。
+
 ### 4C-4V：当前固定产品的计数观测
 
 ProductObservation仅查询已受管固定产品Child，不拥有或释放journal，不替换产品，不输出Key/cert。target/controller严格不同schema，重复/未知/缺失/负值拒绝，规范化为product_count。匿名pipe installed-session支持重复count再stop/upgrade；Windows同用户desktop control/relay支持count，禁止Config/Profile覆盖。每次获准Start使用新观察器，已join或未启动拒绝。2秒查询期限沿Child.Exchange错误锁闭语义；不能把ready、零计数或查询失败解释为TLS成功。
