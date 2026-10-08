@@ -17,6 +17,7 @@ import (
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/nodeidentity"
 	"remoteapp.local/selfhost-poc/nodeproof"
+	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/session"
 	"remoteapp.local/selfhost-poc/streamgate"
 	"remoteapp.local/selfhost-poc/trustinstall"
@@ -86,6 +87,15 @@ func validate(c Config) (ed25519.PublicKey, ed25519.PublicKey, error) {
 // StateDir must be protected by trusted provisioning; journal ownership does
 // not make arbitrary node files trusted or protect them from other processes.
 func Runner(r trustinstall.Release, c Config, open SignerFactory, ready Ready) clientowner.Runner {
+	return runner(r, c, open, ready, nil)
+}
+
+// RunnerWithProduct owns the pinned product INSIDE the installation lease.
+// Product is trusted compiled/local configuration, not peer-selected argv.
+func RunnerWithProduct(r trustinstall.Release, c Config, open SignerFactory, ready Ready, product Product) clientowner.Runner {
+	return runner(r, c, open, ready, &product)
+}
+func runner(r trustinstall.Release, c Config, open SignerFactory, ready Ready, product *Product) clientowner.Runner {
 	return func(ctx context.Context, p trustprofile.Profile) (result error) {
 		if ctx.Err() != nil {
 			return nil
@@ -112,7 +122,17 @@ func Runner(r trustinstall.Release, c Config, open SignerFactory, ready Ready) c
 		if signer == nil {
 			return session.ErrDenied
 		}
-		defer signer.Close() // after node, managed watch, listener and streams join
+		defer func() {
+			// NativeSigner exposes the strict process barrier; trusted test
+			// signers may implement only Close (and must join synchronously).
+			if joined, ok := signer.(interface{ CloseJoined() error }); ok {
+				if err := joined.CloseJoined(); err != nil {
+					result = err
+				}
+			} else {
+				signer.Close()
+			}
+		}() // after product, node, managed watch, listener and streams join
 		expected := controller
 		if c.Server {
 			expected = target
@@ -139,7 +159,7 @@ func Runner(r trustinstall.Release, c Config, open SignerFactory, ready Ready) c
 				}
 			}
 		}()
-		return streamgate.ProfileSession(ctx, r, p, signer, target, controller, c.Grant, c.Binding, c.Server, func(ctx context.Context, g *streamgate.Gate) error {
+		return streamgate.ProfileSessionWithClient(ctx, r, p, signer, target, controller, c.Grant, c.Binding, c.Server, func(ctx context.Context, g *streamgate.Gate, client *invite.NetworkClient, clock func() time.Time) error {
 			// Require an issuer-signed ACTIVE binding watch before Headscale Up.
 			started = true
 			st, err := node.Up(ctx)
@@ -182,11 +202,27 @@ func Runner(r trustinstall.Release, c Config, open SignerFactory, ready Ready) c
 			if !c.Server {
 				port = ln.Addr().(*net.TCPAddr).Port
 			}
-			return supervise(life, ln, proof, stream, func() {
-				if ready != nil {
-					ready(port)
+			work := func(ctx context.Context) error {
+				return supervise(ctx, ln, proof, stream, func() {
+					if ready != nil {
+						ready(port)
+					}
+				})
+			}
+			if product == nil {
+				return work(life)
+			}
+			child, err := product.start(life, client, issuer, c, clock, port)
+			if err != nil {
+				ln.Close()
+				if child != nil {
+					if closeErr := child.Stop(context.Background()); closeErr != nil {
+						return processowner.ErrProcess
+					}
 				}
-			})
+				return err
+			}
+			return processowner.Own(life, child, work)
 		})
 	}
 }

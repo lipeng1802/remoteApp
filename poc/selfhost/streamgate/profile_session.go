@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
+	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/session"
@@ -17,6 +19,18 @@ import (
 // Gate.ConnectTLS (or fixed-payload diagnostics) and MUST join its nested node,
 // listener and stream workers before returning. Signer is borrowed until return.
 func ProfileSession(ctx context.Context, release trustinstall.Release, p trustprofile.Profile, signer invite.DeviceSigner, target, controller ed25519.PublicKey, grant invite.Grant, binding invite.NetworkBinding, server bool, work func(context.Context, *Gate) error) error {
+	if work == nil {
+		return session.ErrDenied
+	}
+	return ProfileSessionWithClient(ctx, release, p, signer, target, controller, grant, binding, server, func(ctx context.Context, g *Gate, _ *invite.NetworkClient, _ func() time.Time) error {
+		return work(ctx, g)
+	})
+}
+
+// ProfileSessionWithClient lends the SAME compiled-profile HTTP client and
+// calibrated clock to trusted product certificate/descriptor preparation. The
+// client/signature authority is never passed to a parent or product process.
+func ProfileSessionWithClient(ctx context.Context, release trustinstall.Release, p trustprofile.Profile, signer invite.DeviceSigner, target, controller ed25519.PublicKey, grant invite.Grant, binding invite.NetworkBinding, server bool, work func(context.Context, *Gate, *invite.NetworkClient, func() time.Time) error) error {
 	if ctx == nil || work == nil {
 		return session.ErrDenied
 	}
@@ -53,7 +67,7 @@ func ProfileSession(ctx context.Context, release trustinstall.Release, p trustpr
 		return e
 	}
 	done := make(chan error, 1)
-	go func() { done <- work(life, m.Gate()) }()
+	go func() { done <- work(life, m.Gate(), client, clock) }()
 	var workerErr error
 	ended := false
 	fault := false
@@ -76,6 +90,10 @@ func ProfileSession(ctx context.Context, release trustinstall.Release, p trustpr
 		return session.ErrDenied
 	}
 	if ctx.Err() != nil {
+		// Cancellation must NOT hide a product's nonzero exit / failed close.
+		if workerErr != nil && !errors.Is(workerErr, context.Canceled) && !errors.Is(workerErr, context.DeadlineExceeded) {
+			return workerErr
+		}
 		return nil
 	} // joined cancellation is normal shutdown
 	return workerErr

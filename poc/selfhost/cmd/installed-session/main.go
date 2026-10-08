@@ -15,17 +15,19 @@ import (
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/privatepipe"
+	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/session"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
 
-var embeddedRelease, embeddedSignerDigest string // trusted link step only
+var embeddedRelease, embeddedSignerDigest, embeddedProductDigest string // trusted link step only
 type request struct {
 	Op                        string
 	Config                    clientruntime.Config
 	VaultScope, VaultExpected string
 	Profile                   trustprofile.Profile
+	ProductKey                string // private TEST HMAC only; not final provisioning
 }
 
 func main() {
@@ -60,9 +62,9 @@ func run(output func(any)) (result error) {
 		return e
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		defer cancel()
-		if e := o.Close(ctx); result == nil {
+		// The parent's timeout may retain this live helper. Exiting here while
+		// a product is unjoined would drop the OS journal lease prematurely.
+		if e := o.Close(context.Background()); result == nil {
 			result = e
 		}
 	}()
@@ -106,7 +108,21 @@ func run(output func(any)) (result error) {
 		return session.ErrDenied
 	}
 	open := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, first.VaultScope, first.VaultExpected)
-	h, e := o.Start(ctx, clientruntime.Runner(r, first.Config, open, func(port int) { output(map[string]any{"status": "ready", "port": port}) }))
+	ready := func(port int) { output(map[string]any{"status": "ready", "port": port}) }
+	runner := clientruntime.Runner(r, first.Config, open, ready)
+	if embeddedProductDigest != "" {
+		// This slice's actual products are Windows target / macOS controller.
+		if (runtime.GOOS == "windows") != first.Config.Server || (first.Config.Server && first.ProductKey != "") {
+			return session.ErrDenied
+		}
+		product := clientruntime.Product{Spec: processowner.Spec{Executable: filepath.Join(dir, "tls-product"+suffix), SHA256: embeddedProductDigest}, ControllerKey: first.ProductKey, TargetReady: func(key, fp string) {
+			output(map[string]string{"status": "product_ready", "Key": key, "Fingerprint": fp})
+		}}
+		runner = clientruntime.RunnerWithProduct(r, first.Config, open, ready, product)
+	} else if first.ProductKey != "" {
+		return session.ErrDenied
+	}
+	h, e := o.Start(ctx, runner)
 	if e != nil {
 		return e
 	}
@@ -119,7 +135,7 @@ func run(output func(any)) (result error) {
 		if !ok {
 			return nil
 		} // EOF cancels and joins via deferred Close
-		if c.Config != (clientruntime.Config{}) || c.VaultScope != "" || c.VaultExpected != "" {
+		if c.Config != (clientruntime.Config{}) || c.VaultScope != "" || c.VaultExpected != "" || c.ProductKey != "" {
 			return session.ErrDenied
 		}
 		switch c.Op {

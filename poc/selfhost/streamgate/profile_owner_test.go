@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/session"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
@@ -27,6 +29,53 @@ type liveJournal struct {
 	mu      sync.Mutex
 	raw     []byte
 	commits int
+}
+
+func TestProfileCancellationDoesNotHideProductJoinFailure(t *testing.T) {
+	f := portableProfileSetup(t)
+	root, key, _ := ed25519.GenerateKey(rand.Reader)
+	now := time.Now()
+	claims := trustprofile.Claims{Version: 1, Service: "join-failure", Epoch: 1, Endpoint: f.endpoint, Certificate: base64.StdEncoding.EncodeToString(f.certificate), Issuer: hex.EncodeToString(f.issuer), IssuedAt: now.Add(-time.Minute).Unix(), ExpiresAt: now.Add(time.Hour).Unix()}
+	p, e := trustprofile.Sign(key, claims)
+	if e != nil {
+		t.Fatal(e)
+	}
+	encoded, e := trustinstall.EncodeForTrustedBuild(trustinstall.Specification{Version: 1, Channel: "join-failure", Root: hex.EncodeToString(root), Service: claims.Service, MinimumEpoch: 1, HelperDigest: strings.Repeat("a", 64), Bundled: p, Test: true}, now)
+	if e != nil {
+		t.Fatal(e)
+	}
+	r, e := trustinstall.DecodeCompiled(encoded)
+	if e != nil {
+		t.Fatal(e)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- ProfileSessionWithClient(ctx, r, p, f.signer, f.target.Public().(ed25519.PublicKey), f.signer.PublicKey(), f.grant, f.binding, false, func(ctx context.Context, _ *Gate, client *invite.NetworkClient, clock func() time.Time) error {
+			if client == nil || clock == nil {
+				return session.ErrDenied
+			}
+			close(started)
+			<-ctx.Done()
+			return processowner.ErrProcess
+		})
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("profile worker not started")
+	}
+	cancel()
+	select {
+	case e := <-done:
+		if !errors.Is(e, processowner.ErrProcess) {
+			t.Fatal("cancellation hid failed product join", e)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("watch/worker did not join")
+	}
 }
 
 func (j *liveJournal) Load() ([]byte, error) {

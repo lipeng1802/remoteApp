@@ -16,16 +16,18 @@ import (
 var deviceLogonError = errors.New("interactive_logon_required")
 
 type Signer struct {
-	mu       sync.Mutex
-	cmd      *exec.Cmd
-	in       io.WriteCloser
-	out      io.ReadCloser
-	reader   *Reader
-	pub      ed25519.PublicKey
-	closed   bool
-	created  bool
-	wait     chan error
-	waitOnce sync.Once
+	mu                 sync.Mutex
+	cmd                *exec.Cmd
+	in                 io.WriteCloser
+	out                io.ReadCloser
+	reader             *Reader
+	pub                ed25519.PublicKey
+	closed             bool
+	created            bool
+	wait               chan struct{}
+	waitErr            error
+	aborted, closedAck bool
+	waitOnce           sync.Once
 }
 type VaultReply struct {
 	Status    string `json:"status"`
@@ -56,11 +58,12 @@ func NewSigner(executable, scope, expected string, create bool) (*Signer, error)
 		out.Close()
 		return nil, ErrProtocol
 	}
-	s := &Signer{cmd: c, in: in, out: out, created: create, reader: NewReader(out), wait: make(chan error, 1)}
+	s := &Signer{cmd: c, in: in, out: out, created: create, reader: NewReader(out), wait: make(chan struct{})}
 	r, e := s.rpc(map[string]any{"Scope": scope, "Create": create, "Expected": expected})
 	pub, pe := hex.DecodeString(r.PublicKey)
 	if e != nil || r.Status != "ready" || pe != nil || len(pub) != 32 || hex.EncodeToString(pub) != r.PublicKey || (expected != "" && expected != r.PublicKey) {
 		s.abort()
+		<-s.wait // a failed startup must not leave an unowned OS signer process
 		if r.Reason == "interactive_logon_required" {
 			return nil, deviceLogonError
 		}
@@ -72,6 +75,7 @@ func NewSigner(executable, scope, expected string, create bool) (*Signer, error)
 func (s *Signer) abort() {
 	if !s.closed {
 		s.closed = true
+		s.aborted = true
 		s.in.Close()
 		s.out.Close()
 		s.cmd.Process.Kill()
@@ -82,7 +86,9 @@ func (s *Signer) abort() {
 		}
 	}
 }
-func (s *Signer) startWait() { s.waitOnce.Do(func() { go func() { s.wait <- s.cmd.Wait() }() }) }
+func (s *Signer) startWait() {
+	s.waitOnce.Do(func() { go func() { s.waitErr = s.cmd.Wait(); close(s.wait) }() })
+}
 func (s *Signer) rpc(v any) (VaultReply, error) {
 	var r VaultReply
 	done := make(chan error, 1)
@@ -128,14 +134,32 @@ func (s *Signer) Close() {
 		s.abort()
 		return
 	}
+	s.closedAck = true
 	s.in.Close()
 	s.startWait()
 	select {
 	case <-s.wait:
 		s.closed = true
+		s.out.Close()
 	case <-time.After(3 * time.Second):
 		s.abort()
 	}
+}
+
+// CloseJoined is the installation-owner barrier. Legacy Close's bounded
+// emergency handling is not a proof of process exit. Join the SAME Wait even
+// after a previous timeout/abort; failed or forced exit is never success.
+func (s *Signer) CloseJoined() error {
+	s.Close()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.startWait()
+	<-s.wait
+	s.out.Close()
+	if s.aborted || !s.closedAck || s.waitErr != nil {
+		return ErrProtocol
+	}
+	return nil
 }
 
 // Test teardown only; helper also denies delete on read-only reopen. This
@@ -156,6 +180,10 @@ func (s *Signer) DeleteCreatedIdentity() error {
 	select {
 	case <-s.wait:
 		s.closed = true
+		s.out.Close()
+		if s.waitErr != nil {
+			return ErrProtocol
+		}
 	case <-time.After(3 * time.Second):
 		s.abort()
 		return ErrProtocol

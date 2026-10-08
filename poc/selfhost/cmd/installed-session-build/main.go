@@ -48,8 +48,10 @@ func main() {
 	fmt.Println("BUILD_READY compiled installed-session + pinned helpers; NOT installed or cross-machine accepted")
 }
 func run() error {
-	// go,module,target,new-dir,public-anchor,public-profile,journal,signer,channel
-	if len(os.Args) != 10 {
+	// Optional last arg: trusted standalone TLS product (no runtime peer path).
+	// .NET callers must publish a complete self-contained single-file product;
+	// copying only an apphost from a multi-file publish is NOT a usable bundle.
+	if len(os.Args) != 10 && len(os.Args) != 11 {
 		return os.ErrInvalid
 	}
 	for _, p := range []string{os.Args[1], os.Args[2], os.Args[4], os.Args[5], os.Args[6], os.Args[7], os.Args[8]} {
@@ -77,6 +79,19 @@ func run() error {
 	if e != nil || len(v) == 0 {
 		return os.ErrInvalid
 	}
+	var product []byte
+	productPin := ""
+	if len(os.Args) == 11 {
+		if !filepath.IsAbs(os.Args[10]) || filepath.Clean(os.Args[10]) != os.Args[10] {
+			return os.ErrInvalid
+		}
+		product, e = read(os.Args[10], 100<<20)
+		if e != nil || len(product) == 0 {
+			return os.ErrInvalid
+		}
+		digest := sha256.Sum256(product)
+		productPin = hex.EncodeToString(digest[:])
+	}
 	s, e := trustinstall.PublicSpecification(a, p, j, os.Args[9], time.Now())
 	if e != nil {
 		return e
@@ -98,16 +113,25 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	if e = trustinstall.CompileSessionBridge(ctx, goexe, module, target, filepath.Join(dest, "installed-session"+suffix), s, pin, time.Now()); e != nil {
+	if productPin != "" {
+		if e = write(filepath.Join(dest, "tls-product"+suffix), product, 0755); e != nil {
+			return e
+		}
+		e = trustinstall.CompileProductSession(ctx, goexe, module, target, filepath.Join(dest, "installed-session"+suffix), s, pin, productPin, time.Now())
+	} else {
+		e = trustinstall.CompileSessionBridge(ctx, goexe, module, target, filepath.Join(dest, "installed-session"+suffix), s, pin, time.Now())
+	}
+	if e != nil {
 		return e
 	}
 	if e = trustinstall.Compile(ctx, goexe, module, target, filepath.Join(dest, "trust-install"+suffix), s, time.Now()); e != nil {
 		return e
 	}
 	b, e := json.Marshal(struct {
-		Release      trustinstall.Specification `json:"release"`
-		SignerDigest string                     `json:"signer_sha256"`
-	}{s, pin})
+		Release       trustinstall.Specification `json:"release"`
+		SignerDigest  string                     `json:"signer_sha256"`
+		ProductDigest string                     `json:"product_sha256,omitempty"`
+	}{s, pin, productPin})
 	if e != nil {
 		return e
 	}

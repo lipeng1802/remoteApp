@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4S：[产品进程进入 compiled owner 租约屏障](poc/selfhost/public-server/INSTALLED_PRODUCT_OWNER.md) 已接线：产品/网络/节点/watch/native signer 实际 join 后才能提交升级或释放；补取消错误传播、命令不因 Close 超时提前退出、同一编译配置客户端的 OS 签名证书发布/新鲜 TLS 描述符校验。Mac 全量回归、Windows 11 项局部验证及 Mac 原生 signer 严格退出测试通过；真实 Swift/C# 两端固定产品摘要包仅构建，未安装或跑新双机会话，整体 4 未完成。
+
 4C-4R：新增[专用管道/进程对和启动适配](poc/selfhost/public-server/INSTALLED_PROCESS_COORDINATION.md)，macOS/Windows 的 10 项进程行为测试通过。尚未切换真实双机协调、接 OS TLS 供应回调，或将独立产品生命周期纳入 compiled owner 的 journal 租约；不算 Headscale/产品 TLS/安装验收。
 
 4C-4Q：[编译锚节点客户端入口](poc/selfhost/public-server/INSTALLED_NODE_RUNTIME.md) 已开发接线：installed-session与双helper摘要固定、只open已安装配置、OS signer重开、签名ACTIVE binding先于实际tsnet.Up、角色node/IP检查、nodeproof绑定当前grant、TLS监听/workers/节点关闭纳入owner。两端包构建与Mac/Windows局部运行时测试通过；实际双机Headscale/OS signer/产品TLS进程组合仍待，未初始化真实信任channel或改旧GUI，整体4未完成。

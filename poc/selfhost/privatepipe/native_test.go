@@ -125,3 +125,38 @@ func TestNativeVaultIdentityAndIsolation(t *testing.T) {
 		t.Fatal("wrong public identity")
 	}
 }
+
+func TestNativeVaultStrictJoinedReopen(t *testing.T) {
+	exe := os.Getenv("REMOTEAPP_VAULT_TEST_EXECUTABLE")
+	if exe == "" {
+		t.Skip("native executable required; no fixture substitution")
+	}
+	var raw [16]byte
+	if _, e := rand.Read(raw[:]); e != nil {
+		t.Fatal(e)
+	}
+	owner, e := privatepipe.NewSigner(exe, hex.EncodeToString(raw[:]), "", true)
+	if e != nil {
+		t.Fatal("test identity unavailable", e)
+	}
+	defer owner.Close()
+	defer func() {
+		if e := owner.DeleteCreatedIdentity(); e != nil {
+			t.Error("exact test identity cleanup unconfirmed", e)
+		}
+	}()
+	reader, e := privatepipe.NewSigner(exe, hex.EncodeToString(raw[:]), hex.EncodeToString(owner.PublicKey()), false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer reader.CloseJoined()
+	if _, e := reader.Sign([]byte("remoteapp-invite-request-v1\n{}")); e != nil {
+		t.Fatal(e)
+	}
+	if e := reader.CloseJoined(); e != nil {
+		t.Fatal("native process not strictly joined", e)
+	}
+	if e := reader.CloseJoined(); e != nil {
+		t.Fatal("native join not sticky", e)
+	}
+}

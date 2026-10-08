@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4S：产品进入compiled owner屏障，联合实机仍待
+
+新增processowner.Own、clientruntime.RunnerWithProduct/Product、ProfileSessionWithClient、CompileProductSession。实际产品child在同一runner内准备/运行/Stop+Wait，product/网络worker都join后才能runner返还，之后watch/client/node/native signer.CloseJoined，Owner最后提交/释放。partial product启动失败同样Stop背景真实join，无内层timeout冒充完成。外部Pair仍只是历史协调组件，不再靠它提前释放bridge租约。ProfileSession取消保留非取消类worker错误；installed-session最终Close背景实际join不再8s超时直接exit；升级请求8s期限失败进入同一关闭等待，不自动恢复。native signer可重复Wait/检查closedAck非forced零exit，启动失败也等进程退出；LegacyClose emergency强杀不是成功。
+
+Product准备用同一compiled profile NetworkClient/OS signer/校准clock。Target固定产品ready HMAC/fp→证书私钥证明→OS publish_tls→新鲜issuer描述符校验→私有product_ready(Key/Fingerprint)，再bridge ready；Controller只匿名pipe接测试ProductKey、自取并验描述符后传给固定Swift子进程，无parent pin/root/CA/endpoint覆盖。HMAC仍私有测试投递，非最终秘密分发；product_ready不可日志/落盘。新增embeddedProductDigest/sibling tls-product，编译产品模式不可runtime降桥接；模式固定Windows target/Mac controller。可信builder可追加standalone product路径；.NET必须单文件self-contained，含native抽取，不能仅copy apphost。build-public只是追溯。
+
+Mac全量race与Mac/Windows全量vet PASS；真实Mac Keychain/helper StrictJoinedReopen单独PASS无SKIP0.26s，随机身份精确清理。Windows新入口 C:\Users\jarvis\run-owned-product-validation-4s.ps1 -BundleDirectory C:\Users\jarvis，4包固定摘要、11项必需top-level全PASS/exit0无SKIP，fixture API/journal/设备signer，真实子进程/匿名pipe/本地HTTPS，不是Windows native或真实产品/headscale。首脚本PASS regex漏转义失败，修正后整轮重跑，不计首轮PASS。详见[本轮证据](../poc/selfhost/public-server/INSTALLED_PRODUCT_OWNER.md)与script内4exe pin；不需要用户重复这11项。
+
+真实Swift TLS产品重新release build，Windows当前源码self-contained单文件publish通过并核对hash 2fe320ff54d78dc77f4d69142284197758d289781f88810debae2ffde7550d47；两端新包 artifacts/connection-poc/installed-product-mac-4s、installed-product-win-4s 均BUILD_READY，现有prerelease公开anchor/profile/helpers，只构建。未initialize真实channel、未启动compiled会话/线上节点、未读发布root/CA私钥或copy节点state/authkey/grant/设备key到包，旧安装/GUI/线上服务NginxACL未改。本輪仅本地提交，不推送。
+
+**下一段必须新协调+正常Windows桌面入口/隔离可信安装+旧helper停止/bound state重开+product_ready私有HMAC转交，再实际compiled双机正常/OS撤销/watch故障/升级前全join/显式新profile恢复/精确清理。** 现有旧split协议不能直接替代新产品模式，当前局部测试不能当联合验收；整体4、GUI/正式签名安装/公共接入/最终秘密投递仍待。未提供新的桌面READY包，暂不要求用户操作；没有JobObject/任意后代/硬kill耐久证明。
+
 ## 2026-10-08 4C-4R：专用管道/进程对和两角色启动适配
 
 新增processowner.Child/Pair/StartEndpoint。可信本地规范exe+SHA256，无shell/秘密argv；8KiB严格匿名JSON pipe、16回复上限；timeout锁闭且不复用迟到回复。Stop成功必须closed/零exit/EOF/reader join；超时留handle，重试只join，不kill/自动重启。Pair任一exit/管道故障停止另一端，双端与monitor全部join才Done；正常并发停防单端卡住继续服务，异常永远FAIL。StartEndpoint Target先product→同步准备证书回调→bridge；Controller先bridge port→签名descriptor配置回调→product。失败保留Launch/部分handle，best-effort8s停止，不删node/key/journal。回调是真实接线待实现的可信代码，不把测试counter当证书API；产品ready只验status。
