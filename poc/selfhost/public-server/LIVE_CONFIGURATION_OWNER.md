@@ -1,5 +1,7 @@
 # 4C-4P：已安装配置的 live owner 与退出屏障
 
+2026-10-08用户确认r3完整Windows桌面入口返回 `VALIDATION PASSED: native live owner lease + HTTPS watch/tunnel cancel and join. NOT cross-machine Headscale, product TLS/GUI or signed installer acceptance.`，本子切片闭环。此为用户反馈的整轮桌面结果，覆盖脚本全部必需项，不捏造逐项日志；下方待验描述是历史准备记录。实际Headscale/产品TLS进程组合、GUI和签名安装包仍未验收。
+
 最新修复：用户r2桌面5项owner（含native）PASS，但HTTPS集成复用Unix服务器Store初始化失败。r3使用仅内存临时issuer的跨平台测试夹具；4项session入口也去除Unix Store依赖，正式存储权限未放宽。Mac全量race/Windows vet通过，真实Windows SSH下本轮HTTPS/流集成及4项session回归全部PASS；r3完整桌面脚本仍待，不将r2部分成功或SSH非native测试冒充整轮完成。
 
 切片4第一段已开发：统一配置/会话owner和真实HTTPS watch、opaque tunnel生命周期适配。Mac原生实测与本地HTTPS/流集成通过，Windows新包桌面待验。**未切换现有enrollment-helper命令或产品GUI到新owner，未完成实际Headscale节点/产品TLS进程组合验收，也不是签名安装包或整体切片4完成。**

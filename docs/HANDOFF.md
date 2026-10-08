@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4P：用户确认Windows r3完整桌面通过，第一段闭环
+
+用户回传 `VALIDATION PASSED: native live owner lease + HTTPS watch/tunnel cancel and join. NOT cross-machine Headscale, product TLS/GUI or signed installer acceptance.`。按r3脚本必需项门禁，5项owner（含Windows native）、1项HTTPS/watch/tunnel集成及4项session回归均通过且无SKIP才输出该结果。记录为用户确认的正常桌面整轮验收，不捏造独立日志或耗时，不用之前SSH非native结果代替。脚本包含精确随机原生测试凭据清理和环境变量恢复，本轮未重新运行测试或修改程序/线上服务。
+
+4C-4P第一段已闭环，整体切片4仍未完成。下一任务：编译锚/已安装配置绑定的新客户端节点启动入口，将OS signer、实际Headscale节点、watch和产品TLS工作进程纳入同一owner，再进行双机退出/升级/故障验收。GUI、正式签名安装包、秘密分发和public admission仍待。下方r3待验及r2失败段落为历史准备/修复记录，以本节为准；本轮仅本地提交文档，不推送。
+
 ## 2026-10-08 4C-4P Windows r2失败修复：r3可移植验证入口
 
 用户截图确认r2五项owner测试PASS（含Windows native lease/reopen）；接着TestInstalledOwnerJoinsRealHTTPSWatchAndOpaqueTunnelBeforeUpgrade在managedSetup的invite.Open报authorization_storage_unavailable。定位为测试错误复用服务器Unix文件Store：Open要求目录权限无group/other位，Windows Go权限语义无法满足，不是native journal或实际网络拒绝。后续4项session选中测试也依赖同Store，原交付前只cross-build未实际跑这些Windows入口，不能算Windows验收完成。
