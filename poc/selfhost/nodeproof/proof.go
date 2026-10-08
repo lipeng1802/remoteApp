@@ -126,7 +126,7 @@ func VerifyWithReport(ctx context.Context, s *tsnet.Server, r invite.ProvisionRe
 	// LocalAPI upgrade wraps the local control connection, so use the actual
 	// fixed remote overlay address, resolved by the same authenticated netmap.
 	who, e := lc.WhoIs(ctx, net.JoinHostPort(o.IP, Port))
-	if e != nil || who.Node.Key.String() != o.NodeKey {
+	if e != nil || who == nil || who.Node == nil || who.Node.Key.String() != o.NodeKey {
 		return false
 	}
 	nonce := make([]byte, 32)
@@ -165,6 +165,23 @@ func ServeWithReport(ctx context.Context, s *tsnet.Server, key ed25519.PrivateKe
 }
 
 func ServeWithSigner(ctx context.Context, s *tsnet.Server, signer invite.DeviceSigner, verifierNode string, report func(string)) error {
+	return serveWithSigner(ctx, s, signer, verifierNode, report, nil)
+}
+
+// ServeBoundWithSigner additionally restricts possession challenges to the
+// active installed session's grant. It cannot sign another grant supplied by
+// the verifier while this runtime owns a single session.
+func ServeBoundWithSigner(ctx context.Context, s *tsnet.Server, signer invite.DeviceSigner, verifierNode, grantID string) error {
+	if !boundGrant(grantID, grantID) {
+		return invite.ErrDenied
+	}
+	return serveWithSigner(ctx, s, signer, verifierNode, nil, func(c challenge) bool { return boundGrant(grantID, c.Grant) })
+}
+func boundGrant(expected, got string) bool {
+	b, e := hex.DecodeString(expected)
+	return e == nil && len(b) == 16 && hex.EncodeToString(b) == expected && got == expected
+}
+func serveWithSigner(ctx context.Context, s *tsnet.Server, signer invite.DeviceSigner, verifierNode string, report func(string), allowed func(challenge) bool) error {
 	if signer == nil || len(signer.PublicKey()) != 32 || verifierNode == "" {
 		return invite.ErrDenied
 	}
@@ -175,8 +192,10 @@ func ServeWithSigner(ctx context.Context, s *tsnet.Server, signer invite.DeviceS
 	}
 	defer ln.Close()
 	done := make(chan struct{})
-	defer close(done)
+	joined := make(chan struct{})
+	defer func() { close(done); <-joined }()
 	go func() {
+		defer close(joined)
 		select {
 		case <-ctx.Done():
 			ln.Close()
@@ -201,11 +220,14 @@ func ServeWithSigner(ctx context.Context, s *tsnet.Server, signer invite.DeviceS
 				return
 			}
 			who, e := lc.WhoIs(requestCtx, conn.RemoteAddr().String())
-			if e != nil || who.Node.Key.String() != verifierNode {
+			if e != nil || who == nil || who.Node == nil || who.Node.Key.String() != verifierNode {
 				return
 			}
 			var c challenge
 			if read(conn, &c) != nil {
+				return
+			}
+			if allowed != nil && !allowed(c) {
 				return
 			}
 			if report != nil {

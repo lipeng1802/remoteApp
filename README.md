@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4Q：[编译锚节点客户端入口](poc/selfhost/public-server/INSTALLED_NODE_RUNTIME.md) 已开发接线：installed-session与双helper摘要固定、只open已安装配置、OS signer重开、签名ACTIVE binding先于实际tsnet.Up、角色node/IP检查、nodeproof绑定当前grant、TLS监听/workers/节点关闭纳入owner。两端包构建与Mac/Windows局部运行时测试通过；实际双机Headscale/OS signer/产品TLS进程组合仍待，未初始化真实信任channel或改旧GUI，整体4未完成。
+
 4C-4P Windows r3完整桌面验收已由用户确认VALIDATION PASSED，第一段闭环。r2的Unix服务器Store测试依赖问题已通过仅内存临时授权签名fixture修复，正式Store权限未放宽；不代表实际Headscale、产品TLS/GUI或签名安装包验收。见[交接](docs/HANDOFF.md)。
 
 4C-4P：[live配置owner与退出屏障](poc/selfhost/public-server/LIVE_CONFIGURATION_OWNER.md) 第一段已闭环：已安装配置与会话串行、cancel后真实join再commit、超时保留原生租约并锁闭；补齐连接/watchdog/授权callback退出等待。Mac新增原生实测、真实本地HTTPS/opaque tunnel升级集成、全量race及双平台vet通过；用户确认Windows r3完整桌面通过。未切换现有enrollment-helper/GUI或完成实际Headscale节点/产品TLS组合验收，整体4未完成。

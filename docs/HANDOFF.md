@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4Q：compiled节点运行时入口，局部通过/实际组合待验
+
+新增clientruntime.Runner/NativeSigner、cmd/installed-session及可信installed-session-build、trustinstall.CompileSessionBridge。root/service/floor/channel/journal与signer摘要来自编译，不接受parent root/CA/state授权，普通空构建锁闭。命令只open既有journal，不安装/create/reset或创建/删设备key；first start使用已准备StateDir、signedGrant/Binding、role、公钥、VaultScope/Expected。先验profile/grant/设备公钥和nodekey，再真实HTTPS校时/watch ACTIVE，才实际tsnet.Up校验self/IP。运行时拥有OS signer、tsnet server、nodeproof与目标overlay47476/控制端loopback TLS桥接worker，grant撤销/故障或取消后join，再node.Close检查、最后signer.Close；整个runner返还前journal租约不释放。
+
+nodeproof新增ServeBoundWithSigner，拒当前grant以外/非规范挑战；原接口保留给历史协调流程。关闭监视器加join，WhoIs nil/Node nil拒绝。stop/EOF/signal取消会话；upgrade成功提交后命令退出，显式新启动，不自动reconnect；错误候选/命令终止helper而非保持服务。stdin是专用父子pipe，不是通用交互控制台。现有node state必须可信/独占，先停旧helper再重开；只恢复已bound节点，不做首次enroll/bind。
+
+4项Runtime局部测试Mac/真实Windows SSH全部PASS，无SKIP；Windows程序摘要014856b0c9c2b2667e1dcb9cecbfbe66f68c435b6d4dac05bc6044406d1c9430。普通未编译入口锁闭、bound grant单元PASS；Mac全量race、Mac/Windows全量vet PASS。Windows测试只本地socket/隔离文件，不是native signer或Headscale启动验收。
+
+现有prerelease-v1/client-public公开材料与现有helpers生成两端包 artifacts/connection-poc/installed-session-mac-4q-ready 和 installed-session-win-4q-ready，BUILD_READY；未运行真实channel安装/升级或compiled会话，未读root/CA私钥，未把node state/grant/authkey/OSkey写包。仅runtime测试exe上传Windows，未替换旧安装或启动线上节点。
+
+**实际双机组合未闭环，产品Swift/C#进程和秘密供应尚不归此helper所有。** 下一任务补协调验收入口（隔离可信安装、Windows桌面owner、停旧helper/重开bound节点、TLS描述符和证书私钥证明/HMAC、实际产品进程退出），再正常TLS/撤销/故障/升级/join/显式恢复与最终清理。不要直接运行新helper初始化正式信任，不能用旧r3脚本或局部mock代替这一轮，不要求用户现在重复旧测试。未改线上服务/Nginx/ACL/GUI/DMG/Setup；整体4未完成，仅本地提交不推送。详见[本轮边界](../poc/selfhost/public-server/INSTALLED_NODE_RUNTIME.md)。
+
 ## 2026-10-08 4C-4P：用户确认Windows r3完整桌面通过，第一段闭环
 
 用户回传 `VALIDATION PASSED: native live owner lease + HTTPS watch/tunnel cancel and join. NOT cross-machine Headscale, product TLS/GUI or signed installer acceptance.`。按r3脚本必需项门禁，5项owner（含Windows native）、1项HTTPS/watch/tunnel集成及4项session回归均通过且无SKIP才输出该结果。记录为用户确认的正常桌面整轮验收，不捏造独立日志或耗时，不用之前SSH非native结果代替。脚本包含精确随机原生测试凭据清理和环境变量恢复，本轮未重新运行测试或修改程序/线上服务。
