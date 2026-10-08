@@ -66,6 +66,14 @@ func TestTLSProductFixture(t *testing.T) {
 			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
 			os.Exit(0)
 		}
+		if cmd.Op == "count" {
+			if mode == "controller" {
+				json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "count", "pongs": 3, "ended": false, "result": "pending", "pin_rejected": false})
+			} else {
+				json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "count", "pongs": 3, "preauth_rejected": 0, "sessions_closed": 0})
+			}
+			continue
+		}
 		if cmd.Op != "certificate_proof" || priv == nil {
 			os.Exit(7)
 		}

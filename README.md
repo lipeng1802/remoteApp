@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4V：补齐 compiled 两端实际产品的私有计数观测（不暴露 HMAC/证书），重复查询后仍走真实停止/升级 join 屏障；新增显式隔离 compiled 协调模式，旧模式期限不变。Mac全量race、双平台vet、11项Python、Windows5项局部测试与Linux3项纯协议测试通过。**完整新compiled双机协调、真实TLS持续payload与borrower桌面实测仍待，整体4未完成。** 见 [交接](docs/HANDOFF.md)。
+
 4C-4U（联合验收准备）：补齐隔离双端可信构建、Windows 借用桌面身份入口、独立 session/identity scope 与一次性 bound-node 交接。构建时固定匹配的 CA/issuer/两端 SSH 回环端点，测试 root 只在内存生成，包均 Test=true；不替换正式信任。Mac 全量 race、双平台 vet、11 项 Python 回归、Windows 两项新信任材料测试和包校验/三脚本语法检查通过。双端包仅 build-only，**真实新 compiled Headscale/产品 TLS 联合会话与借用入口原生实测仍待**，整体 4 未完成。见 [交接](docs/HANDOFF.md)。
 
 4C-4T：新增 Windows **测试专用 compiled 桌面入口**，固定 root/配置/签名器/产品摘要，重开桌面测试身份并持有独占原生 journal，通过同用户本地命名管道协调启动、停止和升级；停止真正 join 后才确认，清理仅针对本轮测试数据。Mac 全量 Go race、双平台 vet 与 Windows 4 项管道测试/包校验/PowerShell 语法检查通过。用户已确认 r2 正常 Windows 桌面的初始化、原生签名/独占存储 probe 与 STOPPED 清理全部通过，**桌面原生入口验收闭环**；新 compiled 双机 Headscale/产品 TLS 尚未验，整体 4 未完成。结果见 [交接](docs/HANDOFF.md)。

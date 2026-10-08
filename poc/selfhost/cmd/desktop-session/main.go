@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,13 +29,15 @@ import (
 var embeddedRelease, embeddedSignerDigest, embeddedProductDigest string
 
 type backend struct {
-	owner    *clientowner.Owner
-	release  trustinstall.Release
-	factory  trustinstall.Factory
-	signer   clientruntime.Signer
-	open     clientruntime.SignerFactory
-	product  processowner.Spec
-	expected string
+	observationMu sync.Mutex
+	observation   *clientruntime.ProductObservation
+	owner         *clientowner.Owner
+	release       trustinstall.Release
+	factory       trustinstall.Factory
+	signer        clientruntime.Signer
+	open          clientruntime.SignerFactory
+	product       processowner.Spec
+	expected      string
 }
 
 func (b *backend) Probe(ctx context.Context) error {
@@ -68,7 +71,8 @@ func (b *backend) Start(ctx context.Context, c clientruntime.Config, out func(an
 		default:
 		}
 	}
-	product := clientruntime.Product{Spec: b.product, TargetReady: func(key, fp string) {
+	observation := &clientruntime.ProductObservation{}
+	product := clientruntime.Product{Spec: b.product, Observation: observation, TargetReady: func(key, fp string) {
 		if e := out(map[string]string{"status": "product_ready", "Key": key, "Fingerprint": fp}); e != nil {
 			report(e)
 		}
@@ -78,6 +82,9 @@ func (b *backend) Start(ctx context.Context, c clientruntime.Config, out func(an
 	if e != nil {
 		return e
 	}
+	b.observationMu.Lock()
+	b.observation = observation
+	b.observationMu.Unlock()
 	timer := time.NewTimer(35 * time.Second)
 	defer timer.Stop()
 	select {
@@ -100,6 +107,12 @@ func (b *backend) Start(ctx context.Context, c clientruntime.Config, out func(an
 		return stopped
 	}
 	return e
+}
+func (b *backend) Count(ctx context.Context) (clientruntime.ProductCount, error) {
+	b.observationMu.Lock()
+	o := b.observation
+	b.observationMu.Unlock()
+	return o.Count(ctx)
 }
 func (b *backend) Stop(ctx context.Context) error { return b.owner.Stop(ctx) }
 func (b *backend) Upgrade(ctx context.Context, p trustprofile.Profile) error {

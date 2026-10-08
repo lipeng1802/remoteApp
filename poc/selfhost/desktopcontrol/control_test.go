@@ -18,6 +18,9 @@ type backend struct {
 }
 
 func (b *backend) Probe(context.Context) error { b.probes.Add(1); return nil }
+func (b *backend) Count(context.Context) (clientruntime.ProductCount, error) {
+	return clientruntime.ProductCount{Status: "product_count", Pongs: 3}, nil
+}
 func (b *backend) Start(ctx context.Context, c clientruntime.Config, out func(any) error) error {
 	if !c.Server {
 		return privatepipe.ErrProtocol
@@ -86,6 +89,13 @@ func TestPrivateStartAndStopAckOnlyAfterJoin(t *testing.T) {
 	w.Encode(Request{Op: "start", Config: clientruntime.Config{Server: true}})
 	status(t, r, "product_ready")
 	status(t, r, "ready")
+	for i := 0; i < 2; i++ {
+		w.Encode(Request{Op: "count"})
+		var count clientruntime.ProductCount
+		if e := r.Read(&count); e != nil || count.Status != "product_count" || count.Pongs != 3 {
+			t.Fatal("count relay", e)
+		}
+	}
 	w.Encode(Request{Op: "stop_session"})
 	<-b.stopping
 	c.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
@@ -129,5 +139,20 @@ func TestCancellationJoinsIdleConnections(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("idle workers not joined")
+	}
+}
+
+func TestCountRejectsRuntimeAndProfileOverrides(t *testing.T) {
+	for _, req := range []Request{
+		{Op: "count", Config: clientruntime.Config{Server: true}},
+		{Op: "count", Profile: trustprofile.Profile{Signature: "untrusted"}},
+	} {
+		c, _, _ := serveTest(t, &backend{})
+		w := json.NewEncoder(c)
+		r := privatepipe.NewReader(c)
+		w.Encode(map[string]string{"Scope": "scope", "Expected": "public"})
+		status(t, r, "ready")
+		w.Encode(req)
+		status(t, r, "failed")
 	}
 }

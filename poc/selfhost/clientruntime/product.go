@@ -22,6 +22,7 @@ type Product struct {
 	Spec          processowner.Spec
 	ControllerKey string
 	TargetReady   func(key, fingerprint string) // private parent pipe; never log
+	Observation   *ProductObservation           // trusted local telemetry; never accepts child wiring
 }
 type networkAPI interface {
 	Request(context.Context, invite.NetworkRequestBody) (invite.NetworkReply, error)
@@ -75,6 +76,7 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 		if e != nil || json.Unmarshal(raw, &ready) != nil || ready.Status != "ready" {
 			return child, session.ErrDenied
 		}
+		p.Observation.bind(child, false)
 		return child, nil
 	}
 	child, e := processowner.Start(p.Spec)
@@ -118,6 +120,7 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	if e != nil || d.Claims.Fingerprint != ready.Fingerprint {
 		return child, session.ErrDenied
 	}
+	p.Observation.bind(child, true)
 	p.TargetReady(ready.Key, ready.Fingerprint)
 	return child, nil
 }

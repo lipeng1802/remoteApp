@@ -51,6 +51,14 @@ Windows 固定摘要入口 `C:\Users\jarvis\run-owned-product-validation-4s.ps1 
 
 ## 下一段
 
+### 4C-4V：当前固定产品的计数观测
+
+ProductObservation仅查询已受管固定产品Child，不拥有或释放journal，不替换产品，不输出Key/cert。target/controller严格不同schema，重复/未知/缺失/负值拒绝，规范化为product_count。匿名pipe installed-session支持重复count再stop/upgrade；Windows同用户desktop control/relay支持count，禁止Config/Profile覆盖。每次获准Start使用新观察器，已join或未启动拒绝。2秒查询期限沿Child.Exchange错误锁闭语义；不能把ready、零计数或查询失败解释为TLS成功。
+
+显式daemon --os-compiled要求真实Nodes且不能同时Fault/actions，公共compiled_phase marker与旧模式严格隔离；仅此测试协调窗口15分钟，旧5分钟不变，不变更grant/watch授权时间。尚未串成完整新双机协调命令。
+
+Mac全量race、双平台vet、11项Python、Windows5项fixture/私有控制/真实子进程join、Linux3项纯协议测试通过。没有本轮真实Swift/C# TLS传输或新Headscale节点/授权。旧4T r2 READY仅作桌面identity probe；新borrower未启动，旧用户窗口Enter STOPPED仍待用户确认。完整fresh matching pair/consent/bound handoff/实际pongs持续增长/撤销/全join/精确清理仍待，不以fixture替代。
+
 ### 4C-4U：联合验收的可信准备组件（不是联合实测通过）
 
 cmd/compiled-pair-build接显式受信管理bootstrap（version/certificate/issuer/target_endpoint/controller_endpoint），只允许HTTPS127.0.0.1规范端口（非443）、单一有界JSON，无root/private-key字段或在线TOFU。临时test root仅在内存生成，签20分钟两端epoch1与预签epoch2候选；只写公共材料，用新darwin-test/windows-desktop-borrowed-test模式强制真实产品/Test=true/random channel，构建后审计两端root/profile对应。不是生产发布root供应或持续签发服务，原生产构建不变。

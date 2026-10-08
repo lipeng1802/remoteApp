@@ -17,6 +17,14 @@ type consentPins struct {
 	Target, Controller string
 	Nodes              bool
 	Fault              bool
+	Compiled           bool // isolated compiled-pair coordination, never a consent shortcut
+}
+
+func (p consentPins) timeout() time.Duration {
+	if p.Compiled {
+		return 15 * time.Minute
+	}
+	return 5 * time.Minute
 }
 
 func clientJournalsCleaned(raw []byte) bool {
@@ -78,6 +86,9 @@ func consentSession(input io.Reader, output io.Writer, pins consentPins, issuer 
 type faultActions struct{ freeze, recover func() error }
 
 func consentSessionOps(input io.Reader, output io.Writer, pins consentPins, issuer string, ca []byte, listen string, timeout time.Duration, actions *faultActions, verifierKey ...string) error {
+	if pins.Compiled && (!pins.Nodes || pins.Fault || actions != nil) {
+		return denied
+	}
 	host, port, e := net.SplitHostPort(listen)
 	p, pe := strconv.Atoi(port)
 	if e != nil || pe != nil || host != "127.0.0.1" || p < 1 || p > 65535 {
@@ -97,6 +108,9 @@ func consentSessionOps(input io.Reader, output io.Writer, pins consentPins, issu
 			return denied
 		}
 		ready["fault_phase"] = true
+	}
+	if pins.Compiled {
+		ready["compiled_phase"] = true
 	}
 	if json.NewEncoder(output).Encode(ready) != nil {
 		return denied

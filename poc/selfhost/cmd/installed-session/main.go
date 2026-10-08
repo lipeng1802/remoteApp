@@ -110,12 +110,13 @@ func run(output func(any)) (result error) {
 	open := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, first.VaultScope, first.VaultExpected)
 	ready := func(port int) { output(map[string]any{"status": "ready", "port": port}) }
 	runner := clientruntime.Runner(r, first.Config, open, ready)
+	observation := &clientruntime.ProductObservation{}
 	if embeddedProductDigest != "" {
 		// This slice's actual products are Windows target / macOS controller.
 		if (runtime.GOOS == "windows") != first.Config.Server || (first.Config.Server && first.ProductKey != "") {
 			return session.ErrDenied
 		}
-		product := clientruntime.Product{Spec: processowner.Spec{Executable: filepath.Join(dir, "tls-product"+suffix), SHA256: embeddedProductDigest}, ControllerKey: first.ProductKey, TargetReady: func(key, fp string) {
+		product := clientruntime.Product{Spec: processowner.Spec{Executable: filepath.Join(dir, "tls-product"+suffix), SHA256: embeddedProductDigest}, Observation: observation, ControllerKey: first.ProductKey, TargetReady: func(key, fp string) {
 			output(map[string]string{"status": "product_ready", "Key": key, "Fingerprint": fp})
 		}}
 		runner = clientruntime.RunnerWithProduct(r, first.Config, open, ready, product)
@@ -126,34 +127,45 @@ func run(output func(any)) (result error) {
 	if e != nil {
 		return e
 	}
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-h.Done():
-		return h.Wait(context.Background())
-	case c, ok := <-commands:
-		if !ok {
+	for {
+		select {
+		case <-ctx.Done():
 			return nil
-		} // EOF cancels and joins via deferred Close
-		if c.Config != (clientruntime.Config{}) || c.VaultScope != "" || c.VaultExpected != "" || c.ProductKey != "" {
-			return session.ErrDenied
-		}
-		switch c.Op {
-		case "stop":
-			if c.Profile != (trustprofile.Profile{}) {
+		case <-h.Done():
+			return h.Wait(context.Background())
+		case c, ok := <-commands:
+			if !ok {
+				return nil
+			} // EOF cancels and joins via deferred Close
+			if c.Config != (clientruntime.Config{}) || c.VaultScope != "" || c.VaultExpected != "" || c.ProductKey != "" {
 				return session.ErrDenied
 			}
-			return nil
-		case "upgrade":
-			limit, stop := context.WithTimeout(context.Background(), 8*time.Second)
-			defer stop()
-			if e = o.Upgrade(limit, c.Profile); e != nil {
-				return e
+			switch c.Op {
+			case "count":
+				if c.Profile != (trustprofile.Profile{}) {
+					return session.ErrDenied
+				}
+				count, err := observation.Count(ctx)
+				if err != nil {
+					return err
+				}
+				output(count)
+			case "stop":
+				if c.Profile != (trustprofile.Profile{}) {
+					return session.ErrDenied
+				}
+				return nil
+			case "upgrade":
+				limit, stop := context.WithTimeout(context.Background(), 8*time.Second)
+				defer stop()
+				if e = o.Upgrade(limit, c.Profile); e != nil {
+					return e
+				}
+				output(map[string]any{"status": "upgraded", "epoch": c.Profile.Claims.Epoch})
+				return nil // explicit new process required; never reconnect
+			default:
+				return session.ErrDenied
 			}
-			output(map[string]any{"status": "upgraded", "epoch": c.Profile.Claims.Epoch})
-			return nil // explicit new process required; never reconnect
-		default:
-			return session.ErrDenied
 		}
 	}
 }

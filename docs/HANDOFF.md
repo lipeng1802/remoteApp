@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4V：compiled 产品计数观测与显式协调窗口，联合实测仍待
+
+用户回复“已就绪”；通过 SSH 再次调用旧 4T r2 正常桌面 owner 的 probe，确认原生签名重开与独占 journal PASS。未直接在 SSH 下打开原生凭据，未启动新 borrower，也未创建新 grant/Headscale 节点。本轮结束时旧身份窗口仍由用户持有；请用户 Enter 并确认 STOPPED，不能未经反馈记录为已清理。
+
+新增 clientruntime.ProductObservation，只绑定 runtime 已固定摘要启动的当前 TLS 产品，通过同一 Child.Exchange 查询 count（最多2秒）；未启动/已join拒绝，单session不重绑。严格区分 C# target 与 Swift controller 返回格式，拒未知/重复/秘密字段、负数、缺字段和未知结果，仅投影 product_count/pongs/拒绝与关闭计数/ended/result/pin_rejected；不暴露 HMAC、证书或私钥，不启动/替换/停止 child，不释放安装租约。现有子进程真实 Stop+Wait/join 屏障不变。count超时沿现有 Exchange 锁闭语义，不能静默重试恢复。
+
+desktopcontrol/desktop-relay/desktop-session 新增同用户私有 count 入口，拒携带 Config/Profile 覆盖。每次获准 Start 新建观察器；失败 Start 不替换既有 observer。installed-session 改为命令循环，允许重复 count 后 stop/upgrade；错误/EOF/退出仍经过 Owner.Close 实际 join。bridge ready 或零计数不代表 TLS 成功。新的验收协调必须确认双端真实 pongs 增长、跨初始 lease 持续传输，然后签名撤销并加入所有 worker；当前没有跑这个联合流程。
+
+daemon-network-check 新增显式 --os-compiled 模式：必须真实 Nodes、禁止 Fault/actions 混用，公共 bootstrap 增 compiled_phase=true；只此隔离测试模式固定15分钟协调窗口，旧模式仍5分钟。只增加准备时间，不延长 grant/watch 期限、不给自动批准或 grant。Python checked_ready严格区分新旧marker；现有 split-consent主流程未自动切换，完整 compiled 双机协调命令仍需开发。
+
+证据：Mac全量 Go race PASS；新增控制参数拒绝测试另行 race PASS；Mac/Windows全量vet PASS；11项Python回归 PASS。Windows经固定摘要 run-product-observation-validation.ps1 运行5项必需测试全部PASS/退出0/无SKIP：格式投影、实际fixture子进程重复count与join后拒查询、私有start/count/stop直到join才ack、Config/Profile覆盖拒绝、空闲连接取消join。产品/API是fixture，不是实际Swift/C#网络、OS存储或双机Headscale。Windows测试 exe SHA256：product-observation-tests-win-4v.exe=`542b49053e611f3d2bfd8c30124f248c1d4ff759e5819f394c8510ea5b935231`，desktop-count-tests-win-4v.exe=`045018884e7d655af22d85ffcde38b1a966e0d5ac17fa885865858c172c9a3f1`，远端仅 C:\Users\jarvis 独立测试文件，旧包未覆盖。
+
+Linux实际运行3项筛选纯协议测试全部PASS/退出0：新compiled marker/固定窗口与混合模式拒绝、旧operator不能批准或接受秘密、node marker必须有verifier。测试文件 /tmp/remoteapp-compiled-phase-tests-4v-20261008，SHA256=`d6f46e6c4812f58aa3abf57dfe661c58d281550350181616623734e8cc383876`；没有启动authority/Headscale、修改Nginx/ACL/数据库或读取release root/CA私钥。测试二进制保留为可复现产物。
+
+下一步：开发完整私有compiled协调入口，串接真实frontend公共bootstrap→匹配fresh pair构建/上传→新Windows borrower桌面READY→OS签名consent/enroll/bind→旧helper真实join后的bound handoff→Mac测试journal明确Initialize→产品HMAC私有转交与本轮count观测→跨lease/撤销/真实join/精确清理。还要原生实测新borrower；旧4U build-only包不可启动。失败不准用 emergency强杀冒充join，不清理生命周期不明的身份/state/journal。**整体4未完成，本轮不宣称真实产品TLS/GUI或签名安装包验收。** 按既有授权本地提交，不自动推送。
+
 ## 2026-10-08 4C-4U：匹配隔离服务的双端构建/借用入口/节点交接，联合实测仍待
 
 新增 trustinstall.NewTestPairMaterial 与 cmd/compiled-pair-build，明确是受信操作者从管理 SSH 得到公共 CA/issuer/两端管理回环端点后的 **test-only build**，不是在线TOFU/运行时root覆盖。input严格单一JSON，拒重复/额外root/private-key字段，允许文本尾换行；端点固定HTTPS127.0.0.1显式规范端口、非443。只在内存新生成一次性测试release root，签两端epoch1及预签epoch2候选（各自endpoint，同一CA/issuer、20分钟），只保存公共anchor/profiles；未读取既有release root/CA私钥，也没把签名器或root生成器加入运行时。构建器新增darwin-test/windows-desktop-borrowed-test，两端必须真实standalone产品，random测试channel/Test=true；构建后检查root/profile/Test与输入对应，拒用旧文件混搭。生产darwin/windows构建模式不变。

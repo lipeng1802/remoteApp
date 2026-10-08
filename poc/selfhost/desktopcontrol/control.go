@@ -25,6 +25,7 @@ type Backend interface {
 	Start(context.Context, clientruntime.Config, func(any) error) error
 	Stop(context.Context) error
 	Upgrade(context.Context, trustprofile.Profile) error
+	Count(context.Context) (clientruntime.ProductCount, error)
 }
 
 func Serve(ctx context.Context, ln net.Listener, scope, public string, b Backend) {
@@ -86,6 +87,12 @@ func handle(ctx context.Context, c net.Conn, scope, public string, b Backend) {
 		limit, cancel := context.WithTimeout(ctx, 40*time.Second)
 		var e error
 		switch {
+		case req.Op == "count" && req.Config == (clientruntime.Config{}) && req.Profile == (trustprofile.Profile{}):
+			var count clientruntime.ProductCount
+			count, e = b.Count(limit)
+			if e == nil {
+				e = out(count)
+			}
 		case req.Op == "probe" && req.Config == (clientruntime.Config{}) && req.Profile == (trustprofile.Profile{}):
 			e = b.Probe(limit)
 			if e == nil {

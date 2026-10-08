@@ -499,7 +499,7 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 					},
 				}
 			}
-			if consentSessionOps(os.Stdin, os.Stdout, *consent, signed.Claims.Issuer, der, listen, 5*time.Minute, actions, initial.Key) != nil {
+			if consentSessionOps(os.Stdin, os.Stdout, *consent, signed.Claims.Issuer, der, listen, consent.timeout(), actions, initial.Key) != nil {
 				return denied
 			}
 			if consent.Nodes {
@@ -644,13 +644,14 @@ func main() {
 		e = run(os.Args[1], "", nil)
 	} else if len(os.Args) == 4 && os.Args[2] == "--frontend" {
 		e = run(os.Args[1], os.Args[3], nil)
-	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && (os.Args[4] == "--os-consent" || os.Args[4] == "--os-nodes" || os.Args[4] == "--os-tls-fault") {
+	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && (os.Args[4] == "--os-consent" || os.Args[4] == "--os-nodes" || os.Args[4] == "--os-tls-fault" || os.Args[4] == "--os-compiled") {
 		pins, err := parseConsentPins(os.Args[5], os.Args[6])
 		if err != nil {
 			e = denied
 		} else {
 			pins.Fault = os.Args[4] == "--os-tls-fault"
-			pins.Nodes = pins.Fault || os.Args[4] == "--os-nodes"
+			pins.Compiled = os.Args[4] == "--os-compiled"
+			pins.Nodes = pins.Fault || pins.Compiled || os.Args[4] == "--os-nodes"
 			e = run(os.Args[1], os.Args[3], &pins)
 		}
 	} else {

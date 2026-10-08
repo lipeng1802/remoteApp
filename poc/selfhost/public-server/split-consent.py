@@ -27,10 +27,14 @@ enrollment = load("split_transport", "enrollment-network.py")
 t, Pipe = enrollment.t, enrollment.Pipe
 uploads = load("split_uploads", "daemon-network.py")
 
-def checked_ready(value, target, controller, nodes=False, fault=False):
+def checked_ready(value, target, controller, nodes=False, fault=False, compiled=False):
     import base64
     import re
     expected = {"status", "split_process", "target", "controller", "issuer", "api_certificate", "api_port"}
+    if compiled:
+        if not nodes or fault or value.get("compiled_phase") is not True:
+            raise RuntimeError("invalid_compiled_phase")
+        expected.add("compiled_phase")
     if nodes:
         expected.update(("node_phase","verifier"))
         if value.get("node_phase") is not True or not re.fullmatch(r"nodekey:[0-9a-f]{64}",value.get("verifier","")):

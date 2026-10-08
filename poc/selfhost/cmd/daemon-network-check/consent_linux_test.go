@@ -22,6 +22,27 @@ func TestConsentPublicPins(t *testing.T) {
 	}
 }
 
+func TestCompiledPhaseExplicitMarkerAndBoundedWindow(t *testing.T) {
+	p := consentPins{Target: strings.Repeat("a", 64), Controller: strings.Repeat("b", 64), Nodes: true, Compiled: true}
+	if p.timeout() != 15*time.Minute || (consentPins{}).timeout() != 5*time.Minute {
+		t.Fatal("coordination window changed")
+	}
+	var out bytes.Buffer
+	if e := consentSession(strings.NewReader("{\"Op\":\"stop\"}\n"), &out, p, "issuer", []byte("ca"), "127.0.0.1:12345", time.Second, "nodekey:"+strings.Repeat("c", 64)); e != nil {
+		t.Fatal(e)
+	}
+	var ready map[string]any
+	if json.Unmarshal(out.Bytes(), &ready) != nil || len(ready) != 10 || ready["compiled_phase"] != true || ready["fault_phase"] != nil {
+		t.Fatal("compiled public marker")
+	}
+	for _, bad := range []consentPins{{Compiled: true}, {Nodes: true, Compiled: true, Fault: true}} {
+		out.Reset()
+		if consentSession(strings.NewReader("{\"Op\":\"stop\"}\n"), &out, bad, "issuer", []byte("ca"), "127.0.0.1:12345", time.Second, "nodekey:"+strings.Repeat("c", 64)) == nil || out.Len() != 0 {
+			t.Fatal("mixed phase accepted")
+		}
+	}
+}
+
 func TestConsentProtocolNeverApprovesOrAcceptsPrivateMaterial(t *testing.T) {
 	pins := consentPins{Target: strings.Repeat("a", 64), Controller: strings.Repeat("b", 64)}
 	for _, c := range []struct {
