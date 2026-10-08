@@ -1,6 +1,6 @@
 # 4C-4O：编译固定安装锚与离线配置升级
 
-切片3的独立维护入口与构建路径已完成，Mac真实编译产物/Keychain验收通过，Windows新版桌面验收待执行。**不是正式签名的产品安装器，也未接活跃客户端会话或修改现有安装包。**
+切片3的独立维护入口与构建路径已完成，Mac真实编译产物/Keychain验收通过，用户已确认Windows新版桌面入口返回本轮VALIDATION PASSED，切片3闭环。**不是正式签名的产品安装器，也未接活跃客户端会话或修改现有安装包。**
 
 ## 安装锚供应
 
@@ -44,7 +44,7 @@ Mac独立真实工具包含固定同channel的v1/v2/other-root三个编译产物
 4. 换编译根不能启用新存储；伪造侧文件/环境变量无效，helper改动拒绝。
 5. 真原生索引损坏后inspect/upgrade/重新initialize都拒绝；精确测试channel清理。
 
-Mac全量Go race、Mac/Windows全量vet通过；普通全量测试未提供原生journal环境变量会SKIP旧原生项，不能当作本轮新实机证据，新流程由上述编译产物实际验收。Windows x64完整验证包构建通过，还未运行其桌面测试，不复用上一轮4M/4N的PASS。
+Mac全量Go race、Mac/Windows全量vet通过；普通全量测试未提供原生journal环境变量会SKIP旧原生项，不能当作本轮新实机证据，新流程由上述编译产物实际验收。Windows x64完整验证包构建通过；2026-10-08用户确认本轮桌面VALIDATION PASSED，不复用上一轮4M/4N的PASS，也不捏造逐项耗时或独立抓取日志。
 
 ## Windows新包
 
@@ -64,4 +64,4 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remotea
 
 本机包 `artifacts/connection-poc/windows-trust-install-validation-4o.zip`。仅公开测试配置与程序；SHA256.json由新构建生成，验收器核对所有必需fixture摘要，PS先校验验收程序。测试profile约23小时有效，要求系统时间正常；若过期应重新生成新包，禁止延长旧配置或调整系统时钟绕过。
 
-下一步先收Windows本轮桌面结果，再接切片4真实客户端会话owner；根轮换、正式安装包签名/发布、秘密分发、公网产品验收及整体4仍未完成。
+本轮Windows桌面结果已收口，下一步接切片4真实客户端会话owner；根轮换、正式安装包签名/发布、秘密分发、公网产品验收及整体4仍未完成。

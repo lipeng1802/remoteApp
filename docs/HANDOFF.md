@@ -1,6 +1,8 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-08 切片4C-4O：编译安装锚/离线升级，Mac通过/Windows待本轮桌面
+## 2026-10-08 切片4C-4O：Windows桌面通过，编译安装锚/离线升级闭环
+
+用户确认本轮新入口返回 `VALIDATION PASSED: compiled anchor + native first install + upgrade/floor/recovery. NOT signed product installer or live-session acceptance.`。记录为用户反馈的Windows桌面验收，不捏造逐项日志或退出码；不是上一轮4M/4N结果替代。本流程覆盖首次安装、升级/最低epoch/失败保留、防降级、固定根与helper拒绝及损坏锁闭，并执行精确测试凭据清理。本轮只更新验收记录，未重新运行程序或修改线上服务。
 
 新增trustinstall、cmd/trust-install、trusted build及隔离validation build/check入口。规格root/service/最低epoch/channel/helper SHA与签名bundled profile只编译进入程序；不读运行时anchor/env或接受root/floor/scope/helper参数，空编译规格失败。scope仅依赖固定channel，因此换根/service不能跳新存储；普通公开材料构建器Test=false，只测试编译产物允许精确测试清理/损坏注入。
 
@@ -10,9 +12,9 @@ initialize先验证当前时效再明确新建；inspect/upgrade只打开已有j
 
 实际现有prerelease-v1/client-public两份公开材料构建 artifacts/connection-poc/prerelease-trust-install-4o，BUILD_READY；未执行真实channel安装/升级，未读取/上传任何现有release/CA私钥，也未重新签真实epoch2或改线上服务。所有新旧测试签名由隔离内存测试根生成，仅公开fixture进入验证包。
 
-Windows新完整包 artifacts/connection-poc/windows-trust-install-validation-4o.zip 已上传ZIP hash核对、解压、PS语法检查：C:\Users\jarvis\remoteapp-trust-install-4o-20261008。正常桌面执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-trust-install-4o-20261008\run-trust-install-validation.ps1"`，应返回 `VALIDATION PASSED: compiled anchor + native first install + upgrade/floor/recovery. NOT signed product installer or live-session acceptance.`；本轮Windows运行仍待，勿用4mn原生存储PASS替代。测试profile约23小时有效，过期重建，勿改时间/放宽验签。
+Windows新完整包 artifacts/connection-poc/windows-trust-install-validation-4o.zip 已上传ZIP hash核对、解压、PS语法检查：C:\Users\jarvis\remoteapp-trust-install-4o-20261008。正常桌面入口为 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-trust-install-4o-20261008\run-trust-install-validation.ps1"`，用户已确认本轮通过。测试profile约23小时有效，后续复测如过期须重建，勿改时间/放宽验签。
 
-Formal代码签名/可信分发与受保护安装仍待，不能把编进root当发行者真实性已验证；同用户/管理员删改及整盘快照回滚、原生断电/EIO/硬崩溃仍不在已验边界。不改现有GUI/DMG/Setup或live会话，整体4未完成。下一步收本轮Windows桌面结果，再切片4实际会话owner/真实cancel+join接入。本轮只本地提交不推送。见[本轮说明](../poc/selfhost/public-server/TRUST_INSTALLATION_RELEASE.md)。
+Formal代码签名/可信分发与受保护安装仍待，不能把编进root当发行者真实性已验证；同用户/管理员删改及整盘快照回滚、原生断电/EIO/硬崩溃仍不在已验边界。不改现有GUI/DMG/Setup或live会话，整体4未完成。切片3已闭环；下一步切片4实际会话owner/真实cancel+join接入。本轮只本地提交不推送。见[本轮说明](../poc/selfhost/public-server/TRUST_INSTALLATION_RELEASE.md)。
 
 ## 2026-10-08 切片4C-4M/4N：Windows桌面通过，两端存储闭环
 
