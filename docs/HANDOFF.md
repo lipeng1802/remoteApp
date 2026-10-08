@@ -1,5 +1,33 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-08 4C-4T：新 compiled Windows 桌面入口，桌面原生验收待
+
+已开发 desktop-session/desktop-relay/desktopcontrol 及新 start/probe 脚本。trusted builder target=windows-desktop-test（必须提供 standalone TLS product）生成独立随机 Test=true channel，固定公开 anchor/profile/journal/signer/product 摘要；runtime 不接受路径、root/CA、helper digest 覆盖或生产 journal 初始化。桌面 interactive-vault 创建随机测试 key，desktop-session 只重开，明确初始化测试 journal并持有独占租约。protected SID-only 本地 pipe 分开控制与旧签名 relay，不是公网 peer API。
+
+probe 对随机挑战执行 OS 签名/验签并确认第二 journal owner 被拒绝，不开网络。start 固定 Windows target 与借用设备身份，复用 RunnerWithProduct；product_ready 测试 HMAC只私有pipe交付，禁止公开bootstrap/日志。stop_session真正join后确认并保留journal，超时锁闭不可自动恢复；升级沿 Owner.Upgrade屏障。父停止先joins reader/control monitors/connections，随后Owner.Close背景等产品/node/watch/网络，再signer.CloseJoined，全部成功才精确删除该测试journal；launcher先等desktop实际退出后才停随机key creator，仅两child closed回复和exit0打印STOPPED，失败不强杀冒充成功。vaultbridge也补齐monitor实际join。
+
+Mac全量Go race、Mac/Windows全量vet与新增role/未编译拒绝测试通过（旧native默认未开，不声称本轮实测）。Windows实际SSH下运行四项协议测试全PASS无SKIP退出0：启动两条私有ready、stop实际join之前不ack、错误身份/额外路径字段拒绝、取消空闲连接join，以及真实本地pipe namespace/首实例碰撞检查。`check-desktop-session-bundle.ps1`全包SHA和两脚本PowerShell5.1语法解析通过。没有在SSH下创建/读取Windows原生journal/设备key，没有更改服务器/ACL/旧GUI/安装或Tailscale，没有读取release root/CA私钥。
+
+新包已上传 **C:\Users\jarvis\windows-desktop-session-4t-r2**（本机 artifacts/connection-poc/windows-desktop-session-4t-r2），未初始化或启动。Windows protocol exe SHA256 `4266abe160f8333a8b40865fd139f7e9238c68bb7d642a4aea8f8971f229d47b`；只本地提交，不推送。r1仅本地早期构建，用户使用r2。
+
+### 用户下一步（正常 Windows 桌面，不在 SSH 会话中）
+
+窗口1执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\jarvis\windows-desktop-session-4t-r2\start-desktop-session.ps1
+```
+
+看到READY后保持窗口打开；窗口2执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\jarvis\windows-desktop-session-4t-r2\probe-desktop-session.ps1
+```
+
+应返回 `VALIDATION PASSED: compiled desktop owner + reopened OS signature + exclusive native journal lease. NOT Headscale/product TLS/GUI or signed installer acceptance.` 再窗口1Enter，应返回STOPPED，两个本轮公共bootstrap删除。任何失败提供错误，不手动删除系统凭据或反复initialize；局部/部分journal保留供精确诊断。
+
+**整体4未完成。** 本轮Windows桌面initialize/probe/STOPPED仍待用户验收；新compiled客户端实际Headscale+产品TLS/活会话升级/故障/撤销尚待。既有预发布profile绑定既有issuer/CA，旧split-consent.py动态隔离frontend材料不匹配，不能混用。下一段从匹配隔离frontend的公共anchor/profile构建两端可信包，再新协调准确接bound node state（先停旧helper）、签名grant/binding与private product_ready。当前probe与fixture不替代联合双机验收。详见[实现说明](../poc/selfhost/public-server/INSTALLED_PRODUCT_OWNER.md)。
+
 ## 2026-10-08 4C-4S：产品进入compiled owner屏障，联合实机仍待
 
 新增processowner.Own、clientruntime.RunnerWithProduct/Product、ProfileSessionWithClient、CompileProductSession。实际产品child在同一runner内准备/运行/Stop+Wait，product/网络worker都join后才能runner返还，之后watch/client/node/native signer.CloseJoined，Owner最后提交/释放。partial product启动失败同样Stop背景真实join，无内层timeout冒充完成。外部Pair仍只是历史协调组件，不再靠它提前释放bridge租约。ProfileSession取消保留非取消类worker错误；installed-session最终Close背景实际join不再8s超时直接exit；升级请求8s期限失败进入同一关闭等待，不自动恢复。native signer可重复Wait/检查closedAck非forced零exit，启动失败也等进程退出；LegacyClose emergency强杀不是成功。

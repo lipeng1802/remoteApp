@@ -51,4 +51,16 @@ Windows 固定摘要入口 `C:\Users\jarvis\run-owned-product-validation-4s.ps1 
 
 ## 下一段
 
+### 4C-4T：测试专用 Windows 桌面协调入口
+
+新增 `cmd/desktop-session`、`cmd/desktop-relay` 与 `desktopcontrol`。受信构建器 `installed-session-build` 的 target 可明确选择 `windows-desktop-test`（必须提供 standalone product）；生成随机 `desktop-test-<32hex>` channel，并把 Test=true 的固定安装锚/配置、journal/signer/product 摘要编译进入口。既有 darwin/windows 构建模式不变。桌面入口拒生产 journal、未编译版本、运行时路径/root/CA 覆盖与错误 target 身份。`build-public.json` 仅追溯，不是授权来源；包内摘要是传输完整性，仍不是发行者签名。
+
+launcher 先由 interactive-vault 在正常 Windows 桌面创建随机测试身份，再由 desktop-session 直接重开该身份（create=false），明确初始化新的测试信任 journal 并持有独占租约。公共 `desktop-bootstrap.json` 仅有 pipe/scope/public_key/channel/epoch/relay 路径；不含 grant/authkey/state/HMAC。旧 interactive-bootstrap 保留给后续同用户 OS 签名协调，两个入口不能混用。
+
+新 session pipe 为本用户受保护 DACL、拒远程客户端、首实例拒碰撞的本地命名管道，不是外部网络授权边界。最多四连接，严格有界 JSON。`probe` 真正签名随机域内挑战并验证，确认同一 journal 第二 owner 不能打开；不会启动网络或产品。`start` 只接受 target 角色与已借用设备身份，固定 product/helper，复用 RunnerWithProduct；`product_ready` 的测试 HMAC 只走私有 pipe，禁止公开 stdout 日志/文件；其后才是 bridge ready。不能拿 HMAC 供应测试替代最终产品秘密设计。
+
+`stop_session` 通过新 Owner.Stop 取消并实际 join，保留 journal 以等待显式下一 Start；超时锁闭不能自愈。升级仍用 Owner.Upgrade 的验证/旧会话退出/提交屏障，不自动重连。父窗口停止：先加入 stdin reader、控制连接/监视线程，再 Owner.Close 等产品/网络/node/watch；再 signer.CloseJoined；全成功才精确删除本 channel 测试 journal。launcher 等桌面 child 实际退出，再停身份 creator，只有两个 closed 回复与退出 0 才打印 STOPPED。失败保留公共 bootstrap/不明测试 journal，不以 kill 冒充清理。vaultbridge 同时补 monitor 的真实 join。
+
+4T r2 新包已构建/上传，但**桌面原生测试尚待用户**：Mac full Go race、双平台 full vet、Windows 四项协议/namespace collision 测试 PASS 无 SKIP（退出0）、全包 SHA 与两脚本语法检查通过。4T 没有启动真实 session、初始化 Windows OS journal 或更改服务器。固定预发布 profile 与旧 split-consent 隔离 frontend 的动态 CA/issuer 不一致，不能直接混用；后续联合验收需要从匹配的隔离 frontend 公共材料重新编译可信两端包，并准确接入已绑定 node state。整体4未完成。
+
 提供新的可信协调/Windows 桌面入口：隔离固定信任安装与设备身份 owner、准备/停止旧 node helper 并准确重开 bound state、新产品包上传核对、处理 product_ready 的测试 HMAC 私有转交。然后用新 compiled 产品模式验双机正常 TLS、OS 撤销/watch 故障、升级前全资源 join、显式新 profile 恢复及精确清理。不能继续用旧 split-consent.py 或以上 fixture 充当联合验收。

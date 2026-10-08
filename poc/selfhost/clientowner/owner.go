@@ -167,6 +167,23 @@ func (o *Owner) Upgrade(ctx context.Context, p trustprofile.Profile) error {
 	return e
 }
 
+// Stop joins the current session while retaining the journal for an explicit
+// next Start. A deadline/fault latches closed; retry only joins/Close, not reuse.
+func (o *Owner) Stop(ctx context.Context) error {
+	if e := o.lock(ctx); e != nil {
+		return e
+	}
+	defer o.unlock()
+	if o.closed {
+		return trustprofile.ErrTrust
+	}
+	if e := o.join(ctx); e != nil {
+		o.broken = true
+		return e
+	}
+	return nil
+}
+
 // Close may be retried after a timeout only to finish joining. It never unlocks
 // the native journal while old code could still use the old authority.
 func (o *Owner) Close(ctx context.Context) error {

@@ -27,15 +27,11 @@ func Serve(ctx context.Context, ln net.Listener, signer Identity, scope, public 
 	slots := make(chan struct{}, 4)
 	done := make(chan struct{})
 	go func() {
-		select {
-		case <-ctx.Done():
-			ln.Close()
-		case <-done:
-		}
+		defer close(done)
+		<-ctx.Done()
+		ln.Close()
 	}()
-	defer close(done)
-	defer workers.Wait()
-	defer cancel()
+	defer func() { cancel(); ln.Close(); workers.Wait(); <-done }()
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -53,14 +49,16 @@ func Serve(ctx context.Context, ln net.Listener, signer Identity, scope, public 
 			defer func() { <-slots }()
 			defer conn.Close()
 			finished := make(chan struct{})
+			joined := make(chan struct{})
 			go func() {
+				defer close(joined)
 				select {
 				case <-ctx.Done():
 					conn.Close()
 				case <-finished:
 				}
 			}()
-			defer close(finished)
+			defer func() { close(finished); <-joined }()
 			handle(conn, signer, scope, public)
 		}()
 	}

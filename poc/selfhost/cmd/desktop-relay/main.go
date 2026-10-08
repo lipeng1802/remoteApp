@@ -1,0 +1,79 @@
+// Same-user coordination relay. All frames stay on anonymous/local pipes;
+// stdout may contain a TEST product HMAC and must never become a public log.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"remoteapp.local/selfhost-poc/desktopcontrol"
+	"remoteapp.local/selfhost-poc/privatepipe"
+	"time"
+)
+
+func main() {
+	if run() != nil {
+		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "failed"})
+		os.Exit(1)
+	}
+}
+func run() error {
+	if len(os.Args) != 1 {
+		return privatepipe.ErrProtocol
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	c, e := desktopcontrol.Dial(ctx, os.Getenv("REMOTEAPP_DESKTOP_SESSION_PIPE"))
+	if e != nil {
+		return e
+	}
+	defer c.Close()
+	input := privatepipe.NewReader(os.Stdin)
+	read := privatepipe.NewReader(c)
+	write := json.NewEncoder(c)
+	output := json.NewEncoder(os.Stdout)
+	var hello struct{ Scope, Expected string }
+	if input.Read(&hello) != nil || write.Encode(hello) != nil {
+		return privatepipe.ErrProtocol
+	}
+	var ready struct {
+		Status string `json:"status"`
+		Public string `json:"public_key"`
+	}
+	c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if read.Read(&ready) != nil || ready.Status != "ready" || ready.Public != hello.Expected || output.Encode(ready) != nil {
+		return privatepipe.ErrProtocol
+	}
+	for {
+		var req desktopcontrol.Request
+		if input.Read(&req) != nil {
+			return nil
+		}
+		if write.Encode(req) != nil {
+			return privatepipe.ErrProtocol
+		}
+		for {
+			var reply json.RawMessage
+			c.SetReadDeadline(time.Now().Add(50 * time.Second))
+			if read.Read(&reply) != nil {
+				return privatepipe.ErrProtocol
+			}
+			var status struct {
+				Status string `json:"status"`
+			}
+			if json.Unmarshal(reply, &status) != nil || output.Encode(reply) != nil {
+				return privatepipe.ErrProtocol
+			}
+			if status.Status == "product_ready" && req.Op == "start" {
+				continue
+			}
+			switch status.Status {
+			case "ready", "probe_passed", "session_closed", "upgraded":
+				break
+			default:
+				return privatepipe.ErrProtocol
+			}
+			break
+		}
+	}
+}

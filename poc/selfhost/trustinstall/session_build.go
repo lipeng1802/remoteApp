@@ -29,6 +29,18 @@ func CompileProductSession(ctx context.Context, goexe, module, target, dest stri
 	return compileSession(ctx, goexe, module, target, dest, s, signerDigest, productDigest, now)
 }
 func compileSession(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, now time.Time) error {
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-session", now)
+}
+
+// CompileDesktopTestSession is a separate test-only Windows desktop entry.
+// It cannot initialize a production journal or choose another root at runtime.
+func CompileDesktopTestSession(ctx context.Context, goexe, module, dest string, s Specification, signerDigest, productDigest string, now time.Time) error {
+	if !s.Test || !canonical(productDigest, 32) || productDigest == "" {
+		return trustprofile.ErrTrust
+	}
+	return compileEntry(ctx, goexe, module, "windows", dest, s, signerDigest, productDigest, "./cmd/desktop-session", now)
+}
+func compileEntry(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, now time.Time) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust
 	}
@@ -43,7 +55,7 @@ func compileSession(ctx context.Context, goexe, module, target, dest string, s S
 	if e != nil {
 		return e
 	}
-	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags=-X main.embeddedRelease="+encoded+" -X main.embeddedSignerDigest="+signerDigest+" -X main.embeddedProductDigest="+productDigest, "-o", dest, "./cmd/installed-session")
+	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags=-X main.embeddedRelease="+encoded+" -X main.embeddedSignerDigest="+signerDigest+" -X main.embeddedProductDigest="+productDigest, "-o", dest, entry)
 	cmd.Dir = module
 	arch := runtime.GOARCH
 	if target == "windows" {

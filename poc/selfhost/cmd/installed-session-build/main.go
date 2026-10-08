@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -45,7 +47,7 @@ func main() {
 		fmt.Println("BUILD_FAILED partial material preserved; no installation or session started")
 		os.Exit(1)
 	}
-	fmt.Println("BUILD_READY compiled installed-session + pinned helpers; NOT installed or cross-machine accepted")
+	fmt.Println("BUILD_READY compiled session entry + pinned helpers; NOT installed or cross-machine accepted")
 }
 func run() error {
 	// Optional last arg: trusted standalone TLS product (no runtime peer path).
@@ -60,6 +62,13 @@ func run() error {
 		}
 	}
 	goexe, module, target, dest := os.Args[1], os.Args[2], os.Args[3], os.Args[4]
+	desktop := target == "windows-desktop-test"
+	if desktop {
+		target = "windows"
+		if len(os.Args) != 11 {
+			return os.ErrInvalid
+		}
+	}
 	if target != "darwin" && target != "windows" {
 		return os.ErrInvalid
 	}
@@ -96,6 +105,14 @@ func run() error {
 	if e != nil {
 		return e
 	}
+	if desktop {
+		var nonce [16]byte
+		if _, e = rand.Read(nonce[:]); e != nil {
+			return e
+		}
+		s.Channel = "desktop-test-" + hex.EncodeToString(nonce[:])
+		s.Test = true
+	}
 	digest := sha256.Sum256(v)
 	pin := hex.EncodeToString(digest[:])
 	if e = os.Mkdir(dest, 0700); e != nil {
@@ -117,12 +134,35 @@ func run() error {
 		if e = write(filepath.Join(dest, "tls-product"+suffix), product, 0755); e != nil {
 			return e
 		}
-		e = trustinstall.CompileProductSession(ctx, goexe, module, target, filepath.Join(dest, "installed-session"+suffix), s, pin, productPin, time.Now())
+		if desktop {
+			e = trustinstall.CompileDesktopTestSession(ctx, goexe, module, filepath.Join(dest, "desktop-session.exe"), s, pin, productPin, time.Now())
+		} else {
+			e = trustinstall.CompileProductSession(ctx, goexe, module, target, filepath.Join(dest, "installed-session"+suffix), s, pin, productPin, time.Now())
+		}
 	} else {
 		e = trustinstall.CompileSessionBridge(ctx, goexe, module, target, filepath.Join(dest, "installed-session"+suffix), s, pin, time.Now())
 	}
 	if e != nil {
 		return e
+	}
+	if desktop {
+		for _, name := range []string{"desktop-relay", "interactive-vault", "vault-relay"} {
+			cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-o", filepath.Join(dest, name+".exe"), "./cmd/"+name)
+			cmd.Dir = module
+			cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED=0", "GOOS=windows", "GOARCH=amd64")
+			if cmd.Run() != nil {
+				return os.ErrInvalid
+			}
+		}
+		for _, name := range []string{"start-desktop-session.ps1", "probe-desktop-session.ps1"} {
+			raw, e := read(filepath.Join(module, "public-server", name), 32768)
+			if e != nil {
+				return e
+			}
+			if e = write(filepath.Join(dest, name), raw, 0600); e != nil {
+				return e
+			}
+		}
 	}
 	if e = trustinstall.Compile(ctx, goexe, module, target, filepath.Join(dest, "trust-install"+suffix), s, time.Now()); e != nil {
 		return e
@@ -135,5 +175,28 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	return write(filepath.Join(dest, "build-public.json"), b, 0600) // runtime ignores this sidecar
+	if e = write(filepath.Join(dest, "build-public.json"), b, 0600); e != nil {
+		return e
+	} // runtime ignores this sidecar
+	if desktop {
+		manifest := map[string]string{}
+		entries, e := os.ReadDir(dest)
+		if e != nil {
+			return e
+		}
+		for _, entry := range entries {
+			raw, e := read(filepath.Join(dest, entry.Name()), 100<<20)
+			if e != nil {
+				return e
+			}
+			sum := sha256.Sum256(raw)
+			manifest[entry.Name()] = hex.EncodeToString(sum[:])
+		}
+		raw, e := json.Marshal(manifest)
+		if e != nil {
+			return e
+		}
+		return write(filepath.Join(dest, "SHA256.json"), raw, 0600)
+	}
+	return nil
 }

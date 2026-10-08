@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+4C-4T：新增 Windows **测试专用 compiled 桌面入口**，固定 root/配置/签名器/产品摘要，重开桌面测试身份并持有独占原生 journal，通过同用户本地命名管道协调启动、停止和升级；停止真正 join 后才确认，清理仅针对本轮测试数据。Mac 全量 Go race、双平台 vet 与 Windows 4 项管道测试/包校验/PowerShell 语法检查通过。新包已上传 `C:\Users\jarvis\windows-desktop-session-4t-r2`，**正常 Windows 桌面的 initialize/probe/STOPPED 仍待用户验收**；新 compiled 双机 Headscale/产品 TLS 尚未验，整体 4 未完成。操作见 [交接](docs/HANDOFF.md)。
+
 4C-4S：[产品进程进入 compiled owner 租约屏障](poc/selfhost/public-server/INSTALLED_PRODUCT_OWNER.md) 已接线：产品/网络/节点/watch/native signer 实际 join 后才能提交升级或释放；补取消错误传播、命令不因 Close 超时提前退出、同一编译配置客户端的 OS 签名证书发布/新鲜 TLS 描述符校验。Mac 全量回归、Windows 11 项局部验证及 Mac 原生 signer 严格退出测试通过；真实 Swift/C# 两端固定产品摘要包仅构建，未安装或跑新双机会话，整体 4 未完成。
 
 4C-4R：新增[专用管道/进程对和启动适配](poc/selfhost/public-server/INSTALLED_PROCESS_COORDINATION.md)，macOS/Windows 的 10 项进程行为测试通过。尚未切换真实双机协调、接 OS TLS 供应回调，或将独立产品生命周期纳入 compiled owner 的 journal 租约；不算 Headscale/产品 TLS/安装验收。
