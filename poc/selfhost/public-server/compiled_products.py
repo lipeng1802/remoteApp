@@ -172,7 +172,20 @@ def observe(target, controller, clock=time.monotonic, sleep=time.sleep):
     raise RuntimeError("compiled_payload_deadline")
 
 
-def prepare(t, identities, ready, ports, work):
+def wait_borrower(t, identity, destination, trace, deadline):
+    while time.monotonic() < deadline:
+        raw = t.powershell("$ErrorActionPreference='Stop'; " +
+                           f"if (Test-Path -LiteralPath '{destination}\\desktop-bootstrap.json') " +
+                           f"{{[Convert]::ToBase64String([IO.File]::ReadAllBytes('{destination}\\desktop-bootstrap.json'))}}")
+        if time.monotonic() >= deadline:
+            break
+        if raw:
+            return checked_borrower(json.loads(base64.b64decode(raw, validate=True)), identity, destination, trace)
+        time.sleep(1)
+    raise RuntimeError("borrower_ready_deadline")
+
+
+def prepare(t, identities, ready, ports, work, readiness_deadline):
     """Fresh matching public test material, then normal-desktop borrower READY.
 
     Runs before invitation/grant. Never invokes the borrower under SSH (native
@@ -214,20 +227,10 @@ def prepare(t, identities, ready, ports, work):
           "\\start-borrowed-desktop-session.ps1' -IdentityBootstrap '" + identity_folder +
           "\\interactive-bootstrap.json'", flush=True)
     print("ACTION: wait for borrower READY; do not press Enter in either window yet.", flush=True)
-    deadline = time.monotonic() + 240
-    while time.monotonic() < deadline:
-        raw = t.powershell("$ErrorActionPreference='Stop'; " +
-                           f"if (Test-Path -LiteralPath '{destination}\\desktop-bootstrap.json') " +
-                           f"{{[Convert]::ToBase64String([IO.File]::ReadAllBytes('{destination}\\desktop-bootstrap.json'))}}")
-        if raw:
-            trace = json.loads((out / "win/build-public.json").read_bytes())
-            value = json.loads(base64.b64decode(raw, validate=True))
-            desktop = checked_borrower(value, identities.target, destination, trace)
-            # The public JSON alone is not readiness; the actual local desktop
-            # pipe is probed below before any invitation/enrollment.
-            return CompiledPair(t, out / "mac", destination, desktop, identities)
-        time.sleep(1)
-    raise RuntimeError("borrower_ready_deadline")
+    trace = json.loads((out / "win/build-public.json").read_bytes())
+    desktop = wait_borrower(t, identities.target, destination, trace, readiness_deadline)
+    # Public JSON alone is not readiness: probe the real pipe before enrollment.
+    return CompiledPair(t, out / "mac", destination, desktop, identities)
 
 
 class CompiledPair:

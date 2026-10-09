@@ -211,6 +211,9 @@ def main():
         t.check(prepared.returncode == 0 and backup is not None, "split_database_deny_prepared")
         coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+(" --os-compiled " if compiled else " --os-tls-fault " if fault else " --os-nodes " if nodes else " --os-consent ")+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
         ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"],nodes,fault,compiled)
+        # Existing compiled server lifetime is 15 minutes. Include build/upload
+        # in the ten-minute readiness budget; leave five minutes for acceptance.
+        readiness_deadline = time.monotonic() + 600
         t.check(True, "split_independent_daemon_nonroot_frontend_ready_public_only")
         local_socket = socket.socket(); local_socket.bind(("127.0.0.1",0)); local_port = local_socket.getsockname()[1]; local_socket.close()
         forward = subprocess.Popen(t.SERVER[:-1]+["-N","-o","ExitOnForwardFailure=yes","-L",f"127.0.0.1:{local_port}:127.0.0.1:{ready['api_port']}",t.SERVER[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -229,7 +232,7 @@ def main():
         if not work_created: create_work()
         if compiled:
             import compiled_products
-            compiled_pair=compiled_products.prepare(t,identities,ready,(remote_port,local_port),work)
+            compiled_pair=compiled_products.prepare(t,identities,ready,(remote_port,local_port),work,readiness_deadline)
             compiled_pair.attach(pipe_type)
         binary=t.ARTIFACTS/"device-api-client-win.exe"
         uploaded=subprocess.run(["scp","-O","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(binary),"jarvis@100.73.4.118:"+work.replace("\\","/")+"/device-api-client.exe"],capture_output=True,timeout=60)

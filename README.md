@@ -163,3 +163,6 @@ swift run -c release InputPreview
 git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 
 git -c http.proxy=http://127.0.0.1:1080 push origin main
+# 2026-10-09 验证入口状态
+
+上一轮 borrower 已由用户确认正常 STOPPED、测试 journal 清理，身份 creator 仍 READY。就绪等待改为服务启动后的绝对 10 分钟预算（包含构建和上传），保留原 15 分钟服务期限及授权有效期；29 项协调回归通过。真实 compiled 双机联合验收尚未通过，须使用全新匹配验证包，不能复用已回收端点。详见 [交接](docs/HANDOFF.md)。

@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 borrower 正常STOPPED，修正人工就绪预算
+
+用户提供本轮第二窗口真实退出提示：`STOPPED: borrowed desktop owner joined and its isolated test journal cleaned. Identity creator remains READY; not deleted.`，记录borrower退出与隔离journal清理闭环，第一窗口r2身份仍READY，不删除。此次不是TLS验收通过。
+
+把上传后固定240秒等待改为从服务READY起计算的绝对600秒就绪预算，包含构建/上传/人工启动；既有compiled服务900秒期限不变，保留约300秒用于后续验收。超时查询即使返回public bootstrap也不接纳；未改grant/profile有效期、不复用上一轮包。29项Python回归和diff检查通过（新增到期不查询、跨期限响应拒绝）；下一轮真实联合结果待实际输出。按既有授权仅本地提交。
+
 ## 2026-10-09 fresh borrower 就绪等待超时：服务已回收，桌面退出待确认
 
 差异公共传输后的真实重跑，Windows 全部文件摘要与 fresh pair 上传通过，目标为 `C:\Users\jarvis\remoteapp-split-consent-028d716e2c688a98\compiled-win`。协调器在 compiled_products.py 的240秒 borrower bootstrap等待期限耗尽，退出1；没有进入borrower native probe、设备注册、grant、enrollment或产品TLS，不算联合验收通过。实际日志确认exact verifier retire、隔离目录移除、STOPPED资源join、原file策略恢复和上传服务器程序移除；客户端node journals保留。

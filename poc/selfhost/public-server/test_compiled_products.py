@@ -5,11 +5,26 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from compiled_products import CompiledPair, build_helpers, checked_borrower, observe, product_count, product_secret, verify_bundle, upload_public_bundle
+from compiled_products import CompiledPair, build_helpers, checked_borrower, observe, product_count, product_secret, verify_bundle, upload_public_bundle, wait_borrower
 import hashlib
 
 
 class CompiledProductTests(unittest.TestCase):
+    def test_readiness_budget_expired_does_not_query_or_accept(self):
+        class Transport:
+            def powershell(self, script): raise AssertionError("expired query")
+        with patch("compiled_products.time.monotonic", return_value=601):
+            with self.assertRaisesRegex(RuntimeError, "borrower_ready_deadline"):
+                wait_borrower(Transport(), {}, "public", {}, 600)
+
+    def test_public_response_after_deadline_is_not_accepted(self):
+        class Transport:
+            def powershell(self, script): return base64.b64encode(b'{}').decode()
+        with patch("compiled_products.time.monotonic", side_effect=[599,601]), patch("compiled_products.checked_borrower") as checked:
+            with self.assertRaisesRegex(RuntimeError, "borrower_ready_deadline"):
+                wait_borrower(Transport(), {}, "public", {}, 600)
+            checked.assert_not_called()
+
     def test_public_reuse_uploads_only_partition_and_verifies_manifest_itself(self):
         with tempfile.TemporaryDirectory() as directory:
             folder=Path(directory)
