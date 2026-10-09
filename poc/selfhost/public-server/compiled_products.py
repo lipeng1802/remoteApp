@@ -196,7 +196,7 @@ def wait_borrower(t, identity, destination, trace, deadline):
     raise RuntimeError("borrower_ready_deadline")
 
 
-def prepare(t, identities, ready, ports, work, readiness_deadline):
+def prepare(t, identities, ready, ports, work, readiness_deadline, desktop_stage=None):
     """Fresh matching public test material, then normal-desktop borrower READY.
 
     Runs before invitation/grant. Never invokes the borrower under SSH (native
@@ -233,11 +233,17 @@ def prepare(t, identities, ready, ports, work, readiness_deadline):
     upload_public_bundle(t, out / "win", destination, os.environ["REMOTEAPP_WINDOWS_INTERACTIVE_DIR"])
     t.check(True, "compiled_windows_fresh_pair_uploaded")
     identity_folder = os.environ["REMOTEAPP_WINDOWS_INTERACTIVE_DIR"].replace("'", "''")
-    print("ACTION: normal Windows desktop, second PowerShell window (keep creator READY):", flush=True)
-    print("powershell.exe -NoProfile -ExecutionPolicy Bypass -File '" + destination +
-          "\\start-borrowed-desktop-session.ps1' -IdentityBootstrap '" + identity_folder +
-          "\\interactive-bootstrap.json'", flush=True)
-    print("ACTION: wait for borrower READY; do not press Enter in either window yet.", flush=True)
+    if desktop_stage is not None:
+        if destination != desktop_stage.root + "\\run\\compiled-win":
+            raise RuntimeError("desktop_stage_destination_mismatch")
+        desktop_stage.launch(hashlib.sha256((out / "win/SHA256.json").read_bytes()).hexdigest())
+        print("ACTION: prestarted desktop waiter will launch the verified fresh borrower; no manual startup during the service window.", flush=True)
+    else:
+        print("ACTION: normal Windows desktop, second PowerShell window (keep creator READY):", flush=True)
+        print("powershell.exe -NoProfile -ExecutionPolicy Bypass -File '" + destination +
+              "\\start-borrowed-desktop-session.ps1' -IdentityBootstrap '" + identity_folder +
+              "\\interactive-bootstrap.json'", flush=True)
+        print("ACTION: wait for borrower READY; do not press Enter in either window yet.", flush=True)
     trace = json.loads((out / "win/build-public.json").read_bytes())
     desktop = wait_borrower(t, identities.target, destination, trace, readiness_deadline)
     # Public JSON alone is not readiness: probe the real pipe before enrollment.

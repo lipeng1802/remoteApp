@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 本轮borrower STOPPED；预启动等待窗口已准备，尚待WATCH_READY
+
+用户确认333a86第二窗口完整STOPPED：borrowed desktop owner joined、isolated test journal cleaned、identity creator remains READY/not deleted。r4第一窗口继续READY。用户另说明已打开新窗口；尚未提供新等待脚本WATCH_READY，不当作它已启动。
+
+收口流程新增开发测试专用wait-for-compiled-borrower.ps1和DesktopStage：先在正常Windows桌面启动等待脚本，最多等待30分钟；协调器在服务器/节点/grant变更前发新的公开随机nonce挑战并核对waiting回应，随后仍执行真实native creator probe。预启动就绪后才启动临时服务并构建/上传匹配fresh pair；所有文件摘要成功后，以固定stage\\run\\compiled-win路径和SHA256.json自身摘要发布一次性launch请求，桌面等待窗口重新验证严格12文件清单/摘要/拒reparse，再在自身正常桌面上下文启动既有borrower脚本。用户不再在服务倒计时内手动输入启动命令；原600秒就绪预算、900秒服务期限、profile/grant有效期不变。最终仍需用户Enter正常STOPPED。
+
+管理文件仅含nonce/公开摘要，不提供runtime CA/root替换或签名/授权接口；这是受信SSH管理和同用户开发验收，不是生产发行信任。manifest只校验传输完整性，不能单独证明发行者。固定路径拒注入/旧run复用，nonce不符/未运行等待器不能启动服务；只有实际borrower bootstrap/probe通过才接OS consent。旧手工流程保持兼容；新方式用REMOTEAPP_WINDOWS_DESKTOP_STAGE环境变量显式选择。
+
+39项Python回归及diff检查通过。新目录 `C:\Users\jarvis\remoteapp-compiled-stage-4f7e7f183e4e7a28` 已创建受限本用户/SYSTEM ACL，等待脚本上传后SHA核验和实际PowerShell解析PASS；未启动等待脚本/服务/桌面borrower/节点/grant，未读取任何私钥。本轮只有语法/编排局部验证，自动桌面启动与4X真实live revoke尚待。
+
+下一步用户在新第二窗口运行该目录wait-for-compiled-borrower.ps1，Root同目录、IdentityBootstrap为r4\\interactive-bootstrap.json，返回WATCH_READY后再启动：REMOTEAPP_WINDOWS_INTERACTIVE_DIR=r4、REMOTEAPP_WINDOWS_DESKTOP_STAGE=上方stage目录、split-consent.py --compiled-revoke。自动启动后不需用户再次READY消息才能推进；两个窗口暂不Enter。失败保留stage与未知状态，不复用launch请求。仅本地提交，不推送。
+
 ## 2026-10-09 4X本轮就绪期限耗尽：未进入活会话验收
 
 用户确认r4 creator READY；实际原生身份/独占journal probe、当前9项helper构建、隔离空控制平面、独立daemon/frontend、节点helper提前上传/摘要核验、匹配fresh pair构建、Windows全文件摘要全部PASS。第二窗口目标 `C:\Users\jarvis\remoteapp-split-consent-333a86e747fa214b\compiled-win`。随后绝对readiness预算耗尽，compiled_products.py:196 borrower_ready_deadline，协调exit1；用户随后回复第二窗口已就绪。没有borrower probe/注册/consent/grant/enrollment/产品TLS或live revoke通过结果，不能套用此前4W通过。

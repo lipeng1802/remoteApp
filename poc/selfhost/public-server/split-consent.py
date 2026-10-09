@@ -175,6 +175,12 @@ def main():
         from joined_pipe import JoinedPipe
         def pipe_type(command,config=None): return JoinedPipe(command,config,cwd=t.HERE)
     os.umask(0o077)
+    desktop_stage = None
+    if os.environ.get("REMOTEAPP_WINDOWS_DESKTOP_STAGE"):
+        if not compiled:
+            raise RuntimeError("desktop_stage_requires_compiled_mode")
+        from desktop_stage import DesktopStage
+        desktop_stage = DesktopStage(t,os.environ["REMOTEAPP_WINDOWS_DESKTOP_STAGE"])
     identities = NativeIdentities(t, pipe_type,compiled_desktop=compiled)  # Actual desktop probe before mutations.
     coordinator = None
     clients, tunnels = [], []
@@ -189,7 +195,7 @@ def main():
     work_created = False
     prefix = "/tmp/remoteapp-split-consent-"+secrets.token_hex(8)
     program, daemon, frontend, mode = [prefix+x for x in ("-check", "-daemon", "-frontend", "-mode.py")]
-    work = "C:\\Users\\jarvis\\remoteapp-split-consent-"+secrets.token_hex(8)
+    work = desktop_stage.root+"\\run" if desktop_stage else "C:\\Users\\jarvis\\remoteapp-split-consent-"+secrets.token_hex(8)
     def create_work():
         nonlocal work_created
         t.powershell("$ErrorActionPreference='Stop'; "+f"if (Test-Path -LiteralPath '{work}') {{throw 'exists'}}; New-Item -ItemType Directory -Path '{work}' | Out-Null")
@@ -241,7 +247,7 @@ def main():
             split_nodes.upload_helper(t,work)
         if compiled:
             import compiled_products
-            compiled_pair=compiled_products.prepare(t,identities,ready,(remote_port,local_port),work,readiness_deadline)
+            compiled_pair=compiled_products.prepare(t,identities,ready,(remote_port,local_port),work,readiness_deadline,desktop_stage)
             compiled_pair.attach(pipe_type)
         binary=t.ARTIFACTS/"device-api-client-win.exe"
         uploaded=subprocess.run(["scp","-O","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(binary),"jarvis@100.73.4.118:"+work.replace("\\","/")+"/device-api-client.exe"],capture_output=True,timeout=60)

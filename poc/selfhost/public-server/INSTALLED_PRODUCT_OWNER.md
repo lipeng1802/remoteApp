@@ -4,6 +4,8 @@
 
 ## 4X-2：compiled活会话撤销入口（待原生双机验收）
 
+人工操作改用显式开发staging：用户预先在正常桌面运行wait-for-compiled-borrower.ps1（Root为新建受限ACL目录、IdentityBootstrap为当前READY creator）；看到WATCH_READY后，协调端设置REMOTEAPP_WINDOWS_DESKTOP_STAGE。随机挑战确认等待器当前在线，仍先真实native probe，之后才启动隔离服务/构建/上传。fresh包全部摘要验证后发布仅含nonce和manifest摘要的管理请求，等待器重新核验固定run\\compiled-win的严格清单与摘要、拒重解析目录/文件，自动启动已有borrower脚本。它是受信开发管理辅助，不是peer协议或生产可信发行，manifest不代替签名。启动后仍走compiled root/OS consent；不延长grant/profile/服务期限。等待器30分钟内未收到新包就失败退出（尚无borrower）；请求/目录一次性，不能复用已回收端点。
+
 新可信协调命令为 `split-consent.py --compiled-revoke`，环境 `REMOTEAPP_WINDOWS_INTERACTIVE_DIR` 必须指向本轮仍READY的全新creator目录。它仍使用既有隔离compiled服务阶段/动态匹配fresh pair，不绕过OS consent，不改变grant/profile时效或公网正式配置。旧 `--compiled` 正常join后撤销模式保持不变。
 
 两端真实产品计数持续增长并跨初始lease后，分别确认session_state仍pending，保持会话活跃返回consent；consent随后以owner OS签名在线撤销。协调器不预先发stop或关闭控制管道。Mac自主报告精确session_state(joined/fault)、fault_retired及failed，再等待真实进程exit1；缺任一帧、普通closed、exit0或信号退出均不能作为此验收成功。Windows以同用户本地管道查询实际Handle.Done，要求故障完成且稳定，再显式retire_fault，确认原生journal成功关闭后才给fault_retired。该操作拒未完成/无会话/正常完成/重复退役，旧owner保持锁闭，Start/Upgrade不得恢复。
