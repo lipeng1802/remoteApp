@@ -1,5 +1,9 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 4d354c 本轮borrower清理确认
+
+用户提供第二窗口完整提示：`STOPPED: borrowed desktop owner joined and its isolated test journal cleaned. Identity creator remains READY; not deleted.`。据此确认4d354c本轮borrower真实join和隔离test journal清理，不扩大为节点/TLS通过；r2 creator继续READY，旧身份清理审计仍单独保留。下一轮使用已提前上传helper的修正代码及全新服务/compiled包，不复用已回收端点。仅本地提交，不推送。
+
 ## 2026-10-09 新borrower与OS授权通过，节点helper重复上传超时
 
 本轮work `C:\Users\jarvis\remoteapp-split-consent-4d354c329175c557`：fresh包完整摘要、borrower真实桌面probe、双OS注册、邀请/claim、拒绝无grant、明确批准及双端grant验签全部PASS。随后split_nodes.run在首个60秒未压缩enrollment-helper SCP超时；尚无split_node_helper_uploaded，不标离线prepare、节点绑定或产品TLS通过。授权真实签名撤销PASS；verifier retire、隔离目录移除、STOPPED资源join、原策略恢复、服务器上传程序移除均实际PASS。客户端journal/Windows公开work保留；本轮borrower正常STOPPED待用户确认，creator仍READY。
