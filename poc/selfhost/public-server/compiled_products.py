@@ -156,10 +156,10 @@ def prepare(t, identities, ready, ports, work):
     verify_bundle(out / "mac")
     manifest = verify_bundle(out / "win")
     destination = work + "\\compiled-win"
-    copied = subprocess.run(["scp", "-O", "-r", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+    copied = subprocess.run(["scp", "-O", "-C", "-r", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
                              "-o", "StrictHostKeyChecking=yes", "-i", str(Path.home() / ".ssh/remoteapp_win_ed25519"),
                              str(out / "win"), "jarvis@100.73.4.118:" + destination.replace("\\", "/")],
-                            capture_output=True, timeout=90)
+                            capture_output=True, timeout=180)
     t.check(copied.returncode == 0, "compiled_windows_fresh_pair_uploaded")
     for name, digest in manifest.items():
         actual = t.powershell(f"(Get-FileHash -LiteralPath '{destination}\\{name}' -Algorithm SHA256).Hash")

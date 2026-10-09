@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 r2 网络重跑：首轮公共包上传超时，已回收后压缩重试
+
+用户授权“继续”，r2仍READY。首轮--compiled的8域原生probe、9项helper构建、隔离空控制平面、server/verifier/nonroot frontend/双forward与fresh pair构建PASS；Windows compiled整包未压缩scp在90秒期限超时。未提供borrower命令、未register/claim/approve/enroll或启动TLS。Windows随机work `C:\Users\jarvis\remoteapp-split-consent-931e2c00cea4f865` 的部分公开包保留不可启动；Mac本轮随机identity按finally关闭。server输出实际verifier retire、目录移除及STOPPED marker，原file策略恢复、上传server程序移除PASS，验收FAIL不改判。
+
+仅将compiled公共整包scp改为-C压缩/180秒传输期限；不延长任何grant、profile或网络授权有效期。26项Python回归全部PASS，diff检查PASS；上传仍核对清单每个文件，不能凭scp退出就认可包。由于此前资源真实回收且控制平面为空，在用户仍保持r2 READY时启动独立新的--compiled重试；此轮状态待后续输出，不复用部分上传包或上一轮CA/issuer。
+
 ## 2026-10-09 r2 原生离线修正验收通过，下一步重跑真实双机网络
 
 用户确认 `C:\Users\jarvis\windows-desktop-session-restart-20261009-r2` 桌面READY。实际执行该包probe-desktop-session.ps1返回VALIDATION PASSED；它使用本轮已摘要核验的新desktop-session/native helper，Probe逐项签署并验签全部8类域，再验证独占原生journal，非旧版仅invite域探测。
