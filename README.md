@@ -165,6 +165,8 @@ git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 git -c http.proxy=http://127.0.0.1:1080 push origin main
 # 2026-10-09 验证入口状态
 
+最新真实联合轮次已退出0：fresh compiled原生双端、Headscale节点/OS身份绑定、最小单向ACL、真实产品TLS持续payload与自主刷新、正常join后签名撤销及节点回收/策略恢复通过。桌面两个窗口最终STOPPED待确认。**活会话撤销、升级/故障、GUI和签名安装包尚未验收，整体切片4未完成。** 下一切片优先compiled活会话撤销与故障关闭；下方失败轮次为历史记录。
+
 最新轮次已通过 fresh borrower 原生探测与完整 OS 授权流程；节点 helper 的旧上传路径超时，尚无节点绑定/TLS结果。已将其压缩上传与摘要检查提前到授权前，30项协调回归通过；撤销和服务端资源回收实际通过，Windows borrower STOPPED待确认。
 
 上一轮 borrower 已由用户确认正常 STOPPED、测试 journal 清理，身份 creator 仍 READY。就绪等待改为服务启动后的绝对 10 分钟预算（包含构建和上传），保留原 15 分钟服务期限及授权有效期；29 项协调回归通过。真实 compiled 双机联合验收尚未通过，须使用全新匹配验证包，不能复用已回收端点。详见 [交接](docs/HANDOFF.md)。

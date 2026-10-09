@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 4W fresh compiled双机联合验收通过，桌面最终STOPPED待确认
+
+实际执行修正后的split-consent.py --compiled，Windows work `C:\Users\jarvis\remoteapp-split-consent-65abe99f91398019`，协调exit0。节点helper在fresh borrower启动/授权前已压缩上传并摘要核验。fresh包全清单摘要、borrower真实桌面probe、双OS注册/拒绝无grant/明确批准/双端验签通过；双端注册前节点公钥及OS签名intent、单次HTTPS enrollment、实际节点key与准备值一致、未绑定零规则拒绝、Windows真实节点/OS持有证明、错误Mac身份拒绝/真实未签名挑战、Mac同节点重启及正确身份绑定均PASS。
+
+实际签名binding与双机节点/IP一致；最小单向ACL允许正向合成payload、反向拒绝。compiled pair接收bound handoff，真实产品TLS pongs持续增长并跨初始lease自主刷新；产品/node/watch/signer正常join后才进行OS签名撤销，在线状态确认撤销、客户端节点回收/零ACL、客户端journal持久清理先于daemon停止全部PASS。实际verifier retire、隔离目录移除、STOPPED资源join、原策略恢复、上传server程序移除、control resources zero、线上services/Store/Nginx不变均PASS。Windows公开compiled包/work保留，不复用其已回收端点。
+
+准确范围：compiled native pair + real Headscale binding + product TLS payload/autonomous refresh + normal join + post-stop signed revoke通过。**NOT live-session revocation、upgrade/fault、GUI或signed installer acceptance；整体切片4尚未完成。** 桌面borrower和r2 creator最终STOPPED仍待用户确认：必须第二窗口borrower先Enter/STOPPED，再第一窗口creator Enter/STOPPED。旧r1/4T清理审计独立保留，不能据本轮通过认定已删除。完成此正常双机基线后，下一切片优先compiled活会话撤销与故障关闭，而不是直接安装包验收。本轮结果本地提交，不推送。
+
 ## 2026-10-09 4d354c 本轮borrower清理确认
 
 用户提供第二窗口完整提示：`STOPPED: borrowed desktop owner joined and its isolated test journal cleaned. Identity creator remains READY; not deleted.`。据此确认4d354c本轮borrower真实join和隔离test journal清理，不扩大为节点/TLS通过；r2 creator继续READY，旧身份清理审计仍单独保留。下一轮使用已提前上传helper的修正代码及全新服务/compiled包，不复用已回收端点。仅本地提交，不推送。
