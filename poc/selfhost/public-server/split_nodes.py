@@ -6,15 +6,26 @@ import subprocess
 import tempfile
 import time
 
+def upload_helper(t, work):
+    """Finish public transfer and verification BEFORE issuing a short grant."""
+    binary=t.ARTIFACTS/"enrollment-helper-win.exe"
+    result=subprocess.run(["scp","-O","-C","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(binary),"jarvis@100.73.4.118:"+work.replace("\\","/")+"/enrollment-helper.exe"],capture_output=True,timeout=180)
+    t.check(result.returncode==0,"split_node_helper_uploaded")
+    verify_helper(t, work)
+
+
+def verify_helper(t, work):
+    binary=t.ARTIFACTS/"enrollment-helper-win.exe"
+    actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\enrollment-helper.exe').Hash")
+    t.check(actual.lower()==hashlib.sha256(binary.read_bytes()).hexdigest(),"split_node_helper_binary_verified")
+
+
 def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
+    # Recheck before execution; no upload after the grant has been issued.
+    verify_helper(t, work)
     # Helper validates its node directory against ../../artifacts/... from cwd.
     win_work=work+"\\poc\\selfhost"
     t.powershell(f"New-Item -ItemType Directory -Path '{win_work}' -Force -ErrorAction Stop | Out-Null")
-    binary=t.ARTIFACTS/"enrollment-helper-win.exe"
-    result=subprocess.run(["scp","-O","-o","BatchMode=yes","-o","IdentitiesOnly=yes","-o","StrictHostKeyChecking=yes","-i",str(Path.home()/".ssh/remoteapp_win_ed25519"),str(binary),"jarvis@100.73.4.118:"+work.replace("\\","/")+"/enrollment-helper.exe"],capture_output=True,timeout=60)
-    t.check(result.returncode==0,"split_node_helper_uploaded")
-    actual=t.powershell(f"(Get-FileHash -Algorithm SHA256 '{work}\\enrollment-helper.exe').Hash")
-    t.check(actual.lower()==hashlib.sha256(binary.read_bytes()).hexdigest(),"split_node_helper_binary_verified")
     win=identities.command(win_work,"..\\..\\enrollment-helper.exe")
     local=[str(t.ARTIFACTS/"enrollment-helper")]
     parent=t.ARTIFACTS/"nodes"; parent.mkdir(mode=0o700,exist_ok=True)

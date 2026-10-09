@@ -230,6 +230,9 @@ def main():
         tunnels.append(reverse); time.sleep(1)
         t.check(reverse.poll() is None,"split_private_windows_api_tunnel")
         if not work_created: create_work()
+        if nodes:
+            import split_nodes
+            split_nodes.upload_helper(t,work)
         if compiled:
             import compiled_products
             compiled_pair=compiled_products.prepare(t,identities,ready,(remote_port,local_port),work,readiness_deadline)
