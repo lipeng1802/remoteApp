@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 公共传输复用验收：整包两次超时已回收，差异传输实测通过
+
+压缩180秒的第二轮也在整包SCP超时，部分Windows work `C:\Users\jarvis\remoteapp-split-consent-f2dfaae6b41dbcb4` 保留不可启动。没有register/approve/grant/enroll/TLS；server实际verifier retire/目录移除/STOPPED marker、原策略恢复和上传程序移除均PASS。没有第三次盲目整包重试。只读检查fresh Win包约144MB，失败目标已经包含多个公共文件；仅凭文件Length不能证明内容完整，不用部分包验收。
+
+新增upload_public_bundle：目标必须不存在；仅在本轮可信manifest明确列出的公共文件中，r2源文件实际SHA等于fresh SHA时才在Windows本地Copy-Item并验副本SHA。分区响应严格拒重复/遗漏/未知文件名，其他文件用-C/180秒SCP传输；SHA256.json自身也单独计算摘要传输，最终逐项核验全部文件。源r2只读，不扫描/复制bootstrap、journal、node state、设备凭据，不覆盖运行中的creator，不在运行时覆盖root/CA/授权。
+
+独立实际公共传输检查目录 `C:\Users\jarvis\remoteapp-public-copy-check-ee9e5b12697a026b`，复用3文件/上传10文件，最终完整清单全部SHA通过、工具exit0。该包来自上轮已退出端点，明确NOT LIVE/不可启动；没有启动服务器/桌面产品/创建节点。27项Python回归PASS，新增仅上传差异+manifest本身、源复制哈希检查与非法分区拒绝覆盖；diff检查PASS。随后可重跑真正fresh --compiled，本轮网络结果待实际输出，不将公共传输测试算TLS或权限验收。r2身份creator仍READY（未用户STOPPED）；旧r1清理提示仍待反馈。仅本地提交，不推送。
+
 ## 2026-10-09 r2 网络重跑：首轮公共包上传超时，已回收后压缩重试
 
 用户授权“继续”，r2仍READY。首轮--compiled的8域原生probe、9项helper构建、隔离空控制平面、server/verifier/nonroot frontend/双forward与fresh pair构建PASS；Windows compiled整包未压缩scp在90秒期限超时。未提供borrower命令、未register/claim/approve/enroll或启动TLS。Windows随机work `C:\Users\jarvis\remoteapp-split-consent-931e2c00cea4f865` 的部分公开包保留不可启动；Mac本轮随机identity按finally关闭。server输出实际verifier retire、目录移除及STOPPED marker，原file策略恢复、上传server程序移除PASS，验收FAIL不改判。

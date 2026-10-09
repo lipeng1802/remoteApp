@@ -71,6 +71,56 @@ def verify_bundle(folder):
     return manifest
 
 
+def upload_public_bundle(t, folder, destination, reuse_folder):
+    """Reuse only exact manifest-matching PUBLIC files, never state/credentials.
+
+    The new destination must not exist. A running creator's public helpers may
+    be read but are never modified. Final per-file verification is mandatory.
+    """
+    folder = Path(folder)
+    manifest = dict(verify_bundle(folder))
+    if "SHA256.json" in manifest:
+        raise RuntimeError("invalid_self_referencing_manifest")
+    manifest["SHA256.json"] = hashlib.sha256((folder / "SHA256.json").read_bytes()).hexdigest()
+    encoded = base64.b64encode(json.dumps(manifest).encode()).decode()
+    quote = lambda value: "'" + value.replace("'", "''") + "'"
+    script = ("$ErrorActionPreference='Stop'; $dest=" + quote(destination) +
+              "; $source=" + quote(reuse_folder) +
+              "; if (Test-Path -LiteralPath $dest) {throw 'destination_exists'}; "
+              "New-Item -ItemType Directory -Path $dest | Out-Null; "
+              "$manifest=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + encoded +
+              "')) | ConvertFrom-Json; $needed=@(); $reused=@(); "
+              "foreach ($p in $manifest.PSObject.Properties) { $src=Join-Path $source $p.Name; "
+              "$dst=Join-Path $dest $p.Name; "
+              "if ((Test-Path -LiteralPath $src -PathType Leaf) -and "
+              "(Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash.ToLowerInvariant() -eq $p.Value) { "
+              "Copy-Item -LiteralPath $src -Destination $dst; "
+              "if ((Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash.ToLowerInvariant() -ne $p.Value) "
+              "{throw 'copy_hash_failed'}; $reused += $p.Name "
+              "} else { $needed += $p.Name } }; "
+              "@{needed=@($needed);reused=@($reused)} | ConvertTo-Json -Compress")
+    result = json.loads(t.powershell(script))
+    if (not isinstance(result, dict) or set(result) != {"needed", "reused"}
+            or not all(isinstance(result[key], list) for key in result)):
+        raise RuntimeError("invalid_public_reuse_result")
+    names = result["needed"] + result["reused"]
+    if any(not isinstance(name, str) for name in names) or len(names) != len(set(names)) or set(names) != set(manifest):
+        raise RuntimeError("invalid_public_reuse_partition")
+    if result["needed"]:
+        copied = subprocess.run(["scp", "-O", "-C", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+                                 "-o", "StrictHostKeyChecking=yes", "-i", str(Path.home() / ".ssh/remoteapp_win_ed25519"),
+                                 *[str(folder / name) for name in result["needed"]],
+                                 "jarvis@100.73.4.118:" + destination.replace("\\", "/") + "/"],
+                                capture_output=True, timeout=180)
+        t.check(copied.returncode == 0, "compiled_different_public_files_uploaded")
+    for name, digest in manifest.items():
+        actual = t.powershell("(Get-FileHash -LiteralPath " + quote(destination + "\\" + name) + " -Algorithm SHA256).Hash")
+        if actual.lower() != digest:
+            raise RuntimeError("compiled_remote_package_integrity_failed")
+    t.check(True, "compiled_windows_all_files_verified_after_public_reuse")
+    return result
+
+
 def product_secret(value):
     if set(value) != {"status", "Key", "Fingerprint"} or value["status"] != "product_ready":
         raise RuntimeError("invalid_private_product_ready")
@@ -156,15 +206,8 @@ def prepare(t, identities, ready, ports, work):
     verify_bundle(out / "mac")
     manifest = verify_bundle(out / "win")
     destination = work + "\\compiled-win"
-    copied = subprocess.run(["scp", "-O", "-C", "-r", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
-                             "-o", "StrictHostKeyChecking=yes", "-i", str(Path.home() / ".ssh/remoteapp_win_ed25519"),
-                             str(out / "win"), "jarvis@100.73.4.118:" + destination.replace("\\", "/")],
-                            capture_output=True, timeout=180)
-    t.check(copied.returncode == 0, "compiled_windows_fresh_pair_uploaded")
-    for name, digest in manifest.items():
-        actual = t.powershell(f"(Get-FileHash -LiteralPath '{destination}\\{name}' -Algorithm SHA256).Hash")
-        if actual.lower() != digest:
-            raise RuntimeError("compiled_remote_package_integrity_failed")
+    upload_public_bundle(t, out / "win", destination, os.environ["REMOTEAPP_WINDOWS_INTERACTIVE_DIR"])
+    t.check(True, "compiled_windows_fresh_pair_uploaded")
     identity_folder = os.environ["REMOTEAPP_WINDOWS_INTERACTIVE_DIR"].replace("'", "''")
     print("ACTION: normal Windows desktop, second PowerShell window (keep creator READY):", flush=True)
     print("powershell.exe -NoProfile -ExecutionPolicy Bypass -File '" + destination +

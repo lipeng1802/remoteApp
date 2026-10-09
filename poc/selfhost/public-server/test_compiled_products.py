@@ -5,11 +5,42 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from compiled_products import CompiledPair, build_helpers, checked_borrower, observe, product_count, product_secret, verify_bundle
+from compiled_products import CompiledPair, build_helpers, checked_borrower, observe, product_count, product_secret, verify_bundle, upload_public_bundle
 import hashlib
 
 
 class CompiledProductTests(unittest.TestCase):
+    def test_public_reuse_uploads_only_partition_and_verifies_manifest_itself(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder=Path(directory)
+            contents={"helper.exe":b"shared-public", "entry.exe":b"fresh-public"}
+            for name,data in contents.items(): (folder/name).write_bytes(data)
+            manifest={name:hashlib.sha256(data).hexdigest() for name,data in contents.items()}
+            (folder/"SHA256.json").write_text(json.dumps(manifest))
+            hashes=dict(manifest,**{"SHA256.json":hashlib.sha256((folder/"SHA256.json").read_bytes()).hexdigest()})
+            class Transport:
+                def powershell(self,script):
+                    if "FromBase64String" in script:
+                        self_first=script
+                        if "copy_hash_failed" not in self_first: raise AssertionError("unverified copy")
+                        return json.dumps(dict(needed=["entry.exe","SHA256.json"],reused=["helper.exe"]))
+                    return next(digest for name,digest in hashes.items() if "\\"+name+"'" in script)
+                def check(self,ok,label):
+                    if not ok: raise AssertionError(label)
+            class Result:returncode=0
+            with patch("compiled_products.subprocess.run",return_value=Result()) as run:
+                upload_public_bundle(Transport(),folder,r"C:\fresh",r"C:\source")
+                args=run.call_args.args[0]
+                self.assertNotIn(str(folder/"helper.exe"),args)
+                self.assertIn(str(folder/"entry.exe"),args)
+                self.assertIn(str(folder/"SHA256.json"),args)
+                self.assertIn("-C",args)
+            class Invalid(Transport):
+                def powershell(self,script): return json.dumps(dict(needed=["entry.exe"],reused=["entry.exe"]))
+            with patch("compiled_products.subprocess.run") as run:
+                with self.assertRaises(RuntimeError):upload_public_bundle(Invalid(),folder,r"C:\fresh",r"C:\source")
+                run.assert_not_called()
+
     def test_borrower_pins_compiled_scope_not_only_public_identity(self):
         channel="desktop-test-"+"a"*32
         scope=hashlib.sha256(("remoteapp-installed-trust-channel-v1\n"+channel).encode()).hexdigest()[:32]
