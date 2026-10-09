@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 r2 原生离线修正验收通过，下一步重跑真实双机网络
+
+用户确认 `C:\Users\jarvis\windows-desktop-session-restart-20261009-r2` 桌面READY。实际执行该包probe-desktop-session.ps1返回VALIDATION PASSED；它使用本轮已摘要核验的新desktop-session/native helper，Probe逐项签署并验签全部8类域，再验证独占原生journal，非旧版仅invite域探测。
+
+offline-prepare-diagnostic.py改用r2公开bootstrap及独立随机work，helper上传/摘要核对后实际输出：`PASS offline_retained_signer_before_prepare`、`PASS offline_native_intent_prepare_no_registration`、`PASS offline_retained_signer_after_prepare`，协调exit0。prepare helper真实prepared/exit0，retained vault-relay真实closed/exit0。当前源码native signer既能签provision intent，又不会因另一个helper准备/退出破坏保留连接，旧artifact故障的原生离线修正验证闭环。无server/grant/enrollment/bind/客户端节点/ACL/产品TLS，不将它扩大为整体4或网络通过。
+
+本轮已知独立离线work `C:\Users\jarvis\remoteapp-offline-restart-4d91bc2ba439d348` 和未联网test node state `...\artifacts\connection-poc\nodes\diagnostic-1654e3b15d6f198f` 保留为证据；不复用该state。r2桌面creator仍READY，尚未用户STOPPED，随机test身份和journal仍归launcher持有。上一轮r1退出最后提示用户尚未提供，清理审计待反馈，不将新r2通过当作旧凭据已删除。
+
+下一步可以在此r2仍READY时运行 `REMOTEAPP_WINDOWS_INTERACTIVE_DIR='C:\Users\jarvis\windows-desktop-session-restart-20261009-r2' python3 -B poc/selfhost/public-server/split-consent.py --compiled`，它现在构建9个当前helper（包括Windows native vault/journal），新服务/fresh pair就绪后再提供新borrower第二窗口命令。不要复用旧4T/r1或此前失效compiled包，不自动启动桌面borrower。当前没有启动此网络重跑。仅更新本地验收记录并提交，不推送。
+
 ## 2026-10-09 离线复现定位：旧 Windows signer artifact 缺少 intent/node/TLS 签名域
 
 用户确认restart-r1桌面READY，真实desktop native probe PASS。离线诊断首轮公共helper未加压缩的60秒上传超时，未启动签名/节点helper，部分公开work `C:\Users\jarvis\remoteapp-offline-restart-37a843df98af3052` 保留。改仅公共artifact scp压缩与180秒上限后，新work `C:\Users\jarvis\remoteapp-offline-restart-b78659eeb9841fb5` 摘要核对完成；retained vault-relay签普通invite请求PASS，helper node状态准备后明确固定失败 `helper_intent_sign`。helper真实非零退出已Wait，retained relay正常closed/退出0；不存在网络注册/approval/grant/ACL/TLS。离线节点状态 `...\artifacts\connection-poc\nodes\diagnostic-dfd7c6e3014a1932` 保留，不用未知旧state重试。
