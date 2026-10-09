@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 fresh borrower 就绪等待超时：服务已回收，桌面退出待确认
+
+差异公共传输后的真实重跑，Windows 全部文件摘要与 fresh pair 上传通过，目标为 `C:\Users\jarvis\remoteapp-split-consent-028d716e2c688a98\compiled-win`。协调器在 compiled_products.py 的240秒 borrower bootstrap等待期限耗尽，退出1；没有进入borrower native probe、设备注册、grant、enrollment或产品TLS，不算联合验收通过。实际日志确认exact verifier retire、隔离目录移除、STOPPED资源join、原file策略恢复和上传服务器程序移除；客户端node journals保留。
+
+用户随后回复第二窗口已就绪；只读SSH核对该目标desktop-bootstrap.json现在存在，但不能据此补算已退出协调器的连接成功，也不继续使用已回收的服务/配置。下一步先让第二窗口Enter并确认STOPPED；r2身份creator第一窗口可保持READY供后续新协调使用。若停止两窗口，必须borrower先、creator后。当前尚未收到本轮borrower STOPPED，旧r1清理审计也仍待反馈。需要收口就绪等待流程，避免在用户启动期间过早回收后反复重跑；不得延长已签发grant或复用过期测试包。
+
 ## 2026-10-09 公共传输复用验收：整包两次超时已回收，差异传输实测通过
 
 压缩180秒的第二轮也在整包SCP超时，部分Windows work `C:\Users\jarvis\remoteapp-split-consent-f2dfaae6b41dbcb4` 保留不可启动。没有register/approve/grant/enroll/TLS；server实际verifier retire/目录移除/STOPPED marker、原策略恢复和上传程序移除均PASS。没有第三次盲目整包重试。只读检查fresh Win包约144MB，失败目标已经包含多个公共文件；仅凭文件Length不能证明内容完整，不用部分包验收。
