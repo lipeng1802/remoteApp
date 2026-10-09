@@ -85,10 +85,23 @@ def consent(target, controller, node_phase=None):
     for client in (target, controller):
         t.check(client.request("use_grant", Grant=grant)["passed"], "split_client_verifies_issuer_subjects_expiry")
         t.check(not client.request("network_state")["passed"], "split_grant_without_client_bindings_no_network")
+    phase_failed = False
     try:
         if node_phase is not None: node_phase(grant)
+    except Exception as error:
+        phase_failed = True
+        import traceback
+        frame = traceback.extract_tb(error.__traceback__)[-1]
+        print("NODE_PHASE_DIAGNOSTIC " + type(error).__name__ + " " +
+              Path(frame.filename).name + ":" + str(frame.lineno), flush=True)
+        raise
     finally:
-        t.check(call(target, action="revoke", grant_id=grant["claims"]["id"])["status"] == "revoked", "split_os_owner_signed_revocation")
+        try:
+            t.check(call(target, action="revoke", grant_id=grant["claims"]["id"])["status"] == "revoked", "split_os_owner_signed_revocation")
+        except Exception:
+            print("FAIL split_owner_revocation_unconfirmed", flush=True)
+            if not phase_failed:
+                raise
     final = call(controller, action="status", request_id=pending["request_id"])
     t.check(final["status"] == "revoked" and "grant" not in final, "split_revocation_not_offline_signature_check")
 

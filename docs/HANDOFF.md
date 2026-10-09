@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 4W 本轮授权通过，offline prepare 失败；Windows SSH 后续超时
+
+用户启动creator并确认新borrower READY；fresh Windows包在 `C:\Users\jarvis\remoteapp-split-consent-9a6b047819edbbb1\compiled-win`。真实borrower native probe、双API signer、双register、邀请/claim、拒绝/批准、grant校验及未绑定拒网络均PASS，上一轮首register失败没有复现。进入split_nodes后helper上传/摘要PASS，但未出现offline准备PASS；异常finally撤销时输出固定 `device_request_signer`。原准备异常被撤销异常遮蔽，不能据此确定节点准备的首因，也不能断言身份损坏。尚未enroll/join客户端节点或启动compiled产品TLS。
+
+本轮新回收marker实际出现：verifier精确retire、实验目录移除、`STOPPED isolated_coordinator_resources_joined`；验收自身FAIL不因此变PASS。原file策略恢复、临时上传程序移除PASS。后续服务器只读复核nodes/users/preauthkeys均null、原accept策略、三个既有服务active、Nginx所有基线OK、正式Store SHA仍为 `5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca`。Windows公开包/work及Mac离线节点目录保守保留，不删除未知state，不重开已有节点。
+
+随后旧4T r2 desktop probe实际PASS，只证明该桌面owner的native signer仍可签名，不证明interactive-vault桥接健康。准备离线并行诊断：新诊断helper上传且摘要核对完成，但在新vault-relay连接hello时失败（helper_unknown），没有启动节点helper或创建该诊断的随机node目录；finally关闭未获closed确认，不把它当成功join。该临时脚本位于忽略产物 `artifacts/connection-poc/offline-prepare-diagnostic.py`，不传authkey/approve或调用网络注册，不输出签名/私有回复。新的 `enrollment-helper-diagnostic.exe` 仅在本轮Windows随机work中保留，原binary未覆盖。再核对精确测试进程时Windows SSH `100.73.4.118:22` 超时，因此不能判断桥接是离线、退出、slot耗尽或签名子进程失败。禁止把它推断为唯一根因。
+
+本轮代码补充固定node-helper阶段（signer_open/node_state/intent_sign/protocol）；JoinedPipe只输出白名单失败标签。failed one-shot通过实际Wait且非零退出可确认进程结束，但不会宣称prepared/closed或自动删state；退出0反而拒绝。consent记录node阶段的脱敏首异常，撤销失败单列，不能遮蔽首因。26项Python回归PASS，新增failed one-shot非零join/零退出拒绝及撤销错误不遮蔽首错误；Mac enrollment-helper Go测试PASS，Windows helper交叉构建PASS。整体4/双机compiled TLS仍未完成。
+
+用户当前Windows两窗口的STOPPED尚待确认：先本轮borrower Enter→STOPPED，再creator Enter→STOPPED（launcher正常join，勿强关/强杀）。之后需恢复Windows在线/SSH才能继续桥接诊断，不能启动本轮已失效连接包。此次仅本地提交，不推送。
+
 ## 2026-10-08 4W 第二窗口实测：native probe 通过，首个 register 失败，服务器恢复完成
 
 用户确认第二窗口READY，本轮 compiled borrower真实原生身份与独占journal probe PASS；Windows API binary上传/摘要PASS，Windows/Mac两个API signer READY。首个OS签名register未通过；未创建客户端grant/enrollment/node，也未初始化Mac compiled信任journal或启动产品TLS。不能把borrower probe当作联合验收通过。原API仅返回passed=false，无法确定是签名器、传输还是响应拒绝；之后只读核对Windows/Mac当前UTC秒一致，但这不是失败时完整时钟证据。

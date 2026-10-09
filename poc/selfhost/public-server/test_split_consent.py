@@ -70,6 +70,11 @@ class SplitConsentTests(unittest.TestCase):
         def failed_phase(grant): raise ValueError("phase_failed")
         with self.assertRaises(ValueError): split.consent(a,b,node_phase=failed_phase)
         self.assertFalse(a.answers)  # Owner revoke attempted even on phase error.
+        bad_owner=copy.deepcopy(owner)
+        bad_owner[-1]={"passed":False,"failure_stage":"signer"}
+        with self.assertRaises(ValueError):
+            split.consent(Client(bad_owner),Client(copy.deepcopy(peer)),node_phase=failed_phase)
+        # A secondary revoke failure must not obscure the first node error.
         bad=copy.deepcopy(peer); bad[3]={"passed":True}
         with self.assertRaises(RuntimeError): split.consent(Client(copy.deepcopy(owner)),Client(bad))
         bad=copy.deepcopy(peer); bad[2]["device"]["grant"]=grant

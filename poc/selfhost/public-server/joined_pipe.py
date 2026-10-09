@@ -24,6 +24,7 @@ class JoinedPipe:
         self.buffer = bytearray()
         self.closed_seen = self.stop_sent = False
         self.prepared_seen = False
+        self.failed_seen = False
         self.one_shot = isinstance(config, dict) and config.get("Op") == "prepare"
         self.proc = subprocess.Popen(command, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, bufsize=0)
@@ -59,6 +60,12 @@ class JoinedPipe:
             raise RuntimeError("private_reply_too_large")
         value = json.loads(line, object_pairs_hook=unique_object)
         if not isinstance(value, dict) or value.get("status") in ("failed", "cleanup_timeout"):
+            if isinstance(value, dict) and value.get("status") == "failed":
+                self.failed_seen = True
+                stage = value.get("failure_stage")
+                if stage not in ("signer_open", "node_state", "intent_sign", "protocol"):
+                    stage = "unknown"
+                print("DIAGNOSTIC helper_" + stage, flush=True)
             raise RuntimeError("private_helper_failed")
         if value.get("status") == "closed":
             self.closed_seen = True
@@ -85,6 +92,16 @@ class JoinedPipe:
                 raise RuntimeError("private_join_nonzero_exit")
 
     def emergency(self):
+        # A failed one-shot never emits a close acknowledgement. Join its
+        # actual exit, but do not turn it into successful preparation or delete
+        # its state. A still-running process remains a blocked teardown.
+        if self.one_shot and self.failed_seen:
+            if not self.proc.stdin.closed:
+                self.proc.stdin.close()
+            self.proc.wait(timeout=12)
+            if self.proc.returncode == 0:
+                raise RuntimeError("private_failed_one_shot_zero_exit")
+            return
         # Legacy preparation calls this after an already joined one-shot child.
         # Everything else must still prove close acknowledgement + real exit.
         if self.one_shot and self.prepared_seen and self.proc.poll() == 0:

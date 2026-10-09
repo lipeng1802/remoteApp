@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/netip"
@@ -112,10 +113,25 @@ func openSigner(c config) (invite.DeviceSigner, func(), error) {
 
 const payload = "remoteapp-enrollment-poc-v1"
 
+var (
+	errPrepareSigner = errors.New("prepare signer unavailable")
+	errPrepareState  = errors.New("prepare state unavailable")
+	errPrepareIntent = errors.New("prepare intent signing unavailable")
+)
+
 func output(v any) { json.NewEncoder(os.Stdout).Encode(v) }
 func main() {
-	if run() != nil {
-		output(map[string]string{"status": "failed"})
+	if err := run(); err != nil {
+		stage := "protocol"
+		switch err {
+		case errPrepareSigner:
+			stage = "signer_open"
+		case errPrepareState:
+			stage = "node_state"
+		case errPrepareIntent:
+			stage = "intent_sign"
+		}
+		output(map[string]string{"status": "failed", "failure_stage": stage})
 		os.Exit(1)
 	}
 }
@@ -132,7 +148,7 @@ func run() error {
 	}
 	app, closeSigner, e := openSigner(c)
 	if e != nil {
-		return e
+		return errPrepareSigner
 	}
 	defer closeSigner()
 	networkClient, e := openNetwork(c, app)
@@ -153,7 +169,7 @@ func run() error {
 	}
 	pub, e := nodeidentity.Prepare(dir, "https://mk.fengmap.com:8443")
 	if e != nil {
-		return e
+		return errPrepareState
 	}
 	if c.Op == "prepare" {
 		if len(c.GrantID) != 32 {
@@ -165,7 +181,7 @@ func run() error {
 		}
 		intent, e := invite.SignProvisionWithSigner(app, invite.ProvisionBody{GrantID: c.GrantID, NodeKey: pub, Nonce: hex.EncodeToString(nonce), IssuedAt: time.Now().Unix()})
 		if e != nil {
-			return e
+			return errPrepareIntent
 		}
 		output(map[string]any{"status": "prepared", "node_key": pub, "intent": intent})
 		return nil

@@ -45,4 +45,17 @@ class JoinedPipeTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):p.emergency()
         self.assertIsNone(p.proc.returncode)
 
+    def test_failed_one_shot_joins_nonzero_without_claiming_prepared(self):
+        p=self.child('import sys; sys.stdin.readline(); print(\'{"status":"failed","failure_stage":"intent_sign"}\'); sys.exit(1)',{'Op':'prepare'})
+        with self.assertRaises(RuntimeError): p.read()
+        p.emergency()
+        self.assertEqual(p.proc.returncode,1)
+        self.assertFalse(p.prepared_seen)
+        self.assertFalse(p.closed_seen)
+
+    def test_failed_one_shot_zero_exit_rejected(self):
+        p=self.child('import sys; sys.stdin.readline(); print(\'{"status":"failed","failure_stage":"node_state"}\')',{'Op':'prepare'})
+        with self.assertRaises(RuntimeError): p.read()
+        with self.assertRaises(RuntimeError): p.emergency()
+
 if __name__=="__main__":unittest.main()
