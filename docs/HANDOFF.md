@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 4X本轮就绪期限耗尽：未进入活会话验收
+
+用户确认r4 creator READY；实际原生身份/独占journal probe、当前9项helper构建、隔离空控制平面、独立daemon/frontend、节点helper提前上传/摘要核验、匹配fresh pair构建、Windows全文件摘要全部PASS。第二窗口目标 `C:\Users\jarvis\remoteapp-split-consent-333a86e747fa214b\compiled-win`。随后绝对readiness预算耗尽，compiled_products.py:196 borrower_ready_deadline，协调exit1；用户随后回复第二窗口已就绪。没有borrower probe/注册/consent/grant/enrollment/产品TLS或live revoke通过结果，不能套用此前4W通过。
+
+实际日志确认verifier retire、隔离目录移除、STOPPED资源join、原策略恢复和上传server程序移除；Windows公开work/客户端journal证据保留。不复用已回收端点/过期包。下一步先让本轮第二窗口Enter并确认STOPPED，r4 creator可保持READY。本轮borrower清理尚待用户确认。不得立即盲目重跑：人工桌面就绪与临时服务/配置倒计时的耦合需要先收口；单纯再次延长授权或忽略到期检查不是修复。4X真实活会话撤销仍待，整体4未完成。按既有授权本地提交，不推送。
+
 ## 2026-10-09 4X-2 compiled活会话撤销编排接线，新creator r4待READY
 
 新增显式 `split-consent.py --compiled-revoke`，保持既有--compiled基线模式不变，也不把此模式当authority fault。新模式在真实产品持续pongs跨初始lease后确认双端Handle仍pending，保持产品活跃返回consent；在线OS签名撤销后才观测自主结束，不预发stop/关闭控制管道。Mac必须报告精确session_state(joined=true,fault=true)、fault_retired、failed三帧并真实exit1，缺帧/exit0/未知字段拒绝；该expected-fault join不设置closed ACK、不等于normal成功，无force kill。Windows等待真实Handle.Done且fault、稳定快照，再通过受保护同用户pipe请求retire_fault，原生journal.Close成功才确认；未结束/无会话/正常结束/重复退役拒绝，Start/Upgrade仍锁闭。Mac inspect确认租约可重开后才标两端join完成；后续节点回收/服务退出/策略恢复与桌面清理仍需实际验收。
