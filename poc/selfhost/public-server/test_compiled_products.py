@@ -5,11 +5,20 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from compiled_products import CompiledPair, build_helpers, checked_borrower, observe, product_count, product_secret, verify_bundle, upload_public_bundle, wait_borrower
+from compiled_products import CompiledPair, build_helpers, checked_borrower, observe, product_count, product_secret, verify_bundle, upload_public_bundle, wait_borrower, session_state
 import hashlib
 
 
 class CompiledProductTests(unittest.TestCase):
+    def test_completion_state_is_exact_and_fault_requires_join(self):
+        v=dict(status="session_state",joined=False,fault=False)
+        self.assertEqual(session_state(v),(False,False))
+        self.assertEqual(session_state(dict(v,joined=True,fault=True)),(True,True))
+        self.assertEqual(session_state(dict(v,joined=True)),(True,False))
+        for change in (dict(fault=True),dict(joined=1),dict(fault=0),dict(status="closed"),dict(error="private detail")):
+            with self.subTest(change=change),self.assertRaises(RuntimeError):
+                session_state(dict(v,**change))
+
     def test_readiness_budget_expired_does_not_query_or_accept(self):
         class Transport:
             def powershell(self, script): raise AssertionError("expired query")

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/trustprofile"
@@ -87,6 +88,15 @@ func handle(ctx context.Context, c net.Conn, scope, public string, b Backend) {
 		limit, cancel := context.WithTimeout(ctx, 40*time.Second)
 		var e error
 		switch {
+		case req.Op == "session_state" && req.Config == (clientruntime.Config{}) && req.Profile == (trustprofile.Profile{}):
+			// Optional capability keeps existing backends fail-closed.
+			if observer, ok := b.(interface {
+				SessionState() clientowner.SessionState
+			}); ok {
+				e = out(observer.SessionState())
+			} else {
+				e = privatepipe.ErrProtocol
+			}
 		case req.Op == "count" && req.Config == (clientruntime.Config{}) && req.Profile == (trustprofile.Profile{}):
 			var count clientruntime.ProductCount
 			count, e = b.Count(limit)

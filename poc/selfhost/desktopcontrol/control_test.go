@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/trustprofile"
@@ -15,6 +16,45 @@ import (
 type backend struct {
 	probes            atomic.Int32
 	stopping, release chan struct{}
+}
+
+type observedBackend struct{ *backend }
+
+func (b *observedBackend) SessionState() clientowner.SessionState {
+	return clientowner.SessionState{Status: "session_state", Joined: true, Fault: true}
+}
+
+func TestSessionStateIsReadOnlyAndDoesNotStop(t *testing.T) {
+	b := &observedBackend{&backend{stopping: make(chan struct{}), release: make(chan struct{})}}
+	c, _, _ := serveTest(t, b)
+	w := json.NewEncoder(c)
+	r := privatepipe.NewReader(c)
+	w.Encode(map[string]string{"Scope": "scope", "Expected": "public"})
+	status(t, r, "ready")
+	w.Encode(Request{Op: "session_state"})
+	var state clientowner.SessionState
+	if e := r.Read(&state); e != nil || !state.Joined || !state.Fault || state.Status != "session_state" {
+		t.Fatal("missing actual completion state", e)
+	}
+	select {
+	case <-b.stopping:
+		t.Fatal("observation stopped session")
+	default:
+	}
+	w.Encode(Request{Op: "probe"})
+	status(t, r, "probe_passed")
+}
+
+func TestSessionStateUnsupportedOrInjectedConfigFailsClosed(t *testing.T) {
+	for _, req := range []Request{{Op: "session_state"}, {Op: "session_state", Config: clientruntime.Config{Server: true}}, {Op: "session_state", Profile: trustprofile.Profile{Signature: "untrusted"}}} {
+		c, _, _ := serveTest(t, &backend{})
+		w := json.NewEncoder(c)
+		r := privatepipe.NewReader(c)
+		w.Encode(map[string]string{"Scope": "scope", "Expected": "public"})
+		status(t, r, "ready")
+		w.Encode(req)
+		status(t, r, "failed")
+	}
 }
 
 func (b *backend) Probe(context.Context) error { b.probes.Add(1); return nil }

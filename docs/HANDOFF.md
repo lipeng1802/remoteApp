@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 4W桌面清理闭环；4X-1故障join观测入口开发完成
+
+用户确认65abe99f本轮第二窗口 `STOPPED: borrowed desktop owner joined and its isolated test journal cleaned. Identity creator remains READY; not deleted.`，随后第一窗口 `STOPPED: desktop workers and native signer joined; isolated test journal and random test identity cleaned.`。记录本轮borrower/creator按顺序正常join及随机test身份清理闭环；旧r1/4T审计不与此混同。r2现在已停止，不可继续使用旧bootstrap发起协调。
+
+下个切片4X分段推进：第一段新增clientowner.Handle.State只读完成快照，状态严格仅status/joined/fault，Done未闭合不能称join，即便已有内部err也不提前报告fault；fault=true要求实际完成，不暴露错误详情或授权。Windows桌面backend保留当前Handle，以同用户本地pipe的session_state请求查询；拒带Config/Profile，旧不支持backend失败关闭。Mac installed-session可显式查询，且自主Handle.Done后在保留原非零失败返回前报告实际完成快照。未改Stop/Close租约屏障、重连或故障锁闭，不将此快照当closed ACK、正常exit或TLS断流证据。Python增加精确schema检查，未启用活会话验收模式。
+
+Mac相关5包Go race通过，Windows同包vet退出0，Python31项回归通过，diff检查通过。新增pending/正常/fault完成、只读请求不Stop、缺能力/注入配置拒绝、字段/布尔类型检查。**这是4X-1观测基础实现，不是compiled活会话撤销或故障实机验收通过；整体4未完成。** 本轮未启动服务、Windows桌面、新节点或授权，没有新验证包可让用户运行。
+
+下一段需串接--compiled活会话撤销：保持两端实际pongs增长时撤销，观测自主join，严格区分预期fault terminal和正常closed/exit0，实际Wait进程并验证target原生owner/租约回收；故障done不能豁免正常cleanup或强杀。随后接authority freeze/HTTPS503、旧ACL保留时关闭及显式恢复不复活旧owner。需要当前source全新creator/borrower包及双机原生验收，不能拿旧r2/4T执行本轮。按既有授权本地提交，不推送。
+
 ## 2026-10-09 4W fresh compiled双机联合验收通过，桌面最终STOPPED待确认
 
 实际执行修正后的split-consent.py --compiled，Windows work `C:\Users\jarvis\remoteapp-split-consent-65abe99f91398019`，协调exit0。节点helper在fresh borrower启动/授权前已压缩上传并摘要核验。fresh包全清单摘要、borrower真实桌面probe、双OS注册/拒绝无grant/明确批准/双端验签通过；双端注册前节点公钥及OS签名intent、单次HTTPS enrollment、实际节点key与准备值一致、未绑定零规则拒绝、Windows真实节点/OS持有证明、错误Mac身份拒绝/真实未签名挑战、Mac同节点重启及正确身份绑定均PASS。

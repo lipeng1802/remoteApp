@@ -132,6 +132,9 @@ func run(output func(any)) (result error) {
 		case <-ctx.Done():
 			return nil
 		case <-h.Done():
+			// Report real nested completion before preserving the nonzero failure
+			// exit. This is not a close ACK or a successful revoked session.
+			output(h.State())
 			return h.Wait(context.Background())
 		case c, ok := <-commands:
 			if !ok {
@@ -141,6 +144,11 @@ func run(output func(any)) (result error) {
 				return session.ErrDenied
 			}
 			switch c.Op {
+			case "session_state":
+				if c.Profile != (trustprofile.Profile{}) {
+					return session.ErrDenied
+				}
+				output(h.State())
 			case "count":
 				if c.Profile != (trustprofile.Profile{}) {
 					return session.ErrDenied

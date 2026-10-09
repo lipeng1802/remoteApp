@@ -25,6 +25,29 @@ type Handle struct {
 }
 
 func (h *Handle) Done() <-chan struct{} { return h.done }
+
+// State is read-only completion evidence. Joined includes every nested worker
+// owned by Runner, not merely cancellation. Fault never makes an owner usable.
+// No runner error text or authority material is exposed to the caller.
+type SessionState struct {
+	Status string `json:"status"`
+	Joined bool   `json:"joined"`
+	Fault  bool   `json:"fault"`
+}
+
+func (h *Handle) State() SessionState {
+	s := SessionState{Status: "session_state"}
+	if h == nil {
+		return s
+	}
+	select {
+	case <-h.done:
+		s.Joined, s.Fault = true, h.err != nil
+	default:
+	}
+	return s
+}
+
 func (h *Handle) Wait(ctx context.Context) error {
 	select {
 	case <-h.done:

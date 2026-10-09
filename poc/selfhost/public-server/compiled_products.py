@@ -19,6 +19,16 @@ import time
 from native_bootstrap import checked_desktop_bootstrap
 
 
+def session_state(value):
+    """Completion telemetry is never a close ACK or a successful exit."""
+    if (not isinstance(value, dict) or set(value) != {"status", "joined", "fault"}
+            or value["status"] != "session_state"
+            or type(value["joined"]) is not bool or type(value["fault"]) is not bool
+            or (value["fault"] and not value["joined"])):
+        raise RuntimeError("invalid_session_completion_state")
+    return value["joined"], value["fault"]
+
+
 def checked_borrower(value, identity, folder, trace):
     desktop = checked_desktop_bootstrap(value, identity, folder)
     release = trace.get("release", {})

@@ -165,6 +165,8 @@ git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 git -c http.proxy=http://127.0.0.1:1080 push origin main
 # 2026-10-09 验证入口状态
 
+4W两桌面窗口最终STOPPED已确认，随机test身份和journal清理闭环。4X-1已补只读实际join/fault状态，Mac局部race、Windows vet及31项Python回归通过；**活会话撤销/故障编排及新双机原生验收仍待，不算4X或整体4完成。** 当前旧creator已停止，没有需要运行的新验证包。
+
 最新真实联合轮次已退出0：fresh compiled原生双端、Headscale节点/OS身份绑定、最小单向ACL、真实产品TLS持续payload与自主刷新、正常join后签名撤销及节点回收/策略恢复通过。桌面两个窗口最终STOPPED待确认。**活会话撤销、升级/故障、GUI和签名安装包尚未验收，整体切片4未完成。** 下一切片优先compiled活会话撤销与故障关闭；下方失败轮次为历史记录。
 
 最新轮次已通过 fresh borrower 原生探测与完整 OS 授权流程；节点 helper 的旧上传路径超时，尚无节点绑定/TLS结果。已将其压缩上传与摘要检查提前到授权前，30项协调回归通过；撤销和服务端资源回收实际通过，Windows borrower STOPPED待确认。

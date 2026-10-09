@@ -32,6 +32,7 @@ var embeddedRelease, embeddedSignerDigest, embeddedProductDigest string
 type backend struct {
 	observationMu sync.Mutex
 	observation   *clientruntime.ProductObservation
+	handle        *clientowner.Handle
 	owner         *clientowner.Owner
 	release       trustinstall.Release
 	factory       trustinstall.Factory
@@ -96,6 +97,7 @@ func (b *backend) Start(ctx context.Context, c clientruntime.Config, out func(an
 	}
 	b.observationMu.Lock()
 	b.observation = observation
+	b.handle = h
 	b.observationMu.Unlock()
 	timer := time.NewTimer(35 * time.Second)
 	defer timer.Stop()
@@ -125,6 +127,12 @@ func (b *backend) Count(ctx context.Context) (clientruntime.ProductCount, error)
 	o := b.observation
 	b.observationMu.Unlock()
 	return o.Count(ctx)
+}
+func (b *backend) SessionState() clientowner.SessionState {
+	b.observationMu.Lock()
+	h := b.handle
+	b.observationMu.Unlock()
+	return h.State()
 }
 func (b *backend) Stop(ctx context.Context) error { return b.owner.Stop(ctx) }
 func (b *backend) Upgrade(ctx context.Context, p trustprofile.Profile) error {
