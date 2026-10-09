@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 4X预启动/真实live revoke通过前半段；自主join等待超时，独立恢复不计验收成功
+
+用户预先WATCH_READY后实际执行r4 creator + stage `C:\Users\jarvis\remoteapp-compiled-stage-4f7e7f183e4e7a28` 的--compiled-revoke。随机挑战证明等待器当前在线、真实native creator probe、所有helper构建/隔离服务/提前helper传输、fresh pair全摘要PASS；等待窗口自动启动borrower，真实borrower probe PASS，不再需要服务计时内人工启动。Windows run固定为stage\\run；Mac本轮compiled目录 `artifacts/connection-poc/compiled-live-a52b5f6632adfaf7/mac`。
+
+OS注册/拒绝/批准及验签、双端离线intent/单次enrollment、真实节点/OS持有证明、错误身份拒绝、同节点重启、精确binding/最小单向ACL/反向拒绝PASS。真实产品持续pongs跨初始leasePASS；双端Handle仍pending确认后在线OS签名撤销PASS，状态确认撤销PASS。随后controller.join_fault等待首个完成帧20秒超时（joined_pipe.py:51）；finally正常stop补清理又遇failed帧（line72），Pythonexit1。没有完整故障三帧+actual exit1证据，不能将非零退出/事后恢复算4X通过，不能归因于唯一具体worker或简单扩时重试。
+
+原finally在compiled owner join未确认处停止了后续清理，没有原coordinator STOPPED marker/策略恢复/身份删除完整证据。独立只读检查：无本轮server check/daemon/frontend进程、无本轮本地installed-session或SSH转发；Headscale nodes/users/preauthkeys均0，公开策略当时零ACL。Windows保留creator和borrower进程。使用新只读relay实际观察borrower session_state(joined=true,fault=true)，再明确retire_fault获fault_retired，诊断relay真实exit0；Mac本轮trust-install inspect实际usable/epoch1，证明journal可重开。它们是独立恢复证据，不是原自动join完成。
+
+在上述资源为空/进程不存活/双端原生租约可释放证据成立后，使用本轮精确 `/tmp/remoteapp-split-consent-f514ed1c57c8efd5-mode.py restore /var/lib/remoteapp-poc/enrollment-mode-BkJ9Lg`，实际exit0/file_mode_restored；恢复脚本消费并移除该备份（原配置已复制恢复），没有删除未知client状态。随后公开原策略 `100.120.0.2 -> 100.120.0.1:47476`、三正式服务active、Store固定SHA与Nginx基线检查PASS。四个本轮公开server程序保留，未用无来源marker宣称正常daemon join。Mac随机test身份删除未走完整finally，清理审计未确认；本轮client目录/compiled journal/未知随机身份均保留，不批量删除凭据。
+
+下一步先让第二窗口Enter并确认borrower STOPPED，再第一窗口Enter确认creator STOPPED（故障owner已通过明确retire_fault释放journal）；尚待用户最终提示。后续优先给Mac runner产品/watch/node/signer各层加入固定非秘密join阶段诊断，定位20秒无完成帧及finally失败，严格区分产品已停止、实际进程Wait、原生lease释放；不要盲目继续故障503或扩大时间/降低三帧门槛。预启动桌面机制本轮实际闭环，4X活会话撤销完整验收仍未完成，整体4未完成。仅本地记录提交，不推送。
+
 ## 2026-10-09 本轮borrower STOPPED；预启动等待窗口已准备，尚待WATCH_READY
 
 用户确认333a86第二窗口完整STOPPED：borrowed desktop owner joined、isolated test journal cleaned、identity creator remains READY/not deleted。r4第一窗口继续READY。用户另说明已打开新窗口；尚未提供新等待脚本WATCH_READY，不当作它已启动。

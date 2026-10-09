@@ -165,6 +165,8 @@ git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 git -c http.proxy=http://127.0.0.1:1080 push origin main
 # 2026-10-09 验证入口状态
 
+最新4X实机已通过预启动等待器自动启动、真实节点绑定/TLS持续传输及活会话签名撤销，但Mac自主join首帧等待超时，**完整验收失败**。已独立核对资源为空、Windows实际故障join/原生退役、Mac journal可重开，并恢复原策略/核验线上基线；不将事后恢复算自动退出通过。两桌面最终STOPPED待确认，下一步定位分层join阻塞，不盲目扩时重试。详见[交接](docs/HANDOFF.md)。
+
 人工第二窗口启动曾在服务就绪预算后发生，未进入4X验收；该borrower已确认正常STOPPED。已新增开发专用预启动等待窗口：先确认等待器在线，再启动服务，新包摘要通过后自动在正常桌面上下文启动borrower，授权和服务期限不延长。39项Python回归/Windows脚本解析通过，新等待脚本已上传，**自动启动和活会话撤销仍待实测**。详见[交接](docs/HANDOFF.md)。
 
 4X-2已接线显式compiled活会话撤销模式：先保持实际TLS活跃，再OS签名撤销，要求自主join/原生journal退役及真实非零终止，不预发stop或以强杀代替。36项Python回归、相关Mac race/Windows vet通过；新Windows creator r4公共包摘要/脚本解析通过，待用户READY与新双机实测。**尚未验收活会话撤销、authority故障、升级/GUI/签名安装包，整体4未完成。** 下方为此前分段记录。
