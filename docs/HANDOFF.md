@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 Windows 重启恢复：保留旧状态，准备独立身份入口
+
+用户确认Windows重启后已恢复。实际SSH返回SSH_OK；精确查询interactive-vault/identity-vault/vault-relay/desktop-session/enrollment-helper未列出存活进程，但旧4T r2的interactive-bootstrap.json、desktop-bootstrap.json仍存在。该结果证明已无这些进程，不证明旧随机凭据与journal走正常STOPPED清理。旧文件/凭据/journal保留，不删除、不伪造STOPPED，不直接重跑旧initialize。
+
+为后续离线桥接诊断构建独立 `windows-desktop-session-restart-20261009-r1`：installed-session-build windows-desktop-test生成新的随机compiled channel/journal scope，使用既有可信公共prerelease-v1 anchor/profile与固定Windows native helpers/真实C#测试产品；未读取release root/CA私钥、未启动服务器或新客户端网络。实际BUILD_READY及本地SHA256清单核验PASS。远端目标 `C:\Users\jarvis\windows-desktop-session-restart-20261009-r1` 上传前Test-Path=False，避免覆盖旧包。上传退出0、远端清单自身摘要与全部文件摘要核验PASS，两启动/probe脚本PowerShell语法PASS；尚未桌面启动/native probe或完成故障复现。
+
+下一步用户在正常桌面启动该新目录的start-desktop-session.ps1并保持READY；收到READY后**先做离线节点prepare/保留签名连接复现**，不立即启动--compiled服务器、grant或TLS。协调环境REMOTEAPP_WINDOWS_INTERACTIVE_DIR须改用新目录，旧4T r2及上一轮随机compiled-win包不再作为本次入口。重启清理审计另留：旧凭据/journal不可因进程消失就批量删除。
+
 ## 2026-10-09 4W 本轮授权通过，offline prepare 失败；Windows SSH 后续超时
 
 用户启动creator并确认新borrower READY；fresh Windows包在 `C:\Users\jarvis\remoteapp-split-consent-9a6b047819edbbb1\compiled-win`。真实borrower native probe、双API signer、双register、邀请/claim、拒绝/批准、grant校验及未绑定拒网络均PASS，上一轮首register失败没有复现。进入split_nodes后helper上传/摘要PASS，但未出现offline准备PASS；异常finally撤销时输出固定 `device_request_signer`。原准备异常被撤销异常遮蔽，不能据此确定节点准备的首因，也不能断言身份损坏。尚未enroll/join客户端节点或启动compiled产品TLS。
