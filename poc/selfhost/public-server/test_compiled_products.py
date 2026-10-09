@@ -31,7 +31,10 @@ class CompiledProductTests(unittest.TestCase):
         for machine,want in (("x86_64","amd64"),("arm64","arm64")):
             with patch("compiled_products.platform.machine",return_value=machine),patch("compiled_products.subprocess.run",return_value=Result()) as run:
                 build_helpers(Transport())
-                self.assertEqual(run.call_count,7)
+                self.assertEqual(run.call_count,9)
+                packages={call.args[0][-1] for call in run.call_args_list}
+                self.assertIn("./cmd/identity-vault",packages)
+                self.assertIn("./cmd/trust-journal",packages)
                 envs=[c.kwargs["env"] for c in run.call_args_list]
                 self.assertEqual([e["GOARCH"] for e in envs if e["GOOS"]=="darwin"],[want,want])
                 self.assertTrue(all(e["GOPROXY"]=="off" for e in envs))

@@ -20,6 +20,7 @@ import (
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/desktopcontrol"
+	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/trustinstall"
@@ -44,19 +45,30 @@ func (b *backend) Probe(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	var nonce [32]byte
-	if _, e := rand.Read(nonce[:]); e != nil {
+	if e := probeSigningDomains(b.signer); e != nil {
 		return e
-	}
-	message := []byte("remoteapp-invite-request-v1\n" + hex.EncodeToString(nonce[:]))
-	sig, e := b.signer.Sign(message)
-	if e != nil || !ed25519.Verify(b.signer.PublicKey(), message, sig) {
-		return privatepipe.ErrProtocol
 	}
 	// Prove this desktop owner retains the exclusive OS journal lease.
 	if j, e := b.factory(false); e == nil {
 		j.Close()
 		return trustprofile.ErrTrust
+	}
+	return nil
+}
+
+// A pinned digest proves which binary is running, not that a stale native
+// helper supports the later enrollment/node/product domains. Check all of
+// them before the acceptance coordinator creates any remote resources.
+func probeSigningDomains(s invite.DeviceSigner) error {
+	var nonce [32]byte
+	if _, e := rand.Read(nonce[:]); e != nil {
+		return e
+	}
+	public := append(ed25519.PublicKey(nil), s.PublicKey()...)
+	for _, domain := range []string{"remoteapp-invite-request-v1\n", "remoteapp-network-api-v1\nPOST /v1/network\n", "remoteapp-provision-intent-v1\n", "remoteapp-node-possession-v1\n", "remoteapp-session-target-v1\n", "remoteapp-session-controller-v1\n", "remoteapp-session-product-tls-target-v1\n", "remoteapp-session-product-tls-controller-v1\n"} {
+		if _, e := invite.CheckedSignature(s, public, []byte(domain+hex.EncodeToString(nonce[:]))); e != nil {
+			return privatepipe.ErrProtocol
+		}
 	}
 	return nil
 }

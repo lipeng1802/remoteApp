@@ -42,6 +42,8 @@ def build_helpers(t):
               ("linux", "device-frontend", "device-frontend-private"),
               ("windows", "device-api-client", "device-api-client-win.exe"),
               ("windows", "enrollment-helper", "enrollment-helper-win.exe"),
+              ("windows", "identity-vault", "identity-vault-win.exe"),
+              ("windows", "trust-journal", "trust-journal-win.exe"),
               ("darwin", "device-api-client", "device-api-client"),
               ("darwin", "enrollment-helper", "enrollment-helper"))
     mac_arch = {"arm64":"arm64", "x86_64":"amd64"}.get(platform.machine())

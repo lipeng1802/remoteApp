@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 离线复现定位：旧 Windows signer artifact 缺少 intent/node/TLS 签名域
+
+用户确认restart-r1桌面READY，真实desktop native probe PASS。离线诊断首轮公共helper未加压缩的60秒上传超时，未启动签名/节点helper，部分公开work `C:\Users\jarvis\remoteapp-offline-restart-37a843df98af3052` 保留。改仅公共artifact scp压缩与180秒上限后，新work `C:\Users\jarvis\remoteapp-offline-restart-b78659eeb9841fb5` 摘要核对完成；retained vault-relay签普通invite请求PASS，helper node状态准备后明确固定失败 `helper_intent_sign`。helper真实非零退出已Wait，retained relay正常closed/退出0；不存在网络注册/approval/grant/ACL/TLS。离线节点状态 `...\artifacts\connection-poc\nodes\diagnostic-dfd7c6e3014a1932` 保留，不用未知旧state重试。
+
+核对r1实际identity-vault.exe（复制旧4T r2输入，SHA `38ad9eb62c3aaab6e68fb663854ca73fec826845a99611ceea9b253a60a2397f`）的可执行签名域字符串，仅invite-request/network-api，缺provision-intent/node-possession/session/product-TLS，而当前源码明确支持这些域。与离线intent_sign失败相互印证：构建流程使用了过期的原生helper，文件摘要匹配不等于接口能力符合当前协议。不能把重启或SSH故障当作本次intent失败原因；普通desktop probe此前只签invite，因而漏检旧artifact。错误域请求可使旧native子进程拒绝并退出，导致bridge后续签名失败；当前creator的干净STOPPED/随机凭据删除不能预先保证。
+
+修正：compiled build_helpers除既有7项外，增加从当前可信源码重建Windows identity-vault-win.exe/trust-journal-win.exe，fresh pair不再读取过期这两artifact。desktop native probe扩展为8种精确协议签名域逐项真实验签，新增旧signer只能签invite/network时必须在第三项intent拒绝的单测；拒任意添加域或删除校验。Mac desktop-session/identity-vault Go测试PASS、Windows原生两helper与fresh独立restart-r2实际构建PASS；Python测试更新预期9项helper并检查这两包包含在列表，不将fixture测试标原生验收。
+
+新r2使用当前source native signer（SHA `93261414cceb2f9a45079a839ea920264b4157792006a7c1a78590a6768e3a5d`），新的随机channel/scope，不覆盖r1/旧4T credentials或journal。远端 `C:\Users\jarvis\windows-desktop-session-restart-20261009-r2` 上传退出0，本地/远端全部清单摘要核验PASS，两个启动/probe脚本PowerShell语法PASS；26项Python回归重跑全部PASS，git diff --check PASS。新包桌面启动和8域原生签名尚待。请用户先在当前r1窗口Enter让launcher正常Wait；若警告Acceptance/cleanup NOT confirmed，记录并保留旧bootstrap/随机test凭据，不要求强杀或批量删凭据来伪造STOPPED。确认窗口退出后再新r2 READY，先重做离线intent与 retained signer前后验证，再进真实网络切片。整体4/TLS仍未完成，当前没有新服务器资源。本轮按既有授权本地提交，不推送。
+
 ## 2026-10-09 Windows 重启恢复：保留旧状态，准备独立身份入口
 
 用户确认Windows重启后已恢复。实际SSH返回SSH_OK；精确查询interactive-vault/identity-vault/vault-relay/desktop-session/enrollment-helper未列出存活进程，但旧4T r2的interactive-bootstrap.json、desktop-bootstrap.json仍存在。该结果证明已无这些进程，不证明旧随机凭据与journal走正常STOPPED清理。旧文件/凭据/journal保留，不删除、不伪造STOPPED，不直接重跑旧initialize。

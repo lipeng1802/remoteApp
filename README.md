@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-4W 最新实测：新borrower原生探测、双端签名注册、邀请/拒绝/批准及grant校验均通过；离线节点准备失败，清理撤销时出现签名器失败，尚未节点绑定/TLS。服务器真实回收marker已确认，原策略恢复，既有服务/Nginx/Store不变。Windows重启后SSH恢复，旧bootstrap/凭据/journal保留，不能视为正常STOPPED。新的独立测试入口已构建、上传并核验全部摘要及脚本语法，待桌面READY后先做离线桥接诊断。**根因未定位，联合验收未通过，旧连接包不可续跑。** 详见 [交接](docs/HANDOFF.md)。
+4W 离线复现已定位旧Windows原生signer artifact：普通请求签名通过，provision intent签名失败；旧binary缺少后续签名域。现已改为重建当前源码的Windows native helpers，并增加8类签名域启动验签，Go与26项Python回归通过。独立restart-r2包准备供Windows离线复测，旧r1/4T状态保留，不强删凭据。**代码修正尚待原生实测，节点绑定/产品TLS联合验收仍未通过。** 详见 [交接](docs/HANDOFF.md)。
 
 4C-4W：新增 `split-consent.py --compiled` 联合协调入口，串接匹配真实服务的 fresh test pair、Windows 桌面 borrower、OS 签名授权与 bound-node 交接、实际产品计数持续增长、正常 join 后签名撤销。私有管道有界且不强杀冒充完成。23项 Python 回归与7个跨平台helper构建通过；**真实联合执行仍待 Windows READY，未验收活会话撤销/故障/升级，整体4未完成。** 操作与边界见 [交接](docs/HANDOFF.md)。
 
