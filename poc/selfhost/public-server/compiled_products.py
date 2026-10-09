@@ -2,8 +2,9 @@
 
 Public service bootstrap is received over management SSH. Runtime roots,
 endpoints and sibling digests remain compiled. HMAC/grant/authkey are carried
-only in private pipes. This first round stops normally BEFORE owner revocation;
-it deliberately does not claim live-revocation/fault/upgrade acceptance.
+only in private pipes. Normal baseline stops before revocation; explicit
+live-revoke mode observes autonomous completion without a parent stop command.
+Neither mode claims authority-outage/fault-recovery or upgrade acceptance.
 """
 import base64
 import hashlib
@@ -270,7 +271,7 @@ class CompiledPair:
         if p.returncode != 0 or value.get("status") != "usable" or (op != "cleanup-test" and value.get("epoch") != 1):
             raise RuntimeError("compiled_mac_maintenance_failed")
 
-    def run(self, Pipe, handoff):
+    def run(self, Pipe, handoff, live_revoke=False):
         # Obtain private inputs only after old node owners actually joined.
         inputs = handoff.take()
         self.maintenance("initialize")
@@ -289,10 +290,44 @@ class CompiledPair:
             raise RuntimeError("compiled_controller_not_ready")
         observe(self.target, self.controller)
         self.t.check(True, "compiled_actual_product_pongs_continue_beyond_initial_lease")
+        if live_revoke:
+            # Return with BOTH actual sessions still active. consent() must
+            # issue its signed owner revoke before revoked() joins anything.
+            if session_state(self.target.request("session_state")) != (False, False):
+                raise RuntimeError("compiled_target_not_live_before_revoke")
+            if session_state(self.controller.request("session_state")) != (False, False):
+                raise RuntimeError("compiled_controller_not_live_before_revoke")
+            self.t.check(True, "compiled_both_sessions_live_before_signed_revoke")
+            return
         # First end-to-end slice uses normal joined shutdown. Do not label this
         # live-revocation: consent() sends owner revoke only after we return.
         self.stop_sessions()
         self.t.check(True, "compiled_product_node_watch_signer_normal_join")
+
+    def revoked(self):
+        # No stop command/cancellation is sent before autonomous completion.
+        self.controller.join_fault()
+        self.controller = None
+        self.t.check(True, "compiled_controller_autonomous_fault_join_and_native_retirement")
+        end = time.monotonic() + 20
+        while time.monotonic() < end:
+            joined, fault = session_state(self.target.request("session_state"))
+            if joined:
+                if not fault:
+                    raise RuntimeError("compiled_target_unexpected_normal_completion")
+                break
+            time.sleep(.2)
+        else:
+            raise RuntimeError("compiled_target_autonomous_join_deadline")
+        # Stable terminal state cannot become a freshly active old owner.
+        time.sleep(.5)
+        if session_state(self.target.request("session_state")) != (True, True):
+            raise RuntimeError("compiled_target_terminal_state_regressed")
+        if self.target.request("retire_fault") != {"status":"fault_retired", "joined":True, "fault":True}:
+            raise RuntimeError("compiled_target_native_fault_retirement_unconfirmed")
+        self.t.check(True, "compiled_target_autonomous_fault_join_and_native_retirement")
+        self.maintenance("inspect")  # actual controller lease released
+        self.sessions_joined = True
 
     def stop_sessions(self):
         if self.controller is not None:

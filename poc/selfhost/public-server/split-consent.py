@@ -158,12 +158,18 @@ class Coordinator(Pipe):
             raise RuntimeError("split_remote_cleanup_unconfirmed")
         return self.proc.returncode
 
+def mode_flags(args):
+    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"]): raise RuntimeError("invalid_arguments")
+    live_revoke=args==["--compiled-revoke"]
+    compiled=live_revoke or args==["--compiled"]
+    fault=args==["--tls-fault"]
+    tls=fault or args==["--tls"]
+    nodes=compiled or tls or args==["--nodes"]
+    return compiled,live_revoke,fault,tls,nodes
+
+
 def main():
-    if sys.argv[1:] not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"]): raise RuntimeError("invalid_arguments")
-    compiled=sys.argv[1:]==["--compiled"]
-    fault=sys.argv[1:]==["--tls-fault"]
-    tls=fault or sys.argv[1:]==["--tls"]
-    nodes=compiled or tls or sys.argv[1:]==["--nodes"]
+    compiled,live_revoke,fault,tls,nodes=mode_flags(sys.argv[1:])
     pipe_type=Pipe
     if compiled:
         from joined_pipe import JoinedPipe
@@ -255,12 +261,13 @@ def main():
                 node=split_nodes.run(t,pipe_type,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders)
                 node_result.append(node)
                 if compiled:
-                    compiled_pair.run(pipe_type,node["compiled_handoff"])
+                    compiled_pair.run(pipe_type,node["compiled_handoff"],live_revoke=live_revoke)
                 if tls:
                     active=split_tls.run(t,Pipe,ready,clients,node,grant,product_command,node_helpers)
                     if fault: active=split_tls.fault_round(t,Pipe,ready,clients,node,grant,product_command,node_helpers,coordinator,active)
                     active_tls.append(active)
             consent(*clients,node_phase=node_phase)
+            if live_revoke: compiled_pair.revoked()
             if tls: active_tls[0].revoked()
             split_nodes.reclaimed(t)
             node_cleanup_confirmed=True
@@ -331,7 +338,10 @@ def main():
     t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
     if compiled:
         print("ACTION: verification and server/client teardown finished. Enter in BORROWER window FIRST and confirm its STOPPED, then Enter in identity creator and confirm STOPPED.",flush=True)
-        print("VALIDATION PASSED: compiled native pair + real Headscale binding + product TLS payload/autonomous refresh + normal join + post-stop signed revoke. NOT live-session revocation, borrower STOPPED cleanup, upgrade/fault, GUI or signed installer acceptance.",flush=True)
+        if live_revoke:
+            print("VALIDATION PASSED: compiled native pair + real Headscale/product TLS + signed live-session revocation + autonomous fault join/native retirement. NOT borrower STOPPED cleanup, authority-outage fault, upgrade, GUI or signed installer acceptance.",flush=True)
+        else:
+            print("VALIDATION PASSED: compiled native pair + real Headscale binding + product TLS payload/autonomous refresh + normal join + post-stop signed revoke. NOT live-session revocation, borrower STOPPED cleanup, upgrade/fault, GUI or signed installer acceptance.",flush=True)
         return
     scope=" + real nodeproof + actual product TLS/autonomous refresh/revocation" if tls else " + real nodeproof/minimum ACL/revoked payload" if nodes else " only"
     print("VALIDATION PASSED: split-process OS consent"+scope+". NOT installed trust/public product acceptance.",flush=True)

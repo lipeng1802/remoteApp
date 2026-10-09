@@ -181,4 +181,46 @@ class CompiledProductTests(unittest.TestCase):
         self.assertFalse(pair.sessions_joined)
         self.assertTrue(pair.mac_initialized)
 
+    def test_live_revocation_never_sends_stop_before_autonomous_join(self):
+        events=[];pair=self.pair(events)
+        class Target:
+            replies=[dict(status="product_ready",Key=base64.b64encode(bytes(32)).decode(),Fingerprint="a"*64),dict(status="ready",port=0)]
+            joined=False
+            def send(self,v):events.append("target_start")
+            def read(self):return self.replies.pop(0)
+            def request(self,op):
+                events.append(op)
+                if op=="session_state":return dict(status="session_state",joined=self.joined,fault=self.joined)
+                if op=="retire_fault":return dict(status="fault_retired",joined=True,fault=True)
+                raise AssertionError("stop forbidden")
+        class Controller:
+            def read(self):return dict(status="ready",port=12345)
+            def request(self,op):return dict(status="session_state",joined=False,fault=False)
+            def stop(self):raise AssertionError("stop forbidden")
+            def join_fault(self):events.append("controller_fault_joined")
+        class Handoff:
+            def take(self):return dict(target={},controller={})
+        pair.target=Target()
+        with patch("compiled_products.observe"):
+            pair.run(lambda cmd,cfg:Controller(),Handoff(),live_revoke=True)
+        self.assertFalse(pair.sessions_joined)
+        events.append("owner_signed_revoke")
+        pair.target.joined=True
+        with patch("compiled_products.time.sleep"):
+            pair.revoked()
+        self.assertTrue(pair.sessions_joined)
+        self.assertLess(events.index("owner_signed_revoke"),events.index("controller_fault_joined"))
+        self.assertLess(events.index("controller_fault_joined"),events.index("retire_fault"))
+        self.assertEqual(events[-1],"inspect")
+
+    def test_unconfirmed_fault_retirement_prevents_cleanup(self):
+        events=[];pair=self.pair(events)
+        class Controller:
+            def join_fault(self):raise RuntimeError("missing retirement")
+        pair.controller=Controller()
+        with self.assertRaises(RuntimeError):pair.revoked()
+        self.assertFalse(pair.sessions_joined)
+        self.assertIsNotNone(pair.controller)
+        self.assertEqual(events,[])
+
 if __name__=="__main__":unittest.main()

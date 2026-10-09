@@ -134,7 +134,8 @@ func (b *backend) SessionState() clientowner.SessionState {
 	b.observationMu.Unlock()
 	return h.State()
 }
-func (b *backend) Stop(ctx context.Context) error { return b.owner.Stop(ctx) }
+func (b *backend) Stop(ctx context.Context) error        { return b.owner.Stop(ctx) }
+func (b *backend) RetireFault(ctx context.Context) error { return b.owner.RetireFault(ctx) }
 func (b *backend) Upgrade(ctx context.Context, p trustprofile.Profile) error {
 	return b.owner.Upgrade(ctx, p)
 }

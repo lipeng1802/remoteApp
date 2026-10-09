@@ -68,7 +68,7 @@ func run() error {
 				continue
 			}
 			switch status.Status {
-			case "ready", "probe_passed", "session_closed", "upgraded", "product_count", "session_state":
+			case "ready", "probe_passed", "session_closed", "upgraded", "product_count", "session_state", "fault_retired":
 				break
 			default:
 				return privatepipe.ErrProtocol

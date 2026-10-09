@@ -239,6 +239,25 @@ func (o *Owner) Close(ctx context.Context) error {
 	return e
 }
 
+// RetireFault is explicit trusted maintenance, not a successful Stop. Only an
+// already completed faulty runner may release its journal this way. It never
+// cancels pending work, repairs state, or makes this owner reusable.
+func (o *Owner) RetireFault(ctx context.Context) error {
+	if e := o.lock(ctx); e != nil {
+		return e
+	}
+	defer o.unlock()
+	if o.running == nil || !o.running.State().Joined || !o.running.State().Fault || o.closed {
+		return trustprofile.ErrTrust
+	}
+	o.broken = true
+	if e := o.journal.Close(); e != nil {
+		return e
+	}
+	o.closed = true
+	return nil
+}
+
 // Group is a structured-ownership building block for trusted runtime adapters.
 // Seal prevents new workers racing with join; the context passed to each worker
 // is cancelled before waiting. A worker must join its own nested children.

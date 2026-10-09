@@ -10,6 +10,13 @@ split=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(split)
 
 class SplitConsentTests(unittest.TestCase):
+    def test_live_compiled_mode_is_explicit_and_not_authority_fault(self):
+        self.assertEqual(split.mode_flags(["--compiled-revoke"]),(True,True,False,False,True))
+        self.assertEqual(split.mode_flags(["--compiled"]),(True,False,False,False,True))
+        self.assertEqual(split.mode_flags(["--tls-fault"]),(False,False,True,True,True))
+        for args in (["--compiled-revoke","--tls-fault"],["--compiled-revoke","--compiled"],["--compiled-fault"]):
+            with self.assertRaises(RuntimeError):split.mode_flags(args)
+
     def test_remote_cleanup_requires_authoritative_marker_not_ssh_exit(self):
         for text, code, accepted in [("",0,False),
                 ("STOPPED isolated_coordinator_resources_joined extra",0,False),

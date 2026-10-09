@@ -1,6 +1,14 @@
 # 4C-4S：产品进程进入 compiled owner 的租约屏障
 
-开发接线与两平台局部测试通过。**本轮没有运行新 compiled 客户端的真实双机 Headscale + OS signer + Swift/C# 会话，也未初始化真实 prerelease channel。** 整体切片 4 仍未完成；无需现在重复旧 READY/r3 验证。
+4W compiled正常双机基线已实际通过，包括Headscale/OS绑定、真实Swift/C#持续TLS、自主刷新、正常join后撤销和回收。4X活会话撤销入口已接线，尚待新双机实测；整体切片4仍未完成。下文各旧切片构建/验收范围按其当时记录保留。
+
+## 4X-2：compiled活会话撤销入口（待原生双机验收）
+
+新可信协调命令为 `split-consent.py --compiled-revoke`，环境 `REMOTEAPP_WINDOWS_INTERACTIVE_DIR` 必须指向本轮仍READY的全新creator目录。它仍使用既有隔离compiled服务阶段/动态匹配fresh pair，不绕过OS consent，不改变grant/profile时效或公网正式配置。旧 `--compiled` 正常join后撤销模式保持不变。
+
+两端真实产品计数持续增长并跨初始lease后，分别确认session_state仍pending，保持会话活跃返回consent；consent随后以owner OS签名在线撤销。协调器不预先发stop或关闭控制管道。Mac自主报告精确session_state(joined/fault)、fault_retired及failed，再等待真实进程exit1；缺任一帧、普通closed、exit0或信号退出均不能作为此验收成功。Windows以同用户本地管道查询实际Handle.Done，要求故障完成且稳定，再显式retire_fault，确认原生journal成功关闭后才给fault_retired。该操作拒未完成/无会话/正常完成/重复退役，旧owner保持锁闭，Start/Upgrade不得恢复。
+
+fault_retired不等于正常Stop/closed成功：运行故障仍保留为非零退出；journal.Close失败不确认退役。只有实际runner所有产品/node/watch/signers加入后才能释放租约。随后需真实inspect Mac原生journal、在线确认撤销/客户端节点回收/零规则、daemon退出与原策略恢复。Windows最终仍须borrower先Enter/STOPPED、creator后Enter/STOPPED，才能确认测试journal/身份清理。原生实测前不得输出VALIDATION PASSED；不包含authority freeze/503旧ACL故障、升级、GUI或签名安装包验收。
 
 ## 同一 owner 的生命周期
 

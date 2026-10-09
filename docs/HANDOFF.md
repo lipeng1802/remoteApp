@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-09 4X-2 compiled活会话撤销编排接线，新creator r4待READY
+
+新增显式 `split-consent.py --compiled-revoke`，保持既有--compiled基线模式不变，也不把此模式当authority fault。新模式在真实产品持续pongs跨初始lease后确认双端Handle仍pending，保持产品活跃返回consent；在线OS签名撤销后才观测自主结束，不预发stop/关闭控制管道。Mac必须报告精确session_state(joined=true,fault=true)、fault_retired、failed三帧并真实exit1，缺帧/exit0/未知字段拒绝；该expected-fault join不设置closed ACK、不等于normal成功，无force kill。Windows等待真实Handle.Done且fault、稳定快照，再通过受保护同用户pipe请求retire_fault，原生journal.Close成功才确认；未结束/无会话/正常结束/重复退役拒绝，Start/Upgrade仍锁闭。Mac inspect确认租约可重开后才标两端join完成；后续节点回收/服务退出/策略恢复与桌面清理仍需实际验收。
+
+Owner.RetireFault是明确受信维护操作，不取消pending工作、不修复状态、不清除故障使owner可用；journal释放失败不能确认退役。Windows桌面launcher最终Close在明确退役后可正常join signer并清理本轮test journal，但不抹掉协调端已记录的故障结束。操作/范围更新INSTALLED_PRODUCT_OWNER.md。
+
+相关7包Mac Go race通过、最新Windows同包vet退出0；补测Owner pending/正常/缺会话/重复/原生journal Close失败拒绝及不可重启、管道不同ACK/注入配置拒绝。36项Python回归PASS，含真实子进程三帧+exit1、缺退役/exit0/额外字段拒绝、撤销前不能Stop、未确认退役不清理、显式模式检查；diff检查PASS。**这些是实现/局部验证，不是活会话撤销或authority故障双机通过，整体4未完成。**
+
+当前源码9项helper实际重建。准备creator时临时检查误用另一构建器的BUILD_READY冒号标记，r3本地目录保留未上传/未运行；随后在独立r4目录重新构建，正确BUILD_READY与实际exit0确认，全文件manifest核验并用公开差异复用上传。Windows新目录 `C:\Users\jarvis\windows-desktop-session-live-revoke-20261009-r4`：全部文件摘要PASS、start/probe两公开PowerShell脚本解析PASS（首次手工SSH诊断引用错误未执行脚本，改用编码命令核对成功）。未读取发布root/CA私钥、未启动服务器/桌面或创建节点/grant。旧r2已STOPPED不可用；r4尚待用户正常桌面启动start-desktop-session.ps1/READY。
+
+下一步：收到r4 READY后先真实probe，然后用r4环境启动新的--compiled-revoke隔离服务，提供本轮fresh borrower第二窗口命令；只有实际输出才能记通过。结束仍borrower先STOPPED、creator后STOPPED。若fault退役/进程join未确认，保留journal/签名器/隧道/策略证据，不强杀或伪造正常cleanup。仅本地提交，不推送。
+
 ## 2026-10-09 4W桌面清理闭环；4X-1故障join观测入口开发完成
 
 用户确认65abe99f本轮第二窗口 `STOPPED: borrowed desktop owner joined and its isolated test journal cleaned. Identity creator remains READY; not deleted.`，随后第一窗口 `STOPPED: desktop workers and native signer joined; isolated test journal and random test identity cleaned.`。记录本轮borrower/creator按顺序正常join及随机test身份清理闭环；旧r1/4T审计不与此混同。r2现在已停止，不可继续使用旧bootstrap发起协调。

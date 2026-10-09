@@ -25,6 +25,7 @@ class JoinedPipe:
         self.closed_seen = self.stop_sent = False
         self.prepared_seen = False
         self.failed_seen = False
+        self.fault_joined = False
         self.one_shot = isinstance(config, dict) and config.get("Op") == "prepare"
         self.proc = subprocess.Popen(command, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, bufsize=0)
@@ -42,7 +43,7 @@ class JoinedPipe:
                 raise RuntimeError("private_input_closed")
             rest = rest[written:]
 
-    def read(self, timeout=40):
+    def read(self, timeout=40, allow_exact_failure=False):
         deadline = time.monotonic() + timeout
         while b"\n" not in self.buffer:
             left = deadline - time.monotonic()
@@ -62,6 +63,8 @@ class JoinedPipe:
         if not isinstance(value, dict) or value.get("status") in ("failed", "cleanup_timeout"):
             if isinstance(value, dict) and value.get("status") == "failed":
                 self.failed_seen = True
+                if allow_exact_failure and value == {"status":"failed"}:
+                    return value
                 stage = value.get("failure_stage")
                 if stage not in ("signer_open", "node_state", "intent_sign", "protocol"):
                     stage = "unknown"
@@ -72,6 +75,23 @@ class JoinedPipe:
         if value.get("status") == "prepared":
             self.prepared_seen = True
         return value
+
+    def join_fault(self):
+        # Dedicated expected-fault protocol. It is never a normal close ACK;
+        # require nested join, successful journal retirement AND real exit 1.
+        with self.lock:
+            if self.read(20) != {"status":"session_state", "joined":True, "fault":True}:
+                raise RuntimeError("private_fault_completion_missing")
+            if self.read(12) != {"status":"fault_retired", "joined":True, "fault":True}:
+                raise RuntimeError("private_fault_retirement_missing")
+            if self.read(12, allow_exact_failure=True) != {"status":"failed"}:
+                raise RuntimeError("private_fault_terminal_missing")
+            if not self.proc.stdin.closed:
+                self.proc.stdin.close()
+            self.proc.wait(timeout=12)
+            if self.proc.returncode != 1:
+                raise RuntimeError("private_fault_exit_mismatch")
+            self.fault_joined = True
 
     def request(self, op, **values):
         with self.lock:
@@ -92,6 +112,11 @@ class JoinedPipe:
                 raise RuntimeError("private_join_nonzero_exit")
 
     def emergency(self):
+        if getattr(self, "fault_joined", False):
+            self.proc.wait(timeout=12)
+            if self.proc.returncode != 1:
+                raise RuntimeError("private_fault_exit_mismatch")
+            return
         # A failed one-shot never emits a close acknowledgement. Join its
         # actual exit, but do not turn it into successful preparation or delete
         # its state. A still-running process remains a blocked teardown.

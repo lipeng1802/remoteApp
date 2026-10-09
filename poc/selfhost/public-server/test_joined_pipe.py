@@ -5,6 +5,25 @@ from joined_pipe import JoinedPipe
 
 
 class JoinedPipeTests(unittest.TestCase):
+    def test_fault_join_requires_retirement_terminal_and_actual_exit_one(self):
+        code='import sys; print(\'{"status":"session_state","joined":true,"fault":true}\'); print(\'{"status":"fault_retired","joined":true,"fault":true}\'); print(\'{"status":"failed"}\'); sys.exit(1)'
+        p=self.child(code)
+        p.join_fault()
+        self.assertTrue(p.fault_joined)
+        self.assertFalse(p.closed_seen)
+        self.assertEqual(p.proc.returncode,1)
+        p.emergency()
+
+    def test_fault_join_rejects_missing_retirement_and_zero_exit(self):
+        for receipt, terminal, exit_code in [
+            ('{"status":"closed"}', '{"status":"failed"}', 1),
+            ('{"status":"fault_retired","joined":true,"fault":true}', '{"status":"failed"}', 0),
+            ('{"status":"fault_retired","joined":true,"fault":true}', '{"status":"failed","extra":"private"}', 1)]:
+            code='import sys; print(\'{"status":"session_state","joined":true,"fault":true}\'); print('+repr(receipt)+'); print('+repr(terminal)+'); sys.exit('+str(exit_code)+')'
+            p=self.child(code)
+            with self.assertRaises(RuntimeError): p.join_fault()
+            self.assertFalse(p.fault_joined)
+
     def child(self,code,config=None):
         p=JoinedPipe([sys.executable,"-u","-c",code],config)
         def cleanup():

@@ -23,6 +23,36 @@ type observedBackend struct{ *backend }
 func (b *observedBackend) SessionState() clientowner.SessionState {
 	return clientowner.SessionState{Status: "session_state", Joined: true, Fault: true}
 }
+func (b *observedBackend) RetireFault(context.Context) error { return nil }
+
+func TestFaultRetirementHasDistinctAckAndRejectsAuthorityInput(t *testing.T) {
+	for _, injected := range []bool{false, true} {
+		b := &observedBackend{&backend{stopping: make(chan struct{}), release: make(chan struct{})}}
+		c, _, _ := serveTest(t, b)
+		w := json.NewEncoder(c)
+		r := privatepipe.NewReader(c)
+		w.Encode(map[string]string{"Scope": "scope", "Expected": "public"})
+		status(t, r, "ready")
+		req := Request{Op: "retire_fault"}
+		if injected {
+			req.Config.Server = true
+		}
+		w.Encode(req)
+		if injected {
+			status(t, r, "failed")
+			continue
+		}
+		var state clientowner.SessionState
+		if e := r.Read(&state); e != nil || state.Status != "fault_retired" || !state.Joined || !state.Fault {
+			t.Fatal("fault retirement ACK", e)
+		}
+		select {
+		case <-b.stopping:
+			t.Fatal("normal Stop invoked")
+		default:
+		}
+	}
+}
 
 func TestSessionStateIsReadOnlyAndDoesNotStop(t *testing.T) {
 	b := &observedBackend{&backend{stopping: make(chan struct{}), release: make(chan struct{})}}

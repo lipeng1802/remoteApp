@@ -135,6 +135,12 @@ func run(output func(any)) (result error) {
 			// Report real nested completion before preserving the nonzero failure
 			// exit. This is not a close ACK or a successful revoked session.
 			output(h.State())
+			if h.State().Fault {
+				if e := o.RetireFault(context.Background()); e != nil {
+					return e
+				}
+				output(map[string]any{"status": "fault_retired", "joined": true, "fault": true})
+			}
 			return h.Wait(context.Background())
 		case c, ok := <-commands:
 			if !ok {
