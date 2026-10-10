@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 r6正向payload/TLS/签名撤销通过；自主回报超时，最后阶段signer_closed
+
+用户确认r6 creator READY与stage `C:\Users\jarvis\remoteapp-compiled-stage-ec429e80730b06e7` WATCH_READY后实际执行--compiled-revoke。实时等待器/native probe、当前helper/fresh pair摘要/borrower真实probe、OS授权/单次enrollment/错误身份拒绝/真实节点持有证明/同节点重启/精确binding PASS。正向诊断实际 `forward_probe_stage_payload_verified_reason_none`，完整固定payload通过；反向payload拒绝通过。没有扩大期限、重试或放宽ACL。r5正向失败本轮未复现，不据此证明间歇性问题根治。
+
+实际产品pongs跨初始lease、双端会话仍pending、在线owner OS签名revoke、signed status及无离线替代检查全部PASS。随后Mac join_fault首帧20秒超时，最后固定阶段 `signer_closed`；primary joined_pipe.py:83，finally正常stop又遇failed帧(line104)，Python实际exit1。此阶段仅说明对应signer关闭屏障已返回，不能代替Handle.Done/故障三帧/actual exit1证据，不能仅凭阶段断定所有退出协议成功或唯一根因。尚需检查installed-session完成状态输出/command reader及journal退役顺序；未修改这些实现，不能称4X通过。
+
+本轮Mac compiled目录 `artifacts/connection-poc/compiled-live-4bc14bf48365e99b/mac`。原finally在compiled.close处失败，没有原协调器STOPPED/正常恢复完整证据。独立审计：本輪prefix `/tmp/remoteapp-split-consent-3a68caf4d1c48bd3` 下server进程0、Headscale nodes/users/preauthkeys均0、当时零ACL；本地本轮installed-session/管理子进程/ConnectionIdentityVault均无存活。新的诊断relay核对r6公开身份与borrower bootstrap，实际Windows state=(joined=true,fault=true)，明确retire_fault获准确ACK，relay实际exit0。Mac manifest校验后trust-install inspect实际usable/epoch1，证明native journal可重开，不算原自动回报通过。
+
+在上述资源和原生租约审计后，用本轮精确mode脚本restore `/var/lib/remoteapp-poc/enrollment-mode-W1kz0U`，实际file_mode_restored，备份由脚本消费；原公开单向policy、三正式服务active、Store固定SHA及Nginx基线PASS。本轮公开程序/Windows包/client journal和未知test身份均保留，不删除未知凭据，也不把无marker的原清理计为通过。
+
+下一步先让第二窗口Enter并确认borrower STOPPED，再第一窗口Enter确认creator STOPPED；新stage不可复用。优先收口“runtime signer_closed之后为何无完成帧”的本地协议证据/测试，不盲目扩大20秒预算或再次无诊断live revoke。整体4仍未完成。本轮仅记录并本地提交，不推送。
+
 ## 2026-10-10 正向probe固定阶段诊断完成；r6与新等待入口待桌面就绪
 
 用户要求继续并说明网络/SSH已通。实际通过Windows SSH公开响应及服务器管理调用，Headscale nodes/users/preauthkeys全0；管理通道可达不替代隔离tsnet正向传输验收。未复用已STOPPED的r5 bootstrap或已消费stage。
