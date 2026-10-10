@@ -8,7 +8,9 @@
 
 撤销节点回收零ACL、两个provision durable cleaned后再停止daemon、精确verifier ticket退役、隔离目录移除、STOPPED isolated_coordinator_resources_joined、coordinator实际exit0全部PASS。Mac本轮compiled journal inspect/cleanup-test和随机Mac test signer清理顺序正常完成；公开Windows包/未知旧证据保留。原file policy恢复、本轮公开上传程序移除、控制面nodes/users/preauthkeys均0、原公开policy、三正式服务/Store固定SHA/Nginx基线全部PASS；不需要本轮独立恢复来代替自动收尾。Python协调器实际exit0并输出VALIDATION PASSED。
 
-**4X修复后的真实Headscale/product TLS+活会话签名撤销+自主故障join/native退役已验收通过，但整体4未完成。** 仍不包含两个桌面最终STOPPED、authority-outage故障、upgrade、GUI或签名安装包验收。下一步用户先第二窗口Enter确认borrower STOPPED，再第一窗口Enter确认creator STOPPED；收到实际日志后闭环Windows测试journal/creator身份最终清理，stage不复用。以后不要再把r5/r6失败或本地实验算成功基线。仅本地提交，不推送。
+用户随后确认两个窗口均已STOPPED，记录本轮Windows桌面人工最终退出确认；此次未附完整提示，不扩大为旧未知凭据清理全部通过。stage不复用。**4X修复后的真实Headscale/product TLS+活会话签名撤销+自主故障join/native退役和本轮桌面退出已验收通过，但整体4未完成。** 不得把r5/r6失败或本地实验算成功基线。仅本地提交，不推送。
+
+切片4后续按以下顺序收口（不是全部已有可运行入口）：1）将authority-outage/旧ACL仍残留时的拒绝、TLS断流、完整join及显式同身份恢复接到最新compiled/native双机链路，旧fixture故障证据不能替代；2）真实活会话升级、epoch floor/拒降级、提交失败/超时后锁闭与明确恢复、升级后重启，不能自动恢复旧权限；3）正式公网接入与peer/grant/TLS绑定的秘密安全投递，替换受信SSH/脚本私有HMAC测试分发，补公网准入与防滥用；4）把新网络/原生存储/session owner接到实际RemoteController/RemoteAgent GUI，真实画面/键鼠/剪贴板、连接/断线/撤销可见状态与重连授权；5）正式签名/可信发行安装包，信任初始化/升级保留身份、Keychain升级授权、无开发环境且无需另装/登录Tailscale的双机安装验收。自然到期、网络/服务重启、睡眠唤醒及硬崩溃/损坏恢复按风险补最终异常矩阵，不以一次live revoke替代。近期优先1→2，其余含产品化开发，不能称只剩人工点验。
 
 ## 2026-10-10 故障管道EOF顺序修复完成；r7入口待真实双机验收
 

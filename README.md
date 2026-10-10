@@ -165,7 +165,7 @@ git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 git -c http.proxy=http://127.0.0.1:1080 push origin main
 # 2026-10-10 验证入口状态
 
-最新r7真实双机验收实际exit0：Headscale精确绑定/单向payload、真实产品TLS持续传输、在线签名撤销、严格故障三帧/actual exit1与双端原生退役全部通过。节点回收、协调器正常join、原策略恢复及正式服务基线全部PASS，未使用独立恢复代替自动收尾。**两个Windows桌面最终STOPPED尚待；authority-outage、升级、GUI和签名安装包未验收，整体4仍未完成。** 详细结果和窗口退出顺序见[交接](docs/HANDOFF.md)。下方为历史记录。
+最新r7真实双机验收实际exit0：Headscale精确绑定/单向payload、真实产品TLS持续传输、在线签名撤销、严格故障三帧/actual exit1与双端原生退役全部通过。节点回收、协调器正常join、原策略恢复及正式服务基线全部PASS，未使用独立恢复代替自动收尾。**用户已确认两个Windows桌面均STOPPED；authority-outage、真实升级、正式公网/秘密投递、GUI和可信签名安装包仍待，整体4未完成。** 已完成与剩余清单见[交接](docs/HANDOFF.md)。下方为历史记录。
 
 故障管道收尾修复已实施：严格验证完成+原生退役两帧后才父端EOF，再验证末帧和actual exit1，不发Stop/强杀或放宽要求。44项Python回归及真实Go子进程/Python父端连续3次收尾通过；新r7公共包与等待入口全摘要/脚本解析通过，待Windows READY/WATCH_READY后真实双机验收。**局部修复通过，不等于4X或整体4通过。** 新入口见[交接](docs/HANDOFF.md)。下方为历史记录。
 
