@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 r7真实双机live revoke验收exit0；最终两个桌面STOPPED尚待
+
+用户确认r7 creator READY与stage `C:\Users\jarvis\remoteapp-compiled-stage-d21bc13211ad57af` WATCH_READY后，实际执行修复后的split-consent.py --compiled-revoke。实时等待器/OS creator probe、9项helper、fresh pair全摘要、自动桌面borrower启动及实际native probe PASS；OS签名授权/拒绝/单次enrollment、错误OS身份拒绝、真实node持有证明、同节点重启、精确binding和策略readback PASS。正向诊断实际payload_verified/none、固定payload通过，反向payload仍拒绝，权限/期限未放宽。
+
+真实Swift/C# TLS产品持续pongs跨初始lease、双端在撤销前实际pending、在线owner OS签名revoke和signed status PASS。Mac分帧标记依次fault_wait_completion→fault_completion_verified_wait_retirement→fault_retirement_verified_wait_terminal，随后compiled_controller_autonomous_fault_join_and_native_retirement PASS：严格completed+fault/retired两帧后父EOF、精确failed末帧及actual exit1全部确认，非正常closed、未发Stop或强杀。Windows实际Handle.Done+fault和稳定终态、retire_fault/native journal释放 PASS。
+
+撤销节点回收零ACL、两个provision durable cleaned后再停止daemon、精确verifier ticket退役、隔离目录移除、STOPPED isolated_coordinator_resources_joined、coordinator实际exit0全部PASS。Mac本轮compiled journal inspect/cleanup-test和随机Mac test signer清理顺序正常完成；公开Windows包/未知旧证据保留。原file policy恢复、本轮公开上传程序移除、控制面nodes/users/preauthkeys均0、原公开policy、三正式服务/Store固定SHA/Nginx基线全部PASS；不需要本轮独立恢复来代替自动收尾。Python协调器实际exit0并输出VALIDATION PASSED。
+
+**4X修复后的真实Headscale/product TLS+活会话签名撤销+自主故障join/native退役已验收通过，但整体4未完成。** 仍不包含两个桌面最终STOPPED、authority-outage故障、upgrade、GUI或签名安装包验收。下一步用户先第二窗口Enter确认borrower STOPPED，再第一窗口Enter确认creator STOPPED；收到实际日志后闭环Windows测试journal/creator身份最终清理，stage不复用。以后不要再把r5/r6失败或本地实验算成功基线。仅本地提交，不推送。
+
 ## 2026-10-10 故障管道EOF顺序修复完成；r7入口待真实双机验收
 
 用户明确授权实施修复。JoinedPipe.join_fault现顺序为：严格completion(joined/fault真布尔)→严格fault_retired→关闭本父进程stdin写端→精确failed末帧→actual wait/exit1→fault_joined。EOF不发送Stop、不取消pending runner、不替代完成/原生journal释放或末帧；只在前两帧已确认后让继承命令reader退出。20/12秒期限和故障语义不变，没有强杀。补verified_fault_receipt精确schema和实际布尔类型，避免Python dict equality将整数1当True。只修受信协调父端协议，不宣称通用所有宿主stdin问题或GUI产品接入已完成。

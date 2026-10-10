@@ -165,6 +165,8 @@ git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 git -c http.proxy=http://127.0.0.1:1080 push origin main
 # 2026-10-10 验证入口状态
 
+最新r7真实双机验收实际exit0：Headscale精确绑定/单向payload、真实产品TLS持续传输、在线签名撤销、严格故障三帧/actual exit1与双端原生退役全部通过。节点回收、协调器正常join、原策略恢复及正式服务基线全部PASS，未使用独立恢复代替自动收尾。**两个Windows桌面最终STOPPED尚待；authority-outage、升级、GUI和签名安装包未验收，整体4仍未完成。** 详细结果和窗口退出顺序见[交接](docs/HANDOFF.md)。下方为历史记录。
+
 故障管道收尾修复已实施：严格验证完成+原生退役两帧后才父端EOF，再验证末帧和actual exit1，不发Stop/强杀或放宽要求。44项Python回归及真实Go子进程/Python父端连续3次收尾通过；新r7公共包与等待入口全摘要/脚本解析通过，待Windows READY/WATCH_READY后真实双机验收。**局部修复通过，不等于4X或整体4通过。** 新入口见[交接](docs/HANDOFF.md)。下方为历史记录。
 
 本地独立子进程已复现继承stdin的close/join等待父EOF，而父端等待末帧才EOF的互等：关闭实验父写端后末帧与actual exit1立即完成，3次race及41项Python回归通过。只新增诊断测试和分帧等待标记，尚未修改收尾顺序或进行新双机验收。旧统一超时行号不能证明“首帧超时”，已纠正。下一步修复方案及安全前置条件见[交接](docs/HANDOFF.md)。
