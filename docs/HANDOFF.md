@@ -10,7 +10,7 @@
 
 当前源码重建verifier-owner-linux、上传本轮唯一recovery-verifier并SHA确认；精确 `retire /tmp/remoteapp-daemon-check-1825219874/verifier` 实际RETIRED/exit0，nodes/users/preauthkeys全部0。此后才用本轮mode脚本restore精确备份，实际file_mode_restored；备份由脚本消费，原公开策略 `100.120.0.2 -> 100.120.0.1:47476`、三正式服务/Store固定SHA/Nginx基线再次PASS。现场目录和公开程序保留，未删除未知身份或client journal，独立恢复不计本轮自动验收通过。
 
-下一步用户先第二窗口Enter确认borrower STOPPED，再第一窗口Enter确认creator STOPPED。本stage已消费不可重用；在再次live revoke之前，先给正向probe补固定非秘密reason/阶段证据，区分网络建立与policy readback，不盲目延时或降低负向拒绝要求。4X和整体4仍未完成。本轮仅记录并本地提交，不推送。
+用户随后确认两个窗口均已STOPPED，本轮桌面人工退出确认已记录；未提供完整退出字符串，不扩展为旧未知身份/journal清理审计全部通过。本stage已消费不可重用，r5旧bootstrap不再作为在线身份入口。在再次live revoke之前，先给正向probe补固定非秘密reason/阶段证据，区分网络建立与policy readback，不盲目延时或降低负向拒绝要求。4X和整体4仍未完成。本轮仅记录并本地提交，不推送。
 
 ## 2026-10-10 两窗口用户报告STOPPED；分层退出诊断与全新复测入口
 
