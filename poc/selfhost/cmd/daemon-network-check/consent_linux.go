@@ -86,7 +86,7 @@ func consentSession(input io.Reader, output io.Writer, pins consentPins, issuer 
 type faultActions struct{ freeze, recover func() error }
 
 func consentSessionOps(input io.Reader, output io.Writer, pins consentPins, issuer string, ca []byte, listen string, timeout time.Duration, actions *faultActions, verifierKey ...string) error {
-	if pins.Compiled && (!pins.Nodes || pins.Fault || actions != nil) {
+	if pins.Compiled && (!pins.Nodes || (!pins.Fault && actions != nil)) {
 		return denied
 	}
 	host, port, e := net.SplitHostPort(listen)

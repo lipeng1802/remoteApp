@@ -647,13 +647,13 @@ func main() {
 		e = run(os.Args[1], "", nil)
 	} else if len(os.Args) == 4 && os.Args[2] == "--frontend" {
 		e = run(os.Args[1], os.Args[3], nil)
-	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && (os.Args[4] == "--os-consent" || os.Args[4] == "--os-nodes" || os.Args[4] == "--os-tls-fault" || os.Args[4] == "--os-compiled") {
+	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && (os.Args[4] == "--os-consent" || os.Args[4] == "--os-nodes" || os.Args[4] == "--os-tls-fault" || os.Args[4] == "--os-compiled" || os.Args[4] == "--os-compiled-fault") {
 		pins, err := parseConsentPins(os.Args[5], os.Args[6])
 		if err != nil {
 			e = denied
 		} else {
-			pins.Fault = os.Args[4] == "--os-tls-fault"
-			pins.Compiled = os.Args[4] == "--os-compiled"
+			pins.Fault = os.Args[4] == "--os-tls-fault" || os.Args[4] == "--os-compiled-fault"
+			pins.Compiled = os.Args[4] == "--os-compiled" || os.Args[4] == "--os-compiled-fault"
 			pins.Nodes = pins.Fault || pins.Compiled || os.Args[4] == "--os-nodes"
 			e = run(os.Args[1], os.Args[3], &pins)
 		}

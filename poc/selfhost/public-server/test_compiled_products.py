@@ -223,4 +223,27 @@ class CompiledProductTests(unittest.TestCase):
         self.assertIsNotNone(pair.controller)
         self.assertEqual(events,[])
 
+    def test_fault_recovery_requires_retired_owner_and_absent_controller(self):
+        events=[];pair=self.pair(events)
+        class Target:
+            state=dict(status="session_state",joined=True,fault=True)
+            def request(self,op):
+                if op!="session_state":raise AssertionError("restart forbidden")
+                return self.state
+        pair.target=Target()
+        with self.assertRaises(RuntimeError):pair.assert_fault_latched()
+        pair.sessions_joined=True
+        pair.controller=object()
+        with self.assertRaises(RuntimeError):pair.assert_fault_latched()
+        pair.controller=None
+        pair.assert_fault_latched()
+        self.assertEqual(events,["inspect"])
+        pair.target.state=dict(status="session_state",joined=False,fault=False)
+        with self.assertRaises(RuntimeError):pair.assert_fault_latched()
+
+    def test_conflicting_modes_fail_before_consuming_handoff(self):
+        pair=self.pair([])
+        with self.assertRaisesRegex(RuntimeError,"conflicting_live_modes"):
+            pair.run(None,None,live_revoke=True,authority_fault=True)
+
 if __name__=="__main__":unittest.main()

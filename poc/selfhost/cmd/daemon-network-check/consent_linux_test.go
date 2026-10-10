@@ -43,6 +43,39 @@ func TestCompiledPhaseExplicitMarkerAndBoundedWindow(t *testing.T) {
 	}
 }
 
+func TestCompiledFaultRequiresCallbacksAndOrderedRecovery(t *testing.T) {
+	p := consentPins{Nodes: true, Compiled: true, Fault: true}
+	verifier := "nodekey:" + strings.Repeat("c", 64)
+	for _, input := range []string{
+		"{\"Op\":\"freeze\"}\n{\"Op\":\"recover\"}\n{\"Op\":\"stop\"}\n",
+		"{\"Op\":\"stop\"}\n",
+		"{\"Op\":\"recover\"}\n",
+		"{\"Op\":\"freeze\"}\n{\"Op\":\"stop\"}\n",
+		"{\"Op\":\"freeze\"}\n{\"Op\":\"freeze\"}\n",
+	} {
+		var out bytes.Buffer
+		calls := ""
+		a := &faultActions{freeze: func() error { calls += "f"; return nil }, recover: func() error { calls += "r"; return nil }}
+		e := consentSessionOps(strings.NewReader(input), &out, p, "issuer", []byte("ca"), "127.0.0.1:12345", time.Second, a, verifier)
+		if (e == nil) != strings.Contains(input, "recover\"}\n{\"Op\":\"stop") {
+			t.Fatal("fault sequence accepted out of order")
+		}
+		if e == nil && calls != "fr" {
+			t.Fatal("callbacks not completed")
+		}
+		var ready map[string]any
+		if json.NewDecoder(bytes.NewReader(out.Bytes())).Decode(&ready) != nil || len(ready) != 11 || ready["compiled_phase"] != true || ready["fault_phase"] != true {
+			t.Fatal("missing combined public markers")
+		}
+	}
+	for _, a := range []*faultActions{nil, {}, {freeze: func() error { return nil }}} {
+		var out bytes.Buffer
+		if consentSessionOps(strings.NewReader(""), &out, p, "issuer", []byte("ca"), "127.0.0.1:12345", time.Second, a, verifier) == nil || out.Len() != 0 {
+			t.Fatal("incomplete fault callbacks accepted")
+		}
+	}
+}
+
 func TestConsentProtocolNeverApprovesOrAcceptsPrivateMaterial(t *testing.T) {
 	pins := consentPins{Target: strings.Repeat("a", 64), Controller: strings.Repeat("b", 64)}
 	for _, c := range []struct {

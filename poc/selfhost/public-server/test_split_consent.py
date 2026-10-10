@@ -14,7 +14,8 @@ class SplitConsentTests(unittest.TestCase):
         self.assertEqual(split.mode_flags(["--compiled-revoke"]),(True,True,False,False,True))
         self.assertEqual(split.mode_flags(["--compiled"]),(True,False,False,False,True))
         self.assertEqual(split.mode_flags(["--tls-fault"]),(False,False,True,True,True))
-        for args in (["--compiled-revoke","--tls-fault"],["--compiled-revoke","--compiled"],["--compiled-fault"]):
+        self.assertEqual(split.mode_flags(["--compiled-fault"]),(True,False,True,False,True))
+        for args in (["--compiled-revoke","--tls-fault"],["--compiled-revoke","--compiled"],["--compiled-fault","--compiled"]):
             with self.assertRaises(RuntimeError):split.mode_flags(args)
 
     def test_remote_cleanup_requires_authoritative_marker_not_ssh_exit(self):
@@ -53,6 +54,12 @@ class SplitConsentTests(unittest.TestCase):
         with self.assertRaises(Exception): split.checked_ready(fault_ready,"a"*64,"b"*64,True)
         compiled_ready=dict(node_ready,compiled_phase=True)
         self.assertEqual(split.checked_ready(compiled_ready,"a"*64,"b"*64,True,False,True),compiled_ready)
+        combined=dict(compiled_ready,fault_phase=True)
+        self.assertEqual(split.checked_ready(combined,"a"*64,"b"*64,True,True,True),combined)
+        for marker in ("fault_phase","compiled_phase"):
+            bad=dict(combined);bad.pop(marker)
+            with self.assertRaises(Exception):split.checked_ready(bad,"a"*64,"b"*64,True,True,True)
+            with self.assertRaises(Exception):split.checked_ready(dict(combined,**{marker:1}),"a"*64,"b"*64,True,True,True)
         for n,f,c in [(False,False,True),(True,True,True),(True,False,False)]:
             with self.assertRaises(Exception): split.checked_ready(compiled_ready,"a"*64,"b"*64,n,f,c)
 

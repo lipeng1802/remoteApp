@@ -1,5 +1,11 @@
 # 4C-4S：产品进程进入 compiled owner 的租约屏障
 
+## 最新新增：compiled/native 服务故障入口（尚未双机验收）
+
+`split-consent.py --compiled-fault` 保持真实两端产品活跃后，仅暂停隔离 authority 子进程。核对旧精确 ACL 仍存在、HTTPS503，再等待严格故障 join 与原生退役，随后显式同 verifier 服务恢复、双端新鲜签名状态和旧 owner 持续锁闭。旧 `--compiled-revoke` 不注入服务故障；两模式不可混用。50项 Python 与 Linux10项协议回归通过，不算真实 outage 通过。
+
+需全新 Windows creator READY + 全新 stage WATCH_READY，不能复用 r7 已停止的端点或身份。此入口不启动新的产品会话，显式新 owner 重连仍待；实际故障实验、GUI、真实升级与签名安装包也不能由局部回归替代。详见最新交接。
+
 4W compiled正常双机基线已实际通过，包括Headscale/OS绑定、真实Swift/C#持续TLS、自主刷新、正常join后撤销和回收。2026-10-10 r7已通过4X真实活会话签名撤销、严格故障三帧/actual exit1、双端原生退役与自动资源/策略恢复；用户确认两个桌面均STOPPED。父端仅在完成和原生退役两帧严格验证后EOF，再验末帧与实际退出，解决继承stdin的收尾互等，不放宽故障标准。authority-outage、真实升级、产品GUI和可信签名安装包等仍待，整体切片4未完成；详见[最新交接](../../../docs/HANDOFF.md)。下文各旧切片构建/验收范围按其当时记录保留。
 
 ## 4X-2：compiled活会话撤销入口（待原生双机验收）

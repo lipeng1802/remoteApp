@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-10-10 当前状态：r7 compiled/native 双机真实产品 TLS、活会话签名撤销、实际故障 join/原生退役和两个桌面 STOPPED 已验收。新增 `split-consent.py --compiled-fault` 隔离服务故障验证入口；50 项 Python 与 Linux 10 项协议回归通过，**新入口尚未真实双机验收**。只暂停本轮隔离 authority 子进程，不暂停正式服务；验证旧 ACL 残留期间两端自主关闭、同 verifier 服务显式恢复后旧会话仍锁闭，不宣称新产品会话重连。整体切片 4 未完成。后续步骤见 [交接](docs/HANDOFF.md)，下方旧记录按历史保留。
+
 4W 旧Windows signer artifact故障已完成原生离线修正验收：restart-r2实际8类签名域验证、节点intent准备及准备前后保留连接签名全部PASS，helper真实退出，未注册网络节点。当前源码native helpers重建已加入构建流程，Go与26项Python回归通过。r2身份窗口仍READY，旧r1/4T状态保留，清理审计不与新测试混同。**下一步重跑fresh双机网络；节点绑定/产品TLS联合验收仍未通过。** 详见 [交接](docs/HANDOFF.md)。
 
 4C-4W：新增 `split-consent.py --compiled` 联合协调入口，串接匹配真实服务的 fresh test pair、Windows 桌面 borrower、OS 签名授权与 bound-node 交接、实际产品计数持续增长、正常 join 后签名撤销。私有管道有界且不强杀冒充完成。23项 Python 回归与7个跨平台helper构建通过；**真实联合执行仍待 Windows READY，未验收活会话撤销/故障/升级，整体4未完成。** 操作与边界见 [交接](docs/HANDOFF.md)。

@@ -32,7 +32,7 @@ def checked_ready(value, target, controller, nodes=False, fault=False, compiled=
     import re
     expected = {"status", "split_process", "target", "controller", "issuer", "api_certificate", "api_port"}
     if compiled:
-        if not nodes or fault or value.get("compiled_phase") is not True:
+        if not nodes or value.get("compiled_phase") is not True:
             raise RuntimeError("invalid_compiled_phase")
         expected.add("compiled_phase")
     if nodes:
@@ -159,11 +159,11 @@ class Coordinator(Pipe):
         return self.proc.returncode
 
 def mode_flags(args):
-    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"]): raise RuntimeError("invalid_arguments")
+    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"],["--compiled-fault"]): raise RuntimeError("invalid_arguments")
     live_revoke=args==["--compiled-revoke"]
-    compiled=live_revoke or args==["--compiled"]
-    fault=args==["--tls-fault"]
-    tls=fault or args==["--tls"]
+    compiled=live_revoke or args in (["--compiled"],["--compiled-fault"])
+    fault=args in (["--tls-fault"],["--compiled-fault"])
+    tls=args in (["--tls-fault"],["--tls"])
     nodes=compiled or tls or args==["--nodes"]
     return compiled,live_revoke,fault,tls,nodes
 
@@ -221,7 +221,7 @@ def main():
         if prepared.stdout.splitlines():
             backup = json.loads(prepared.stdout.splitlines()[0]).get("backup")
         t.check(prepared.returncode == 0 and backup is not None, "split_database_deny_prepared")
-        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+(" --os-compiled " if compiled else " --os-tls-fault " if fault else " --os-nodes " if nodes else " --os-consent ")+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
+        coordinator = Coordinator(t.SERVER+[program+" "+daemon+" --frontend "+frontend+(" --os-compiled-fault " if compiled and fault else " --os-compiled " if compiled else " --os-tls-fault " if fault else " --os-nodes " if nodes else " --os-consent ")+identities.target["ExpectedPublic"]+" "+identities.controller["ExpectedPublic"]])
         ready = checked_ready(coordinator.read(), identities.target["ExpectedPublic"], identities.controller["ExpectedPublic"],nodes,fault,compiled)
         # Existing compiled server lifetime is 15 minutes. Include build/upload
         # in the ten-minute readiness budget; leave five minutes for acceptance.
@@ -267,7 +267,9 @@ def main():
                 node=split_nodes.run(t,pipe_type,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders)
                 node_result.append(node)
                 if compiled:
-                    compiled_pair.run(pipe_type,node["compiled_handoff"],live_revoke=live_revoke)
+                    compiled_pair.run(pipe_type,node["compiled_handoff"],live_revoke=live_revoke,authority_fault=fault)
+                    if fault:
+                        compiled_products.fault_round(t,coordinator,clients,node,compiled_pair)
                 if tls:
                     active=split_tls.run(t,Pipe,ready,clients,node,grant,product_command,node_helpers)
                     if fault: active=split_tls.fault_round(t,Pipe,ready,clients,node,grant,product_command,node_helpers,coordinator,active)

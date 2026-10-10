@@ -4,7 +4,8 @@ Public service bootstrap is received over management SSH. Runtime roots,
 endpoints and sibling digests remain compiled. HMAC/grant/authkey are carried
 only in private pipes. Normal baseline stops before revocation; explicit
 live-revoke mode observes autonomous completion without a parent stop command.
-Neither mode claims authority-outage/fault-recovery or upgrade acceptance.
+Explicit authority-fault mode uses the isolated coordinator only. None of
+these modes claims GUI, signed installer or live upgrade acceptance.
 """
 import base64
 import hashlib
@@ -18,6 +19,39 @@ import subprocess
 import time
 
 from native_bootstrap import checked_desktop_bootstrap
+
+
+def fault_round(t, coordinator, apis, node, pair):
+    """Observe fault closure BEFORE recovery, without stop or owner revoke.
+
+    Recovery is of the isolated authority/verifier only. A fresh client owner
+    and fresh authorization are required for a new product session; this
+    entry deliberately does not relaunch either retired product owner.
+    """
+    from split_tls import fault_ack, wait
+    binding = node["binding"]
+    expected = {"acls": [{"action": "accept", "src": [binding["controller_ip"]],
+                          "dst": [binding["target_ip"] + ":47476"]}]}
+    t.check(t.admin("policy", "get") == expected, "compiled_fault_exact_acl_before_pause")
+    t.check(fault_ack(coordinator.request("freeze"), "frozen"),
+            "compiled_isolated_authority_paused_https503_old_acl_retained")
+    t.check(t.admin("policy", "get") == expected, "compiled_fault_old_acl_before_join")
+    pair.join_fault()  # Actual product/watch/node/signer join + native retirement.
+    t.check(t.admin("policy", "get") == expected, "compiled_fault_old_acl_after_join")
+    t.check(fault_ack(coordinator.request("recover"), "recovered"),
+            "compiled_fault_explicit_same_verifier_authority_restart")
+    wait(lambda: t.admin("policy", "get") == expected,
+         "compiled_fault_recovery_minimum_policy", t)
+    for api in apis:
+        fresh = api.request("network_state")
+        claims = fresh.get("network_state", {}).get("claims", {})
+        t.check(fresh.get("passed") is True and claims.get("active") is True
+                and claims.get("binding") == binding,
+                "compiled_fault_recovery_fresh_signed_same_binding")
+    pair.assert_fault_latched()
+    time.sleep(.5)
+    pair.assert_fault_latched()
+    t.check(True, "compiled_fault_old_product_owners_remain_closed_after_recovery")
 
 
 def session_state(value):
@@ -277,7 +311,9 @@ class CompiledPair:
         if p.returncode != 0 or value.get("status") != "usable" or (op != "cleanup-test" and value.get("epoch") != 1):
             raise RuntimeError("compiled_mac_maintenance_failed")
 
-    def run(self, Pipe, handoff, live_revoke=False):
+    def run(self, Pipe, handoff, live_revoke=False, authority_fault=False):
+        if live_revoke and authority_fault:
+            raise RuntimeError("compiled_conflicting_live_modes")
         # Obtain private inputs only after old node owners actually joined.
         inputs = handoff.take()
         self.maintenance("initialize")
@@ -296,14 +332,14 @@ class CompiledPair:
             raise RuntimeError("compiled_controller_not_ready")
         observe(self.target, self.controller)
         self.t.check(True, "compiled_actual_product_pongs_continue_beyond_initial_lease")
-        if live_revoke:
-            # Return with BOTH actual sessions still active. consent() must
-            # issue its signed owner revoke before revoked() joins anything.
+        if live_revoke or authority_fault:
+            # Return with BOTH sessions active. The caller injects the isolated
+            # authority fault OR issues signed revoke before any fault join.
             if session_state(self.target.request("session_state")) != (False, False):
                 raise RuntimeError("compiled_target_not_live_before_revoke")
             if session_state(self.controller.request("session_state")) != (False, False):
                 raise RuntimeError("compiled_controller_not_live_before_revoke")
-            self.t.check(True, "compiled_both_sessions_live_before_signed_revoke")
+            self.t.check(True, "compiled_both_sessions_live_before_authority_fault" if authority_fault else "compiled_both_sessions_live_before_signed_revoke")
             return
         # First end-to-end slice uses normal joined shutdown. Do not label this
         # live-revocation: consent() sends owner revoke only after we return.
@@ -311,6 +347,9 @@ class CompiledPair:
         self.t.check(True, "compiled_product_node_watch_signer_normal_join")
 
     def revoked(self):
+        self.join_fault()
+
+    def join_fault(self):
         # No stop command/cancellation is sent before autonomous completion.
         self.controller.join_fault()
         self.controller = None
@@ -334,6 +373,12 @@ class CompiledPair:
         self.t.check(True, "compiled_target_autonomous_fault_join_and_native_retirement")
         self.maintenance("inspect")  # actual controller lease released
         self.sessions_joined = True
+
+    def assert_fault_latched(self):
+        if (not self.sessions_joined or self.controller is not None or
+                session_state(self.target.request("session_state")) != (True, True)):
+            raise RuntimeError("compiled_fault_owner_reopened")
+        self.maintenance("inspect")
 
     def stop_sessions(self):
         if self.controller is not None:

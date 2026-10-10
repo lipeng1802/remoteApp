@@ -1,6 +1,18 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-10 r7真实双机live revoke验收exit0；最终两个桌面STOPPED尚待
+## 2026-10-10 compiled/native authority outage 验证入口开发完成；双机实测待准备
+
+用户“继续”后按优先级开发服务故障关闭，不启动 Windows 会话，不暂停正式服务。新增唯一显式 `split-consent.py --compiled-fault`（不允许与其他模式混用），server 对应 `--os-compiled-fault`；严格要求 node/compiled/fault 三标记、完整隔离 freeze/recover 回调。旧 compiled、compiled-revoke、tls-fault 模式保持分别独立。
+
+新入口先实际两端产品持续 pongs 跨初始 lease，并确认双方仍 pending；再冻结本轮独立 authority 子进程，复用真实内核 stopped/HTTPS503/原 ACL 不变检查。旧 ACL 必须在两端完整故障 join/原生退役前后仍残留，不能提前 stop 或签名 revoke 替代故障关闭。Mac继续严格三帧+父EOF顺序+actual exit1，Windows继续严格 Handle.Done/fault/显式 retire_fault。只有确认 join 后才显式恢复同 verifier authority，双端 API 必须返回新鲜签名的同 active binding；恢复后两次检查旧 Windows owner 故障完成保持锁闭、Mac 子进程已退出、原生journal可检查，不重新 Start。随后在线签名撤销和原资源/策略收尾照常执行。
+
+范围：本入口验证服务恢复与旧产品 owner 不自动复活；**不包含新产品 owner 的显式重连、真实活升级、GUI、公开准入或可信签名安装包**。恢复后需要新 owner 并重新验证有效授权；不能重用退役 owner。失败时保留不确定资源证据，不强杀、伪造 join 或把 finally 的正常 stop 算故障通过。
+
+本轮实际回归：50项 Python 全套 PASS；Linux 10 项纯协议测试实际 PASS/exit0，包括 combined 标记、回调缺失拒绝、freeze→recover→stop 严格顺序、旧路径兼容、持久清理屏障。测试程序公开上传至 `/tmp/remoteapp-compiled-fault-protocol-20261010-tests`，只执行模拟回调协议测试，未调用真实暂停/恢复或创建节点。Linux 测试程序交叉编译 PASS，diff 检查 PASS。**未执行新双机 outage，不能标记该待验收项完成。**
+
+下一步准备全新 creator+stage（不可复用已 STOPPED 的 r7 身份/bootstrap 或已消费 stage）；复用公开二进制必须核对当前摘要，网络 helper 在协调运行前重建。用户按新路径启动正常 Windows 桌面第一窗口 READY、第二窗口 WATCH_READY 后再执行新模式。真实成功还需精确旧 ACL/503、实际双端故障 join、同 verifier 恢复且旧 owner 锁闭、在线最终撤销、durable 客户端清理、coordinator STOPPED/exit0、原正式服务/Store/Nginx/policy 基线恢复和用户 borrower→creator 顺序 STOPPED。仅本地提交，未推送。
+
+## 2026-10-10 r7真实双机live revoke验收exit0；最终两个桌面STOPPED已确认
 
 用户确认r7 creator READY与stage `C:\Users\jarvis\remoteapp-compiled-stage-d21bc13211ad57af` WATCH_READY后，实际执行修复后的split-consent.py --compiled-revoke。实时等待器/OS creator probe、9项helper、fresh pair全摘要、自动桌面borrower启动及实际native probe PASS；OS签名授权/拒绝/单次enrollment、错误OS身份拒绝、真实node持有证明、同节点重启、精确binding和策略readback PASS。正向诊断实际payload_verified/none、固定payload通过，反向payload仍拒绝，权限/期限未放宽。
 
