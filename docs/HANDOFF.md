@@ -1,12 +1,22 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-10 r9 路由/真实payload通过；bound helper退出失败，故障注入尚未到达
+## 2026-10-10 产品交接角色/阶段诊断完成；纠正r9失败位置推断
+
+用户继续下一步后，对照调用链发现：r9统一read报错(joined_pipe.py:112)也可能来自compiled target/controller startup，不足以证明BoundHandoff.take中的helper stop失败。原“确定旧helper退出失败、未初始化Mac journal、未启动产品”的说法缺独立阶段证据，现纠正为“路由/payload之后的产品交接链路失败，具体阶段待定位；没有产品持续pongs通过或故障注入证据”。保留原实测失败/exit1和恢复记录，不改为成功。
+
+新增coordination_diagnostics.run_stage：只允许固定阶段枚举，只输出begin/completed/failed，不输出操作结果、错误文本、argv、路径或任何secret；异常原样传播，completed只在对应同步调用真实返回后输出，不能代替运行时ACK/退出证明。stop_bound_helpers分别记录bound_controller_join和bound_target_join；CompiledPair.run记录bound_handoff、mac_native_initialize、target_start_send/product_ready/session_ready、controller_start/session_ready、product_observe；正常停止记录两端stop阶段。失败不能推进到后续初始化/启动；key/config仍只留私有pipe，诊断不放宽故障/normal ACK、实际exit、native lease、时间预算或权限。
+
+58项Python全套实际PASS，新增固定日志拒未知stage、不泄露返回值/错误、保留原异常对象、交接失败阻止初始化、target product_ready失败与helper交接失败区分。diff检查PASS。本轮未启动Windows窗口/新网络/服务故障。只对保留包 `artifacts/connection-poc/compiled-live-9c83059972d478f7/mac` 做manifest核验和trust-install inspect，实际非零/not usable；不能从这一结果反推r9从未初始化或作为清理成功证明，未删除或覆盖现场。
+
+下一步准备fresh creator/stage双机阶段诊断实测；不可复用已STOPPED r9端点或已消费stage。完整故障验收仍待。整体4未完成，本地提交不推送。
+
+## 2026-10-10 r9 路由/真实payload通过；产品交接链路失败，故障注入尚未到达
 
 用户随后确认已STOPPED，记录为本轮两个桌面窗口最终退出确认。未附完整退出日志，不扩大为未知旧凭据/journal全部已清理；不能把本次helper交接失败或未执行的故障注入改为通过。当前无需重开Windows窗口。
 
 用户确认r9双窗口就绪后实际运行--compiled-fault。在线挑战/native creator probe、9helper、空控制资源、隔离服务、fresh匹配包摘要/borrower实际probe、OS授权/拒自批准/单次enrollment、错误OS证明拒绝、同节点重启/真实节点持有、双端签名active binding均PASS。新增`split_controller_exact_peer_route_ready`实际PASS，随后单次正向探测为payload_verified/none、完整固定payload PASS、反向拒绝PASS。r8的路由缺失本轮未复现，可记本轮新就绪屏障/真实网络这一段通过，不能宣称间歇性问题永久根治。
 
-随后BoundHandoff.take停止旧节点helper阶段出现`DIAGNOSTIC helper_unknown`，primary为joined_pipe.py:112的严格失败帧拒绝；node_phase RuntimeError，owner OS签名revoke随后实际PASS。finally尝试compiled_pair.close又遇BrokenPipeError(joined_pipe.py:79)，Python实际exit1。没有完整旧helper closed/exit0交接证据，不能让新tsnet owner接管；本轮未初始化Mac compiled journal、未启动实际产品TLS/pongs，也未freeze/recover。尚缺role/精确退出原因，不能仅凭统一read行号判断是Mac还是Windows helper，更不能把次要BrokenPipe掩盖原失败。没有放宽ACK/exit、重试或强杀。
+随后产品交接链路出现`DIAGNOSTIC helper_unknown`，primary为joined_pipe.py:112的严格失败帧拒绝；node_phase RuntimeError，owner OS签名revoke随后实际PASS。finally尝试compiled_pair.close又遇BrokenPipeError(joined_pipe.py:79)，Python实际exit1。原推断为BoundHandoff helper退出失败已纠正：没有独立阶段日志，不能区分helper join、后续初始化或target/controller启动失败，也不能确认Mac journal初始化和产品启动是否发生。本轮没有实际持续pongs通过，freeze/recover未执行。尚缺role/精确原因，不把次要BrokenPipe掩盖原失败。没有放宽ACK/exit、重试或强杀。
 
 独立只读审计发现本轮prefix `/tmp/remoteapp-split-consent-c8d73346cb3480f0` 的check/daemon/frontend仍存活，PoC零ACL、client节点已回收但verifier资源仍1。未在writer存活时恢复file配置或打开第二Store。向精确唯一check的现有operator FIFO发送固定stop（该fault模式尚未freeze，stop走严格失败/正常defer清理，不伪造整轮成功），检查coordinator退出；随后独立审计三隔离进程无存活、临时base `/tmp/remoteapp-daemon-check-1626306220`已不存在，nodes/users/preauthkeys全0。未捕获原coordinator STOPPED/退出码为0，不把独立审计算原自动成功。
 

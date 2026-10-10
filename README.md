@@ -1,6 +1,8 @@
 # Personal Remote Desktop MVP
 
-r9实机路由就绪、单次正向固定payload、反向拒绝均通过；随后旧bound helper正常退出失败，尚未进入产品TLS或服务故障注入。已独立完成隔离进程/控制资源清理及原策略、正式服务/Store/Nginx恢复，不计原协调完整验收。用户已确认两个桌面窗口STOPPED，下一项定位helper退出失败，整体4未完成。详见 [HANDOFF](docs/HANDOFF.md)。
+新增产品交接角色/阶段诊断，58项Python回归通过。纠正r9定位：统一失败帧行号不能证明旧helper退出失败，也可能是后续产品启动失败；现已补两侧helper实际join、初始化和产品启动的独立固定阶段标记，尚待fresh双机实测，未确认根因或修复。详见 [HANDOFF](docs/HANDOFF.md)。
+
+r9实机路由就绪、单次正向固定payload、反向拒绝均通过；随后产品交接链路失败，没有产品持续TLS/pongs或服务故障注入通过证据。已独立完成隔离进程/控制资源清理及原策略、正式服务/Store/Nginx恢复，不计原协调完整验收。用户已确认两个桌面窗口STOPPED，下一项定位具体失败阶段，整体4未完成。
 
 r9路由诊断复测入口已构建并上传：当前9helper、隔离测试包全部摘要、fresh stage及三个PowerShell入口语法通过，原控制资源全0和正式基线复核正常。用户下一步使用 `windows-desktop-route-ready-20261010-r9` 与新stage启动READY/WATCH_READY；**尚未启动双机或故障实验**。具体目录与步骤见 [HANDOFF](docs/HANDOFF.md)。
 

@@ -5,6 +5,7 @@ import secrets
 import subprocess
 import tempfile
 import time
+from coordination_diagnostics import run_stage
 
 def checked_route_status(value):
     flags={"query_ok","running","peer_known","ip_matches","in_network_map","allowed_ip","in_engine","ready"}
@@ -152,8 +153,8 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
         nonlocal peer,server
         # No new tsnet owner may reopen either directory before actual join.
         # Failed stop leaves its handle/evidence in the parent's cleanup list.
-        for helper in (peer,server):
-            helper.stop(); helpers.remove(helper)
+        for stage,helper in (("bound_controller_join",peer),("bound_target_join",server)):
+            run_stage(stage,helper.stop); helpers.remove(helper)
         peer,server=None,None
     return {"peer":peer,"target_ip":target_ip,"binding":binding,"restart_managed":restart_managed,
             "compiled_handoff":BoundHandoff(inputs,stop_bound_helpers)}

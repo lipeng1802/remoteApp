@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from compiled_products import CompiledPair, build_helpers, checked_borrower, observe, product_count, product_secret, verify_bundle, upload_public_bundle, wait_borrower, session_state
 import hashlib
+import contextlib
+import io
 
 
 class CompiledProductTests(unittest.TestCase):
@@ -245,5 +247,34 @@ class CompiledProductTests(unittest.TestCase):
         pair=self.pair([])
         with self.assertRaisesRegex(RuntimeError,"conflicting_live_modes"):
             pair.run(None,None,live_revoke=True,authority_fault=True)
+
+    def test_handoff_failure_is_distinct_and_blocks_native_initialize(self):
+        events=[];pair=self.pair(events);out=io.StringIO()
+        class Handoff:
+            def take(self):raise RuntimeError("private detail")
+        with contextlib.redirect_stdout(out),self.assertRaises(RuntimeError):
+            pair.run(None,Handoff())
+        self.assertEqual(events,[])
+        self.assertFalse(pair.mac_initialized)
+        self.assertIn("coordination_bound_handoff_failed",out.getvalue())
+        self.assertNotIn("mac_native_initialize",out.getvalue())
+        self.assertNotIn("private",out.getvalue())
+
+    def test_target_failure_after_handoff_is_not_named_helper_join(self):
+        events=[];pair=self.pair(events);out=io.StringIO()
+        class Handoff:
+            def take(self):return dict(target={},controller={})
+        class Target:
+            def send(self,v):pass
+            def read(self):raise RuntimeError("private detail")
+        pair.target=Target()
+        with contextlib.redirect_stdout(out),self.assertRaises(RuntimeError):
+            pair.run(None,Handoff())
+        self.assertTrue(pair.mac_initialized)
+        self.assertEqual(events,["initialize"])
+        self.assertIn("coordination_bound_handoff_completed",out.getvalue())
+        self.assertIn("coordination_target_product_ready_failed",out.getvalue())
+        self.assertNotIn("controller_start",out.getvalue())
+        self.assertNotIn("private",out.getvalue())
 
 if __name__=="__main__":unittest.main()

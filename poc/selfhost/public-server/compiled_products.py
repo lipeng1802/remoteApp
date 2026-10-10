@@ -19,6 +19,7 @@ import subprocess
 import time
 
 from native_bootstrap import checked_desktop_bootstrap
+from coordination_diagnostics import run_stage
 
 
 def fault_round(t, coordinator, apis, node, pair):
@@ -315,22 +316,26 @@ class CompiledPair:
         if live_revoke and authority_fault:
             raise RuntimeError("compiled_conflicting_live_modes")
         # Obtain private inputs only after old node owners actually joined.
-        inputs = handoff.take()
-        self.maintenance("initialize")
+        inputs = run_stage("bound_handoff",handoff.take)
+        run_stage("mac_native_initialize",lambda:self.maintenance("initialize"))
         self.mac_initialized = True
-        self.target.send(dict(Op="start", Config=inputs["target"]))
-        key = product_secret(self.target.read())
-        if self.target.read() != dict(status="ready", port=0):
-            raise RuntimeError("compiled_target_not_ready")
+        run_stage("target_start_send",lambda:self.target.send(dict(Op="start", Config=inputs["target"])))
+        key = run_stage("target_product_ready",lambda:product_secret(self.target.read()))
+        def target_ready():
+            if self.target.read() != dict(status="ready", port=0):
+                raise RuntimeError("compiled_target_not_ready")
+        run_stage("target_session_ready",target_ready)
         identity = self.identities.controller
-        self.controller = Pipe([str(self.mac / "installed-session")],
+        self.controller = run_stage("controller_start",lambda:Pipe([str(self.mac / "installed-session")],
                                dict(Op="start", Config=inputs["controller"], ProductKey=key,
-                                    VaultScope=identity["VaultScope"], VaultExpected=identity["ExpectedPublic"]))
+                                    VaultScope=identity["VaultScope"], VaultExpected=identity["ExpectedPublic"])))
         key = None  # Never output/persist/retain it in the pair's public state.
-        ready = self.controller.read()
-        if set(ready) != {"status", "port"} or ready["status"] != "ready" or type(ready["port"]) is not int or not 0 < ready["port"] < 65536:
-            raise RuntimeError("compiled_controller_not_ready")
-        observe(self.target, self.controller)
+        def controller_ready():
+            ready = self.controller.read()
+            if set(ready) != {"status", "port"} or ready["status"] != "ready" or type(ready["port"]) is not int or not 0 < ready["port"] < 65536:
+                raise RuntimeError("compiled_controller_not_ready")
+        run_stage("controller_session_ready",controller_ready)
+        run_stage("product_observe",lambda:observe(self.target, self.controller))
         self.t.check(True, "compiled_actual_product_pongs_continue_beyond_initial_lease")
         if live_revoke or authority_fault:
             # Return with BOTH sessions active. The caller injects the isolated
@@ -382,11 +387,13 @@ class CompiledPair:
 
     def stop_sessions(self):
         if self.controller is not None:
-            self.controller.stop()
+            run_stage("controller_normal_stop",self.controller.stop)
             self.controller = None
         if self.target is not None:
-            if self.target.request("stop_session") != dict(status="session_closed"):
-                raise RuntimeError("compiled_target_join_unconfirmed")
+            def stop_target():
+                if self.target.request("stop_session") != dict(status="session_closed"):
+                    raise RuntimeError("compiled_target_join_unconfirmed")
+            run_stage("target_normal_stop",stop_target)
         self.sessions_joined = True
 
     def close(self):
