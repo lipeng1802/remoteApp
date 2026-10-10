@@ -112,10 +112,13 @@ class JoinedPipe:
         # Dedicated expected-fault protocol. It is never a normal close ACK;
         # require nested join, successful journal retirement AND real exit 1.
         with self.lock:
+            print("DIAGNOSTIC fault_wait_completion", flush=True)
             if self.read(20) != {"status":"session_state", "joined":True, "fault":True}:
                 raise RuntimeError("private_fault_completion_missing")
+            print("DIAGNOSTIC fault_completion_verified_wait_retirement", flush=True)
             if self.read(12) != {"status":"fault_retired", "joined":True, "fault":True}:
                 raise RuntimeError("private_fault_retirement_missing")
+            print("DIAGNOSTIC fault_retirement_verified_wait_terminal", flush=True)
             if self.read(12, allow_exact_failure=True) != {"status":"failed"}:
                 raise RuntimeError("private_fault_terminal_missing")
             if not self.proc.stdin.closed:

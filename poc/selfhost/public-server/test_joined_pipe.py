@@ -1,6 +1,8 @@
 import subprocess
 import sys
 import unittest
+import contextlib
+import io
 from joined_pipe import JoinedPipe
 
 
@@ -13,7 +15,13 @@ class JoinedPipeTests(unittest.TestCase):
     def test_fault_join_requires_retirement_terminal_and_actual_exit_one(self):
         code='import sys; print(\'{"status":"session_state","joined":true,"fault":true}\'); print(\'{"status":"fault_retired","joined":true,"fault":true}\'); print(\'{"status":"failed"}\'); sys.exit(1)'
         p=self.child(code)
-        p.join_fault()
+        diagnostic=io.StringIO()
+        with contextlib.redirect_stdout(diagnostic):
+            p.join_fault()
+        self.assertEqual(diagnostic.getvalue().splitlines(),[
+            "DIAGNOSTIC fault_wait_completion",
+            "DIAGNOSTIC fault_completion_verified_wait_retirement",
+            "DIAGNOSTIC fault_retirement_verified_wait_terminal"])
         self.assertTrue(p.fault_joined)
         self.assertFalse(p.closed_seen)
         self.assertEqual(p.proc.returncode,1)

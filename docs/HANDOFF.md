@@ -1,10 +1,20 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 本地复现继承stdin收尾互等；仅诊断，尚未修改收尾行为
+
+用户要求继续排查。对照当前installed-session.run defer `cancel(); os.Stdin.Close(); <-readerDone` 与JoinedPipe.join_fault的顺序：父进程在收到completion/retirement/failed三帧后才关闭stdin写端。Go本地工具链os/file_unix.go表明阻塞继承fd通过kindNewFile创建，不自动成为pollable；关闭这样的文件不能当作等待中Read已退出的证明。
+
+新增无网络/无journal/无signer的独立测试子进程，保持与现有stdin close/join同样顺序：先输出completion+retirement，继承stdin的reader等待父EOF，第三帧被close/join阻塞；父写端保持打开300ms确认无第三帧，然后只关闭实验父写端，立即获得failed第三帧并实际exit1，无强杀。Mac实际复现，3次Go race重复通过。它证明该收尾顺序存在互等，并与实机超时后父stop/EOF才收到failed吻合；仍不是原实机全部帧的直接证据，不能宣称唯一根因已实机确认。
+
+纠正旧记录：joined_pipe.py统一read超时行号不能区分第1/2/3帧，原“首帧20秒超时”没有分帧证据，应称故障协议帧等待超时。新增固定非秘密fault_wait_completion、fault_completion_verified_wait_retirement、fault_retirement_verified_wait_terminal诊断，原严格frame schema/20与12秒期限/真实exit1要求不变。41项Python回归、Windows installed-session vet与diff检查PASS；本轮未启动server/Windows/节点/产品，未改生产reader、父EOF或native journal行为，不发布新验证包。
+
+建议下一步修复：仅在验证真实joined+fault和fault_retired两帧后关闭父stdin写端，再等待精确failed末帧和actual exit1。此时实际runner已join且native journal明确退役，EOF只结束命令reader，不代替Stop/worker join，不允许缺前两帧提前EOF或弱化三帧/非零退出要求。需补“末帧等待父EOF”的真实子进程正向回归及缺/伪造前置帧不关闭写端负向测试，再做fresh双机验收。当前只完成诊断；整体4仍未完成。本地提交，不推送。
+
 ## 2026-10-10 r6正向payload/TLS/签名撤销通过；自主回报超时，最后阶段signer_closed
 
 用户确认r6 creator READY与stage `C:\Users\jarvis\remoteapp-compiled-stage-ec429e80730b06e7` WATCH_READY后实际执行--compiled-revoke。实时等待器/native probe、当前helper/fresh pair摘要/borrower真实probe、OS授权/单次enrollment/错误身份拒绝/真实节点持有证明/同节点重启/精确binding PASS。正向诊断实际 `forward_probe_stage_payload_verified_reason_none`，完整固定payload通过；反向payload拒绝通过。没有扩大期限、重试或放宽ACL。r5正向失败本轮未复现，不据此证明间歇性问题根治。
 
-实际产品pongs跨初始lease、双端会话仍pending、在线owner OS签名revoke、signed status及无离线替代检查全部PASS。随后Mac join_fault首帧20秒超时，最后固定阶段 `signer_closed`；primary joined_pipe.py:83，finally正常stop又遇failed帧(line104)，Python实际exit1。此阶段仅说明对应signer关闭屏障已返回，不能代替Handle.Done/故障三帧/actual exit1证据，不能仅凭阶段断定所有退出协议成功或唯一根因。尚需检查installed-session完成状态输出/command reader及journal退役顺序；未修改这些实现，不能称4X通过。
+实际产品pongs跨初始lease、双端会话仍pending、在线owner OS签名revoke、signed status及无离线替代检查全部PASS。随后Mac join_fault故障协议帧等待超时（没有分帧证据，不能确定是首帧），最后固定阶段 `signer_closed`；primary joined_pipe.py:83，finally正常stop又遇failed帧(line104)，Python实际exit1。此阶段仅说明对应signer关闭屏障已返回，不能代替Handle.Done/故障三帧/actual exit1证据，不能仅凭阶段断定所有退出协议成功或唯一根因。尚需检查installed-session完成状态输出/command reader及journal退役顺序；未修改这些实现，不能称4X通过。
 
 本轮Mac compiled目录 `artifacts/connection-poc/compiled-live-4bc14bf48365e99b/mac`。原finally在compiled.close处失败，没有原协调器STOPPED/正常恢复完整证据。独立审计：本輪prefix `/tmp/remoteapp-split-consent-3a68caf4d1c48bd3` 下server进程0、Headscale nodes/users/preauthkeys均0、当时零ACL；本地本轮installed-session/管理子进程/ConnectionIdentityVault均无存活。新的诊断relay核对r6公开身份与borrower bootstrap，实际Windows state=(joined=true,fault=true)，明确retire_fault获准确ACK，relay实际exit0。Mac manifest校验后trust-install inspect实际usable/epoch1，证明native journal可重开，不算原自动回报通过。
 

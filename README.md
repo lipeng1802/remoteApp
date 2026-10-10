@@ -165,6 +165,8 @@ git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 git -c http.proxy=http://127.0.0.1:1080 push origin main
 # 2026-10-10 验证入口状态
 
+本地独立子进程已复现继承stdin的close/join等待父EOF，而父端等待末帧才EOF的互等：关闭实验父写端后末帧与actual exit1立即完成，3次race及41项Python回归通过。只新增诊断测试和分帧等待标记，尚未修改收尾顺序或进行新双机验收。旧统一超时行号不能证明“首帧超时”，已纠正。下一步修复方案及安全前置条件见[交接](docs/HANDOFF.md)。
+
 最新r6真实复测已通过正向精确payload、反向拒绝、产品TLS持续传输及在线签名撤销；Mac自主完成帧仍超时，最后固定阶段为signer_closed，**完整验收失败**。已独立核对资源为零、Windows故障join/退役及Mac native journal可重开，并恢复原策略/核验正式基线，不计为自动退出通过。用户完整日志确认两窗口STOPPED及本轮Windows测试身份/journal清理；Mac电源日志未见本轮区间整机睡眠，不能把息屏当作根因。下一步检查本地完成状态回报与收尾协议。详见[交接](docs/HANDOFF.md)。下方为历史记录。
 
 正向网络probe已补固定非秘密阶段/原因，只有完整精确payload才通过，不扩时/不重试或回退管理Tailscale。41项Python回归、相关Go race/Windows vet通过；已实际确认双方SSH和空控制平面。新r6 creator与新等待目录上传、全摘要及脚本解析通过，待正常Windows桌面READY/WATCH_READY后复测。**尚未证明网络失败已修复或4X通过。** 启动入口见[交接](docs/HANDOFF.md)。下方为历史记录。
@@ -173,7 +175,7 @@ git -c http.proxy=http://127.0.0.1:1080 push origin main
 
 用户已报告上轮两个窗口均STOPPED。已补产品/watch/worker/node/signer固定非秘密退出阶段诊断，40项Python回归、相关Go race及Windows vet通过；仍要求原故障三帧与实际exit1，不延长退出期限。新r5 creator与唯一等待目录用于重新验收；真实双机结果尚待，不能将诊断或包构建算4X通过。启动入口见[交接](docs/HANDOFF.md)。下方为历史记录。
 
-最新4X实机已通过预启动等待器自动启动、真实节点绑定/TLS持续传输及活会话签名撤销，但Mac自主join首帧等待超时，**完整验收失败**。已独立核对资源为空、Windows实际故障join/原生退役、Mac journal可重开，并恢复原策略/核验线上基线；不将事后恢复算自动退出通过。两桌面最终STOPPED待确认，下一步定位分层join阻塞，不盲目扩时重试。详见[交接](docs/HANDOFF.md)。
+最新4X实机已通过预启动等待器自动启动、真实节点绑定/TLS持续传输及活会话签名撤销，但Mac自主join故障协议帧等待超时（未分帧，不能确认首帧），**完整验收失败**。已独立核对资源为空、Windows实际故障join/原生退役、Mac journal可重开，并恢复原策略/核验线上基线；不将事后恢复算自动退出通过。两桌面最终STOPPED待确认，下一步定位分层join阻塞，不盲目扩时重试。详见[交接](docs/HANDOFF.md)。
 
 人工第二窗口启动曾在服务就绪预算后发生，未进入4X验收；该borrower已确认正常STOPPED。已新增开发专用预启动等待窗口：先确认等待器在线，再启动服务，新包摘要通过后自动在正常桌面上下文启动borrower，授权和服务期限不延长。39项Python回归/Windows脚本解析通过，新等待脚本已上传，**自动启动和活会话撤销仍待实测**。详见[交接](docs/HANDOFF.md)。
 
