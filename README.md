@@ -1,10 +1,12 @@
 # Personal Remote Desktop MVP
 
+r10全新阶段诊断双窗口入口已构建、上传并逐文件验摘要，Windows脚本解析及58项Python回归通过，原策略/正式服务/Store/Nginx基线正常。下一步只使用 `windows-desktop-phase-diag-20261010-r10` 和其fresh stage，等待READY/WATCH_READY后协调实测；r9入口已消费，不再使用。尚未启动身份、网络或故障实验，整体4未完成。步骤见 [HANDOFF](docs/HANDOFF.md)。
+
 新增产品交接角色/阶段诊断，58项Python回归通过。纠正r9定位：统一失败帧行号不能证明旧helper退出失败，也可能是后续产品启动失败；现已补两侧helper实际join、初始化和产品启动的独立固定阶段标记，尚待fresh双机实测，未确认根因或修复。详见 [HANDOFF](docs/HANDOFF.md)。
 
 r9实机路由就绪、单次正向固定payload、反向拒绝均通过；随后产品交接链路失败，没有产品持续TLS/pongs或服务故障注入通过证据。已独立完成隔离进程/控制资源清理及原策略、正式服务/Store/Nginx恢复，不计原协调完整验收。用户已确认两个桌面窗口STOPPED，下一项定位具体失败阶段，整体4未完成。
 
-r9路由诊断复测入口已构建并上传：当前9helper、隔离测试包全部摘要、fresh stage及三个PowerShell入口语法通过，原控制资源全0和正式基线复核正常。用户下一步使用 `windows-desktop-route-ready-20261010-r9` 与新stage启动READY/WATCH_READY；**尚未启动双机或故障实验**。具体目录与步骤见 [HANDOFF](docs/HANDOFF.md)。
+r9路由诊断复测入口曾构建并上传，已完成上述失败实测并消费，不可再启动或复用其bootstrap/stage。历史准备证据与具体边界见 [HANDOFF](docs/HANDOFF.md)。
 
 新增 overlay 客户端就绪检查：精确匹配预期节点/IP、本地netmap与/32路由，在原12秒投影预算内等待；保留单次payload和禁止系统网络回退。Go相关测试/race、54项Python及Windows helper编译通过，**尚未fresh双机实测，未证明r8根因或故障验收通过**。下一步准备全新双窗口入口，详见 [HANDOFF](docs/HANDOFF.md)。
 

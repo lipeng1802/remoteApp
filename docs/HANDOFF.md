@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 r10 全新阶段诊断双窗口入口准备完成
+
+用户继续下一步后，Windows SSH可用；Headscale nodes/users/preauthkeys全0，原policy、三正式服务、Store固定SHA及Nginx基线只读核验PASS。当前9项helper全部重建PASS；全新Windows creator实际BUILD_READY/exit0、隔离test_namespace=true/minimum_epoch=1、manifest验证PASS。公开文件上传仅复用与本轮manifest精确匹配的旧公开文件，远端所有文件摘要PASS。fresh stage仅当前SID/SYSTEM ACL，waiter摘要及start/probe/waiter三个PowerShell解析PASS。58项Python回归PASS。没有启动桌面身份、网络节点、隔离服务或故障实验；不代表根因或整体验收完成。
+
+creator：`C:\Users\jarvis\windows-desktop-phase-diag-20261010-r10`；stage：`C:\Users\jarvis\remoteapp-compiled-stage-6f417f3c2e9d8a10`。
+
+普通Windows桌面窗口1运行creator下start-desktop-session.ps1至READY，保持打开。窗口2运行stage下wait-for-compiled-borrower.ps1，Root为该stage，IdentityBootstrap为creator下interactive-bootstrap.json，至WATCH_READY。暂不要Enter。r9及更早入口已消费，不得复用。
+
+收到两窗口就绪后，设置REMOTEAPP_WINDOWS_INTERACTIVE_DIR为本轮creator、REMOTEAPP_WINDOWS_DESKTOP_STAGE为本轮stage，运行 `python3 poc/selfhost/public-server/split-consent.py --compiled-fault`。当前代码固定role/stage标记须用于区分bound_controller_join/bound_target_join、Mac初始化、target及controller启动和持续观察。completed标记不能替代ACK/实际退出；若产品未通过，不注入故障、不扩大期限或强杀。最终仍borrower先STOPPED、creator后STOPPED。
+
+本轮只完成新入口准备与文档收口，本地提交不推送；整体4仍未完成。等待用户两窗口就绪后才进行真实阶段定位。
+
 ## 2026-10-10 产品交接角色/阶段诊断完成；纠正r9失败位置推断
 
 用户继续下一步后，对照调用链发现：r9统一read报错(joined_pipe.py:112)也可能来自compiled target/controller startup，不足以证明BoundHandoff.take中的helper stop失败。原“确定旧helper退出失败、未初始化Mac journal、未启动产品”的说法缺独立阶段证据，现纠正为“路由/payload之后的产品交接链路失败，具体阶段待定位；没有产品持续pongs通过或故障注入证据”。保留原实测失败/exit1和恢复记录，不改为成功。
