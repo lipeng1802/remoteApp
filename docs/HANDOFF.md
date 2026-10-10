@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 两窗口用户报告STOPPED；分层退出诊断与全新复测入口
+
+用户报告上轮两个窗口均Stopped，要求重新验证。未提供本次完整退出字符串，不据此推断旧未知凭据全部清理；此前未完成的Mac随机test身份清理审计仍保留。旧r4 creator/bootstrap和已消费的stage不复用。
+
+新增jointrace仅向stderr输出固定白名单阶段：product_stopping/product_joined、watch_stopping/watch_joined、workers_joined、node_closing/node_closed、signer_closing/signer_closed。只有既有实际join返回后输出对应完成阶段；错误语义/超时/授权/租约屏障不变。Python并行排空stderr，只保留最多16个白名单阶段，超长行/未知文本不输出；协议stdout和故障三帧校验独立，超时仅报告最后已见阶段。诊断不是完成收据或成功退出证据，不扩20秒等待。
+
+40项Python回归、6包Go race与Windows相关vet退出0，diff检查通过。当前9项helper重建，全新creator本地构建退出0。新入口为 `C:\Users\jarvis\windows-desktop-session-live-revoke-20261010-r5\start-desktop-session.ps1`；等待目录为 `C:\Users\jarvis\remoteapp-compiled-stage-879ec86330cbf6ad`（本用户/SYSTEM受限ACL），等待脚本摘要与Windows解析通过。creator公开文件差异上传后全部摘要核验与start/probe两脚本解析PASS；没有复制身份/bootstrap/journal。尚未启动新桌面/服务/节点/grant，不算4X实际验收。
+
+下一步第一窗口先运行新creator至READY；第二窗口运行新目录wait-for-compiled-borrower.ps1，Root为上述stage、IdentityBootstrap为r5\interactive-bootstrap.json，至WATCH_READY。用户确认两者就绪后，以REMOTEAPP_WINDOWS_INTERACTIVE_DIR=r5、REMOTEAPP_WINDOWS_DESKTOP_STAGE=上述stage运行split-consent.py --compiled-revoke。失败保留实际阶段/资源证据，不以强杀、延时或事后退役算自主退出通过；最终仍先borrower Enter后creator Enter。仅本地提交，不推送。
+
 ## 2026-10-09 4X预启动/真实live revoke通过前半段；自主join等待超时，独立恢复不计验收成功
 
 用户预先WATCH_READY后实际执行r4 creator + stage `C:\Users\jarvis\remoteapp-compiled-stage-4f7e7f183e4e7a28` 的--compiled-revoke。随机挑战证明等待器当前在线、真实native creator probe、所有helper构建/隔离服务/提前helper传输、fresh pair全摘要PASS；等待窗口自动启动borrower，真实borrower probe PASS，不再需要服务计时内人工启动。Windows run固定为stage\\run；Mac本轮compiled目录 `artifacts/connection-poc/compiled-live-a52b5f6632adfaf7/mac`。

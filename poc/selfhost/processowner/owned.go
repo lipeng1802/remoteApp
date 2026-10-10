@@ -1,6 +1,9 @@
 package processowner
 
-import "context"
+import (
+	"context"
+	"remoteapp.local/selfhost-poc/jointrace"
+)
 
 // Own runs an in-process network worker with one product child. Called INSIDE
 // clientowner.Runner: neither normal cancellation nor a timeout can bypass
@@ -29,7 +32,14 @@ func Own(ctx context.Context, c *Child, work func(context.Context) error) error 
 	// Stop concurrently with network cancellation, never let a stuck worker
 	// leave a product serving. No detached timeout or forced kill as success.
 	joined := make(chan error, 1)
-	go func() { joined <- c.Stop(context.Background()) }()
+	go func() {
+		jointrace.Emit(jointrace.ProductStopping)
+		e := c.Stop(context.Background())
+		if e == nil {
+			jointrace.Emit(jointrace.ProductJoined)
+		}
+		joined <- e
+	}()
 	if !ended {
 		if e := <-worker; result == nil {
 			result = e

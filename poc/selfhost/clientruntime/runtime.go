@@ -15,6 +15,7 @@ import (
 
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/jointrace"
 	"remoteapp.local/selfhost-poc/nodeidentity"
 	"remoteapp.local/selfhost-poc/nodeproof"
 	"remoteapp.local/selfhost-poc/processowner"
@@ -123,15 +124,18 @@ func runner(r trustinstall.Release, c Config, open SignerFactory, ready Ready, p
 			return session.ErrDenied
 		}
 		defer func() {
+			jointrace.Emit(jointrace.SignerClosing)
 			// NativeSigner exposes the strict process barrier; trusted test
 			// signers may implement only Close (and must join synchronously).
 			if joined, ok := signer.(interface{ CloseJoined() error }); ok {
 				if err := joined.CloseJoined(); err != nil {
 					result = err
+					return
 				}
 			} else {
 				signer.Close()
 			}
+			jointrace.Emit(jointrace.SignerClosed)
 		}() // after product, node, managed watch, listener and streams join
 		expected := controller
 		if c.Server {
@@ -153,7 +157,11 @@ func runner(r trustinstall.Release, c Config, open SignerFactory, ready Ready, p
 		started := false
 		defer func() {
 			if started {
+				jointrace.Emit(jointrace.NodeClosing)
 				e := node.Close()
+				if e == nil {
+					jointrace.Emit(jointrace.NodeClosed)
+				}
 				if result == nil {
 					result = e
 				}

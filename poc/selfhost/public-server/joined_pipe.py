@@ -27,10 +27,40 @@ class JoinedPipe:
         self.failed_seen = False
         self.fault_joined = False
         self.one_shot = isinstance(config, dict) and config.get("Op") == "prepare"
+        self.join_stages = []
+        self.diagnostics_done = threading.Event()
         self.proc = subprocess.Popen(command, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.DEVNULL, bufsize=0)
+                                     stderr=subprocess.PIPE, bufsize=0)
+        threading.Thread(target=self._drain_diagnostics, daemon=True).start()
         if config is not None:
             self.send(config)
+
+    def _drain_diagnostics(self):
+        allowed = {b"product_stopping", b"product_joined", b"watch_stopping", b"watch_joined",
+                   b"workers_joined", b"node_closing", b"node_closed", b"signer_closing", b"signer_closed"}
+        line, oversized = bytearray(), False
+        try:
+            while True:
+                raw = self.proc.stderr.read(1)
+                if not raw:
+                    break
+                if raw == b"\n":
+                    if not oversized and line.startswith(b"JOIN_STAGE ") and bytes(line[11:]) in allowed:
+                        self.join_stages.append(bytes(line[11:]).decode("ascii"))
+                        self.join_stages[:] = self.join_stages[-16:]
+                    line.clear(); oversized = False
+                elif len(line) < 128 and not oversized:
+                    line.extend(raw)
+                else:
+                    line.clear(); oversized = True
+        finally:
+            self.proc.stderr.close()
+            self.diagnostics_done.set()
+
+    def _join_diagnostics(self):
+        done = getattr(self, "diagnostics_done", None)
+        if done is not None and not done.wait(2):
+            raise RuntimeError("private_diagnostics_join_unconfirmed")
 
     def send(self, value):
         raw = json.dumps(value, separators=(",", ":")).encode() + b"\n"
@@ -48,6 +78,8 @@ class JoinedPipe:
         while b"\n" not in self.buffer:
             left = deadline - time.monotonic()
             if left <= 0 or not select.select([self.proc.stdout], [], [], left)[0]:
+                stage = self.join_stages[-1] if self.join_stages else "not_reported"
+                print("DIAGNOSTIC latest_join_stage_" + stage, flush=True)
                 raise RuntimeError("private_pipe_timeout")
             raw = os.read(self.proc.stdout.fileno(), 4096)
             if not raw:
@@ -89,6 +121,7 @@ class JoinedPipe:
             if not self.proc.stdin.closed:
                 self.proc.stdin.close()
             self.proc.wait(timeout=12)
+            self._join_diagnostics()
             if self.proc.returncode != 1:
                 raise RuntimeError("private_fault_exit_mismatch")
             self.fault_joined = True
@@ -108,12 +141,14 @@ class JoinedPipe:
                 if self.read(12).get("status") != "closed":
                     raise RuntimeError("private_close_ack_missing")
             self.proc.wait(timeout=12)
+            self._join_diagnostics()
             if self.proc.returncode != 0:
                 raise RuntimeError("private_join_nonzero_exit")
 
     def emergency(self):
         if getattr(self, "fault_joined", False):
             self.proc.wait(timeout=12)
+            self._join_diagnostics()
             if self.proc.returncode != 1:
                 raise RuntimeError("private_fault_exit_mismatch")
             return
@@ -124,6 +159,7 @@ class JoinedPipe:
             if not self.proc.stdin.closed:
                 self.proc.stdin.close()
             self.proc.wait(timeout=12)
+            self._join_diagnostics()
             if self.proc.returncode == 0:
                 raise RuntimeError("private_failed_one_shot_zero_exit")
             return

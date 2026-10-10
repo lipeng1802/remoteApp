@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
+	"remoteapp.local/selfhost-poc/jointrace"
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
@@ -82,10 +83,13 @@ func ProfileSessionWithClient(ctx context.Context, release trustinstall.Release,
 	// cancellation was requested, even if work is stuck despite its context.
 	m.Gate().Deny()
 	cancel()
+	jointrace.Emit(jointrace.WatchStopping)
 	m.Stop()
+	jointrace.Emit(jointrace.WatchJoined)
 	if !ended {
 		workerErr = <-done
 	}
+	jointrace.Emit(jointrace.WorkersJoined)
 	if fault {
 		return session.ErrDenied
 	}

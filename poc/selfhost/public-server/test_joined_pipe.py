@@ -5,6 +5,11 @@ from joined_pipe import JoinedPipe
 
 
 class JoinedPipeTests(unittest.TestCase):
+    def test_diagnostics_are_bounded_whitelisted_and_separate_from_protocol(self):
+        p=self.child('import sys; sys.stderr.write("secret-not-a-stage\\nJOIN_STAGE unknown\\n"+"x"*1000+"\\nJOIN_STAGE node_closing\\n"); print(\'{"status":"ready"}\')')
+        self.assertEqual(p.read(),{"status":"ready"})
+        p.proc.wait(timeout=2);p._join_diagnostics()
+        self.assertEqual(p.join_stages,["node_closing"])
     def test_fault_join_requires_retirement_terminal_and_actual_exit_one(self):
         code='import sys; print(\'{"status":"session_state","joined":true,"fault":true}\'); print(\'{"status":"fault_retired","joined":true,"fault":true}\'); print(\'{"status":"failed"}\'); sys.exit(1)'
         p=self.child(code)
