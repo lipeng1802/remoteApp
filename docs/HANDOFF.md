@@ -2,13 +2,15 @@
 
 ## 2026-10-10 r9 路由/真实payload通过；bound helper退出失败，故障注入尚未到达
 
+用户随后确认已STOPPED，记录为本轮两个桌面窗口最终退出确认。未附完整退出日志，不扩大为未知旧凭据/journal全部已清理；不能把本次helper交接失败或未执行的故障注入改为通过。当前无需重开Windows窗口。
+
 用户确认r9双窗口就绪后实际运行--compiled-fault。在线挑战/native creator probe、9helper、空控制资源、隔离服务、fresh匹配包摘要/borrower实际probe、OS授权/拒自批准/单次enrollment、错误OS证明拒绝、同节点重启/真实节点持有、双端签名active binding均PASS。新增`split_controller_exact_peer_route_ready`实际PASS，随后单次正向探测为payload_verified/none、完整固定payload PASS、反向拒绝PASS。r8的路由缺失本轮未复现，可记本轮新就绪屏障/真实网络这一段通过，不能宣称间歇性问题永久根治。
 
 随后BoundHandoff.take停止旧节点helper阶段出现`DIAGNOSTIC helper_unknown`，primary为joined_pipe.py:112的严格失败帧拒绝；node_phase RuntimeError，owner OS签名revoke随后实际PASS。finally尝试compiled_pair.close又遇BrokenPipeError(joined_pipe.py:79)，Python实际exit1。没有完整旧helper closed/exit0交接证据，不能让新tsnet owner接管；本轮未初始化Mac compiled journal、未启动实际产品TLS/pongs，也未freeze/recover。尚缺role/精确退出原因，不能仅凭统一read行号判断是Mac还是Windows helper，更不能把次要BrokenPipe掩盖原失败。没有放宽ACK/exit、重试或强杀。
 
 独立只读审计发现本轮prefix `/tmp/remoteapp-split-consent-c8d73346cb3480f0` 的check/daemon/frontend仍存活，PoC零ACL、client节点已回收但verifier资源仍1。未在writer存活时恢复file配置或打开第二Store。向精确唯一check的现有operator FIFO发送固定stop（该fault模式尚未freeze，stop走严格失败/正常defer清理，不伪造整轮成功），检查coordinator退出；随后独立审计三隔离进程无存活、临时base `/tmp/remoteapp-daemon-check-1626306220`已不存在，nodes/users/preauthkeys全0。未捕获原coordinator STOPPED/退出码为0，不把独立审计算原自动成功。
 
-此后才用本轮mode脚本消费精确备份 `/var/lib/remoteapp-poc/enrollment-mode-O_mzew`恢复file模式；原policy、三正式服务、Store固定SHA/Nginx基线均PASS。本地相关installed-session/enrollment-helper/device-api-client/ConnectionIdentityVault进程统计全0，但不据此证明未知旧test身份已经删除。公开管理程序/Windows包及不确定client journal/凭据保留。本轮stage `C:\Users\jarvis\remoteapp-compiled-stage-a9d60174b30f287c`已消费，creator `C:\Users\jarvis\windows-desktop-route-ready-20261010-r9`。用户需borrower第二窗口Enter至STOPPED后，creator第一窗口Enter至STOPPED，尚待确认，不复用该stage/bootstrap。
+此后才用本轮mode脚本消费精确备份 `/var/lib/remoteapp-poc/enrollment-mode-O_mzew`恢复file模式；原policy、三正式服务、Store固定SHA/Nginx基线均PASS。本地相关installed-session/enrollment-helper/device-api-client/ConnectionIdentityVault进程统计全0，但不据此证明未知旧test身份已经删除。公开管理程序/Windows包及不确定client journal/凭据保留。本轮stage `C:\Users\jarvis\remoteapp-compiled-stage-a9d60174b30f287c`已消费，creator `C:\Users\jarvis\windows-desktop-route-ready-20261010-r9`。用户已确认两个窗口STOPPED，不复用该stage/bootstrap。
 
 下一项优先对bound helper正常退出补role/固定阶段证据，并本地排查失败帧和清理异常传播；不能盲目继续故障实验或将路由就绪当全产品通过。整体4未完成，本地提交不推送。
 
