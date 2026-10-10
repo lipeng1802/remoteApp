@@ -10,7 +10,11 @@
 
 在上述资源和原生租约审计后，用本轮精确mode脚本restore `/var/lib/remoteapp-poc/enrollment-mode-W1kz0U`，实际file_mode_restored，备份由脚本消费；原公开单向policy、三正式服务active、Store固定SHA及Nginx基线PASS。本轮公开程序/Windows包/client journal和未知test身份均保留，不删除未知凭据，也不把无marker的原清理计为通过。
 
-下一步先让第二窗口Enter并确认borrower STOPPED，再第一窗口Enter确认creator STOPPED；新stage不可复用。优先收口“runtime signer_closed之后为何无完成帧”的本地协议证据/测试，不盲目扩大20秒预算或再次无诊断live revoke。整体4仍未完成。本轮仅记录并本地提交，不推送。
+用户提供完整退出日志：第二窗口包括watch/product/workers/node/signer各阶段及 `STOPPED: borrowed desktop owner joined and its isolated test journal cleaned. Identity creator remains READY; not deleted.`；第一窗口实际 `STOPPED: desktop workers and native signer joined; isolated test journal and random test identity cleaned.`。本轮Windows桌面/测试journal及creator随机身份人工清理确认闭环，不能据此将Mac故障三帧超时或旧未知凭据审计改为通过。新stage不可复用。
+
+用户补充Mac曾息屏。只读pmset电源日志：最近整机Sleep为09:24:11、Wake为09:30:08；r6公开build文件时间10:24:15、本轮结果记录提交10:37:56，随后Display off首条为10:40:18。该区间未见整机Sleep/Wake，现有时间证据不支持把本轮超时归因于整机睡眠；息屏与系统睡眠须区分，没有修改电源设置或关闭安全锁屏。仍需本地协议证据才能确定根因，后续可在保持清醒条件下排除变量。
+
+下一步优先收口“runtime signer_closed之后为何无完成帧”的本地协议证据/测试，不盲目扩大20秒预算或再次无诊断live revoke。整体4仍未完成。本轮仅记录并本地提交，不推送。
 
 ## 2026-10-10 正向probe固定阶段诊断完成；r6与新等待入口待桌面就绪
 
