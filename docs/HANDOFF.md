@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 r5复测在正向网络payload前置项失败；独立回收与原策略恢复完成
+
+用户确认两个新窗口READY/WATCH_READY后，实际执行r5 + stage `C:\Users\jarvis\remoteapp-compiled-stage-879ec86330cbf6ad` 的--compiled-revoke。实时nonce、creator native probe、9项helper、fresh pair全摘要、等待器自动启动borrower及真实borrower probe全部PASS；OS签名注册/拒绝/批准、单次enrollment、真实持有证明/错误身份拒绝、同节点重启、精确单向策略readback和双端signed binding均PASS。
+
+最后通过项为两次split_signed_binding_matches_actual_pair，随后split_nodes.run中的split_forward_actual_fixed_payload_allowed检查失败（t.check统一抛异常位置cross-network.py:35）；未保留probe具体reason，不推断是唯一ACL/DERP/传播问题。没有进入CompiledPair.run，未启动本轮产品TLS或自主退出故障验证，不属于上次Mac20秒join超时复现。owner实际签名revoke已返回成功；finally borrower空会话关闭/relay退出完成并保留公开包，但coordinator没有STOPPED完整marker，保留 `/tmp/remoteapp-daemon-check-1825219874` 和备份 `/var/lib/remoteapp-poc/enrollment-mode-VKmQpQ`，Python实际exit1。不可称4X通过或原自动清理成功。
+
+独立只读审计：本轮server prefix下进程0、本轮本地installed-session/ConnectionIdentityVault无存活进程；控制平面最初nodes/users/preauthkeys=3/3/3、零ACL，原正式Store SHA/Nginx及三服务active基线PASS。隔离journal两个provision仍bound。仅以本轮原profile/anchor/network配置重新启动sole authority supervisor，实际READY，SIGTERM正常stop并实际STOPPED/exit0；临时检查脚本误读小写Version/Provisions，因此打印pending，随后的独立大小写正确读取确认两条均cleaned，控制资源变为1/1/1（只剩verifier），没有把错误检查伪改成成功或重跑节点。
+
+当前源码重建verifier-owner-linux、上传本轮唯一recovery-verifier并SHA确认；精确 `retire /tmp/remoteapp-daemon-check-1825219874/verifier` 实际RETIRED/exit0，nodes/users/preauthkeys全部0。此后才用本轮mode脚本restore精确备份，实际file_mode_restored；备份由脚本消费，原公开策略 `100.120.0.2 -> 100.120.0.1:47476`、三正式服务/Store固定SHA/Nginx基线再次PASS。现场目录和公开程序保留，未删除未知身份或client journal，独立恢复不计本轮自动验收通过。
+
+下一步用户先第二窗口Enter确认borrower STOPPED，再第一窗口Enter确认creator STOPPED。本stage已消费不可重用；在再次live revoke之前，先给正向probe补固定非秘密reason/阶段证据，区分网络建立与policy readback，不盲目延时或降低负向拒绝要求。4X和整体4仍未完成。本轮仅记录并本地提交，不推送。
+
 ## 2026-10-10 两窗口用户报告STOPPED；分层退出诊断与全新复测入口
 
 用户报告上轮两个窗口均Stopped，要求重新验证。未提供本次完整退出字符串，不据此推断旧未知凭据全部清理；此前未完成的Mac随机test身份清理审计仍保留。旧r4 creator/bootstrap和已消费的stage不复用。
