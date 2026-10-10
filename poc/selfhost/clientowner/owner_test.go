@@ -334,3 +334,85 @@ func TestNativeLiveOwnerRetainsLeaseOnTimeoutAndReopensEpoch(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestNativeFaultReplacementPreservesFloorAndExclusiveLease(t *testing.T) {
+	exe := os.Getenv("REMOTEAPP_JOURNAL_TEST_EXECUTABLE")
+	if exe == "" {
+		t.Skip("native helper required; not memory acceptance")
+	}
+	real, e := filepath.EvalSymlinks(exe)
+	if e != nil {
+		t.Fatal(e)
+	}
+	b, e := os.ReadFile(real)
+	if e != nil {
+		t.Fatal(e)
+	}
+	sum := sha256.Sum256(b)
+	r, nextProfile := fixture(t, hex.EncodeToString(sum[:]))
+	f, e := r.NativeFactory(real)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() {
+		if e := trustprofile.DeleteTestDesktopJournal(real, r.Scope()); e != nil {
+			t.Error("exact test cleanup", e)
+		}
+	})
+	offline, e := trustinstall.NewOfflineOwner(r, f, time.Now)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = offline.Initialize(); e != nil {
+		t.Fatal(e)
+	}
+	old, e := Open(r, f, time.Now)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer old.Close(context.Background())
+	if e = old.Upgrade(context.Background(), nextProfile); e != nil {
+		t.Fatal(e)
+	}
+	release := make(chan struct{})
+	h := mustStart(t, old, func(context.Context, trustprofile.Profile) error { <-release; return errors.New("fault") })
+	if replacement, e := old.OpenReplacement(context.Background()); e == nil || replacement != nil {
+		t.Fatal("pending runner replaced")
+	}
+	if j, e := f(false); e == nil {
+		j.Close()
+		t.Fatal("old live lease released")
+	}
+	close(release)
+	<-h.Done()
+	if e = old.RetireFault(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	replacement, e := old.OpenReplacement(context.Background())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer replacement.Close(context.Background())
+	if replacement == old || replacement.running != nil {
+		t.Fatal("old owner reused or auto-started")
+	}
+	if second, e := old.OpenReplacement(context.Background()); e == nil {
+		second.Close(context.Background())
+		t.Fatal("exclusive replacement lease bypassed")
+	}
+	if _, e = old.Start(context.Background(), func(context.Context, trustprofile.Profile) error { return nil }); e == nil {
+		t.Fatal("retired owner revived")
+	}
+	if e = replacement.Upgrade(context.Background(), r.Specification().Bundled); e == nil {
+		t.Fatal("persisted floor downgraded")
+	}
+	h = mustStart(t, replacement, func(_ context.Context, p trustprofile.Profile) error {
+		if p.Claims.Epoch != 2 {
+			return trustprofile.ErrTrust
+		}
+		return nil
+	})
+	if e = h.Wait(context.Background()); e != nil {
+		t.Fatal("replacement lost committed epoch", e)
+	}
+}

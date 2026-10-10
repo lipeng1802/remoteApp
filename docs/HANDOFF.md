@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 显式重连切片A：退役后新owner安全重建接口；Windows桌面原生测试待执行
+
+用户开始下一切片后，先补clientowner.OpenReplacement(ctx)可信进程内接口。Owner保留Open时已验证的release/factory/clock；调用者不能注入新root/profile/factory。仅RetireFault实际成功设置retiredFault，pending、未退役fault、normal Close、退役journal Close失败均拒绝重建。旧owner不重置closed/broken，也不继承runner/Handle或Config/grant/authkey；新Owner是独立对象，从同一已提交原生journal重新读取，Current额外核验当前有效性/expiry/floor，失败关闭新journal，不初始化/修复/降级。接口只返回idle新owner，不自动Start；后续真实runner仍须独立核验有效授权、节点和绑定。
+
+新增4组内存回归：退役前各状态拒绝且不开factory；新对象idle/旧对象Start继续拒绝；缺失/损坏/工厂失败拒绝且不修复；取消与过期配置拒绝。另新增TestNativeFaultReplacementPreservesFloorAndExclusiveLease：实际原生helper下pending不释放租约、故障完成和显式退役、重建新对象、第二replacement被独占租约拒绝、旧对象不可Start、持久epoch2/拒epoch1降级、显式新runner读取epoch2。此runner仅测试常量，不是网络重连或有效grant验收。
+
+实际本地clientowner/desktopcontrol/desktop-session/installed-session相关race回归PASS（最初沙箱回环监听拒绝，放开仅回环测试后PASS）。macOS随机独立namespace原生replacement测试实际PASS/exit0、自己的测试journal清理PASS。Windows测试交叉编译与公开包逐文件摘要、脚本解析PASS，上传 `C:\Users\jarvis\windows-fault-replacement-20261011-r1`。脚本严格要求全部5测试PASS/无SKIP及exit0，恢复原进程环境变量；没有启动身份窗口/Headscale/产品TLS或故障服务。
+
+通过管理SSH执行该Windows包时，4组基础回归实际PASS，但原生测试在owner_test.go:367 offline.Initialize失败，随后精确测试清理在:359也失败；实际exit1。没有进入replacement原生断言，不能标Windows保护存储通过，也不能只凭SSH上下文断言唯一原因。没有删除未知凭据/journal。必须在普通Windows桌面执行新脚本（不要旧r10窗口或安装包）：
+
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-fault-replacement-20261011-r1\run-fault-replacement-validation.ps1"`
+
+预期 `VALIDATION PASSED: explicit fresh owner after fault retirement + native lease and epoch floor. NOT cross-machine reconnect, fresh authorization, GUI or signed installer acceptance.`。本轮只完成重连安全基础接口和验证入口；尚未接入desktop backend、新Mac进程重启、私有授权重交接或--compiled重连协调。收到Windows桌面结果后再开发下一子切片，不能把本轮记整体重连通过。整体4未完成，本地提交不推送。
+
 ## 2026-10-11 r10 compiled/native authority outage 实机通过；两桌面STOPPED已确认
 
 用户随后明确反馈“两窗口已STOPPED”，记录为本轮borrower与identity creator桌面最终退出确认。未提供完整退出日志，不扩大为未知历史身份/journal均已清理。r10服务故障自主关闭/同verifier恢复验收与人工桌面退出收口完成，stage/bootstrap已消费，不再要求重开旧窗口。下一独立切片优先补服务恢复后的fresh product owner显式重连验收，仍须新owner及有效授权，禁止复活退役owner；之后推进live upgrade/floor等验收。整体4未完成。

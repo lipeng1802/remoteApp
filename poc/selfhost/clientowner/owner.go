@@ -63,6 +63,10 @@ type Owner struct {
 	installed      *trustprofile.Installation
 	running        *Handle
 	broken, closed bool
+	retiredFault   bool
+	release        trustinstall.Release
+	factory        trustinstall.Factory
+	clock          func() time.Time
 }
 
 // Open never initializes or repairs missing/corrupt native state. The journal
@@ -89,7 +93,8 @@ func Open(r trustinstall.Release, f trustinstall.Factory, clock func() time.Time
 		j.Close()
 		return nil, e
 	}
-	return &Owner{serial: make(chan struct{}, 1), journal: j, installed: s}, nil
+	return &Owner{serial: make(chan struct{}, 1), journal: j, installed: s,
+		release: r, factory: f, clock: clock}, nil
 }
 
 func (o *Owner) lock(ctx context.Context) error {
@@ -255,7 +260,41 @@ func (o *Owner) RetireFault(ctx context.Context) error {
 		return e
 	}
 	o.closed = true
+	o.retiredFault = true
 	return nil
+}
+
+// OpenReplacement is explicit trusted maintenance after successful fault
+// retirement. It opens a DIFFERENT owner from the same committed native state;
+// it never resets this owner, initializes/repairs state, inherits a runner or
+// starts a session. The caller must supply fresh verified runtime authorization
+// to a separate Start. The native factory still enforces exclusive ownership.
+func (o *Owner) OpenReplacement(ctx context.Context) (*Owner, error) {
+	if e := o.lock(ctx); e != nil {
+		return nil, e
+	}
+	defer o.unlock()
+	if !o.retiredFault || !o.closed || o.running == nil ||
+		!o.running.State().Joined || !o.running.State().Fault {
+		return nil, trustprofile.ErrTrust
+	}
+	next, e := Open(o.release, o.factory, o.clock)
+	if e != nil {
+		return nil, e
+	}
+	// Open permits offline inspection/upgrade of an expired installation. A
+	// replacement intended for reconnect must additionally validate Current;
+	// it cannot advertise a usable owner by falling back to the bundled epoch.
+	if _, _, e = next.installed.Current(); e == nil {
+		e = ctx.Err()
+	}
+	if e != nil {
+		if closed := next.Close(context.Background()); closed != nil {
+			return nil, closed
+		}
+		return nil, e
+	}
+	return next, nil
 }
 
 // Group is a structured-ownership building block for trusted runtime adapters.
