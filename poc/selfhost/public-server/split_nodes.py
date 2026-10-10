@@ -6,6 +6,32 @@ import subprocess
 import tempfile
 import time
 
+def checked_route_status(value):
+    flags={"query_ok","running","peer_known","ip_matches","in_network_map","allowed_ip","in_engine","ready"}
+    if (not isinstance(value,dict) or set(value)!=flags|{"status"}
+            or value["status"]!="route_status" or any(type(value[k]) is not bool for k in flags)
+            or value["ready"]!=all(value[k] for k in flags-{"in_engine","ready"})):
+        raise RuntimeError("invalid_overlay_route_status")
+    return value
+
+def print_route_status(value):
+    print("DIAGNOSTIC overlay_route_"+"_".join(k+"_"+str(value[k]).lower() for k in
+          ("query_ok","running","peer_known","ip_matches","in_network_map","allowed_ip","in_engine")),flush=True)
+
+def wait_overlay_route(t,peer,ip,node,deadline):
+    # Share the EXISTING projection budget, never retry the payload probe.
+    last=None
+    while time.monotonic()<deadline:
+        last=checked_route_status(peer.request("route_status",Peer=ip,PeerNode=node))
+        if time.monotonic()>=deadline: break
+        if last["ready"]:
+            t.check(True,"split_controller_exact_peer_route_ready")
+            return
+        time.sleep(min(.2,max(0,deadline-time.monotonic())))
+    if last is not None:
+        print_route_status(last)
+    raise RuntimeError("split_client_route_not_ready")
+
 def checked_forward_probe(reply):
     stages = {"local_client_failed", "overlay_dial_failed", "overlay_route_missing",
               "deadline_failed", "write_failed", "read_failed", "payload_mismatch", "payload_verified"}
@@ -99,7 +125,15 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
         reply=api.request("network_state")
         claims=reply.get("network_state",{}).get("claims",{})
         t.check(reply["passed"] and claims.get("active") is True and claims.get("binding")==binding,"split_signed_binding_matches_actual_pair")
-    t.check(checked_forward_probe(peer.request("probe",Peer=target_ip)),"split_forward_actual_fixed_payload_allowed")
+    wait_overlay_route(t,peer,target_ip,target["node_key"],end)
+    forward_ok=checked_forward_probe(peer.request("probe",Peer=target_ip))
+    if not forward_ok:
+        # Post-failure metadata is evidence only, never another payload attempt.
+        try:
+            print_route_status(checked_route_status(peer.request("route_status",Peer=target_ip,PeerNode=target["node_key"])))
+        except Exception:
+            print("DIAGNOSTIC overlay_route_snapshot_unavailable",flush=True)
+    t.check(forward_ok,"split_forward_actual_fixed_payload_allowed")
     reverse=server.request("probe",Peer=controller_ip)
     t.check(not reverse["passed"] and reverse.get("reason") in ("route_denied","dial_denied") and peer.request("count")["value"]==0,"split_reverse_payload_denied")
     def restart_managed():

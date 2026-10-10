@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+新增 overlay 客户端就绪检查：精确匹配预期节点/IP、本地netmap与/32路由，在原12秒投影预算内等待；保留单次payload和禁止系统网络回退。Go相关测试/race、54项Python及Windows helper编译通过，**尚未fresh双机实测，未证明r8根因或故障验收通过**。下一步准备全新双窗口入口，详见 [HANDOFF](docs/HANDOFF.md)。
+
 r8真实尝试在服务故障注入前失败：OS授权/节点持有证明/签名binding通过，但正向探测为 `overlay_route_missing / route_denied`，产品TLS和authority暂停尚未执行。已独立恢复原Store/同verifier完成客户端清理、精确退役、控制资源归零和原策略/正式基线恢复；不算原自动验收成功。用户已确认两个桌面窗口STOPPED，下一项排查overlay路由缺失，整体4未完成。见 [最新交接](docs/HANDOFF.md)。
 
 authority outage r8 验证入口已准备并上传：当前9项helper重建、Windows公开包全部摘要、fresh stage等待脚本摘要和三个PowerShell入口语法均通过。下一步用户在正常Windows桌面启动全新creator `windows-desktop-authority-fault-20261010-r8` 与新stage双窗口至READY/WATCH_READY，再运行真实故障验收；**尚未启动会话或执行服务故障实验**。命令与目录见 [HANDOFF](docs/HANDOFF.md)。

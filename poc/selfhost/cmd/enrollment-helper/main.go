@@ -308,10 +308,10 @@ func run() error {
 	}()
 	for {
 		var request struct {
-			Op, Peer, Role, Issuer, Target, Controller string
-			State                                      invite.NetworkState
-			Proof                                      invite.ClockProof
-			Bridge                                     bool
+			Op, Peer, PeerNode, Role, Issuer, Target, Controller string
+			State                                                invite.NetworkState
+			Proof                                                invite.ClockProof
+			Bridge                                               bool
 		}
 		readDone := make(chan error, 1)
 		go func() { readDone <- decode(&request) }()
@@ -343,6 +343,19 @@ func run() error {
 				active, done = managed.Status()
 			}
 			output(map[string]any{"status": "count", "value": count.Load(), "challenges": challenges.Load(), "signed": signed.Load(), "stream_ticks": streamTicks.Load(), "stream_closed": streamClosed.Load(), "stream_opened": streamOpened.Load(), "probing": probing.Load(), "managed_active": active, "managed_done": done})
+			continue
+		}
+		if request.Op == "route_status" {
+			ip, err := netip.ParseAddr(request.Peer)
+			if err != nil || !netip.MustParsePrefix("100.120.0.0/24").Contains(ip) {
+				return io.ErrUnexpectedEOF
+			}
+			lc, err := s.LocalClient()
+			if err != nil {
+				output(nodeproof.RouteStatus{Status: "route_status"})
+			} else {
+				output(nodeproof.ClientRouteStatus(ctx, lc, request.PeerNode, ip))
+			}
 			continue
 		}
 		if request.Op == "watch_stop" {

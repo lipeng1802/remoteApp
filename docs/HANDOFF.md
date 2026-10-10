@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 overlay 客户端就绪屏障与无秘密诊断完成；尚待fresh双机实测
+
+用户授权继续下一步后，补`enrollment-helper route_status`元数据请求，使用当前嵌入式tsnet的LocalClient.Status，单次查询750ms上限（继承主ctx取消）。只返回严格固定schema布尔：query_ok/running/peer_known/ip_matches/in_network_map/allowed_ip/in_engine/ready。预期节点公钥/IP由可信协调端已有binding输入，helper核对精确公钥、对应IP、当前netmap及精确/32 AllowedIP；不输出公钥、IP、端点、原始错误或凭据，不拨号、不签名、不改授权。in_engine仅诊断不参与ready（idle peer可能未在engine中），状态就绪不等于ACL或payload通过。
+
+split_nodes现在与原12秒服务端projection预算共用同一deadline，完成精确policy和双端签名binding后，轮询Mac元数据直至目标peer已进入本地map/host route。没有新增12秒等待或延长原3秒probe/2秒交换deadline；过期后不得查询或接受迟到ready。拒未知字段/整数bool/ready不一致。只执行一次真实payload；失败后再取一次元数据用于固定非秘密诊断，不重试payload、不跟随Dial-Self、不采用系统Tailscale fallback、不放宽零ACL/反向拒绝/撤销门禁。补这一就绪屏障是针对已发现的客户端状态检查缺口，并不能证明r8唯一根因就是传播延迟。
+
+实际本地Go nodeproof/enrollment-helper完整测试及race PASS；新增覆盖错误查询/公钥/IP/旧map/缺AllowedIPs/宽网段不能ready、idle engine标记不误拒。Python全54项PASS，新增元数据严格schema、只查metadata不probe、迟到响应和过期预算拒绝。最终Windows helper交叉编译PASS，diff检查PASS。没有上传新helper、启动Windows身份、注册节点、暂停服务或执行故障实验。r8 stage已消费、两窗口已STOPPED；不得复用旧bootstrap。整体4仍未完成，本地提交不推送。
+
+下一步准备全新creator/stage，协调前重建当前helpers，再让用户READY/WATCH_READY进行fresh --compiled-fault。必须区分客户端ready、本次单payload通过、真实产品TLS与故障join的独立证据；若仍失败，用固定状态快照定位，不标记双机问题根治。
+
 ## 2026-10-10 r8 服务故障实验在注入前失败；独立恢复闭环，两桌面STOPPED已确认
 
 用户随后确认“两窗口已STOPPED”，本轮桌面人工最终退出确认已记录。未附完整退出字符串，不扩大为旧未知身份/journal已全部清理；该确认不能把正向overlay探测失败或缺失的故障注入验收改为通过。当前无需用户重开旧窗口，下一项仍为overlay路由缺失诊断。
