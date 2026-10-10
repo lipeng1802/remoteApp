@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 r8 服务故障实验在注入前失败；独立恢复闭环，桌面STOPPED待确认
+
+用户确认r8两窗口就绪后实际执行 `--compiled-fault`。在线等待器挑战/native creator probe、当前9helper、隔离服务、fresh匹配包公开摘要/borrower probe、OS签名授权/拒自批准/单次enrollment、错误OS节点证明拒绝、同节点重启/实际持有证明、双端签名active binding均PASS。随后正向固定payload探测失败：`forward_probe_stage_overlay_route_missing_reason_route_denied`；运行时精确含义为LocalAPI返回HTTP200+Dial-Self，DialOnlyOverlay拒绝系统socket fallback，未放宽边界。尚无证据确定是policy/netmap传播或其他原因，不以SSH可达替代overlay路由，不重试/扩大期限冒充原验收。
+
+本轮**未进入 compiled pair 产品start/pongs，也未执行freeze/recover**，故authority-outage/TLS故障join没有实测证据。在线owner签名revoke实际PASS，随后finally的server资源清理缺STOPPED标记，Python实际exit1。严格保留状态；修正新模式最终成功摘要为专用authority outage范围，不能误报旧正常join模式（本轮并未走到成功摘要）。
+
+本轮确切server实验目录 `/tmp/remoteapp-daemon-check-935587794`，管理prefix `/tmp/remoteapp-split-consent-dc5bb48d57fcec12`，备份 `/var/lib/remoteapp-poc/enrollment-mode-vLKMUN`。只读审计原check/daemon/frontend无存活，正式三服务active/Store固定SHA/Nginx基线通过，PoC零ACL但残留本轮3节点/3用户/3key，故不能直接恢复file策略。独立用原profile/Store/同verifier启动sole daemon，实际READY、全部Provisions cleaned、正常STOPPED和真实exit0；没有写假cleaned或删除锁。随后当前源码构建/上传公开recovery-verifier并SHA验证，精确Retire本轮verifier实际PASS，控制资源均0。此后才用本轮精确mode脚本消费上述备份恢复file模式，原policy/正式三服务/Store固定SHA/Nginx再次PASS。独立恢复不算原协调自动收尾或故障验收通过。
+
+本轮实验目录、公开管理/恢复程序、Windows新包及不确定client journal/身份现场保留，不删除未知凭据。Windows stage `C:\Users\jarvis\remoteapp-compiled-stage-f83074d0c9a3158b` 已消费；creator `C:\Users\jarvis\windows-desktop-authority-fault-20261010-r8`。已请用户borrower第二窗口Enter至STOPPED，随后creator第一窗口Enter至STOPPED，尚待回执。不可复用旧stage/bootstrap。下一项优先获取“policy readback和签名binding通过，但LocalAPI无overlay route”的层级证据；不要盲目再跑故障实验。整体4未完成，本地提交不推送。
+
 ## 2026-10-10 authority outage r8 双窗口入口准备完成；待用户就绪
 
 用户授权开始下一项后，全9项当前helper离线重建PASS，Windows SSH实际可用。全新creator可信build实际BUILD_READY/exit0，Test命名空间与minimum_epoch=1确认，本地11文件manifest校验PASS。公开文件上传仅复用与本轮manifest完全一致的旧公开二进制，不复制旧bootstrap、身份或journal。远端全部文件摘要PASS；fresh stage仅当前SID/SYSTEM ACL，waiter摘要PASS；start/probe/waiter三个PowerShell语法检查PASS。没有启动桌面身份、网络会话、Headscale节点或隔离服务，更没有暂停正式服务；不计故障实验已通过。

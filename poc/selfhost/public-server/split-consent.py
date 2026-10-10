@@ -346,7 +346,9 @@ def main():
     t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
     if compiled:
         print("ACTION: verification and server/client teardown finished. Enter in BORROWER window FIRST and confirm its STOPPED, then Enter in identity creator and confirm STOPPED.",flush=True)
-        if live_revoke:
+        if fault:
+            print("VALIDATION PASSED: compiled native pair + real Headscale/product TLS + isolated authority outage with stale ACL + autonomous fault join/native retirement + explicit same-verifier recovery with old owners closed. NOT new product-session reconnect, borrower STOPPED cleanup, upgrade, GUI or signed installer acceptance.",flush=True)
+        elif live_revoke:
             print("VALIDATION PASSED: compiled native pair + real Headscale/product TLS + signed live-session revocation + autonomous fault join/native retirement. NOT borrower STOPPED cleanup, authority-outage fault, upgrade, GUI or signed installer acceptance.",flush=True)
         else:
             print("VALIDATION PASSED: compiled native pair + real Headscale binding + product TLS payload/autonomous refresh + normal join + post-stop signed revoke. NOT live-session revocation, borrower STOPPED cleanup, upgrade/fault, GUI or signed installer acceptance.",flush=True)

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r8真实尝试在服务故障注入前失败：OS授权/节点持有证明/签名binding通过，但正向探测为 `overlay_route_missing / route_denied`，产品TLS和authority暂停尚未执行。已独立恢复原Store/同verifier完成客户端清理、精确退役、控制资源归零和原策略/正式基线恢复；不算原自动验收成功。下一项排查overlay路由缺失，用户桌面borrower→creator STOPPED待确认，整体4未完成。见 [最新交接](docs/HANDOFF.md)。
+
 authority outage r8 验证入口已准备并上传：当前9项helper重建、Windows公开包全部摘要、fresh stage等待脚本摘要和三个PowerShell入口语法均通过。下一步用户在正常Windows桌面启动全新creator `windows-desktop-authority-fault-20261010-r8` 与新stage双窗口至READY/WATCH_READY，再运行真实故障验收；**尚未启动会话或执行服务故障实验**。命令与目录见 [HANDOFF](docs/HANDOFF.md)。
 
 2026-10-10 当前状态：r7 compiled/native 双机真实产品 TLS、活会话签名撤销、实际故障 join/原生退役和两个桌面 STOPPED 已验收。新增 `split-consent.py --compiled-fault` 隔离服务故障验证入口；50 项 Python 与 Linux 10 项协议回归通过，**新入口尚未真实双机验收**。只暂停本轮隔离 authority 子进程，不暂停正式服务；验证旧 ACL 残留期间两端自主关闭、同 verifier 服务显式恢复后旧会话仍锁闭，不宣称新产品会话重连。整体切片 4 未完成。后续步骤见 [交接](docs/HANDOFF.md)，下方旧记录按历史保留。
