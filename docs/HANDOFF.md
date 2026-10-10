@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 路由诊断版 r9 全新双窗口入口已准备；待用户就绪
+
+用户继续后当前9项helper（含route_status）重建PASS；Windows SSH可用，Headscale nodes/users/preauthkeys全0、原policy和正式三服务/Store固定SHA/Nginx基线只读复核PASS。全新creator build实际BUILD_READY/exit0、test_namespace=true/minimum_epoch=1和manifest确认。公开差异上传仅复用与本轮manifest完全一致的旧公开文件，远端全部文件摘要PASS。fresh stage仅当前SID/SYSTEM ACL、waiter摘要及start/probe/waiter三脚本Windows解析PASS。没有复制旧bootstrap/身份/journal、启动运行身份/节点/隔离服务或故障实验。
+
+creator：`C:\Users\jarvis\windows-desktop-route-ready-20261010-r9`；stage：`C:\Users\jarvis\remoteapp-compiled-stage-a9d60174b30f287c`。普通Windows桌面第一窗口运行creator下start-desktop-session.ps1至READY；第二窗口运行stage下wait-for-compiled-borrower.ps1，Root=该stage，IdentityBootstrap=creator下interactive-bootstrap.json，至WATCH_READY。保持两窗口打开，暂不要Enter。
+
+收到用户两窗口就绪后，设置REMOTEAPP_WINDOWS_INTERACTIVE_DIR=本轮creator、REMOTEAPP_WINDOWS_DESKTOP_STAGE=本轮stage，执行 `python3 poc/selfhost/public-server/split-consent.py --compiled-fault`。协调前会再次重建helper并上传最新enrollment-helper到本轮run；fresh服务匹配borrower仍在在线挑战/native probe后生成。重点先观察`split_controller_exact_peer_route_ready`，仍需唯一真实payload和产品TLS独立通过才允许注入故障；超时/状态不一致/后续payload失败均不能标成功。失败固定快照不输出原始provider数据，不放宽probe/系统fallback边界。
+
+准备包不代表实机路由问题根治或authority-outage通过。最终仍borrower先STOPPED、creator后STOPPED，r8已消费stage/bootstrap不可复用。整体4未完成，当前仅本地提交不推送。
+
 ## 2026-10-10 overlay 客户端就绪屏障与无秘密诊断完成；尚待fresh双机实测
 
 用户授权继续下一步后，补`enrollment-helper route_status`元数据请求，使用当前嵌入式tsnet的LocalClient.Status，单次查询750ms上限（继承主ctx取消）。只返回严格固定schema布尔：query_ok/running/peer_known/ip_matches/in_network_map/allowed_ip/in_engine/ready。预期节点公钥/IP由可信协调端已有binding输入，helper核对精确公钥、对应IP、当前netmap及精确/32 AllowedIP；不输出公钥、IP、端点、原始错误或凭据，不拨号、不签名、不改授权。in_engine仅诊断不参与ready（idle peer可能未在engine中），状态就绪不等于ACL或payload通过。
