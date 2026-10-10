@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 authority outage r8 双窗口入口准备完成；待用户就绪
+
+用户授权开始下一项后，全9项当前helper离线重建PASS，Windows SSH实际可用。全新creator可信build实际BUILD_READY/exit0，Test命名空间与minimum_epoch=1确认，本地11文件manifest校验PASS。公开文件上传仅复用与本轮manifest完全一致的旧公开二进制，不复制旧bootstrap、身份或journal。远端全部文件摘要PASS；fresh stage仅当前SID/SYSTEM ACL，waiter摘要PASS；start/probe/waiter三个PowerShell语法检查PASS。没有启动桌面身份、网络会话、Headscale节点或隔离服务，更没有暂停正式服务；不计故障实验已通过。
+
+creator目录：`C:\Users\jarvis\windows-desktop-authority-fault-20261010-r8`；stage：`C:\Users\jarvis\remoteapp-compiled-stage-f83074d0c9a3158b`。用户普通Windows桌面第一窗口运行creator下start-desktop-session.ps1，保持READY；第二窗口运行stage下wait-for-compiled-borrower.ps1，Root为上述stage、IdentityBootstrap为creator下interactive-bootstrap.json，保持WATCH_READY。就绪前不要按Enter；不可启动旧r7或复用已消费stage。
+
+收到两窗口就绪后，协调端设置REMOTEAPP_WINDOWS_INTERACTIVE_DIR=本轮creator、REMOTEAPP_WINDOWS_DESKTOP_STAGE=本轮stage，执行 `python3 poc/selfhost/public-server/split-consent.py --compiled-fault`（当前helpers仍在协调前重建）。实际服务故障实验由可信协调端执行，不让用户手工停止authority。最终依旧borrower先STOPPED、creator后STOPPED。新鲜匹配服务的borrower包在等待器在线挑战/native probe之后生成并发布，不把本轮creator准备算产品TLS或故障join证明。
+
+该准备切片仅本地提交，未推送；正式服务、Store及Nginx未修改。下一轮需严格保留服务恢复而旧产品owner锁闭、新产品显式重连仍待的验收边界。
+
 ## 2026-10-10 compiled/native authority outage 验证入口开发完成；双机实测待准备
 
 用户“继续”后按优先级开发服务故障关闭，不启动 Windows 会话，不暂停正式服务。新增唯一显式 `split-consent.py --compiled-fault`（不允许与其他模式混用），server 对应 `--os-compiled-fault`；严格要求 node/compiled/fault 三标记、完整隔离 freeze/recover 回调。旧 compiled、compiled-revoke、tls-fault 模式保持分别独立。
