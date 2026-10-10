@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 正向probe固定阶段诊断完成；r6与新等待入口待桌面就绪
+
+用户要求继续并说明网络/SSH已通。实际通过Windows SSH公开响应及服务器管理调用，Headscale nodes/users/preauthkeys全0；管理通道可达不替代隔离tsnet正向传输验收。未复用已STOPPED的r5 bootstrap或已消费stage。
+
+enrollment-helper的probe新增固定stage：local_client_failed、overlay_dial_failed、overlay_route_missing、deadline_failed、write_failed、read_failed、payload_mismatch、payload_verified；reason仍为固定枚举，成功改为none。保留3秒probe和2秒读写deadline，拒短写及非精确payload，不输出token、payload、IP或原始网络错误。split_nodes正向检查输出白名单阶段/原因，不认识或类型不符只打印unknown；实际通过要求严格四字段schema、passed真布尔、payload_verified+none。诊断不提供重试/延长等待或管理Tailscale/系统socket fallback，负向零规则/错误身份/反向拒绝检查不放宽。
+
+41项Python回归通过，enrollment-helper/nodeproof Go race通过，两包Windows vet退出0，diff检查PASS；Go补精确payload/短写/deadline/写失败/读失败/内容不符测试，Python补类型/schema/未知字段和诊断不泄露测试。当前9项helper重新构建。新creator `C:\Users\jarvis\windows-desktop-session-probe-diag-20261010-r6` 构建实际exit0，公开差异上传后全部manifest摘要与start/probe脚本Windows解析PASS；新stage `C:\Users\jarvis\remoteapp-compiled-stage-ec429e80730b06e7` 本用户/SYSTEM ACL创建，等待脚本摘要/解析PASS。未上传私钥/状态，未启动新桌面/节点/grant或更改正式服务，不能称网络问题已修复或4X通过。
+
+下一步第一窗口运行r6\start-desktop-session.ps1至READY；第二窗口运行新stage\wait-for-compiled-borrower.ps1，Root为新stage、IdentityBootstrap=r6\interactive-bootstrap.json，至WATCH_READY后用户确认。随后REMOTEAPP_WINDOWS_INTERACTIVE_DIR=r6、REMOTEAPP_WINDOWS_DESKTOP_STAGE=ec429e新stage，以split-consent.py --compiled-revoke重新验收；若正向再次失败，依据固定stage定位，不盲目反复重跑。整体4仍未完成；只本地提交，不推送。
+
 ## 2026-10-10 r5复测在正向网络payload前置项失败；独立回收与原策略恢复完成
 
 用户确认两个新窗口READY/WATCH_READY后，实际执行r5 + stage `C:\Users\jarvis\remoteapp-compiled-stage-879ec86330cbf6ad` 的--compiled-revoke。实时nonce、creator native probe、9项helper、fresh pair全摘要、等待器自动启动borrower及真实borrower probe全部PASS；OS签名注册/拒绝/批准、单次enrollment、真实持有证明/错误身份拒绝、同节点重启、精确单向策略readback和双端signed binding均PASS。

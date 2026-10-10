@@ -4,10 +4,24 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from split_nodes import upload_helper
+from split_nodes import upload_helper, checked_forward_probe
+import contextlib
+import io
 
 
 class NodeUploadTests(unittest.TestCase):
+    def test_forward_requires_exact_payload_and_only_emits_fixed_diagnostics(self):
+        good=dict(status="probe",passed=True,reason="none",stage="payload_verified")
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertTrue(checked_forward_probe(good))
+            for change in (dict(passed=1),dict(passed=False),dict(stage="read_failed"),
+                           dict(reason="dial_denied"),dict(extra="secret"),dict(stage="secret",reason="secret"),
+                           dict(stage={"secret":1},reason=["secret"])):
+                self.assertFalse(checked_forward_probe(dict(good,**change)))
+        self.assertNotIn("secret",output.getvalue())
+        self.assertIn("forward_probe_stage_unknown_reason_unknown",output.getvalue())
+
     def test_compressed_bounded_transfer_then_hash_check(self):
         with tempfile.TemporaryDirectory() as directory:
             binary=Path(directory)/"enrollment-helper-win.exe"

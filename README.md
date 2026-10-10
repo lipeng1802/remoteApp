@@ -165,6 +165,8 @@ git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 git -c http.proxy=http://127.0.0.1:1080 push origin main
 # 2026-10-10 验证入口状态
 
+正向网络probe已补固定非秘密阶段/原因，只有完整精确payload才通过，不扩时/不重试或回退管理Tailscale。41项Python回归、相关Go race/Windows vet通过；已实际确认双方SSH和空控制平面。新r6 creator与新等待目录上传、全摘要及脚本解析通过，待正常Windows桌面READY/WATCH_READY后复测。**尚未证明网络失败已修复或4X通过。** 启动入口见[交接](docs/HANDOFF.md)。下方为历史记录。
+
 最新r5真实复测通过等待器自动启动、OS授权/节点持有证明及signed binding，但正向网络payload前置检查失败，未进入产品TLS和自主join验证。原协调器清理未完整通过；已用本轮监督器独立回收已撤销节点、精确退役verifier，确认资源为零后恢复原策略并核验正式基线。**复测失败，不计4X通过；用户已确认两个桌面窗口均STOPPED。** 旧入口不复用，下一步补正向网络probe诊断。详细证据及下一步见[交接](docs/HANDOFF.md)。
 
 用户已报告上轮两个窗口均STOPPED。已补产品/watch/worker/node/signer固定非秘密退出阶段诊断，40项Python回归、相关Go race及Windows vet通过；仍要求原故障三帧与实际exit1，不延长退出期限。新r5 creator与唯一等待目录用于重新验收；真实双机结果尚待，不能将诊断或包构建算4X通过。启动入口见[交接](docs/HANDOFF.md)。下方为历史记录。

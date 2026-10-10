@@ -6,6 +6,22 @@ import subprocess
 import tempfile
 import time
 
+def checked_forward_probe(reply):
+    stages = {"local_client_failed", "overlay_dial_failed", "overlay_route_missing",
+              "deadline_failed", "write_failed", "read_failed", "payload_mismatch", "payload_verified"}
+    stage = reply.get("stage") if isinstance(reply, dict) else None
+    reason = reply.get("reason") if isinstance(reply, dict) else None
+    if not isinstance(stage, str) or stage not in stages:
+        stage = "unknown"
+    if not isinstance(reason, str) or reason not in {"none", "exchange_denied", "dial_denied", "route_denied"}:
+        reason = "unknown"
+    print("DIAGNOSTIC forward_probe_stage_" + stage + "_reason_" + reason, flush=True)
+    # A stage is diagnostic only. Require the actual verified fixed payload,
+    # not merely an open socket, policy readback, SSH reachability or a retry.
+    return (isinstance(reply, dict) and set(reply) == {"status", "passed", "reason", "stage"}
+            and reply["status"] == "probe" and reply["passed"] is True
+            and stage == "payload_verified" and reason == "none")
+
 def upload_helper(t, work):
     """Finish public transfer and verification BEFORE issuing a short grant."""
     binary=t.ARTIFACTS/"enrollment-helper-win.exe"
@@ -83,7 +99,7 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
         reply=api.request("network_state")
         claims=reply.get("network_state",{}).get("claims",{})
         t.check(reply["passed"] and claims.get("active") is True and claims.get("binding")==binding,"split_signed_binding_matches_actual_pair")
-    t.check(peer.request("probe",Peer=target_ip)["passed"],"split_forward_actual_fixed_payload_allowed")
+    t.check(checked_forward_probe(peer.request("probe",Peer=target_ip)),"split_forward_actual_fixed_payload_allowed")
     reverse=server.request("probe",Peer=controller_ip)
     t.check(not reverse["passed"] and reverse.get("reason") in ("route_denied","dial_denied") and peer.request("count")["value"]==0,"split_reverse_payload_denied")
     def restart_managed():

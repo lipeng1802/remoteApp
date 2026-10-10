@@ -496,6 +496,7 @@ func run() error {
 		}
 		probeCtx, stop := context.WithTimeout(ctx, 3*time.Second)
 		reason := "exchange_denied"
+		stage := "local_client_failed"
 		success := func() bool {
 			lc, e := s.LocalClient()
 			if e != nil {
@@ -504,21 +505,22 @@ func run() error {
 			conn, e := nodeproof.DialOnlyOverlay(probeCtx, lc, ip.String(), 47476)
 			if e != nil {
 				reason = "dial_denied"
+				stage = "overlay_dial_failed"
 				if e == nodeproof.ErrNoOverlayRoute {
 					reason = "route_denied"
+					stage = "overlay_route_missing"
 				}
 				return false
 			}
 			defer conn.Close()
-			conn.SetDeadline(time.Now().Add(2 * time.Second))
-			if _, e = io.WriteString(conn, c.Token); e != nil {
-				return false
+			ok, current := exchangeProbe(conn, c.Token)
+			stage = current
+			if ok {
+				reason = "none"
 			}
-			b := make([]byte, len(payload))
-			_, e = io.ReadFull(conn, b)
-			return e == nil && string(b) == payload
+			return ok
 		}()
 		stop()
-		output(map[string]any{"status": "probe", "passed": success, "reason": reason})
+		output(map[string]any{"status": "probe", "passed": success, "reason": reason, "stage": stage})
 	}
 }
