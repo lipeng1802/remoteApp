@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r9实机路由就绪、单次正向固定payload、反向拒绝均通过；随后旧bound helper正常退出失败，尚未进入产品TLS或服务故障注入。已独立完成隔离进程/控制资源清理及原策略、正式服务/Store/Nginx恢复，不计原协调完整验收。下一项定位helper退出失败，用户两桌面STOPPED待确认，整体4未完成。详见 [HANDOFF](docs/HANDOFF.md)。
+
 r9路由诊断复测入口已构建并上传：当前9helper、隔离测试包全部摘要、fresh stage及三个PowerShell入口语法通过，原控制资源全0和正式基线复核正常。用户下一步使用 `windows-desktop-route-ready-20261010-r9` 与新stage启动READY/WATCH_READY；**尚未启动双机或故障实验**。具体目录与步骤见 [HANDOFF](docs/HANDOFF.md)。
 
 新增 overlay 客户端就绪检查：精确匹配预期节点/IP、本地netmap与/32路由，在原12秒投影预算内等待；保留单次payload和禁止系统网络回退。Go相关测试/race、54项Python及Windows helper编译通过，**尚未fresh双机实测，未证明r8根因或故障验收通过**。下一步准备全新双窗口入口，详见 [HANDOFF](docs/HANDOFF.md)。
