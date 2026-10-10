@@ -1,6 +1,8 @@
 # Personal Remote Desktop MVP
 
-r10全新阶段诊断双窗口入口已构建、上传并逐文件验摘要，Windows脚本解析及58项Python回归通过，原策略/正式服务/Store/Nginx基线正常。下一步只使用 `windows-desktop-phase-diag-20261010-r10` 和其fresh stage，等待READY/WATCH_READY后协调实测；r9入口已消费，不再使用。尚未启动身份、网络或故障实验，整体4未完成。步骤见 [HANDOFF](docs/HANDOFF.md)。
+r10真实双机authority outage验收通过/实际exit0：helper交接与产品启动全部阶段完成，真实TLS/pongs跨初始lease，隔离authority不可用且旧ACL残留时两端自主fault join/native retirement，同verifier恢复后旧owner保持关闭；在线撤销、资源归零与正式基线恢复全部通过。仍待两个桌面窗口按顺序STOPPED确认；不包含新产品重连、升级、GUI或签名安装包，整体4未完成。r9历史失败根因不能据本轮成功倒推。详见 [HANDOFF](docs/HANDOFF.md)。
+
+r10全新阶段诊断双窗口入口构建、摘要与脚本校验及58项Python回归通过，已完成上述实测并消费stage。r10/r9端点均不可复用。历史准备步骤见 [HANDOFF](docs/HANDOFF.md)。
 
 新增产品交接角色/阶段诊断，58项Python回归通过。纠正r9定位：统一失败帧行号不能证明旧helper退出失败，也可能是后续产品启动失败；现已补两侧helper实际join、初始化和产品启动的独立固定阶段标记，尚待fresh双机实测，未确认根因或修复。详见 [HANDOFF](docs/HANDOFF.md)。
 

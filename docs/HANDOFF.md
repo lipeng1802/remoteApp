@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r10 compiled/native authority outage 实机通过；桌面STOPPED待确认
+
+用户确认r10两窗口就绪后，实际执行 `split-consent.py --compiled-fault`，Python实际exit0。在线等待器挑战/native creator与borrower probe、当前9helper、OS签名授权/拒自批准/单次enrollment、错误OS节点证明拒绝、同节点重启/持有证明、双方签名binding均PASS。精确本地peer route ready、单次正向固定payload、反向拒绝均PASS。
+
+固定阶段证据实际确认bound_controller_join与bound_target_join均completed，bound_handoff、Mac native initialize、target start/product_ready/session_ready、controller start/session_ready、product_observe全部completed；随后actual product pongs跨初始lease持续增长、双方故障注入前仍live均PASS。r9失败本轮未复现；不能据此确定r9历史根因或声称间歇问题永久根治。
+
+仅本轮隔离authority实际暂停、HTTPS503、旧精确ACL仍残留PASS。Mac实际自主fault completion/native retirement/严格终止帧与实际退出，Windows实际自主fault join/native retirement均PASS；两端join后旧ACL仍残留。显式同verifier authority恢复、最小策略恢复、双端fresh signed same binding、旧产品owners保持closed均PASS。没有重新启动旧owner；不包含新产品会话显式重连。
+
+随后owner在线OS签名revoke、client节点回收/零ACL、client journals durable clean、daemon join、精确verifier退役、实验目录删除均PASS，实际收到 `STOPPED isolated_coordinator_resources_joined` 和coordinator zero exit。原file policy恢复、上传实验程序删除、nodes/users/preauthkeys全0、原policy、正式服务/Store/Nginx基线全部PASS。不是独立事后恢复冒充原协调成功。
+
+本轮creator `C:\Users\jarvis\windows-desktop-phase-diag-20261010-r10`；stage `C:\Users\jarvis\remoteapp-compiled-stage-6f417f3c2e9d8a10` 已消费，公开Windows包/run按设计保留。用户下一步在窗口2 borrower按Enter并确认STOPPED，再在窗口1 identity creator按Enter并确认STOPPED。此人工退出/测试identity最终清理尚待反馈，不能先记完成。不得复用该stage/bootstrap，也不清理未知旧凭据。
+
+本轮通过范围：compiled native双机、真实Headscale/product TLS、残留旧ACL下服务故障自主关闭/退役、同verifier恢复且旧owner锁闭。仍不包含new session reconnect、live upgrade、公开准入、GUI或可信签名安装包；整体4未完成。先完成桌面STOPPED收口，再安排下一独立验收切片。本地提交不推送。
+
 ## 2026-10-10 r10 全新阶段诊断双窗口入口准备完成
 
 用户继续下一步后，Windows SSH可用；Headscale nodes/users/preauthkeys全0，原policy、三正式服务、Store固定SHA及Nginx基线只读核验PASS。当前9项helper全部重建PASS；全新Windows creator实际BUILD_READY/exit0、隔离test_namespace=true/minimum_epoch=1、manifest验证PASS。公开文件上传仅复用与本轮manifest精确匹配的旧公开文件，远端所有文件摘要PASS。fresh stage仅当前SID/SYSTEM ACL，waiter摘要及start/probe/waiter三个PowerShell解析PASS。58项Python回归PASS。没有启动桌面身份、网络节点、隔离服务或故障实验；不代表根因或整体验收完成。
