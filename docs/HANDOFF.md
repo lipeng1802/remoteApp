@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-10 故障管道EOF顺序修复完成；r7入口待真实双机验收
+
+用户明确授权实施修复。JoinedPipe.join_fault现顺序为：严格completion(joined/fault真布尔)→严格fault_retired→关闭本父进程stdin写端→精确failed末帧→actual wait/exit1→fault_joined。EOF不发送Stop、不取消pending runner、不替代完成/原生journal释放或末帧；只在前两帧已确认后让继承命令reader退出。20/12秒期限和故障语义不变，没有强杀。补verified_fault_receipt精确schema和实际布尔类型，避免Python dict equality将整数1当True。只修受信协调父端协议，不宣称通用所有宿主stdin问题或GUI产品接入已完成。
+
+44项Python回归实际PASS：收到完整两帧后EOF才输出terminal的真实子进程通过且未发stop；pending/数值布尔/额外字段/错误retirement不提前EOF；EOF后缺末帧、错误末帧/额外字段/exit0不能fault_joined。用上一轮复现问题的真实Go测试子进程，修复后的Python父端连续3次完成严格三帧和actual exit1（不是Python模拟子进程替代），无网络/凭据/强杀。diff检查PASS。installed-session子进程reader行为未改，原诊断实验仍用于证明该继承描述符问题。
+
+当前9项helper重建；Windows和server SSH检查实际PASS，Headscale资源全0。新creator `C:\Users\jarvis\windows-desktop-session-eof-fix-20261010-r7` 可信构建实际exit0、公开差异上传全manifest摘要及start/probe Windows解析PASS；新stage `C:\Users\jarvis\remoteapp-compiled-stage-d21bc13211ad57af` 本用户/SYSTEM ACL，等待脚本摘要/解析PASS。未复制旧bootstrap/身份/journal、未启动新服务/节点/grant，本轮局部修复不计4X通过。
+
+下一步第一窗口运行r7\start-desktop-session.ps1至READY，第二窗口运行新stage\wait-for-compiled-borrower.ps1，Root同stage、IdentityBootstrap=r7\interactive-bootstrap.json至WATCH_READY。用户确认后使用REMOTEAPP_WINDOWS_INTERACTIVE_DIR=r7、REMOTEAPP_WINDOWS_DESKTOP_STAGE=d21bc新stage执行split-consent.py --compiled-revoke。分帧诊断必须显示实际完整协议和exit1，再确认Windows退役/节点回收/正常server恢复；最终仍borrower先STOPPED、creator后STOPPED。整体4仍未完成；本地提交，不推送。
+
 ## 2026-10-10 本地复现继承stdin收尾互等；仅诊断，尚未修改收尾行为
 
 用户要求继续排查。对照当前installed-session.run defer `cancel(); os.Stdin.Close(); <-readerDone` 与JoinedPipe.join_fault的顺序：父进程在收到completion/retirement/failed三帧后才关闭stdin写端。Go本地工具链os/file_unix.go表明阻塞继承fd通过kindNewFile创建，不自动成为pollable；关闭这样的文件不能当作等待中Read已退出的证明。

@@ -3,10 +3,56 @@ import sys
 import unittest
 import contextlib
 import io
+import json
 from joined_pipe import JoinedPipe
 
 
 class JoinedPipeTests(unittest.TestCase):
+    def test_fault_terminal_waiting_for_parent_eof_joins_without_stop_command(self):
+        code='import sys; print(\'{"status":"session_state","joined":true,"fault":true}\'); print(\'{"status":"fault_retired","joined":true,"fault":true}\'); received=sys.stdin.read(); print(\'{"status":"failed"}\'); sys.exit(1 if received=="" else 9)'
+        p=self.child(code)
+        p.join_fault()
+        self.assertTrue(p.proc.stdin.closed)
+        self.assertTrue(p.fault_joined)
+        self.assertFalse(p.closed_seen)
+        self.assertFalse(p.stop_sent)
+        self.assertEqual(p.proc.returncode,1)
+
+    def test_fault_eof_is_not_sent_before_both_strict_receipts(self):
+        completed=dict(status="session_state",joined=True,fault=True)
+        retired=dict(status="fault_retired",joined=True,fault=True)
+        for first,second in [
+            (dict(completed,joined=False),retired),
+            (dict(completed,joined=1),retired),
+            (dict(completed,fault=1),retired),
+            (dict(completed,extra="private"),retired),
+            (completed,dict(retired,joined=False)),
+            (completed,dict(retired,joined=1)),
+            (completed,dict(retired,fault=1)),
+            (completed,dict(retired,extra="private")),
+            (completed,dict(status="closed"))]:
+            with self.subTest(first=first,second=second):
+                code='import sys; print('+repr(json.dumps(first))+'); print('+repr(json.dumps(second))+'); sys.stdin.read(); sys.exit(1)'
+                p=self.child(code)
+                with self.assertRaises(RuntimeError):p.join_fault()
+                self.assertFalse(p.proc.stdin.closed)
+                self.assertFalse(p.stop_sent)
+                self.assertFalse(p.fault_joined)
+
+    def test_fault_eof_does_not_replace_terminal_receipt_or_exit_code(self):
+        for terminal,exit_code in [(None,1),('{"status":"closed"}',1),
+                                   ('{"status":"failed","extra":"private"}',1),
+                                   ('{"status":"failed"}',0)]:
+            with self.subTest(terminal=terminal,exit_code=exit_code):
+                code='import sys; print(\'{"status":"session_state","joined":true,"fault":true}\'); print(\'{"status":"fault_retired","joined":true,"fault":true}\'); sys.stdin.read(); '
+                if terminal is not None:code+='print('+repr(terminal)+'); '
+                code+='sys.exit('+str(exit_code)+')'
+                p=self.child(code)
+                with self.assertRaises(RuntimeError):p.join_fault()
+                self.assertTrue(p.proc.stdin.closed)
+                self.assertFalse(p.stop_sent)
+                self.assertFalse(p.fault_joined)
+
     def test_diagnostics_are_bounded_whitelisted_and_separate_from_protocol(self):
         p=self.child('import sys; sys.stderr.write("secret-not-a-stage\\nJOIN_STAGE unknown\\n"+"x"*1000+"\\nJOIN_STAGE node_closing\\n"); print(\'{"status":"ready"}\')')
         self.assertEqual(p.read(),{"status":"ready"})

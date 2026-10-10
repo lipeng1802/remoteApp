@@ -18,6 +18,14 @@ def unique_object(pairs):
     return result
 
 
+def verified_fault_receipt(value, status):
+    # Python dictionary equality alone accepts 1 as True. Completion evidence
+    # must be exact-schema JSON with actual booleans, not truthy substitutes.
+    return (isinstance(value, dict) and set(value) == {"status", "joined", "fault"}
+            and value["status"] == status and type(value["joined"]) is bool
+            and type(value["fault"]) is bool and value["joined"] and value["fault"])
+
+
 class JoinedPipe:
     def __init__(self, command, config=None, cwd=None):
         self.lock = threading.Lock()
@@ -113,16 +121,20 @@ class JoinedPipe:
         # require nested join, successful journal retirement AND real exit 1.
         with self.lock:
             print("DIAGNOSTIC fault_wait_completion", flush=True)
-            if self.read(20) != {"status":"session_state", "joined":True, "fault":True}:
+            if not verified_fault_receipt(self.read(20), "session_state"):
                 raise RuntimeError("private_fault_completion_missing")
             print("DIAGNOSTIC fault_completion_verified_wait_retirement", flush=True)
-            if self.read(12) != {"status":"fault_retired", "joined":True, "fault":True}:
+            if not verified_fault_receipt(self.read(12), "fault_retired"):
                 raise RuntimeError("private_fault_retirement_missing")
+            # These two receipts prove nested runner join and native journal
+            # retirement. EOF now joins ONLY the command reader; it does not
+            # stop a live session or substitute for either receipt. Inherited
+            # blocking stdin cannot reliably be interrupted by child Close.
+            if not self.proc.stdin.closed:
+                self.proc.stdin.close()
             print("DIAGNOSTIC fault_retirement_verified_wait_terminal", flush=True)
             if self.read(12, allow_exact_failure=True) != {"status":"failed"}:
                 raise RuntimeError("private_fault_terminal_missing")
-            if not self.proc.stdin.closed:
-                self.proc.stdin.close()
             self.proc.wait(timeout=12)
             self._join_diagnostics()
             if self.proc.returncode != 1:

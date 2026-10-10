@@ -165,6 +165,8 @@ git -c http.proxy=http://127.0.0.1:1080 pull --ff-only origin main
 git -c http.proxy=http://127.0.0.1:1080 push origin main
 # 2026-10-10 验证入口状态
 
+故障管道收尾修复已实施：严格验证完成+原生退役两帧后才父端EOF，再验证末帧和actual exit1，不发Stop/强杀或放宽要求。44项Python回归及真实Go子进程/Python父端连续3次收尾通过；新r7公共包与等待入口全摘要/脚本解析通过，待Windows READY/WATCH_READY后真实双机验收。**局部修复通过，不等于4X或整体4通过。** 新入口见[交接](docs/HANDOFF.md)。下方为历史记录。
+
 本地独立子进程已复现继承stdin的close/join等待父EOF，而父端等待末帧才EOF的互等：关闭实验父写端后末帧与actual exit1立即完成，3次race及41项Python回归通过。只新增诊断测试和分帧等待标记，尚未修改收尾顺序或进行新双机验收。旧统一超时行号不能证明“首帧超时”，已纠正。下一步修复方案及安全前置条件见[交接](docs/HANDOFF.md)。
 
 最新r6真实复测已通过正向精确payload、反向拒绝、产品TLS持续传输及在线签名撤销；Mac自主完成帧仍超时，最后固定阶段为signer_closed，**完整验收失败**。已独立核对资源为零、Windows故障join/退役及Mac native journal可重开，并恢复原策略/核验正式基线，不计为自动退出通过。用户完整日志确认两窗口STOPPED及本轮Windows测试身份/journal清理；Mac电源日志未见本轮区间整机睡眠，不能把息屏当作根因。下一步检查本地完成状态回报与收尾协议。详见[交接](docs/HANDOFF.md)。下方为历史记录。
