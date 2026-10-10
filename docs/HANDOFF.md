@@ -1,6 +1,8 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-11 r10 compiled/native authority outage 实机通过；桌面STOPPED待确认
+## 2026-10-11 r10 compiled/native authority outage 实机通过；两桌面STOPPED已确认
+
+用户随后明确反馈“两窗口已STOPPED”，记录为本轮borrower与identity creator桌面最终退出确认。未提供完整退出日志，不扩大为未知历史身份/journal均已清理。r10服务故障自主关闭/同verifier恢复验收与人工桌面退出收口完成，stage/bootstrap已消费，不再要求重开旧窗口。下一独立切片优先补服务恢复后的fresh product owner显式重连验收，仍须新owner及有效授权，禁止复活退役owner；之后推进live upgrade/floor等验收。整体4未完成。
 
 用户确认r10两窗口就绪后，实际执行 `split-consent.py --compiled-fault`，Python实际exit0。在线等待器挑战/native creator与borrower probe、当前9helper、OS签名授权/拒自批准/单次enrollment、错误OS节点证明拒绝、同节点重启/持有证明、双方签名binding均PASS。精确本地peer route ready、单次正向固定payload、反向拒绝均PASS。
 
@@ -10,7 +12,7 @@
 
 随后owner在线OS签名revoke、client节点回收/零ACL、client journals durable clean、daemon join、精确verifier退役、实验目录删除均PASS，实际收到 `STOPPED isolated_coordinator_resources_joined` 和coordinator zero exit。原file policy恢复、上传实验程序删除、nodes/users/preauthkeys全0、原policy、正式服务/Store/Nginx基线全部PASS。不是独立事后恢复冒充原协调成功。
 
-本轮creator `C:\Users\jarvis\windows-desktop-phase-diag-20261010-r10`；stage `C:\Users\jarvis\remoteapp-compiled-stage-6f417f3c2e9d8a10` 已消费，公开Windows包/run按设计保留。用户下一步在窗口2 borrower按Enter并确认STOPPED，再在窗口1 identity creator按Enter并确认STOPPED。此人工退出/测试identity最终清理尚待反馈，不能先记完成。不得复用该stage/bootstrap，也不清理未知旧凭据。
+本轮creator `C:\Users\jarvis\windows-desktop-phase-diag-20261010-r10`；stage `C:\Users\jarvis\remoteapp-compiled-stage-6f417f3c2e9d8a10` 已消费，公开Windows包/run按设计保留。协调结束后已要求borrower先STOPPED、creator后STOPPED；用户现已确认两窗口STOPPED。不得复用该stage/bootstrap，也不清理未知旧凭据。
 
 本轮通过范围：compiled native双机、真实Headscale/product TLS、残留旧ACL下服务故障自主关闭/退役、同verifier恢复且旧owner锁闭。仍不包含new session reconnect、live upgrade、公开准入、GUI或可信签名安装包；整体4未完成。先完成桌面STOPPED收口，再安排下一独立验收切片。本地提交不推送。
 

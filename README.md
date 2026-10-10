@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-r10真实双机authority outage验收通过/实际exit0：helper交接与产品启动全部阶段完成，真实TLS/pongs跨初始lease，隔离authority不可用且旧ACL残留时两端自主fault join/native retirement，同verifier恢复后旧owner保持关闭；在线撤销、资源归零与正式基线恢复全部通过。仍待两个桌面窗口按顺序STOPPED确认；不包含新产品重连、升级、GUI或签名安装包，整体4未完成。r9历史失败根因不能据本轮成功倒推。详见 [HANDOFF](docs/HANDOFF.md)。
+r10真实双机authority outage验收通过/实际exit0：helper交接与产品启动全部阶段完成，真实TLS/pongs跨初始lease，隔离authority不可用且旧ACL残留时两端自主fault join/native retirement，同verifier恢复后旧owner保持关闭；在线撤销、资源归零与正式基线恢复全部通过。用户已确认两个桌面窗口STOPPED；不包含新产品重连、升级、GUI或签名安装包，整体4未完成。下一独立切片优先fresh owner显式重连。r9历史失败根因不能据本轮成功倒推。详见 [HANDOFF](docs/HANDOFF.md)。
 
 r10全新阶段诊断双窗口入口构建、摘要与脚本校验及58项Python回归通过，已完成上述实测并消费stage。r10/r9端点均不可复用。历史准备步骤见 [HANDOFF](docs/HANDOFF.md)。
 
