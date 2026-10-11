@@ -3,6 +3,7 @@ package desktopcontrol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
@@ -19,6 +20,36 @@ type backend struct {
 }
 
 type observedBackend struct{ *backend }
+
+type diagnosticBackend struct {
+	*backend
+	failure error
+}
+
+func (b *diagnosticBackend) Start(context.Context, clientruntime.Config, func(any) error) error {
+	return errors.Join(errors.New("private-secret-must-not-be-returned"), b.failure)
+}
+func TestStartupDiagnosticOnlyReturnsFixedStage(t *testing.T) {
+	for _, tc := range []struct {
+		failure error
+		stage   string
+	}{
+		{clientruntime.ErrTLSCertificatePublication, "product_tls_publish"},
+		{clientruntime.ErrTestCertificateOpen, "product_certificate_open"},
+	} {
+		b := &diagnosticBackend{backend: &backend{}, failure: tc.failure}
+		c, _, _ := serveTest(t, b)
+		w := json.NewEncoder(c)
+		r := privatepipe.NewReader(c)
+		w.Encode(map[string]string{"Scope": "scope", "Expected": "public"})
+		status(t, r, "ready")
+		w.Encode(Request{Op: "start"})
+		var got map[string]string
+		if e := r.Read(&got); e != nil || len(got) != 2 || got["status"] != "failed" || got["failure_stage"] != tc.stage {
+			t.Fatal("unsafe or missing diagnostic", e)
+		}
+	}
+}
 
 type replacementBackend struct {
 	*backend

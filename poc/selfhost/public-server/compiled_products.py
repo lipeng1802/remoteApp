@@ -281,7 +281,7 @@ def prepare(t, identities, ready, ports, work, readiness_deadline, desktop_stage
             "mac-vault": root / "macos/RemoteController/.build/release/ConnectionIdentityVault",
             "win-vault": parent / "identity-vault-win.exe",
             "mac-product": root / "macos/RemoteController/.build/release/TLSBridgeProbe",
-            "win-product": parent / "TlsBridgeProbe-win-4s.exe"}
+            "win-product": parent / "TlsBridgeProbe-win-reconnect-v2.exe"}
     env = dict(os.environ, GOENV="off", GOTOOLCHAIN="local", GOPROXY="off",
                GOMODCACHE=str(parent / "gomod"), GOCACHE=str(parent / "gocache"))
     command = [str(go), "run", "./cmd/compiled-pair-build"]
@@ -324,6 +324,7 @@ class CompiledPair:
         self._reconnect_attempted = False
         self._retired_controller_proc = None
         self._last_product_key_digest = None
+        self._last_product_fingerprint = None
 
     def attach(self, Pipe):
         d = self.desktop
@@ -370,7 +371,12 @@ class CompiledPair:
         # Mark ownership pending BEFORE the first send/launch can create work.
         self.sessions_joined = False
         run_stage("target_start_send",lambda:self.target.send(dict(Op="start", Config=inputs["target"])))
-        key = run_stage("target_product_ready",lambda:product_secret(self.target.read()))
+        receipt = run_stage("target_product_ready",self.target.read)
+        key = product_secret(receipt)
+        fingerprint=receipt["Fingerprint"]
+        if self._last_product_fingerprint is not None and fingerprint!=self._last_product_fingerprint:
+            raise RuntimeError("compiled_reconnect_certificate_changed")
+        self._last_product_fingerprint=fingerprint # public pin, never output
         digest=hashlib.sha256(base64.b64decode(key,validate=True)).digest()
         if digest==self._last_product_key_digest:
             raise RuntimeError("compiled_reconnect_product_key_reused")
@@ -410,6 +416,7 @@ class CompiledPair:
             if session_state(self.target.request("session_state")) != (False,False):
                 raise RuntimeError("compiled_reconnect_owner_not_idle")
         run_stage("reconnect_target_reopen",reopen)
+        inputs["target"]["ReuseProductCertificate"]=True # exact same compiled/grant OS certificate; new HMAC
         self._start_products(Pipe,inputs) # fresh target HMAC and fresh Mac process
         if self.controller.proc.pid == self._retired_controller_proc.pid or self._retired_controller_proc.poll()!=1:
             raise RuntimeError("compiled_reconnect_reused_controller")

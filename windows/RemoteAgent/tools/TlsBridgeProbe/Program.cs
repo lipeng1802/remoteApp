@@ -1,4 +1,5 @@
-// Private development pipe. No production credentials/keychain/native actions.
+// Private development pipe. Scoped TEST certificates may use CurrentUser OS
+// storage; no production credentials/certificate namespace is accessed.
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -17,7 +18,25 @@ static string? Line()
     }
     throw new InvalidDataException();
 }
-using var certificate = AgentCertificateFactory.CreateSelfSigned();
+if ((args.Length == 2 && args[0] == "--cleanup-test-certificate") ||
+    (args.Length == 1 && args[0] == "--test-certificate-selftest"))
+{
+    try
+    {
+        Output(new { status = "ready" });
+        using var command = JsonDocument.Parse(Line() ?? throw new InvalidDataException());
+        if (command.RootElement.GetProperty("Op").GetString() != "stop") throw new InvalidDataException();
+        if (args.Length == 2) ScopedTestCertificateStore.Delete(args[1]);
+        else ScopedTestCertificateStore.SelfTest();
+        Output(new { status = "closed" });
+        return 0;
+    }
+    catch { Output(new { status = "failed" }); return 1; }
+}
+if (args.Length != 0 && (args.Length != 2 || args[0] is not ("--create-test-certificate" or "--reopen-test-certificate")))
+{ Output(new { status = "failed" }); return 1; }
+using var certificate = args.Length == 0 ? AgentCertificateFactory.CreateSelfSigned() :
+    ScopedTestCertificateStore.Open(args[1], args[0] == "--create-test-certificate");
 var key = RandomNumberGenerator.GetBytes(32);
 var identity = RandomNumberGenerator.GetBytes(16);
 using var stop = new CancellationTokenSource(TimeSpan.FromMinutes(5));

@@ -6,6 +6,7 @@ package desktopcontrol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -143,7 +144,13 @@ func handle(ctx context.Context, c net.Conn, scope, public string, b Backend) {
 		}
 		cancel()
 		if e != nil {
-			out(map[string]string{"status": "failed"})
+			if errors.Is(e, clientruntime.ErrTLSCertificatePublication) {
+				out(map[string]string{"status": "failed", "failure_stage": "product_tls_publish"})
+			} else if errors.Is(e, clientruntime.ErrTestCertificateOpen) {
+				out(map[string]string{"status": "failed", "failure_stage": "product_certificate_open"})
+			} else {
+				out(map[string]string{"status": "failed"})
+			}
 			return
 		}
 	}

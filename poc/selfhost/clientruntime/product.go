@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
@@ -19,11 +20,18 @@ import (
 // compiled command fixes Spec; only the TEST controller HMAC is parent-supplied
 // through its anonymous pipe. This is not final product secret distribution.
 type Product struct {
-	Spec          processowner.Spec
-	ControllerKey string
-	TargetReady   func(key, fingerprint string) // private parent pipe; never log
-	Observation   *ProductObservation           // trusted local telemetry; never accepts child wiring
+	Spec              processowner.Spec
+	ControllerKey     string
+	TargetReady       func(key, fingerprint string) // private parent pipe; never log
+	Observation       *ProductObservation           // trusted local telemetry; never accepts child wiring
+	CertificateScope  string                        // nonempty only for compiled Windows TEST target
+	CertificateReopen bool
+	CertificateOpened func(string) // local ownership bookkeeping; no private key
 }
+
+var ErrTLSCertificatePublication = errors.New("product_tls_publication_failed")
+var ErrTestCertificateOpen = errors.New("product_test_certificate_open_failed")
+
 type networkAPI interface {
 	Request(context.Context, invite.NetworkRequestBody) (invite.NetworkReply, error)
 }
@@ -57,6 +65,9 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	// the outer runner. Deadline failure cannot release the installation lease.
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
+	if !c.Server && (p.CertificateScope != "" || p.CertificateReopen || p.CertificateOpened != nil) {
+		return nil, session.ErrDenied
+	}
 	if api == nil || clock == nil || len(issuer) != 32 || (c.Server && (p.ControllerKey != "" || p.TargetReady == nil)) || (!c.Server && (!hmacKey(p.ControllerKey) || port < 1 || port > 65535)) {
 		return nil, session.ErrDenied
 	}
@@ -79,17 +90,33 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 		p.Observation.bind(child, false)
 		return child, nil
 	}
-	child, e := processowner.Start(p.Spec)
+	spec := p.Spec
+	if p.CertificateScope != "" {
+		var err error
+		spec, err = certificateSpec(spec, p.CertificateScope, p.CertificateReopen)
+		if err != nil {
+			return nil, err
+		}
+	} else if p.CertificateReopen {
+		return nil, session.ErrDenied
+	}
+	child, e := processowner.Start(spec)
 	if e != nil {
 		return nil, e
 	}
 	raw, e := child.Exchange(ctx, nil)
 	var ready productReady
 	if e != nil || json.Unmarshal(raw, &ready) != nil || ready.Status != "ready" || !hmacKey(ready.Key) {
+		if p.CertificateScope != "" {
+			return child, errors.Join(session.ErrDenied, ErrTestCertificateOpen)
+		}
 		return child, session.ErrDenied
 	}
 	if _, e = key(ready.Fingerprint); e != nil {
 		return child, e
+	}
+	if p.CertificateScope != "" && p.CertificateOpened != nil {
+		p.CertificateOpened(p.CertificateScope)
 	}
 	n, e := nonce()
 	if e != nil {
@@ -114,7 +141,7 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	// The authority verifies the actual RSA private-key proof under the target
 	// device's OS signature. No certificate private key is copied to this helper.
 	if _, e = api.Request(ctx, invite.NetworkRequestBody{Action: "publish_tls", Grant: c.Grant, Challenge: n, Certificate: proof.Certificate, CertificateProof: proof.CertificateProof}); e != nil {
-		return child, session.ErrDenied
+		return child, errors.Join(session.ErrDenied, ErrTLSCertificatePublication)
 	}
 	d, e := descriptor(ctx, api, issuer, c, clock)
 	if e != nil || d.Claims.Fingerprint != ready.Fingerprint {

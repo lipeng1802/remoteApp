@@ -1,5 +1,31 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r12 精确恢复完成；r13 TEST 证书复用修复待桌面/双机验收
+
+用户确认两窗口 STOPPED。独立恢复程序实际 exit0：精确匹配 r12 issuer/Store/verifier/backup，durable clients 和 verifier 退役、Headscale nodes/users/preauthkeys 归零、原 file policy 与三个正式服务恢复、正式 Store 和 Nginx 摘要未变；本轮 Mac 隔离 journal inspect/cleanup-test 实际通过。不把独立恢复写成原失败协调器 STOPPED/exit0；未知历史身份和证据保留，未批量删除。
+
+实现：Windows TLSBridgeProbe 增加仅 TEST 的 CurrentUser/My 原生证书命名空间，由 compiled 随机 release channel + 已验证 grant ID 推导。首次创建拒绝既有项，重连仅重开已由本桌面 owner 持有的 scope，缺失/重复/无私钥/过期均拒绝，不自动重建或更换 pin。原 production Agent 证书逻辑与服务端同 grant 禁止换 pin 门禁未改；证书私钥不出 OS container。每次产品启动仍生成新的随机 HMAC。最终桌面关闭在产品实际 join 后精确清理本轮证书及私钥；故障退役不删除重连所需证书。
+
+桌面 probe 新增随机原生证书 selftest：缺失拒绝、创建/重开同证书、原生 RSA 持有证明、重复创建与外 scope 拒绝、删除后重开拒绝。maintenance 需要 exact closed + actual zero exit/join；deadline 不丢失子进程 handle。启动诊断仅允许 product_certificate_open/product_tls_publish 固定阶段，不返回异常/密钥/指纹。协调器要求重连 fingerprint 不变、新 HMAC 不复用；任一失败不得启动 Mac 新产品。
+
+Windows 独立构建目录 `C:\Users\jarvis\windows-certificate-reuse-build-20261011-r13`：公共源码上传摘要校验、65/65 protocol bridge tests、实际 .NET 单文件编译及下载摘要一致均 PASS；credential persistence 在 SSH 下仍 SKIP，不能冒充普通桌面原生验收。新公共产品 `artifacts/connection-poc/TlsBridgeProbe-win-reconnect-v2.exe`，不覆盖旧 4s。Python 全套 67 tests PASS，增加重连换指纹拒绝与 target-only reopen 检查；Go 增加 canonical scope/固定参数拒绝、固定诊断无私密错误、变更证书拒绝发布新会话密钥的回归。原生桌面与真实双机新 TLS/pongs 尚未验证。
+
+下一步使用全新 r13 creator 与 stage（不复用 r12 已消费身份）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-desktop-reconnect-20261011-r13\start-desktop-session.ps1"
+```
+
+窗口1 READY 后普通桌面窗口2：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-compiled-stage-a84f231c07d693e5\wait-for-compiled-borrower.ps1" -Root "C:\Users\jarvis\remoteapp-compiled-stage-a84f231c07d693e5" -IdentityBootstrap "C:\Users\jarvis\windows-desktop-reconnect-20261011-r13\interactive-bootstrap.json"
+```
+
+r13 准备实际 exit0：9 个 Linux/Windows/Darwin helpers 构建、fresh creator BUILD_READY、隔离 test namespace/minimum epoch=1、上传所有文件摘要、独立等待入口与3个 PowerShell脚本语法检查全部 PASS。未启动身份或网络。相关 clientruntime/desktop-session/desktopcontrol/clientowner/invite 五包 race 全部 PASS；新固定诊断测试先被沙箱禁止回环监听，提升权限后实际 PASS，不能把初次沙箱失败混为代码通过。
+
+确认两窗口 READY/WATCH_READY 后，才运行相应环境变量的 split-consent.py --compiled-reconnect。需实际验收：两桌面新 certificate probe、初始真实 TLS/pongs、authority fault join/retirement、同 verifier 恢复、旧 owner 保持关闭、同授权证书重开/新 HMAC/新 Mac 进程、新 pongs 跨 lease、正常 join/签名 revoke、资源归零、原协调器 STOPPED/exit0、两桌面最终 STOPPED、原生证书精确清理。现有泛化失败不能断言唯一根因；新阶段诊断辅助定位。整体切片4、GUI和签名安装包均未完成。
+
 ## 2026-10-11 r12 relay修复实测通过，但新target产品启动失败；待桌面STOPPED和精确恢复
 
 用户确认r12两窗口就绪后，实际split-consent.py --compiled-reconnect退出1。在线probe、空控制面、当前helper、matching fresh pair上传校验、OS签名授权/负向、节点证明/同节点重启/绑定、正向payload和反向拒绝、旧helper实际join/可信交接、初始product TLS/pongs跨lease全部PASS。旧产品fault join/native retirement、旧ACL残留、同verifier恢复/fresh签名binding、旧owners保持closed、reconnect双方授权重核验/Mac journal inspect全部PASS。

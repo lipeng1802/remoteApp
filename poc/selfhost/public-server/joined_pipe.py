@@ -106,7 +106,7 @@ class JoinedPipe:
                 if allow_exact_failure and value == {"status":"failed"}:
                     return value
                 stage = value.get("failure_stage")
-                if stage not in ("signer_open", "node_state", "intent_sign", "protocol"):
+                if stage not in ("signer_open", "node_state", "intent_sign", "protocol", "product_tls_publish", "product_certificate_open"):
                     stage = "unknown"
                 print("DIAGNOSTIC helper_" + stage, flush=True)
             raise RuntimeError("private_helper_failed")

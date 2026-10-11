@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -121,6 +122,9 @@ func (a *productAPI) Request(ctx context.Context, b invite.NetworkRequestBody) (
 		if e != nil || rsa.VerifyPSS(pub, crypto.SHA256, h[:], sig, &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash}) != nil {
 			return invite.NetworkReply{}, invite.ErrDenied
 		}
+		if a.published && a.fingerprint != fingerprint {
+			return invite.NetworkReply{}, invite.ErrDenied
+		}
 		a.fingerprint = fingerprint
 		a.published = true
 		return invite.NetworkReply{}, nil
@@ -214,6 +218,26 @@ func TestProductBadPossessionRejectsWithoutSecretOutput(t *testing.T) {
 	}
 	if e == nil || a.published || notified {
 		t.Fatal("invalid possession published")
+	}
+}
+func TestChangedCertificateRejectedBeforePublishingSessionSecret(t *testing.T) {
+	a, pub := productFixture(t)
+	cfg := a.c
+	cfg.Server = true
+	notified := false
+	p := Product{Spec: productSpec(t, "target"), TargetReady: func(string, string) { notified = true }}
+	first, e := p.start(context.Background(), a, pub, cfg, time.Now, 0)
+	if e != nil {
+		stopProduct(t, first)
+		t.Fatal("initial publication failed", e)
+	}
+	stopProduct(t, first)
+	fingerprint := a.fingerprint
+	notified = false
+	second, e := p.start(context.Background(), a, pub, cfg, time.Now, 0)
+	defer stopProduct(t, second)
+	if !errors.Is(e, ErrTLSCertificatePublication) || notified || a.fingerprint != fingerprint {
+		t.Fatal("changed pin or session secret accepted")
 	}
 }
 func TestProductControllerUsesVerifiedDescriptorAndPrivateConfig(t *testing.T) {

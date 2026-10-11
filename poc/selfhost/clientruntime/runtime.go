@@ -29,13 +29,14 @@ import (
 const ControlURL = "https://mk.fengmap.com:8443"
 
 type Config struct {
-	StateDir           string
-	AuthKey            string
-	Verifier           string
-	Target, Controller string
-	Grant              invite.Grant
-	Binding            invite.NetworkBinding
-	Server             bool
+	StateDir                string
+	AuthKey                 string
+	Verifier                string
+	Target, Controller      string
+	Grant                   invite.Grant
+	Binding                 invite.NetworkBinding
+	Server                  bool
+	ReuseProductCertificate bool // trusted explicit reconnect, target TEST only
 }
 type Signer interface {
 	invite.DeviceSigner
@@ -59,6 +60,9 @@ func nodeKey(s string) bool {
 	return e == nil
 }
 func validate(c Config) (ed25519.PublicKey, ed25519.PublicKey, error) {
+	if c.ReuseProductCertificate && !c.Server {
+		return nil, nil, session.ErrDenied
+	}
 	t, e := key(c.Target)
 	if e != nil {
 		return nil, nil, e

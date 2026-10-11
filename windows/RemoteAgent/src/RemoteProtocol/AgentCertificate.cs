@@ -16,14 +16,18 @@ public static class AgentCertificateFactory
     internal static X509Certificate2 CreatePersistentSelfSigned() =>
         CreateSelfSigned(null, null, persistPrivateKey: true);
 
+    internal static X509Certificate2 CreateScopedPersistentSelfSigned(string subject) =>
+        CreateSelfSigned(null, null, persistPrivateKey: true, subject: subject);
+
     private static X509Certificate2 CreateSelfSigned(
         DateTimeOffset? notBefore,
         DateTimeOffset? notAfter,
-        bool persistPrivateKey)
+        bool persistPrivateKey,
+        string subject = SubjectName)
     {
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest(
-            SubjectName,
+            subject,
             rsa,
             HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1);

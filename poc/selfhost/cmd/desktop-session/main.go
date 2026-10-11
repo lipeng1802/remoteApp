@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -30,18 +31,20 @@ import (
 var embeddedRelease, embeddedSignerDigest, embeddedProductDigest string
 
 type backend struct {
-	ownerMu       sync.Mutex // serialize replacement with start/retire/upgrade/close
-	closing       bool
-	observationMu sync.Mutex
-	observation   *clientruntime.ProductObservation
-	handle        *clientowner.Handle
-	owner         *clientowner.Owner
-	release       trustinstall.Release
-	factory       trustinstall.Factory
-	signer        clientruntime.Signer
-	open          clientruntime.SignerFactory
-	product       processowner.Spec
-	expected      string
+	ownerMu           sync.Mutex // serialize replacement with start/retire/upgrade/close
+	closing           bool
+	observationMu     sync.Mutex
+	observation       *clientruntime.ProductObservation
+	handle            *clientowner.Handle
+	owner             *clientowner.Owner
+	release           trustinstall.Release
+	factory           trustinstall.Factory
+	signer            clientruntime.Signer
+	open              clientruntime.SignerFactory
+	product           processowner.Spec
+	expected          string
+	certificateMu     sync.Mutex
+	certificateScopes map[string]bool
 }
 
 func (b *backend) Probe(ctx context.Context) error {
@@ -54,6 +57,9 @@ func (b *backend) Probe(ctx context.Context) error {
 		return ctx.Err()
 	}
 	if e := probeSigningDomains(b.signer); e != nil {
+		return e
+	}
+	if e := clientruntime.ProbeTestCertificateStore(ctx, b.product); e != nil {
 		return e
 	}
 	// Prove this desktop owner retains the exclusive OS journal lease.
@@ -97,10 +103,27 @@ func (b *backend) Start(ctx context.Context, c clientruntime.Config, out func(an
 		}
 	}
 	observation := &clientruntime.ProductObservation{}
+	scope, e := clientruntime.TestCertificateScope(b.release, c.Grant)
+	if e != nil {
+		return e
+	}
+	b.certificateMu.Lock()
+	ownedCertificate := b.certificateScopes[scope]
+	b.certificateMu.Unlock()
+	if c.ReuseProductCertificate != ownedCertificate {
+		return privatepipe.ErrProtocol
+	}
 	product := clientruntime.Product{Spec: b.product, Observation: observation, TargetReady: func(key, fp string) {
 		if e := out(map[string]string{"status": "product_ready", "Key": key, "Fingerprint": fp}); e != nil {
 			report(e)
 		}
+	}, CertificateScope: scope, CertificateReopen: c.ReuseProductCertificate, CertificateOpened: func(s string) {
+		b.certificateMu.Lock()
+		defer b.certificateMu.Unlock()
+		if b.certificateScopes == nil {
+			b.certificateScopes = make(map[string]bool)
+		}
+		b.certificateScopes[s] = true
 	}}
 	runner := clientruntime.RunnerWithProduct(b.release, c, b.open, func(port int) { report(out(map[string]any{"status": "ready", "port": port})) }, product)
 	h, e := b.owner.Start(ctx, runner)
@@ -130,7 +153,7 @@ func (b *backend) Start(ctx context.Context, c clientruntime.Config, out func(an
 	}
 	// A failed startup never reports a joined session before actual completion.
 	if stopped := b.owner.Stop(context.Background()); stopped != nil {
-		return stopped
+		return errors.Join(e, stopped) // keep safe failure stage, never raw error output
 	}
 	return e
 }
@@ -193,7 +216,18 @@ func (b *backend) Close(ctx context.Context) error {
 	b.ownerMu.Lock()
 	defer b.ownerMu.Unlock()
 	b.closing = true // prevent replacement racing final teardown
-	return b.owner.Close(ctx)
+	if e := b.owner.Close(ctx); e != nil {
+		return e
+	}
+	b.certificateMu.Lock()
+	defer b.certificateMu.Unlock()
+	for scope := range b.certificateScopes {
+		if e := clientruntime.CleanupTestCertificate(ctx, b.product, scope); e != nil {
+			return e
+		}
+		delete(b.certificateScopes, scope)
+	}
+	return nil
 }
 func main() {
 	e := run()

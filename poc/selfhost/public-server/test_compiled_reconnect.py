@@ -58,6 +58,8 @@ class ReconnectTests(unittest.TestCase):
             def assert_fault_latched(self):events.append("old_fault_latched")
             def maintenance(self,op):events.append(op)
             def _start_products(self,Pipe,values):
+                if values["target"].get("ReuseProductCertificate") is not True or values["controller"].get("ReuseProductCertificate",False):
+                    raise RuntimeError("certificate_reopen_not_target_only")
                 events.append("new_products");self.sessions_joined=False
                 self.controller=SimpleNamespace(proc=SimpleNamespace(pid=2))
             def stop_sessions(self):events.append("actual_normal_join");self.sessions_joined=True
@@ -102,6 +104,17 @@ class ReconnectTests(unittest.TestCase):
         pair.sessions_joined=True
         pair.target=SimpleNamespace(send=lambda value:(_ for _ in ()).throw(RuntimeError("failed")))
         with self.assertRaises(RuntimeError):pair._start_products(None,dict(target={}))
+        self.assertFalse(pair.sessions_joined)
+
+    def test_changed_target_certificate_never_starts_mac(self):
+        import base64
+        pair=CompiledPair(None,"/private/tmp/test",r"C:\test",{},None)
+        pair._last_product_fingerprint="b"*64
+        pair.target=SimpleNamespace(send=lambda value:None,read=lambda:dict(status="product_ready",Key=base64.b64encode(bytes(32)).decode(),Fingerprint="a"*64))
+        launch=unittest.mock.Mock()
+        with self.assertRaisesRegex(RuntimeError,"certificate_changed"):
+            pair._start_products(launch,dict(target={}))
+        launch.assert_not_called()
         self.assertFalse(pair.sessions_joined)
 
     def test_reused_product_key_never_starts_mac(self):
