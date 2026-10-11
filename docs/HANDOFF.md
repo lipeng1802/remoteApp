@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r13 两桌面 STOPPED / 收尾核验 PASS，显式重连子切片闭环
+
+用户确认两窗口 STOPPED 后，只读 `check-r13-stopped.py` 实际 exit0：精确 r13 creator/borrower 可执行路径的 Windows 子进程为0，两个 owner 的3个 public bootstrap 均由成功停止入口移除；CurrentUser/My 中 `CN=Personal Remote Desktop Test ` 前缀的测试证书为0。使用远端 borrower SHA256.json 匹配唯一 local compiled pair，Mac 对应产品子进程为0。Headscale nodes/users/preauthkeys 全空，原 file policy 不变，三个正式服务 active、Store 固定摘要及 Nginx 基线均再次 PASS。未删除生产身份或无法归属的历史凭据/文件。
+
+本轮 native key 删除依据：借用桌面 STOPPED 仅在 compiled desktop 实际 zero exit + closed 后输出；backend.Close 在实际 product join 后执行精确 scope certificate/key 删除，失败不能 closed/exit0；独立只读证书枚举再次确认不存在。native journal/test identity 删除同样依据两个普通桌面严格 closed/zero-exit STOPPED 与 bootstrap 成功清理，未通过 SSH 的另一凭据上下文冒充原生保护存储清理验证。保留 public package/work 供审计；它们不是活跃凭据，不重启已消费 r13 入口。
+
+结合上一节原协调器实际 STOPPED/exit0，本轮“同一仍有效授权的显式新 owner/process + 原证书/新 HMAC TLS 重连”已闭环。整体4仍未完成；下一项优先真实 live upgrade/floor/fault-commit（先 join 再提交、失败锁闭、显式新 owner），再收口新的授权/公开接入、GUI、签名安装包。仅记录本地提交，不推送；下面等待两 STOPPED 的描述为历史。
+
 ## 2026-10-11 r13 真实显式 TLS 重连验收 PASS / 实际 exit0；等待两桌面 STOPPED
 
 用户确认已启动两 PowerShell 窗口后，实际执行对应 r13 的 `split-consent.py --compiled-reconnect`，进程 exit0。等待窗口 live challenge、creator native probe、matching fresh pair 构建/逐文件摘要上传、borrower real desktop probe（含随机 CurrentUser certificate create/reopen/native RSA proof/negative/delete）全部通过。OS 签名注册/拒绝/审批、免登录 enrollment/单次 intent、节点持有证明/错误签名拒绝、Mac 同节点身份重启、signed binding、正向固定 payload 与反向拒绝 PASS；旧 helper 实际 join/交接与 Mac native initialize PASS。

@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-r13 真实双机显式重连验收通过（协调器实际 exit0）：原生桌面证书探测、Headscale 授权网络、初始 TLS、authority outage 下自主 fault join/退役、同 verifier 恢复后旧 owner 保持关闭、原证书复用/新 HMAC/新 Mac 进程、重连 pongs 跨租约、正常 join、签名撤销和节点回收均通过。原策略、正式服务、Store/Nginx 基线恢复；禁止静默换 pin 门禁不变。待用户按顺序确认两个 Windows 桌面 STOPPED 与本轮原生证书最终清理；不包含新邀请审批、升级、GUI或签名安装包，整体切片4未完成。详见 [HANDOFF](docs/HANDOFF.md)。
+r13 真实双机显式重连验收已闭环（协调器实际 exit0，两桌面 STOPPED）：原生桌面证书探测、Headscale 授权网络、初始 TLS、authority outage 下自主 fault join/退役、同 verifier 恢复后旧 owner 保持关闭、原证书复用/新 HMAC/新 Mac 进程、重连 pongs 跨租约、正常 join、签名撤销和节点回收均通过。本轮子进程/桌面 bootstrap/原生测试证书已无残留，原策略、正式服务、Store/Nginx 基线恢复；禁止静默换 pin 门禁不变。不包含新邀请审批、升级、GUI或签名安装包，整体切片4未完成。详见 [HANDOFF](docs/HANDOFF.md)。
 
 显式重连B1：已接入Windows桌面backend的同用户本地 `reopen_fault`，成功只返回idle新owner；生命周期操作串行，最终关闭当前替换owner，失败保留旧终止状态，不自动启动或复活旧会话。相关race/vet与Windows交叉编译通过；本轮未进行原生桌面或双机验收。下一步Mac新进程/授权重交接及compiled重连协调，详见 [HANDOFF](docs/HANDOFF.md)。
 
