@@ -30,6 +30,12 @@ type Backend interface {
 	Count(context.Context) (clientruntime.ProductCount, error)
 }
 
+var ErrUpgradeCandidate = errors.New("upgrade_candidate_rejected")
+
+type installationObserver interface {
+	InstalledEpoch(context.Context) (uint64, error)
+}
+
 func Serve(ctx context.Context, ln net.Listener, scope, public string, b Backend) {
 	life, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
@@ -138,6 +144,19 @@ func handle(ctx context.Context, c net.Conn, scope, public string, b Backend) {
 			e = b.Upgrade(limit, req.Profile)
 			if e == nil {
 				e = out(map[string]any{"status": "upgraded", "epoch": req.Profile.Claims.Epoch})
+			} else if errors.Is(e, ErrUpgradeCandidate) {
+				e = out(map[string]string{"status": "upgrade_rejected"})
+			}
+		case req.Op == "installation_state" && req.Config == (clientruntime.Config{}) && req.Profile == (trustprofile.Profile{}):
+			observer, ok := b.(installationObserver)
+			if !ok {
+				e = privatepipe.ErrProtocol
+				break
+			}
+			var epoch uint64
+			epoch, e = observer.InstalledEpoch(limit)
+			if e == nil {
+				e = out(map[string]any{"status": "installation_state", "epoch": epoch})
 			}
 		default:
 			e = privatepipe.ErrProtocol

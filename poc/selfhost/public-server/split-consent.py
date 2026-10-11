@@ -159,9 +159,9 @@ class Coordinator(Pipe):
         return self.proc.returncode
 
 def mode_flags(args):
-    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"],["--compiled-fault"],["--compiled-reconnect"]): raise RuntimeError("invalid_arguments")
+    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"]): raise RuntimeError("invalid_arguments")
     live_revoke=args==["--compiled-revoke"]
-    compiled=live_revoke or args in (["--compiled"],["--compiled-fault"],["--compiled-reconnect"])
+    compiled=live_revoke or args in (["--compiled"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"])
     fault=args in (["--tls-fault"],["--compiled-fault"],["--compiled-reconnect"])
     tls=args in (["--tls-fault"],["--tls"])
     nodes=compiled or tls or args==["--nodes"]
@@ -171,6 +171,7 @@ def mode_flags(args):
 def main():
     compiled,live_revoke,fault,tls,nodes=mode_flags(sys.argv[1:])
     reconnect=sys.argv[1:]==["--compiled-reconnect"]
+    live_upgrade=sys.argv[1:]==["--compiled-upgrade"]
     pipe_type=Pipe
     if compiled:
         from joined_pipe import JoinedPipe
@@ -268,7 +269,7 @@ def main():
                 node=split_nodes.run(t,pipe_type,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders)
                 node_result.append(node)
                 if compiled:
-                    compiled_pair.run(pipe_type,node["compiled_handoff"],live_revoke=live_revoke,authority_fault=fault,reconnect=reconnect)
+                    compiled_pair.run(pipe_type,node["compiled_handoff"],live_revoke=live_revoke,authority_fault=fault,reconnect=reconnect,live_upgrade=live_upgrade,apis=clients,binding=node["binding"])
                     if fault:
                         compiled_products.fault_round(t,coordinator,clients,node,compiled_pair)
                         if reconnect:
@@ -349,7 +350,9 @@ def main():
     t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
     if compiled:
         print("ACTION: verification and server/client teardown finished. Enter in BORROWER window FIRST and confirm its STOPPED, then Enter in identity creator and confirm STOPPED.",flush=True)
-        if reconnect:
+        if live_upgrade:
+            print("VALIDATION PASSED: compiled native pair + real live TLS profile upgrade + both epoch2 floors/downgrade rejection + explicit new process/session + normal join and signed revoke. NOT native commit-failure injection, borrower STOPPED cleanup, GUI or signed installer acceptance.",flush=True)
+        elif reconnect:
             print("VALIDATION PASSED: compiled native pair + isolated authority outage/fault retirement + same-verifier recovery + explicit fresh owner/process product TLS reconnect under reverified still-active grant + normal join and signed revoke. NOT new invitation/approval, borrower STOPPED cleanup, upgrade, GUI or signed installer acceptance.",flush=True)
         elif fault:
             print("VALIDATION PASSED: compiled native pair + real Headscale/product TLS + isolated authority outage with stale ACL + autonomous fault join/native retirement + explicit same-verifier recovery with old owners closed. NOT new product-session reconnect, borrower STOPPED cleanup, upgrade, GUI or signed installer acceptance.",flush=True)

@@ -4,8 +4,9 @@ Public service bootstrap is received over management SSH. Runtime roots,
 endpoints and sibling digests remain compiled. HMAC/grant/authkey are carried
 only in private pipes. Normal baseline stops before revocation; explicit
 live-revoke mode observes autonomous completion without a parent stop command.
-Explicit authority-fault mode uses the isolated coordinator only. None of
-these modes claims GUI, signed installer or live upgrade acceptance.
+Explicit authority-fault mode uses the isolated coordinator only. Explicit
+upgrade mode owns a separate join/commit/floor/new-session round. No mode
+claims GUI, signed installer or actual OS write-failure acceptance.
 """
 import base64
 import copy
@@ -82,6 +83,10 @@ def fault_round(t, coordinator, apis, node, pair):
     pair.assert_fault_latched()
     t.check(True, "compiled_fault_old_product_owners_remain_closed_after_recovery")
 
+
+def epoch_receipt(value, status, epoch):
+    return (isinstance(value,dict) and set(value)=={"status","epoch"}
+            and value["status"]==status and type(value["epoch"]) is int and value["epoch"]==epoch)
 
 def session_state(value):
     """Completion telemetry is never a close ACK or a successful exit."""
@@ -325,6 +330,7 @@ class CompiledPair:
         self._retired_controller_proc = None
         self._last_product_key_digest = None
         self._last_product_fingerprint = None
+        self._maintenance_epoch = 1
 
     def attach(self, Pipe):
         d = self.desktop
@@ -338,14 +344,18 @@ class CompiledPair:
             raise RuntimeError("borrower_native_probe_failed")
         self.t.check(True, "compiled_borrower_real_desktop_probe")
 
-    def maintenance(self, op):
+    def maintenance(self, op, expected_epoch=None):
+        if expected_epoch is None: expected_epoch=self._maintenance_epoch
         verify_bundle(self.mac)
         p = subprocess.run([str(self.mac / "trust-install"), op], capture_output=True, timeout=20)
         value = json.loads(p.stdout)
-        if p.returncode != 0 or value.get("status") != "usable" or (op != "cleanup-test" and value.get("epoch") != 1):
+        valid=(value=={"status":"usable"}) if op=="cleanup-test" else epoch_receipt(value,"usable",expected_epoch)
+        if p.returncode != 0 or not valid:
             raise RuntimeError("compiled_mac_maintenance_failed")
 
-    def run(self, Pipe, handoff, live_revoke=False, authority_fault=False, reconnect=False):
+    def run(self, Pipe, handoff, live_revoke=False, authority_fault=False, reconnect=False, live_upgrade=False, apis=None, binding=None):
+        if live_upgrade and (live_revoke or authority_fault or reconnect):
+            raise RuntimeError("compiled_upgrade_conflicting_mode")
         if live_revoke and authority_fault:
             raise RuntimeError("compiled_conflicting_live_modes")
         if reconnect and not authority_fault:
@@ -357,6 +367,9 @@ class CompiledPair:
         if reconnect:
             self._reconnect_inputs = copy.deepcopy(inputs) # private memory only
         self._start_products(Pipe, inputs)
+        if live_upgrade:
+            self.upgrade_round(Pipe,inputs,apis,binding)
+            return
         if live_revoke or authority_fault:
             if session_state(self.target.request("session_state")) != (False, False):
                 raise RuntimeError("compiled_target_not_live_before_revoke")
@@ -366,6 +379,51 @@ class CompiledPair:
             return
         self.stop_sessions()
         self.t.check(True, "compiled_product_node_watch_signer_normal_join")
+
+    def upgrade_round(self, Pipe, inputs, apis, binding):
+        # Public profiles were pre-signed only in the trusted throwaway build.
+        parent=self.mac.parent
+        candidates={role:json.loads((parent/(role+"-upgrade.json")).read_bytes()) for role in ("target","controller")}
+        for peer in (self.target,self.controller):
+            if session_state(peer.request("session_state"))!=(False,False):
+                raise RuntimeError("compiled_upgrade_session_not_live")
+        for role,peer in (("controller",self.controller),("target",self.target)):
+            bad=copy.deepcopy(candidates[role]);bad["signature"]="invalid"
+            if peer.request("upgrade",Profile=bad)!={"status":"upgrade_rejected"}:
+                raise RuntimeError("compiled_invalid_upgrade_not_rejected")
+        observe(self.target,self.controller)
+        self.t.check(True,"compiled_invalid_upgrade_preserves_live_tls_payload")
+        old=self.controller.proc
+        if not epoch_receipt(self.controller.request("upgrade",Profile=candidates["controller"]),"upgraded",2):
+            raise RuntimeError("compiled_controller_upgrade_ack_invalid")
+        self.controller.join_upgraded() # actual nested normal join + native lease release + zero exit
+        if old.poll()!=0:raise RuntimeError("compiled_controller_upgrade_not_joined")
+        self.controller=None
+        self._maintenance_epoch=2 # only after actual upgraded child zero exit
+        if not epoch_receipt(self.target.request("upgrade",Profile=candidates["target"]),"upgraded",2):
+            raise RuntimeError("compiled_target_upgrade_ack_invalid")
+        if session_state(self.target.request("session_state"))!=(True,False):
+            raise RuntimeError("compiled_target_upgrade_not_normally_joined")
+        if not epoch_receipt(self.target.request("installation_state"),"installation_state",2):
+            raise RuntimeError("compiled_target_durable_epoch_missing")
+        self.sessions_joined=True
+        self.maintenance("inspect",expected_epoch=2)
+        original=json.loads((parent/"target-profile.json").read_bytes())
+        if self.target.request("upgrade",Profile=original)!={"status":"upgrade_rejected"}:
+            raise RuntimeError("compiled_target_floor_downgraded")
+        p=subprocess.run([str(self.mac/"trust-install"),"upgrade"],capture_output=True,timeout=20)
+        value=json.loads(p.stdout)
+        if p.returncode!=1 or value!={"status":"failed","reason":"trust_rejected"}:
+            raise RuntimeError("compiled_mac_floor_downgraded")
+        self.maintenance("inspect",expected_epoch=2)
+        self.t.check(True,"compiled_both_native_epoch2_and_downgrade_denial")
+        verify_reconnect_authorization(apis,inputs,binding)
+        inputs["target"]["ReuseProductCertificate"]=True
+        self._start_products(Pipe,inputs)
+        if self.controller.proc.pid==old.pid or old.poll()!=0:
+            raise RuntimeError("compiled_upgrade_reused_controller_process")
+        self.stop_sessions()
+        self.t.check(True,"compiled_live_upgrade_explicit_new_session_tls_and_normal_join")
 
     def _start_products(self, Pipe, inputs):
         # Mark ownership pending BEFORE the first send/launch can create work.

@@ -1,5 +1,37 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r14 升级/floor/不确定提交回执切片开发完成，Windows与真实双机验收待执行
+
+本轮补齐两组入口，证据分开：真实双机 TLS 升级使用 `--compiled-upgrade`；提交不确定性仅在独立 native unit executable 中模拟，不开放产品远程 fault 注入。整体4未完成。
+
+修复 Mac installed-session 无效升级候选会终止仍有效旧会话的问题：只有 Upgrade 返回错误且安装仍可用时输出固定 `upgrade_rejected`、继续旧 runner/管道；join/commit/expiry/损坏导致不可用仍失败锁闭。Windows同样提供明确拒绝回执。新增只读 Owner.InstalledEpoch / installation_state，仅返回经 durable journal 核验的 epoch，broken/closed 不返回可用值；查询拒绝 profile/config override。relay 新回执 exact schema、正确 op、整数epoch；拒绝浮点/布尔/额外字段，不放宽退出屏障。
+
+真实升级流程：初始 pongs 跨 lease；双方错误签名拒绝后旧 TLS payload 仍继续；Mac 有效 epoch2 升级实际 join/commit，然后 upgraded/closed + zero exit（EOF仅解锁reader，不发送stop冒充升级）；Windows有效升级、实际正常join和durable epoch2回执；Mac native inspect重开读2；双方epoch1降级拒绝、Mac再次inspect2；双方重新核验仍有效同一grant，再显式新Mac进程/新产品会话、原Windows测试证书/新HMAC、新pongs跨lease，正常join/签名撤销/完整资源及基线恢复。Windows成功升级保留健康安装owner、新runner需显式启动，不能称为故障owner复活或新授权审批。以上真实跨机流程尚待执行。
+
+独立 native 不确定回执测试在真实原生 durable Commit 后故意返回error：正常旧runner必须先join；旧owner锁闭、拒Start/epoch查询，Close前仍持有排他租约；显式Close后新idle owner重开读epoch2并拒降级。随机TEST root/journal精确清理；不是实际OS写失败/断电验证。其他验收覆盖无效candidate保留runner、native超时保留租约、测试product先closed但未退出时不得commit、nonzero退出拒upgrade。
+
+验证：Python全套72 PASS；clientowner/desktopcontrol/desktop-session/desktop-relay/installed-session/clientruntime六包race与相关vet PASS。Mac端运行了与Windows新入口对应的五项测试，实际全部PASS且无SKIP，含两个native测试；Windows只交叉编译，普通桌面尚未运行。r14准备实际exit0：9helpers、fresh creator BUILD_READY/test namespace、逐文件hash、waiter/3个入口解析、新native包hash与入口解析均PASS，无新身份/网络会话启动。
+
+先请用户在 Windows 普通桌面 PowerShell 执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-upgrade-floor-20261011-r14\run-upgrade-floor-validation.ps1"
+```
+
+必须5个明确PASS、实际exit0、无SKIP。成功输出 `VALIDATION PASSED: native durable upgrade + uncertain receipt locks owner + explicit idle reopen and epoch floor + actual product fixture join. NOT cross-machine TLS upgrade, real OS write failure, GUI or signed installer acceptance.`。成功后才启动新的两桌面入口，不复用已消费r13：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-desktop-upgrade-20261011-r14\start-desktop-session.ps1"
+```
+
+窗口1 READY 后窗口2：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-compiled-stage-b9274dc518a06e3f\wait-for-compiled-borrower.ps1" -Root "C:\Users\jarvis\remoteapp-compiled-stage-b9274dc518a06e3f" -IdentityBootstrap "C:\Users\jarvis\windows-desktop-upgrade-20261011-r14\interactive-bootstrap.json"
+```
+
+确认READY/WATCH_READY后才用相应 REMOTEAPP_WINDOWS_INTERACTIVE_DIR/REMOTEAPP_WINDOWS_DESKTOP_STAGE运行 split-consent.py --compiled-upgrade，不混用fault/reconnect。最后borrower先STOPPED、creator后STOPPED，复核本轮原生证书/进程/bootstrap、节点、正式基线。不把上传或模拟升级写为真实验收。仅本地提交，不推送。
+
 ## 2026-10-11 r13 两桌面 STOPPED / 收尾核验 PASS，显式重连子切片闭环
 
 用户确认两窗口 STOPPED 后，只读 `check-r13-stopped.py` 实际 exit0：精确 r13 creator/borrower 可执行路径的 Windows 子进程为0，两个 owner 的3个 public bootstrap 均由成功停止入口移除；CurrentUser/My 中 `CN=Personal Remote Desktop Test ` 前缀的测试证书为0。使用远端 borrower SHA256.json 匹配唯一 local compiled pair，Mac 对应产品子进程为0。Headscale nodes/users/preauthkeys 全空，原 file policy 不变，三个正式服务 active、Store 固定摘要及 Nginx 基线均再次 PASS。未删除生产身份或无法归属的历史凭据/文件。

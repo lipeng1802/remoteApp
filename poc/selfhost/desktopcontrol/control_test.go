@@ -21,6 +21,47 @@ type backend struct {
 
 type observedBackend struct{ *backend }
 
+type epochBackend struct {
+	*backend
+	reads atomic.Int32
+}
+
+func (b *epochBackend) InstalledEpoch(context.Context) (uint64, error) { b.reads.Add(1); return 2, nil }
+func (b *epochBackend) Upgrade(context.Context, trustprofile.Profile) error {
+	return ErrUpgradeCandidate
+}
+func TestInvalidUpgradeKeepsControlPipeAndEpochReadRejectsOverrides(t *testing.T) {
+	for _, injected := range []bool{false, true} {
+		b := &epochBackend{backend: &backend{}}
+		c, _, _ := serveTest(t, b)
+		w := json.NewEncoder(c)
+		r := privatepipe.NewReader(c)
+		w.Encode(map[string]string{"Scope": "scope", "Expected": "public"})
+		status(t, r, "ready")
+		w.Encode(Request{Op: "upgrade", Profile: trustprofile.Profile{Signature: "invalid"}})
+		status(t, r, "upgrade_rejected")
+		req := Request{Op: "installation_state"}
+		if injected {
+			req.Profile.Signature = "override"
+		}
+		w.Encode(req)
+		if injected {
+			status(t, r, "failed")
+			if b.reads.Load() != 0 {
+				t.Fatal("injected profile reached installed state")
+			}
+			continue
+		}
+		var reply struct {
+			Status string
+			Epoch  uint64
+		}
+		if e := r.Read(&reply); e != nil || reply.Status != "installation_state" || reply.Epoch != 2 || b.reads.Load() != 1 {
+			t.Fatal("missing read-only epoch", e)
+		}
+	}
+}
+
 type diagnosticBackend struct {
 	*backend
 	failure error

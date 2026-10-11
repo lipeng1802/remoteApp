@@ -16,6 +16,7 @@ class SplitConsentTests(unittest.TestCase):
         self.assertEqual(split.mode_flags(["--tls-fault"]),(False,False,True,True,True))
         self.assertEqual(split.mode_flags(["--compiled-fault"]),(True,False,True,False,True))
         self.assertEqual(split.mode_flags(["--compiled-reconnect"]),(True,False,True,False,True))
+        self.assertEqual(split.mode_flags(["--compiled-upgrade"]),(True,False,False,False,True))
         for args in (["--compiled-revoke","--tls-fault"],["--compiled-revoke","--compiled"],["--compiled-fault","--compiled"]):
             with self.assertRaises(RuntimeError):split.mode_flags(args)
 

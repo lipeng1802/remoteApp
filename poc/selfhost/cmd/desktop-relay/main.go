@@ -78,6 +78,15 @@ func run() error {
 // A successful idle replacement is not session readiness. Forward its exact
 // ACK without terminating the relay needed for the subsequent state/start.
 func terminalReplyAllowed(op, status string, raw json.RawMessage) bool {
+	if status == "upgrade_rejected" {
+		var reply map[string]json.RawMessage
+		return op == "upgrade" && json.Unmarshal(raw, &reply) == nil && len(reply) == 1 && string(reply["status"]) == `"upgrade_rejected"`
+	}
+	if status == "installation_state" {
+		var reply map[string]json.RawMessage
+		var epoch uint64
+		return op == "installation_state" && json.Unmarshal(raw, &reply) == nil && len(reply) == 2 && string(reply["status"]) == `"installation_state"` && json.Unmarshal(reply["epoch"], &epoch) == nil && epoch > 0 && epoch <= 1<<53-1
+	}
 	if op == "reopen_fault" {
 		var reply map[string]json.RawMessage
 		if json.Unmarshal(raw, &reply) != nil || len(reply) != 2 {

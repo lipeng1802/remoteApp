@@ -136,4 +136,15 @@ class JoinedPipeTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): p.read()
         with self.assertRaises(RuntimeError): p.emergency()
 
+    def test_upgraded_join_requires_closed_and_actual_zero_exit(self):
+        p=self.child('import sys; sys.stdin.readline(); print(\'{"status":"upgraded","epoch":2}\',flush=True); sys.stdin.read(); print(\'{"status":"closed"}\',flush=True)',{'Op':'upgrade'})
+        self.assertEqual(p.read(),dict(status="upgraded",epoch=2))
+        p.join_upgraded()
+        self.assertEqual(p.proc.poll(),0)
+
+    def test_upgraded_closed_receipt_cannot_hide_nonzero_exit(self):
+        p=self.child('import sys; sys.stdin.readline(); print(\'{"status":"upgraded","epoch":2}\',flush=True); sys.stdin.read(); print(\'{"status":"closed"}\',flush=True); sys.exit(7)',{'Op':'upgrade'})
+        p.read()
+        with self.assertRaisesRegex(RuntimeError,'upgrade_exit_mismatch'):p.join_upgraded()
+
 if __name__=="__main__":unittest.main()

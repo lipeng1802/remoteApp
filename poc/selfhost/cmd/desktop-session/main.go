@@ -210,7 +210,21 @@ func (b *backend) Upgrade(ctx context.Context, p trustprofile.Profile) error {
 	if b.closing {
 		return trustprofile.ErrTrust
 	}
-	return b.owner.Upgrade(ctx, p)
+	err := b.owner.Upgrade(ctx, p)
+	if err != nil {
+		if _, healthy := b.owner.InstalledEpoch(ctx); healthy == nil {
+			return desktopcontrol.ErrUpgradeCandidate
+		}
+	}
+	return err
+}
+func (b *backend) InstalledEpoch(ctx context.Context) (uint64, error) {
+	b.ownerMu.Lock()
+	defer b.ownerMu.Unlock()
+	if b.closing {
+		return 0, trustprofile.ErrTrust
+	}
+	return b.owner.InstalledEpoch(ctx)
 }
 func (b *backend) Close(ctx context.Context) error {
 	b.ownerMu.Lock()

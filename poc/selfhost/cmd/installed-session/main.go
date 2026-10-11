@@ -150,6 +150,15 @@ func run(output func(any)) (result error) {
 				return session.ErrDenied
 			}
 			switch c.Op {
+			case "installation_state":
+				if c.Profile != (trustprofile.Profile{}) {
+					return session.ErrDenied
+				}
+				epoch, err := o.InstalledEpoch(ctx)
+				if err != nil {
+					return err
+				}
+				output(map[string]any{"status": "installation_state", "epoch": epoch})
 			case "session_state":
 				if c.Profile != (trustprofile.Profile{}) {
 					return session.ErrDenied
@@ -171,10 +180,16 @@ func run(output func(any)) (result error) {
 				return nil
 			case "upgrade":
 				limit, stop := context.WithTimeout(context.Background(), 8*time.Second)
-				defer stop()
 				if e = o.Upgrade(limit, c.Profile); e != nil {
+					_, healthy := o.InstalledEpoch(limit)
+					stop()
+					if healthy == nil {
+						output(map[string]string{"status": "upgrade_rejected"})
+						continue // invalid candidate did not cancel the live runner
+					}
 					return e
 				}
+				stop()
 				output(map[string]any{"status": "upgraded", "epoch": c.Profile.Claims.Epoch})
 				return nil // explicit new process required; never reconnect
 			default:

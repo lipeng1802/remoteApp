@@ -146,6 +146,19 @@ class JoinedPipe:
             self.send(dict(Op=op, **values))
             return self.read()
 
+    def join_upgraded(self):
+        # Upgrade already quiesced the runner. EOF only releases the command
+        # reader; never send a second stop or confuse its ACK with upgrade.
+        with self.lock:
+            if not self.proc.stdin.closed:
+                self.proc.stdin.close()
+            if self.read(12) != {"status":"closed"}:
+                raise RuntimeError("private_upgrade_close_missing")
+            self.proc.wait(timeout=12)
+            self._join_diagnostics()
+            if self.proc.returncode != 0:
+                raise RuntimeError("private_upgrade_exit_mismatch")
+
     def stop(self, helper=True):
         with self.lock:
             if not self.stop_sent and self.proc.poll() is None:

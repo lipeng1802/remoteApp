@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestUpgradeReceiptsAreExactAndOperationBound(t *testing.T) {
+	if !terminalReplyAllowed("upgrade", "upgrade_rejected", json.RawMessage(`{"status":"upgrade_rejected"}`)) {
+		t.Fatal("candidate rejection rejected")
+	}
+	if !terminalReplyAllowed("installation_state", "installation_state", json.RawMessage(`{"status":"installation_state","epoch":2}`)) {
+		t.Fatal("epoch rejected")
+	}
+	for _, raw := range []string{`{"status":"installation_state","epoch":0}`, `{"status":"installation_state","epoch":true}`, `{"status":"installation_state","epoch":2,"secret":"not-allowed"}`} {
+		if terminalReplyAllowed("installation_state", "installation_state", json.RawMessage(raw)) {
+			t.Fatal("invalid epoch receipt")
+		}
+	}
+	if terminalReplyAllowed("start", "upgrade_rejected", json.RawMessage(`{"status":"upgrade_rejected"}`)) || terminalReplyAllowed("count", "installation_state", json.RawMessage(`{"status":"installation_state","epoch":2}`)) {
+		t.Fatal("wrong operation")
+	}
+}
+
 func TestReplacementReplyKeepsRelayAvailable(t *testing.T) {
 	ack := json.RawMessage(`{"status":"owner_reopened","started":false}`)
 	if !terminalReplyAllowed("reopen_fault", "owner_reopened", ack) {

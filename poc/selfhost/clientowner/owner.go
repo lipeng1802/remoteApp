@@ -159,6 +159,24 @@ func (o *Owner) Start(ctx context.Context, run Runner) (*Handle, error) {
 
 type quiescer struct{ o *Owner }
 
+// InstalledEpoch is a read-only, secret-free query of the current durable
+// installation. A failed commit/join never produces a usable epoch receipt.
+func (o *Owner) InstalledEpoch(ctx context.Context) (uint64, error) {
+	if e := o.lock(ctx); e != nil {
+		return 0, e
+	}
+	defer o.unlock()
+	if !o.healthy() {
+		return 0, trustprofile.ErrTrust
+	}
+	p, _, e := o.installed.Current()
+	if e != nil {
+		o.broken = true
+		return 0, e
+	}
+	return p.Claims.Epoch, nil
+}
+
 func (q quiescer) Quiesce(ctx context.Context) error { return q.o.join(ctx) }
 func (o *Owner) join(ctx context.Context) error {
 	if o.running == nil {
