@@ -1,6 +1,10 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-11 显式重连切片A：退役后新owner安全重建接口；Windows桌面原生测试待执行
+## 2026-10-11 显式重连切片A：退役后新owner安全重建接口；Windows桌面验证通过
+
+用户随后提供普通Windows桌面脚本最终输出：`VALIDATION PASSED: explicit fresh owner after fault retirement + native lease and epoch floor. NOT cross-machine reconnect, fresh authorization, GUI or signed installer acceptance.`。记录为用户执行的本轮Windows桌面验证通过；脚本要求全部5项测试PASS、无SKIP/FAIL及exit0才输出该摘要。连同macOS原生测试与相关race结果，切片A安全重建基础验收收口。不把该结果倒推为先前SSH初始化/精确清理已成功，未知SSH测试状态仍不擅自删除。
+
+下一子切片接入desktop backend显式新owner替换、Mac新进程启动与私有授权重新交接，再准备fresh双机故障恢复后真实产品重连验收。当前没有cross-machine reconnect/fresh authorization证据，整体4仍未完成；不启动旧r10窗口、不复用其已消费stage/bootstrap。本次仅记录结果并本地提交，不推送或自动开启网络实验。
 
 用户开始下一切片后，先补clientowner.OpenReplacement(ctx)可信进程内接口。Owner保留Open时已验证的release/factory/clock；调用者不能注入新root/profile/factory。仅RetireFault实际成功设置retiredFault，pending、未退役fault、normal Close、退役journal Close失败均拒绝重建。旧owner不重置closed/broken，也不继承runner/Handle或Config/grant/authkey；新Owner是独立对象，从同一已提交原生journal重新读取，Current额外核验当前有效性/expiry/floor，失败关闭新journal，不初始化/修复/降级。接口只返回idle新owner，不自动Start；后续真实runner仍须独立核验有效授权、节点和绑定。
 
