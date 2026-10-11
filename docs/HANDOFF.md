@@ -1,5 +1,25 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r11 显式重连验证入口已上传；等待两桌面就绪
+
+用户加载服务器专用密钥后，实际运行prepare-reconnect-r11.py --upload-built退出0。Windows管理SSH、Headscale nodes/users/preauthkeys全空、原policy、三正式服务active、Store固定SHA与Nginx基线全部PASS。当前9helper跨平台重建PASS，现有本地fresh creator manifest及隔离test_namespace/minimum_epoch=1核验通过，固定Windows产品摘要通过。仅上传公开包，所有远端文件逐个摘要校验PASS；fresh stage以当前SID/SYSTEM ACL创建，waiter摘要和三个PowerShell入口解析均PASS。未启动桌面身份、网络节点或隔离故障服务，未修改SSH持久配置或系统Tailscale。
+
+新creator：`C:\Users\jarvis\windows-desktop-reconnect-20261011-r11`；新stage：`C:\Users\jarvis\remoteapp-compiled-stage-3c881ec2b58f41a7`。不得使用旧r10等已消费入口。
+
+普通Windows桌面窗口1：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-desktop-reconnect-20261011-r11\start-desktop-session.ps1"
+```
+
+窗口1显示READY后，另开普通桌面窗口2：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-compiled-stage-3c881ec2b58f41a7\wait-for-compiled-borrower.ps1" -Root "C:\Users\jarvis\remoteapp-compiled-stage-3c881ec2b58f41a7" -IdentityBootstrap "C:\Users\jarvis\windows-desktop-reconnect-20261011-r11\interactive-bootstrap.json"
+```
+
+等待用户确认READY/WATCH_READY，保持两窗口打开、暂不Enter。届时在线probe并使用对应r11的REMOTEAPP_WINDOWS_INTERACTIVE_DIR/REMOTEAPP_WINDOWS_DESKTOP_STAGE运行split-consent.py --compiled-reconnect；此时才生成fresh borrower并进行故障退役/恢复/新产品重连。实际验收仍待执行，不用上传成功替代TLS/pongs/旧owner锁闭/资源清理证据。最终borrower先STOPPED，creator后STOPPED。本次记录本地提交、不推送；下方SSH阻塞记录为历史。
+
 ## 2026-10-11 重启后 SSH 密钥加载诊断：Windows 已恢复，服务器待加载
 
 只读诊断确认Windows接受原公钥；此前失败不能解释为jarvis公钥被删除。Mac重启后的agent为空，加密私钥无法在BatchMode下交互解锁，有效AddKeysToAgent=false。用户手动执行ssh-add --apple-use-keychain加载Windows专用密钥后，实际SSH_READY/exit0通过。未修改SSH配置、账户、公钥或持久化设置。
