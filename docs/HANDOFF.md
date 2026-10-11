@@ -1,6 +1,14 @@
 # 下一次 Codex 会话交接
 
-## 2026-10-11 r14 PowerShell stderr 入口修复，等待普通桌面重新验收
+## 2026-10-11 r14 Windows 五项原生验收 PASS，下一步真实双机 TLS 升级
+
+用户反馈修复后的普通桌面验证入口完整输出：TestNativeLiveOwnerRetainsLeaseOnTimeoutAndReopensEpoch、TestOwnedProductUpgradeWaitsForProductAndNetworkJoin、TestOwnedProductNonzeroExitRejectsUpgrade、TestInstalledEpochRejectsBrokenOwnerAndInvalidCandidateKeepsRunner、TestNativeUpgradeUncertainReceiptLatchesClosedAndPreservesFloor 全部 PASS，无 SKIP/FAIL；末尾返回本轮预期 VALIDATION PASSED。native durable commit + uncertain receipt latch + explicit idle reopen + persisted epoch2 floor 的 CHECK 同样 PASS。验收入口只在 actual exit0 和全部 required PASS 满足后输出该成功标记；此处证据来自用户提供的执行结果。
+
+JOIN_STAGE 普通 stderr 日志已正常作为文本输出，不再触发 NativeCommandError；负向产品退出用例仍必须拒升级，不能仅凭某条阶段日志认定完整 join。此前捕获自测和中止运行的记录保留，不能倒推未知历史测试资源已清理。
+
+尚未执行 r14 真实双机 TLS 升级。下一步按下节命令在正常 Windows 桌面开启 fresh r14 creator 与 waiter，分别等待 READY / WATCH_READY，暂不要按 Enter。用户确认两窗口就绪后才运行对应 `split-consent.py --compiled-upgrade`；最后 borrower 先 STOPPED、creator 后 STOPPED，再核验本轮资源与正式基线。不复用已消费 r13，不通过 SSH 冒充普通桌面身份。不包含真实 OS 写失败、GUI、签名安装包或整体切片4完成。本轮仅记录并本地提交，不推送。
+
+## 2026-10-11 r14 PowerShell stderr 入口修复，等待普通桌面重新验收（历史，现已通过）
 
 用户运行新native入口时报 `NativeCommandError: JOIN_STAGE product_stopping`。原脚本 `$ErrorActionPreference='Stop'` + native `2>&1` 将正常stderr阶段日志提升为PowerShell ErrorRecord，不能据此认定原生断言失败，也不能计验收通过。只读检查精确验证目录子进程0，原二进制/脚本/manifest摘要一致；没有删除未知或部分TEST凭据。
 
