@@ -88,6 +88,15 @@ func handle(ctx context.Context, c net.Conn, scope, public string, b Backend) {
 		limit, cancel := context.WithTimeout(ctx, 40*time.Second)
 		var e error
 		switch {
+		case req.Op == "reopen_fault" && req.Config == (clientruntime.Config{}) && req.Profile == (trustprofile.Profile{}):
+			if replacement, ok := b.(interface{ ReopenFault(context.Context) error }); ok {
+				e = replacement.ReopenFault(limit)
+				if e == nil {
+					e = out(map[string]any{"status": "owner_reopened", "started": false})
+				}
+			} else {
+				e = privatepipe.ErrProtocol
+			}
 		case req.Op == "retire_fault" && req.Config == (clientruntime.Config{}) && req.Profile == (trustprofile.Profile{}):
 			if retire, ok := b.(interface{ RetireFault(context.Context) error }); ok {
 				e = retire.RetireFault(limit)

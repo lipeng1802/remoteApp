@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 显式重连切片B1：Windows桌面backend替换接口接入；双机重连仍待
+
+用户继续后接入desktopcontrol同用户本地可选能力 `reopen_fault`。仅Op且Config/Profile全零才调用backend.ReopenFault；未知能力、注入Config/Profile、替换失败均返回严格failed。成功固定ACK为 `owner_reopened/started=false`，不是session ready、授权或TLS通过；不传新root/profile/grant/authkey，不启动任何worker。
+
+Windows desktop backend增加ownerMu，串行Start/Stop/RetireFault/Upgrade/Probe/ReopenFault/最终Close。ReopenFault调用切片A的旧owner.OpenReplacement，成功后发布独立新owner并清空旧handle/产品观测，失败保留旧owner和终止遥测。Close先标closing阻止后续替换，最终退出改为关闭backend当前owner，不再只关闭初始化时捕获的旧owner；原Serve所有连接退出屏障和signer/test journal清理顺序保留。旧owner仍不能Start，重建只打开idle对象，产品Start仍走原RunnerWithProduct授权/绑定门禁。
+
+新增4组backend内存生命周期回归：替换后idle/旧owner拒Start/旧count不可用/重复重开拒绝/最终关闭当前租约；取消失败保留旧终止状态；8并发替换仅1成功；替换与最终Close竞态不留租约、不允许closing后重开。新增control测试覆盖idle ACK、Config/Profile注入、能力缺失及替换失败。测试使用签名测试profile和内存租约模拟，不伪称Windows原生或网络证明。
+
+最终clientowner/desktopcontrol/desktop-session/installed-session相关race回归PASS，desktopcontrol/desktop-session vet PASS，Windows amd64桌面程序交叉编译及diff检查PASS。交叉编译产物仅编译检查、没有可信compiled release，不能当可运行产品安装包；本轮没有上传/启动新桌面、节点、故障服务或真实TLS，不复用旧r10入口。
+
+下一子切片接入Mac新进程和可信私有授权重交接，开发独立compiled重连协调模式；实际网络仍须fresh两窗口、成功fault join/retirement、同verifier恢复、重新核验有效授权与节点绑定、显式新会话TLS/pongs、旧owner拒复活及正常收尾。不能用owner_reopened或内存测试替代这些证据。整体4及整体显式重连均未完成，本轮本地提交不推送，用户暂无需Windows操作。
+
 ## 2026-10-11 显式重连切片A：退役后新owner安全重建接口；Windows桌面验证通过
 
 用户随后提供普通Windows桌面脚本最终输出：`VALIDATION PASSED: explicit fresh owner after fault retirement + native lease and epoch floor. NOT cross-machine reconnect, fresh authorization, GUI or signed installer acceptance.`。记录为用户执行的本轮Windows桌面验证通过；脚本要求全部5项测试PASS、无SKIP/FAIL及exit0才输出该摘要。连同macOS原生测试与相关race结果，切片A安全重建基础验收收口。不把该结果倒推为先前SSH初始化/精确清理已成功，未知SSH测试状态仍不擅自删除。

@@ -30,6 +30,8 @@ import (
 var embeddedRelease, embeddedSignerDigest, embeddedProductDigest string
 
 type backend struct {
+	ownerMu       sync.Mutex // serialize replacement with start/retire/upgrade/close
+	closing       bool
 	observationMu sync.Mutex
 	observation   *clientruntime.ProductObservation
 	handle        *clientowner.Handle
@@ -43,6 +45,11 @@ type backend struct {
 }
 
 func (b *backend) Probe(ctx context.Context) error {
+	b.ownerMu.Lock()
+	defer b.ownerMu.Unlock()
+	if b.closing {
+		return trustprofile.ErrTrust
+	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -76,6 +83,11 @@ func probeSigningDomains(s invite.DeviceSigner) error {
 func (b *backend) Start(ctx context.Context, c clientruntime.Config, out func(any) error) error {
 	if !c.Server || c.Target != b.expected {
 		return privatepipe.ErrProtocol
+	}
+	b.ownerMu.Lock()
+	defer b.ownerMu.Unlock()
+	if b.closing || ctx.Err() != nil {
+		return trustprofile.ErrTrust
 	}
 	ready := make(chan error, 2)
 	report := func(e error) {
@@ -134,10 +146,54 @@ func (b *backend) SessionState() clientowner.SessionState {
 	b.observationMu.Unlock()
 	return h.State()
 }
-func (b *backend) Stop(ctx context.Context) error        { return b.owner.Stop(ctx) }
-func (b *backend) RetireFault(ctx context.Context) error { return b.owner.RetireFault(ctx) }
+func (b *backend) Stop(ctx context.Context) error {
+	b.ownerMu.Lock()
+	defer b.ownerMu.Unlock()
+	if b.closing {
+		return trustprofile.ErrTrust
+	}
+	return b.owner.Stop(ctx)
+}
+func (b *backend) RetireFault(ctx context.Context) error {
+	b.ownerMu.Lock()
+	defer b.ownerMu.Unlock()
+	if b.closing {
+		return trustprofile.ErrTrust
+	}
+	return b.owner.RetireFault(ctx)
+}
+
+// SAME-USER trusted maintenance only. Reopening does not accept peer authority,
+// grant, state path or profile, and does not launch any product/network worker.
+func (b *backend) ReopenFault(ctx context.Context) error {
+	b.ownerMu.Lock()
+	defer b.ownerMu.Unlock()
+	if b.closing || b.owner == nil {
+		return trustprofile.ErrTrust
+	}
+	next, e := b.owner.OpenReplacement(ctx)
+	if e != nil {
+		return e
+	}
+	b.owner = next
+	b.observationMu.Lock()
+	b.handle, b.observation = nil, nil
+	b.observationMu.Unlock()
+	return nil
+}
 func (b *backend) Upgrade(ctx context.Context, p trustprofile.Profile) error {
+	b.ownerMu.Lock()
+	defer b.ownerMu.Unlock()
+	if b.closing {
+		return trustprofile.ErrTrust
+	}
 	return b.owner.Upgrade(ctx, p)
+}
+func (b *backend) Close(ctx context.Context) error {
+	b.ownerMu.Lock()
+	defer b.ownerMu.Unlock()
+	b.closing = true // prevent replacement racing final teardown
+	return b.owner.Close(ctx)
 }
 func main() {
 	e := run()
@@ -204,12 +260,13 @@ func run() (result error) {
 	if e != nil {
 		return e
 	}
+	b := &backend{owner: owner, release: r, factory: factory, signer: signer, open: open, expected: first.VaultExpected, product: processowner.Spec{Executable: filepath.Join(dir, "tls-product.exe"), SHA256: embeddedProductDigest}}
 	defer func() {
-		if e := owner.Close(context.Background()); e != nil {
+		// Close the CURRENT owner, not the captured retired predecessor.
+		if e := b.Close(context.Background()); e != nil {
 			result = e
 		}
 	}()
-	b := &backend{owner: owner, release: r, factory: factory, signer: signer, open: open, expected: first.VaultExpected, product: processowner.Spec{Executable: filepath.Join(dir, "tls-product.exe"), SHA256: embeddedProductDigest}}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	// A matching new bundle borrows a still-READY creator without colliding

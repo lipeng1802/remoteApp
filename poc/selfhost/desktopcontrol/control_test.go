@@ -20,6 +20,63 @@ type backend struct {
 
 type observedBackend struct{ *backend }
 
+type replacementBackend struct {
+	*backend
+	reopens atomic.Int32
+	fail    bool
+}
+
+func (b *replacementBackend) ReopenFault(context.Context) error {
+	b.reopens.Add(1)
+	if b.fail {
+		return privatepipe.ErrProtocol
+	}
+	return nil
+}
+
+func TestReplacementAckIsDistinctIdleAndRejectsAuthorityOverrides(t *testing.T) {
+	for _, scenario := range []string{"valid", "config", "profile", "failed", "unsupported"} {
+		t.Run(scenario, func(t *testing.T) {
+			b := &replacementBackend{backend: &backend{}, fail: scenario == "failed"}
+			var implementation Backend = b
+			if scenario == "unsupported" {
+				implementation = &backend{}
+			}
+			c, _, _ := serveTest(t, implementation)
+			w := json.NewEncoder(c)
+			r := privatepipe.NewReader(c)
+			w.Encode(map[string]string{"Scope": "scope", "Expected": "public"})
+			status(t, r, "ready")
+			req := Request{Op: "reopen_fault"}
+			if scenario == "config" {
+				req.Config.Server = true
+			}
+			if scenario == "profile" {
+				req.Profile.Signature = "injected"
+			}
+			w.Encode(req)
+			if scenario != "valid" {
+				status(t, r, "failed")
+			} else {
+				var ack struct {
+					Status  string
+					Started *bool
+				}
+				if e := r.Read(&ack); e != nil || ack.Status != "owner_reopened" || ack.Started == nil || *ack.Started {
+					t.Fatal("not idle replacement ACK", e)
+				}
+			}
+			want := int32(0)
+			if scenario == "valid" || scenario == "failed" {
+				want = 1
+			}
+			if b.reopens.Load() != want {
+				t.Fatal("authority input reached replacement")
+			}
+		})
+	}
+}
+
 func (b *observedBackend) SessionState() clientowner.SessionState {
 	return clientowner.SessionState{Status: "session_state", Joined: true, Fault: true}
 }
