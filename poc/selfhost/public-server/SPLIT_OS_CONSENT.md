@@ -1,5 +1,11 @@
 # 4C-4G：独立进程双机 OS 授权入口
 
+## r15 重新授权入口（待实机验收）
+
+`--compiled-reauthorize` 是独立入口：节点注册前撤销首份批准授权，验证旧grant在线拒绝、旧request不可重批与旧码不可复用；实际join旧API客户端后重新邀请/明确批准，必须得到不同request/grant。新API客户端使用相同OS签名身份和固定HTTPS参数，不允许现有客户端替换已接受grant。仅新grant进入compiled Headscale/产品TLS，最后正常join、签名撤销和基线恢复。
+
+Python和Go回归已通过；fresh r15公开双桌面包已核验上传，真实双机尚待。Go过期分支仅fixture clock推进/持久化重开，不是实机自然过期；本入口不建立首份grant的旧TLS，因此不是旧活会话撤销后重连。操作和当前证据以 `docs/HANDOFF.md` 为准，不重用已消费桌面stage。
+
 真实双机 OS consent 验收已通过，完整退出码0。不是整体切片 4 完成。
 
 ## 4C-4H：独立进程真实 nodeproof（已通过）

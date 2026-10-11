@@ -17,6 +17,7 @@ class SplitConsentTests(unittest.TestCase):
         self.assertEqual(split.mode_flags(["--compiled-fault"]),(True,False,True,False,True))
         self.assertEqual(split.mode_flags(["--compiled-reconnect"]),(True,False,True,False,True))
         self.assertEqual(split.mode_flags(["--compiled-upgrade"]),(True,False,False,False,True))
+        self.assertEqual(split.mode_flags(["--compiled-reauthorize"]),(True,False,False,False,True))
         for args in (["--compiled-revoke","--tls-fault"],["--compiled-revoke","--compiled"],["--compiled-fault","--compiled"]):
             with self.assertRaises(RuntimeError):split.mode_flags(args)
 
@@ -95,5 +96,64 @@ class SplitConsentTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): split.consent(Client(copy.deepcopy(owner)),Client(bad))
         bad=copy.deepcopy(peer); bad[2]["device"]["grant"]=grant
         with self.assertRaises(RuntimeError): split.consent(Client(copy.deepcopy(owner)),Client(bad))
+
+    def test_fresh_approval_joins_old_clients_and_only_passes_new_grant(self):
+        def run(fault=None, phase_fail=False):
+            grants = {"r2":{"claims":{"id":"a"*32}}, "r3":{"claims":{"id":"b"*32}}}
+            if fault == "same_grant": grants["r3"]=copy.deepcopy(grants["r2"])
+            events, revoked, approved = [], set(), set()
+            counts = {"invite":0, "claim":0}
+            class Client:
+                def __init__(self, role, fresh=False): self.role,self.fresh,self.stopped=role,fresh,False
+                def request(self, op, **kwargs):
+                    if self.stopped: raise AssertionError("old client reused after join")
+                    events.append((self.role,self.fresh,op,kwargs))
+                    if op == "network_state": return {"passed":False}
+                    if op in ("use_grant","recheck_grant"):
+                        g=kwargs["Grant"]
+                        if fault == "old_online" and g == grants["r2"] and revoked: return {"passed":True}
+                        return {"passed":g not in [grants[r] for r in revoked]}
+                    b=kwargs["Device"]; a=b["action"]; value={}
+                    if a == "register": value={"device_id":self.role,"device_code":"123"}
+                    elif a == "invite":
+                        counts[a]+=1; value={"code":str(counts[a])}
+                    elif a == "claim":
+                        if b["code"] == "2" and revoked: return {"passed":False}
+                        counts[a]+=1; value={"status":"pending","request_id":"r"+str(counts[a])}
+                        if fault == "auto" and counts[a] == 3: value["grant"]=grants["r3"]
+                    elif a == "incoming": value={"request_id":"r"+str(counts['claim']),"controller_id":"peer"}
+                    elif a == "approve":
+                        if self.role == "peer" or b["request_id"] in revoked: return {"passed":False}
+                        if b["allow"]:
+                            approved.add(b["request_id"]); value={"grant":grants[b["request_id"]]}
+                        else: value={"status":"denied"}
+                    elif a == "status":
+                        r=b["request_id"]
+                        value={"status":"revoked"} if r in revoked else {"grant":grants[r]} if r in approved else {"status":"denied"}
+                    elif a == "revoke":
+                        r=next(r for r,g in grants.items() if g['claims']['id']==b['grant_id'])
+                        revoked.add(r); value={"status":"revoked"}
+                    else: raise AssertionError(a)
+                    return {"passed":True,"device":value}
+            old=[Client("owner"),Client("peer")]
+            def fresh():
+                self.assertIn("r2",revoked)
+                for c in old: c.stopped=True
+                events.append(("joined",))
+                return Client("owner",True),Client("peer",True)
+            def phase(grant):
+                self.assertEqual(grant,grants["r3"])
+                self.assertTrue(all(c.stopped for c in old))
+                if phase_fail: raise ValueError("phase_failure")
+            try:
+                split.consent(*old,node_phase=phase,reauthorize=True,fresh_clients=fresh)
+            finally:
+                if fault is None: self.assertEqual(revoked,{"r2","r3"})
+            self.assertEqual(sum(e==("joined",) for e in events),1)
+        run()
+        with self.assertRaises(ValueError): run(phase_fail=True)
+        for fault in ("old_online","auto","same_grant"):
+            with self.subTest(fault=fault),self.assertRaises(RuntimeError): run(fault=fault)
+        with self.assertRaises(RuntimeError): split.consent(None,None,reauthorize=True)
 
 if __name__=="__main__": unittest.main()

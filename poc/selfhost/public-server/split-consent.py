@@ -50,7 +50,9 @@ def checked_ready(value, target, controller, nodes=False, fault=False, compiled=
         raise RuntimeError("invalid_split_bootstrap")
     return value
 
-def consent(target, controller, node_phase=None):
+def consent(target, controller, node_phase=None, reauthorize=False, fresh_clients=None):
+    if reauthorize and fresh_clients is None:
+        raise RuntimeError("fresh_authorization_clients_required")
     def call(client, **body):
         response = client.request("device", Device=body)
         if response.get("passed") is not True:
@@ -87,6 +89,34 @@ def consent(target, controller, node_phase=None):
         t.check(not client.request("network_state")["passed"], "split_grant_without_client_bindings_no_network")
     phase_failed = False
     try:
+        if reauthorize:
+            old_grant, old_request, old_code = grant, pending["request_id"], invitation["code"]
+            t.check(call(target, action="revoke", grant_id=old_grant["claims"]["id"])["status"] == "revoked", "split_old_grant_explicitly_revoked")
+            for client in (target, controller):
+                t.check(not client.request("recheck_grant", Grant=old_grant)["passed"], "split_revoked_grant_online_rejected")
+                t.check(not client.request("network_state")["passed"], "split_revoked_grant_no_network")
+            old_status = call(controller, action="status", request_id=old_request)
+            t.check(old_status["status"] == "revoked" and "grant" not in old_status, "split_old_request_stays_revoked")
+            t.check(not target.request("device", Device={"action":"approve", "request_id":old_request, "allow":True})["passed"], "split_old_request_cannot_be_reapproved")
+            t.check(not controller.request("device", Device={"action":"claim", "target_code":owner["device_code"], "code":old_code})["passed"], "split_old_invite_cannot_be_reused")
+            # Accepted grants cannot be replaced in an existing API client.
+            # Join those clients before opening the fresh approval cycle.
+            target, controller = fresh_clients()
+            invitation = call(target, action="invite")
+            pending = call(controller, action="claim", target_code=owner["device_code"], code=invitation["code"])
+            t.check(pending["status"] == "pending" and "grant" not in pending and pending["request_id"] != old_request, "split_fresh_request_requires_approval")
+            incoming = call(target, action="incoming")
+            t.check(incoming["request_id"] == pending["request_id"] and incoming["controller_id"] == peer["device_id"], "split_fresh_request_exact_peer")
+            t.check(not controller.request("device", Device={"action":"approve", "request_id":pending["request_id"], "allow":True})["passed"], "split_fresh_request_no_self_approval")
+            approved = call(target, action="approve", request_id=pending["request_id"], allow=True)
+            # Track the new grant immediately so failure teardown revokes it too.
+            grant = approved["grant"]
+            received = call(controller, action="status", request_id=pending["request_id"])
+            t.check(grant == received.get("grant") and grant["claims"]["id"] != old_grant["claims"]["id"], "split_fresh_approval_distinct_grant")
+            for client in (target, controller):
+                t.check(not client.request("use_grant", Grant=old_grant)["passed"], "split_new_approval_does_not_revive_old_grant")
+                t.check(client.request("use_grant", Grant=grant)["passed"], "split_fresh_grant_online_verified")
+                t.check(not client.request("network_state")["passed"], "split_fresh_grant_still_requires_node_binding")
         if node_phase is not None: node_phase(grant)
     except Exception as error:
         phase_failed = True
@@ -159,9 +189,9 @@ class Coordinator(Pipe):
         return self.proc.returncode
 
 def mode_flags(args):
-    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"]): raise RuntimeError("invalid_arguments")
+    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"],["--compiled-reauthorize"]): raise RuntimeError("invalid_arguments")
     live_revoke=args==["--compiled-revoke"]
-    compiled=live_revoke or args in (["--compiled"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"])
+    compiled=live_revoke or args in (["--compiled"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"],["--compiled-reauthorize"])
     fault=args in (["--tls-fault"],["--compiled-fault"],["--compiled-reconnect"])
     tls=args in (["--tls-fault"],["--tls"])
     nodes=compiled or tls or args==["--nodes"]
@@ -172,6 +202,7 @@ def main():
     compiled,live_revoke,fault,tls,nodes=mode_flags(sys.argv[1:])
     reconnect=sys.argv[1:]==["--compiled-reconnect"]
     live_upgrade=sys.argv[1:]==["--compiled-upgrade"]
+    reauthorize=sys.argv[1:]==["--compiled-reauthorize"]
     pipe_type=Pipe
     if compiled:
         from joined_pipe import JoinedPipe
@@ -186,6 +217,7 @@ def main():
     identities = NativeIdentities(t, pipe_type,compiled_desktop=compiled)  # Actual desktop probe before mutations.
     coordinator = None
     clients, tunnels = [], []
+    client_specs = []
     node_helpers, folders, node_result = [], [], []
     active_tls=[]
     product_command=None
@@ -261,8 +293,18 @@ def main():
                 "Target":hashlib.sha256(bytes.fromhex(ready["target"])).hexdigest(),"Controller":hashlib.sha256(bytes.fromhex(ready["controller"])).hexdigest()}
             config.update(identities.config(role,windows))
             command=identities.command(work,"device-api-client.exe") if windows else [str(t.ARTIFACTS/"device-api-client")]
+            client_specs.append((command, config))
             client=pipe_type(command,config); clients.append(client)
             t.check(client.read()["status"]=="ready","split_device_os_signer_ready")
+        def fresh_clients():
+            while clients:
+                clients[-1].stop()
+                clients.pop()
+            for command, config in client_specs:
+                client = pipe_type(command, config)
+                clients.append(client)
+                t.check(client.read()["status"] == "ready", "split_fresh_api_client_ready_after_old_join")
+            return tuple(clients)
         if nodes:
             import split_nodes
             def node_phase(grant):
@@ -278,7 +320,7 @@ def main():
                     active=split_tls.run(t,Pipe,ready,clients,node,grant,product_command,node_helpers)
                     if fault: active=split_tls.fault_round(t,Pipe,ready,clients,node,grant,product_command,node_helpers,coordinator,active)
                     active_tls.append(active)
-            consent(*clients,node_phase=node_phase)
+            consent(*clients,node_phase=node_phase,reauthorize=reauthorize,fresh_clients=fresh_clients)
             if live_revoke: compiled_pair.revoked()
             if tls: active_tls[0].revoked()
             split_nodes.reclaimed(t)
@@ -350,7 +392,9 @@ def main():
     t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
     if compiled:
         print("ACTION: verification and server/client teardown finished. Enter in BORROWER window FIRST and confirm its STOPPED, then Enter in identity creator and confirm STOPPED.",flush=True)
-        if live_upgrade:
+        if reauthorize:
+            print("VALIDATION PASSED: revoked prior consent + fresh invitation/explicit approval/distinct grant + compiled Headscale/product TLS + normal join and signed revoke. NOT old live TLS revocation/reconnect, natural expiry, borrower STOPPED cleanup, GUI or signed installer acceptance.",flush=True)
+        elif live_upgrade:
             print("VALIDATION PASSED: compiled native pair + real live TLS profile upgrade + both epoch2 floors/downgrade rejection + explicit new process/session + normal join and signed revoke. NOT native commit-failure injection, borrower STOPPED cleanup, GUI or signed installer acceptance.",flush=True)
         elif reconnect:
             print("VALIDATION PASSED: compiled native pair + isolated authority outage/fault retirement + same-verifier recovery + explicit fresh owner/process product TLS reconnect under reverified still-active grant + normal join and signed revoke. NOT new invitation/approval, borrower STOPPED cleanup, upgrade, GUI or signed installer acceptance.",flush=True)

@@ -1,5 +1,35 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r15 新邀请/新审批/独立新授权切片开发完成，等待 fresh 两桌面
+
+新增独立 `split-consent.py --compiled-reauthorize`，不混用reconnect/fault/upgrade。初始拒绝和批准流程之后、任何客户端节点注册之前，owner签名撤销首份grant；两端recheck_grant必须在线拒绝，network_state仍不可用；old status为revoked且无grant，旧request不可再次approve、旧邀请码不可claim。旧API客户端实际stop/join后，从相同OS签名身份/固定私有HTTPS参数开启全新API进程，新邀请必须pending无grant/不同request，owner发现确切peer，controller不得自批；明确批准后双方同一不同ID新grant，旧grant仍不可use，新grant在线验证成功且未bind不开放网络。仅新grant送入现有compiled节点/TLS流程，最终正常join和owner签名撤销/完整资源恢复。
+
+没有放宽device-api-client既有“use_grant只接受空current、recheck不得换grant”的门禁。fresh客户端启动先于新邀请，以免启动失败时已产生新批准授权；正常失败仍走现有owner撤销和保守退出证据门禁。本轮不先建立旧TLS会话，因此不能称旧活TLS撤销后重连；实机自然过期未执行。
+
+新增Go两分支回归：revoked/expired grant在Store持久化重开后保持拒绝、旧request/邀请码不能复用、fresh pending在重开后不自动批准、controller自批拒绝、fresh grant不同ID且重开后active，旧grant在线签名clock proof拒绝，新grant实际在线proof成功。时间推进仅fixture clock，不修改系统或生产时钟。测试使用memory Driver而非真实Headscale；实机节点/TLS证据待运行新入口。Python73项全部PASS（含旧在线误放行、自动grant、同ID新grant、phase失败仍撤销），invite/API全包race、vet PASS。首次sandbox HTTPS监听拒绝后获准重跑；补充positive proof时发现测试Driver未配置，修正fixture后全量通过，不变更生产逻辑。
+
+准备脚本 `artifacts/connection-poc/prepare-reauthorize-r15.py` 实际exit0：服务器资源空/基线不变、当前9helpers构建、固定Windows产品摘要、fresh creator BUILD_READY/隔离TEST namespace、公开包逐文件摘要、waiter摘要与3个PowerShell入口解析全部PASS。仅上传公开测试包，不启动桌面identity/网络；r14已消费不能重用，不删Tailscale或旧包。
+
+Windows普通桌面窗口1：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-desktop-reauthorize-20261011-r15\start-desktop-session.ps1"
+```
+
+READY后窗口2：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-compiled-stage-reauthorize-20261011-r15\wait-for-compiled-borrower.ps1" -Root "C:\Users\jarvis\remoteapp-compiled-stage-reauthorize-20261011-r15" -IdentityBootstrap "C:\Users\jarvis\windows-desktop-reauthorize-20261011-r15\interactive-bootstrap.json"
+```
+
+两窗口READY/WATCH_READY后才运行：
+
+```sh
+REMOTEAPP_WINDOWS_INTERACTIVE_DIR='C:\Users\jarvis\windows-desktop-reauthorize-20261011-r15' REMOTEAPP_WINDOWS_DESKTOP_STAGE='C:\Users\jarvis\remoteapp-compiled-stage-reauthorize-20261011-r15' python3 -B poc/selfhost/public-server/split-consent.py --compiled-reauthorize
+```
+
+协调actual exit0后先borrower再creator STOPPED，再精确核验原生测试证书/进程/bootstrap及正式基线。尚未真实双机验收，整体4未完成；不包含公网无SSH准入、自然过期实机、旧活TLS撤销重连、GUI或签名安装包。本地提交，不推送。
+
 ## 2026-10-11 r14 两桌面 STOPPED / 收尾核验 PASS，升级子切片闭环
 
 用户确认两窗口STOPPED后，运行只读 `artifacts/connection-poc/check-r14-stopped.py`，实际exit0。精确r14 creator/borrower可执行目录下Windows子进程0，三个public bootstrap均不存在；CurrentUser/My中 `CN=Personal Remote Desktop Test ` 前缀测试证书0。远端borrower manifest摘要匹配唯一local compiled pair，该pair目录下Mac产品子进程0。Headscale nodes/users/preauthkeys全空，原policy不变，三个正式服务active，Store固定摘要及Nginx基线复查PASS。
