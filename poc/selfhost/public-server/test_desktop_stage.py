@@ -2,10 +2,17 @@ import json
 import unittest
 from unittest.mock import patch
 
-from desktop_stage import DesktopStage, checked_ack
+from desktop_stage import DesktopStage, checked_ack, validate_stage_root
 
 
 class DesktopStageTests(unittest.TestCase):
+    def test_preparation_root_contract_rejects_descriptive_r15_name(self):
+        good = r'C:\Users\jarvis\remoteapp-compiled-stage-6d93c428f1a7be05'
+        self.assertEqual(validate_stage_root(good), good)
+        for root in (r'C:\Users\jarvis\remoteapp-compiled-stage-reauthorize-20261011-r15',
+                     good.upper(), good+'0', good[:-1], good+'\\child', None):
+            with self.assertRaises(RuntimeError): validate_stage_root(root)
+
     def test_current_challenge_required_and_public_fields_exact(self):
         checked_ack({"nonce":"a"*32,"status":"waiting"},"a"*32)
         for value in ({"nonce":"b"*32,"status":"waiting"}, {"nonce":"a"*32,"status":"ready"}, {"nonce":"a"*32,"status":"waiting","secret":"no"}):

@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r15 等待窗口 staging root 修正，尚未启动网络验收
+
+用户窗口2返回Invalid staging root。根因是总控准备/交接错误使用描述性后缀，违反原PowerShell与DesktopStage一致的16位小写hex路径门禁；之前语法/hash检查不能证明参数合法。保持原门禁，不放宽用户路径或生产授权。新fresh目录为 `C:\Users\jarvis\remoteapp-compiled-stage-6d93c428f1a7be05`，窗口1creator不变，可继续READY，不按Enter。
+
+新目录已创建/限制ACL并上传原waiter，摘要一致；实际Windows按原waiter中抽取的regex核验root、非reparse/container/无run及脚本解析PASS，最终verify-only实际exit0。首次修复辅助检查自身regex转义错误，未通过不能算验收；随后改用原waiter精确regex并只读复核通过。旧错误命名目录保留，仅公开脚本，没有启动borrower/network，未删除身份或Tailscale。preparer现在先调用共享validate_stage_root再做远端操作；新增描述性r15错误路径拒绝回归，Python全套74 PASS。
+
+用户只需窗口2重新执行下节已更新的hex路径命令，等WATCH_READY后确认两窗口就绪；没有运行r15实际OS授权/Headscale/TLS。修复本地提交，不推送。
+
 ## 2026-10-11 r15 新邀请/新审批/独立新授权切片开发完成，等待 fresh 两桌面
 
 新增独立 `split-consent.py --compiled-reauthorize`，不混用reconnect/fault/upgrade。初始拒绝和批准流程之后、任何客户端节点注册之前，owner签名撤销首份grant；两端recheck_grant必须在线拒绝，network_state仍不可用；old status为revoked且无grant，旧request不可再次approve、旧邀请码不可claim。旧API客户端实际stop/join后，从相同OS签名身份/固定私有HTTPS参数开启全新API进程，新邀请必须pending无grant/不同request，owner发现确切peer，controller不得自批；明确批准后双方同一不同ID新grant，旧grant仍不可use，新grant在线验证成功且未bind不开放网络。仅新grant送入现有compiled节点/TLS流程，最终正常join和owner签名撤销/完整资源恢复。
@@ -19,13 +27,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows
 READY后窗口2：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-compiled-stage-reauthorize-20261011-r15\wait-for-compiled-borrower.ps1" -Root "C:\Users\jarvis\remoteapp-compiled-stage-reauthorize-20261011-r15" -IdentityBootstrap "C:\Users\jarvis\windows-desktop-reauthorize-20261011-r15\interactive-bootstrap.json"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-compiled-stage-6d93c428f1a7be05\wait-for-compiled-borrower.ps1" -Root "C:\Users\jarvis\remoteapp-compiled-stage-6d93c428f1a7be05" -IdentityBootstrap "C:\Users\jarvis\windows-desktop-reauthorize-20261011-r15\interactive-bootstrap.json"
 ```
 
 两窗口READY/WATCH_READY后才运行：
 
 ```sh
-REMOTEAPP_WINDOWS_INTERACTIVE_DIR='C:\Users\jarvis\windows-desktop-reauthorize-20261011-r15' REMOTEAPP_WINDOWS_DESKTOP_STAGE='C:\Users\jarvis\remoteapp-compiled-stage-reauthorize-20261011-r15' python3 -B poc/selfhost/public-server/split-consent.py --compiled-reauthorize
+REMOTEAPP_WINDOWS_INTERACTIVE_DIR='C:\Users\jarvis\windows-desktop-reauthorize-20261011-r15' REMOTEAPP_WINDOWS_DESKTOP_STAGE='C:\Users\jarvis\remoteapp-compiled-stage-6d93c428f1a7be05' python3 -B poc/selfhost/public-server/split-consent.py --compiled-reauthorize
 ```
 
 协调actual exit0后先borrower再creator STOPPED，再精确核验原生测试证书/进程/bootstrap及正式基线。尚未真实双机验收，整体4未完成；不包含公网无SSH准入、自然过期实机、旧活TLS撤销重连、GUI或签名安装包。本地提交，不推送。

@@ -11,10 +11,15 @@ def checked_ack(value, nonce):
         raise RuntimeError("desktop_stage_ack_invalid")
 
 
+def validate_stage_root(root):
+    if not isinstance(root, str) or not re.fullmatch(r"C:\\Users\\jarvis\\remoteapp-compiled-stage-[0-9a-f]{16}", root):
+        raise RuntimeError("desktop_stage_root_invalid")
+    return root
+
+
 class DesktopStage:
     def __init__(self, t, root):
-        if not re.fullmatch(r"C:\\Users\\jarvis\\remoteapp-compiled-stage-[0-9a-f]{16}", root):
-            raise RuntimeError("desktop_stage_root_invalid")
+        validate_stage_root(root)
         self.t, self.root, self.nonce = t, root, secrets.token_hex(16)
         t.powershell("$ErrorActionPreference='Stop'; $r=Get-Item -LiteralPath '"+root+"'; "
                      "if (-not $r.PSIsContainer -or ($r.Attributes -band [IO.FileAttributes]::ReparsePoint) -or "
