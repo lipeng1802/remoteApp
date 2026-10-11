@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r15 两桌面 STOPPED / 收尾核验 PASS，重新授权子切片闭环
+
+用户确认两窗口STOPPED后，执行只读 `artifacts/connection-poc/check-r15-stopped.py`，实际exit0。精确creator `windows-desktop-reauthorize-20261011-r15` 与borrower `remoteapp-compiled-stage-6d93c428f1a7be05/run/compiled-win` 下Windows子进程0，三个public bootstrap均不存在；CurrentUser/My测试证书前缀枚举0。远端borrower manifest摘要匹配唯一local compiled pair，对应Mac产品子进程0。Headscale nodes/users/preauthkeys全空，原policy不变，三个正式服务active，Store固定摘要与Nginx基线再次PASS。
+
+本轮原生journal/test identity清理依据普通桌面严格closed/zero-exit STOPPED与bootstrap移除；测试证书不存在另经只读枚举确认。不以SSH凭据上下文冒充桌面原生journal读取验收。本次核验没有额外删除任何数据，公开包/work保留用于审计，错误命名旧staging仍保留；未知历史凭据未宣称全部清理。不重启已消费r15，两窗口可以关闭。
+
+结合原协调器actual exit0，本轮“网络注册前撤销旧批准 → 新邀请/明确审批/不同grant → 实际Headscale/产品TLS → 正常join/签名撤销/完整收尾”子切片闭环。仍不是旧活TLS撤销后重新授权重连或自然过期实机验收。整体4未完成；后续优先补活会话失效后新授权/新owner的组合流程，再推进正式公开接入、GUI与签名安装包。仅本地提交、不推送；下方待STOPPED为历史。
+
 ## 2026-10-11 r15 真实双机重新授权 PASS / 实际 exit0，等待两桌面 STOPPED
 
 用户确认修正路径后两窗口就绪，实际运行 `--compiled-reauthorize`，creator `windows-desktop-reauthorize-20261011-r15` 与stage `remoteapp-compiled-stage-6d93c428f1a7be05`。协调器实际exit0。waiter live/native creator probe、当前9helpers重建、fresh matching pair构建与逐文件上传校验、borrower real desktop probe PASS。
