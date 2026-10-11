@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r15 真实双机重新授权 PASS / 实际 exit0，等待两桌面 STOPPED
+
+用户确认修正路径后两窗口就绪，实际运行 `--compiled-reauthorize`，creator `windows-desktop-reauthorize-20261011-r15` 与stage `remoteapp-compiled-stage-6d93c428f1a7be05`。协调器实际exit0。waiter live/native creator probe、当前9helpers重建、fresh matching pair构建与逐文件上传校验、borrower real desktop probe PASS。
+
+初始设备OS签名注册/拒绝/明确批准 PASS。首份批准在网络注册前签名撤销；两端旧grant online recheck拒绝/无网络、旧status仍revoked无grant、旧request不可重批、旧邀请码不可claim全部PASS。旧API实际join、同身份fresh API READY PASS；新邀请pending无grant/不同request、incoming确切peer、controller自批拒绝、owner明确批准双方同一不同ID新grant PASS。fresh API拒旧grant、接受新grant online校时验签，未bind仍无网络 PASS。
+
+仅新grant执行真实enroll/单次intent、OS/node持有证明、错误身份拒绝、Mac同node重启、signed binding、正向实际固定payload/反向拒绝和bound helper join PASS。双端产品启动及真实TLS pongs持续跨初始lease、controller与target正常stop/join、node/watch/signer正常join PASS。随后OS owner signed revoke/status revoked、客户端节点回收零ACL、durable journal清理、exact verifier退役、隔离资源移除和原协调器 `STOPPED isolated_coordinator_resources_joined` / actual exit0 PASS；原policy、线上服务/Store/Nginx基线恢复不变、控制nodes/users/preauthkeys全空。
+
+本轮Windows公开compiled package/work保留待桌面最终Close。请窗口2borrower先Enter并确认STOPPED，再窗口1creator Enter并确认STOPPED；收到后核验精确本轮Windows/Mac进程、bootstrap、测试证书及基线。不提前记原生certificate/journal清理完成，不重用已消费r15。没有建立首份grant的旧TLS，所以不是旧活TLS撤销后新授权重连；自然过期仅Go fixture覆盖、未实机等待。GUI、正式公网准入、签名安装包及整体4仍未完成。仅本地提交，不推送；下方待实机为历史。
+
 ## 2026-10-11 r15 等待窗口 staging root 修正，尚未启动网络验收
 
 用户窗口2返回Invalid staging root。根因是总控准备/交接错误使用描述性后缀，违反原PowerShell与DesktopStage一致的16位小写hex路径门禁；之前语法/hash检查不能证明参数合法。保持原门禁，不放宽用户路径或生产授权。新fresh目录为 `C:\Users\jarvis\remoteapp-compiled-stage-6d93c428f1a7be05`，窗口1creator不变，可继续READY，不按Enter。

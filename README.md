@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r15 真实双机重新授权已通过，协调器实际exit0：旧grant在线拒绝、旧请求/邀请码不可复用，旧API实际join后新邀请/明确审批产生不同grant；新grant真实Headscale绑定及产品TLS pongs跨租约、正常join/签名撤销和资源归零/正式基线恢复均PASS。等待两桌面STOPPED及最终原生清理核验。不是旧活TLS撤销后重连或自然过期实机验收，整体4未完成。
+
 r15 等待窗口目录名已修正为原规则要求的16位hex路径，实际Windows参数规则/非重定向/无run/脚本摘要与解析检查PASS，Python74项通过。creator保持不变，重新执行HANDOFF中窗口2更新命令即可；真实双机重新授权仍待验收。
 
 r15 重新授权切片已开发并准备 fresh Windows 双窗口入口：旧批准先签名撤销，旧grant在线拒绝/旧请求不可重批/旧码不可复用；旧API实际join后新邀请与明确审批生成不同grant，再接compiled Headscale/TLS。Python73项、invite/API race及vet通过，撤销/过期与持久化重开的Go回归通过；新公开包摘要及入口解析已核验，尚未真实双机验收。不代表旧活TLS撤销后重连、实机自然过期或整体4完成。操作见 [HANDOFF](docs/HANDOFF.md)。
