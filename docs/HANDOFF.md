@@ -1,5 +1,29 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r11 独立恢复完成；r12 relay修复包已准备，等待fresh两桌面
+
+用户确认r11两窗口STOPPED；只读Get-CimInstance按r11 creator/stage可执行路径确认子进程0，Mac本轮compiled目录无产品子进程。精确匹配本地compiled-live-25b41d45f41da489公开issuer与服务器 `/tmp/remoteapp-daemon-check-4212800235/config/profile.json`，相关隔离服务进程0、所有Requests已revoked/denied、2条Provisions仍bound；唯一策略备份 `/var/lib/remoteapp-poc/enrollment-mode-FC2hne` 包含原file模式。未依据mtime单独授权删除资源。
+
+可信临时恢复工具只打开该精确authority Store（取得原排他租约）、重核issuer及2条记录均不再Authorized，通过原ProvisionBackend.Reconcile/Headscale Driver按durable ticket回收并确认2条cleaned，关闭Store，再verifier.Retire精确原journal（原排他租约）退役。工具实际exit0，Headscale nodes/users/preauthkeys全部为空。原enrollment-mode恢复工具摘要核验后，恢复精确备份并正常restart PoC；原file policy、三正式服务active、Store固定SHA及Nginx基线全部PASS。Mac本轮compiled trust-install inspect/cleanup-test实际PASS，清理其随机测试journal。不是原协调STOPPED/exit0的证明，也未确认所有历史Mac随机身份或客户端状态均清理，未知凭据/旧实验目录不删除。服务器本轮已终止的恢复证据及公开制品暂保留；精确策略备份由原恢复流程消费删除，不再可用于重复恢复。
+
+随后准备全新r12：空控制资源/原策略/正式基线再次PASS，当前9helper重建PASS。fresh creator BUILD_READY/exit0，manifest/test_namespace=true/minimum_epoch=1核验PASS；从已提交333931e修复构建，公开文件仅精确摘要复用，远端逐文件SHA均PASS。fresh stage当前SID/SYSTEM ACL、waiter摘要及三PowerShell入口解析PASS。未启动新身份、节点或隔离服务。
+
+新creator：`C:\Users\jarvis\windows-desktop-reconnect-20261011-r12`；新stage：`C:\Users\jarvis\remoteapp-compiled-stage-78b659da10e34fc2`。
+
+窗口1普通桌面PowerShell：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-desktop-reconnect-20261011-r12\start-desktop-session.ps1"
+```
+
+窗口1READY后，另开窗口2：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-compiled-stage-78b659da10e34fc2\wait-for-compiled-borrower.ps1" -Root "C:\Users\jarvis\remoteapp-compiled-stage-78b659da10e34fc2" -IdentityBootstrap "C:\Users\jarvis\windows-desktop-reconnect-20261011-r12\interactive-bootstrap.json"
+```
+
+收到READY/WATCH_READY后才使用对应r12环境变量执行split-consent.py --compiled-reconnect。r11旧stage/bootstrap已消费不得复用；新grant/HMAC不得复用。须实际验收新owner/new Mac PID/TLS pongs、旧owner不复活、正常join/签名revoke/durable节点回收、原协调实际STOPPED/exit0及最终基线；修复上传不代表通过。最终borrower先STOPPED、creator后STOPPED。整体4仍未完成，本次记录本地提交不推送。
+
 ## 2026-10-11 r11 真实显式重连失败：relay回执遗漏已修复，现场收尾待完成
 
 用户确认两个新窗口就绪后，实际执行r11 split-consent.py --compiled-reconnect，最终exit1。在线waiter/native probe、matching fresh pair构建上传、OS签名邀请/拒绝/审批、节点注册/错误签名拒绝/同身份重启/绑定、精确正向payload与反向拒绝、两个旧helper实际join/交接均PASS。初始真实product TLS/pongs跨初始lease、隔离authority暂停/HTTPS503且旧ACL残留、Mac实际fault join/native retirement/exit、Windowsfault join/native retirement、同verifier恢复/fresh signed same binding/旧owners仍closed全部PASS。双方reconnect授权重新核验及Mac已提交journal inspect PASS。

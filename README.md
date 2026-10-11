@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-显式重连r11实测未通过：初始TLS/pongs、故障退役、同verifier恢复、授权重核验通过；Windows新owner已实际重开idle，但desktop-relay遗漏owner_reopened回执，后续通道退出。已修复严格回执处理，Go race/vet、66项Python回归和Windows交叉编译通过；尚未部署修复或重测。旧桌面正常STOPPED、失败现场精确清理/基线恢复仍待，不启动下一轮或标整体通过。详见 [HANDOFF](docs/HANDOFF.md)。
+显式重连r11实测未通过：desktop-relay遗漏owner_reopened回执已修复，自动回归通过。用户确认两桌面STOPPED，独立恢复已精确回收本轮节点和verifier、控制资源归零、原策略/服务/Store/Nginx基线恢复；不倒推为原协调成功。全新r12修复包已上传并校验，等待两桌面READY/WATCH_READY复测；整体重连仍待验收，未知历史凭据与现场证据保留。详见 [HANDOFF](docs/HANDOFF.md)。
 
 显式重连B1：已接入Windows桌面backend的同用户本地 `reopen_fault`，成功只返回idle新owner；生命周期操作串行，最终关闭当前替换owner，失败保留旧终止状态，不自动启动或复活旧会话。相关race/vet与Windows交叉编译通过；本轮未进行原生桌面或双机验收。下一步Mac新进程/授权重交接及compiled重连协调，详见 [HANDOFF](docs/HANDOFF.md)。
 
