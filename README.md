@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r14 真实双机 TLS 升级验收已通过，协调器实际 exit0：无效候选保持旧 TLS payload、两端原生 epoch2 与拒降级、显式新进程/会话的 TLS pongs 跨租约、正常 join、签名撤销、控制资源归零及原服务/策略/Store/Nginx 基线恢复均 PASS。等待用户先 borrower、后 creator 两桌面 STOPPED，再核验最终本轮原生测试资源清理；不包含真实 OS 写失败、GUI或签名安装包，整体4未完成。
+
 r14 Windows 五项原生升级/lifecycle 验收已由用户反馈全部 PASS，修复后的入口返回预期 VALIDATION PASSED。覆盖原生租约、产品实际 join、非零退出拒升级、无效候选保留旧 runner、不确定提交回执锁闭及重开 epoch2 floor。真实双机 TLS 升级仍待验收；不代表真实 OS 写失败、GUI或签名安装包通过。
 
 当前 r14 升级切片：已补齐无效候选拒绝但保持旧会话、只读 durable epoch、显式 `--compiled-upgrade` 双机入口及原生不确定提交回执锁闭测试。相关 race/vet、Python 72 项和 macOS、Windows 各五项原生/生命周期验收通过；下一步启动新的两桌面入口进行真实双机 TLS 升级验收。未增加生产远程故障注入，不把模拟回执错误视为真实 OS 写失败。详见 [HANDOFF](docs/HANDOFF.md)。

@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r14 真实双机 TLS 升级 PASS / 实际 exit0，等待两桌面 STOPPED
+
+用户确认 r14 两窗口就绪后，实际执行对应 fresh creator/stage 的 `split-consent.py --compiled-upgrade`，协调器实际 exit0。desktop waiter live、creator OS identity probe、当前9个helper构建、matching fresh pair构建/上传摘要、borrower real desktop probe全部PASS。OS签名注册/拒绝/审批、enrollment与单次intent、真实节点与OS持有证明、错误身份拒绝、Mac同节点重启、signed binding、正向固定payload/反向拒绝及bound helper实际join交接均PASS。
+
+初始真实产品 TLS pongs 跨初始lease PASS；双方无效升级候选拒绝后旧TLS payload持续PASS；双方原生epoch2、epoch1降级拒绝PASS；显式新Mac进程/产品会话再次真实TLS pongs跨初始lease、两端正常stop/join PASS，输出 `compiled_live_upgrade_explicit_new_session_tls_and_normal_join`。不能把成功升级后的新runner称为故障owner复活或新授权审批；本轮不是native commit失败注入，原生不确定回执测试证据见下节。
+
+owner OS-signed revoke、durable客户端清理、zero ACL、exact verifier retirement、隔离实验目录移除及原协调器 `STOPPED isolated_coordinator_resources_joined` / zero exit均PASS。Headscale控制资源归零，原file policy、三个正式服务、Store/Nginx基线恢复/不变，上传执行程序精确移除。Windows compiled package/work保留等待桌面最终Close，不能提前宣称borrower原生证书/journal已清理。
+
+下一步窗口2（borrower/waiter，`C:\Users\jarvis\remoteapp-compiled-stage-b9274dc518a06e3f\run\compiled-win`）先按Enter并确认STOPPED；然后窗口1（creator，`C:\Users\jarvis\windows-desktop-upgrade-20261011-r14`）按Enter并确认STOPPED。收到两窗口STOPPED后精确核验本轮进程/bootstrap/测试证书清理与正式基线，不删除未知历史凭据，不重启已消费r14。整体4未完成，不包含真实OS写失败、GUI或签名安装包。仅本地提交，不推送；下方双机待验收为历史状态。
+
 ## 2026-10-11 r14 Windows 五项原生验收 PASS，下一步真实双机 TLS 升级
 
 用户反馈修复后的普通桌面验证入口完整输出：TestNativeLiveOwnerRetainsLeaseOnTimeoutAndReopensEpoch、TestOwnedProductUpgradeWaitsForProductAndNetworkJoin、TestOwnedProductNonzeroExitRejectsUpgrade、TestInstalledEpochRejectsBrokenOwnerAndInvalidCandidateKeepsRunner、TestNativeUpgradeUncertainReceiptLatchesClosedAndPreservesFloor 全部 PASS，无 SKIP/FAIL；末尾返回本轮预期 VALIDATION PASSED。native durable commit + uncertain receipt latch + explicit idle reopen + persisted epoch2 floor 的 CHECK 同样 PASS。验收入口只在 actual exit0 和全部 required PASS 满足后输出该成功标记；此处证据来自用户提供的执行结果。
