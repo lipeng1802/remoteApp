@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r14 两桌面 STOPPED / 收尾核验 PASS，升级子切片闭环
+
+用户确认两窗口STOPPED后，运行只读 `artifacts/connection-poc/check-r14-stopped.py`，实际exit0。精确r14 creator/borrower可执行目录下Windows子进程0，三个public bootstrap均不存在；CurrentUser/My中 `CN=Personal Remote Desktop Test ` 前缀测试证书0。远端borrower manifest摘要匹配唯一local compiled pair，该pair目录下Mac产品子进程0。Headscale nodes/users/preauthkeys全空，原policy不变，三个正式服务active，Store固定摘要及Nginx基线复查PASS。
+
+原生journal/test identity清理证据为用户普通桌面严格closed/zero-exit STOPPED与bootstrap移除；不以SSH另一凭据上下文冒充原生存储读取验收。测试证书不存在另经只读枚举确认。本轮没有额外删除任何资源，公开包与work保留作审计，不重启已消费r14；未知历史凭据未清理或宣称归零。
+
+结合上一节原协调器实际exit0，r14真实TLS升级/epoch2 floor/拒降级/显式新进程会话/正常join/签名撤销子切片闭环。独立native不确定回执测试也已由两平台验收，但不代表真实OS写失败或断电验证。整体4未完成，后续重点新的授权生命周期与公开接入、GUI接线、签名安装包验收。仅本地提交、不推送；下方等待桌面STOPPED为历史记录。
+
 ## 2026-10-11 r14 真实双机 TLS 升级 PASS / 实际 exit0，等待两桌面 STOPPED
 
 用户确认 r14 两窗口就绪后，实际执行对应 fresh creator/stage 的 `split-consent.py --compiled-upgrade`，协调器实际 exit0。desktop waiter live、creator OS identity probe、当前9个helper构建、matching fresh pair构建/上传摘要、borrower real desktop probe全部PASS。OS签名注册/拒绝/审批、enrollment与单次intent、真实节点与OS持有证明、错误身份拒绝、Mac同节点重启、signed binding、正向固定payload/反向拒绝及bound helper实际join交接均PASS。
