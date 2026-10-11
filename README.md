@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r14 Windows 验证入口的 PowerShell stderr 处理已修复并更新原位置：JOIN_STAGE 普通日志不再触发 NativeCommandError；实际零/非零退出捕获自测通过，五项PASS/无FAIL或SKIP门禁不变。请重新执行原生验证入口，原生和真实双机升级尚待验收。
+
 当前 r14 升级切片：已补齐无效候选拒绝但保持旧会话、只读 durable epoch、显式 `--compiled-upgrade` 双机入口及原生不确定提交回执锁闭测试。相关 race/vet、Python 72 项和 macOS 五项原生/生命周期验收通过；新的 Windows 原生测试包与两桌面入口已上传校验，等待普通桌面验证及真实双机 TLS 升级验收。未增加生产远程故障注入，不把模拟回执错误视为真实 OS 写失败。详见 [HANDOFF](docs/HANDOFF.md)。
 
 r13 真实双机显式重连验收已闭环（协调器实际 exit0，两桌面 STOPPED）：原生桌面证书探测、Headscale 授权网络、初始 TLS、authority outage 下自主 fault join/退役、同 verifier 恢复后旧 owner 保持关闭、原证书复用/新 HMAC/新 Mac 进程、重连 pongs 跨租约、正常 join、签名撤销和节点回收均通过。本轮子进程/桌面 bootstrap/原生测试证书已无残留，原策略、正式服务、Store/Nginx 基线恢复；禁止静默换 pin 门禁不变。不包含新邀请审批、升级、GUI或签名安装包，整体切片4未完成。详见 [HANDOFF](docs/HANDOFF.md)。

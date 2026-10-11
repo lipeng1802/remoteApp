@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r14 PowerShell stderr 入口修复，等待普通桌面重新验收
+
+用户运行新native入口时报 `NativeCommandError: JOIN_STAGE product_stopping`。原脚本 `$ErrorActionPreference='Stop'` + native `2>&1` 将正常stderr阶段日志提升为PowerShell ErrorRecord，不能据此认定原生断言失败，也不能计验收通过。只读检查精确验证目录子进程0，原二进制/脚本/manifest摘要一致；没有删除未知或部分TEST凭据。
+
+修复仅脚本：ProcessStartInfo重定向stdout/stderr并发ReadToEndAsync；实际WaitForExit，不强杀、不把cancel当join；作为普通文本打印日志，以actual exit0、5个required PASS、无FAIL/SKIP/no-tests严格验收。测试EXE及journal helper未改变。增加独立 `-TestProcessCapture` 自测，不读取journal/key，输出不同的PROCESS_CAPTURE_PASSED，不能冒充native VALIDATION。实际Windows使用原生cmd文本fixture（0与7两个退出码）验证并全部PASS；嵌套encoded PowerShell自测未通过后改用与Go日志匹配的原生文本fixture。普通直接脚本调用被execution policy拒绝已确认，最终自测使用进程级Bypass成功，未修改系统策略。
+
+远端原目录脚本/manifest已更新并逐文件hash核验，old `.original.ps1` / `SHA256.original.json` 与中间 capture-v1 版本备份保留。本地public bundle同步新摘要。下一步用户在普通Windows桌面重新执行同一命令：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-upgrade-floor-20261011-r14\run-upgrade-floor-validation.ps1"
+```
+
+必须5个PASS、actual exit0、无SKIP，才可继续fresh两桌面真实升级；目前native Windows和双机升级仍待验收。此前中止的测试产生的未知随机命名空间不批量清理、不宣称全部清理。脚本捕获自测通过不替代原生验收。仅本地提交、不推送。
+
 ## 2026-10-11 r14 升级/floor/不确定提交回执切片开发完成，Windows与真实双机验收待执行
 
 本轮补齐两组入口，证据分开：真实双机 TLS 升级使用 `--compiled-upgrade`；提交不确定性仅在独立 native unit executable 中模拟，不开放产品远程 fault 注入。整体4未完成。
