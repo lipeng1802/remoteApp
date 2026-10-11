@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r13 真实显式 TLS 重连验收 PASS / 实际 exit0；等待两桌面 STOPPED
+
+用户确认已启动两 PowerShell 窗口后，实际执行对应 r13 的 `split-consent.py --compiled-reconnect`，进程 exit0。等待窗口 live challenge、creator native probe、matching fresh pair 构建/逐文件摘要上传、borrower real desktop probe（含随机 CurrentUser certificate create/reopen/native RSA proof/negative/delete）全部通过。OS 签名注册/拒绝/审批、免登录 enrollment/单次 intent、节点持有证明/错误签名拒绝、Mac 同节点身份重启、signed binding、正向固定 payload 与反向拒绝 PASS；旧 helper 实际 join/交接与 Mac native initialize PASS。
+
+初始真实 TLS/pongs 持续跨初始 lease PASS；隔离 authority 暂停/HTTPS503、旧 ACL 残留时两端自主 fault completion/join/native retirement PASS；同 verifier 显式恢复、fresh signed same binding/minimum policy、旧 owner 保持 closed PASS。双方重新核验仍有效同一 grant、Mac journal inspect、新 Windows owner idle ACK PASS。随后新 target 产品成功重开原生证书，通过同 pin 检查和新 HMAC 非复用检查，启动新 Mac 进程（不同 PID，旧进程保持实际 fault exit1），真实新 TLS/pongs 再次跨初始 lease；两端正常 stop/join，`compiled_explicit_new_owner_product_reconnect_and_normal_join` PASS。未修改同 grant 禁止换 pin 门禁；不能把本轮成功倒推为 r12 泛化失败的唯一根因证明。
+
+在线 owner OS-signed revoke、durable clients 清理、nodes/users/preauthkeys 归零、zero ACL、exact verifier ticket retirement、隔离实验目录移除均 PASS。原协调器输出 `STOPPED isolated_coordinator_resources_joined`，随后 zero exit PASS；原 file policy、三个正式服务及 Store/Nginx 基线全部恢复/不变，公共上传程序精确移除。不是独立恢复冒充原协调成功。Windows public compiled package/work 为桌面最终关闭保留，不提前删除。
+
+当前窗口2 borrower：`C:\Users\jarvis\remoteapp-compiled-stage-a84f231c07d693e5\run\compiled-win`；窗口1 creator：`C:\Users\jarvis\windows-desktop-reconnect-20261011-r13`。请先窗口2按 Enter 并确认 STOPPED，再窗口1按 Enter 并确认 STOPPED。最终 borrower Close 才在产品实际 join 后删除本轮 scoped native certificate/key；目前不能记该项已完成。收到两窗口 STOPPED 后，再精确核验本轮进程退出、原生测试证书及 journal 清理，不检查/删除无关历史或生产身份。
+
+本轮验证范围是同一仍有效授权的显式新 owner/process 重连，不包含新邀请/审批、expired/revoked grant 重新授权、升级/floor/fault-commit、GUI picture/input/clipboard、签名安装包或整体切片4完成。本地记录提交，不推送。以下 r13 待验收及 r12 失败记录为历史，以本节新证据为准。
+
 ## 2026-10-11 r12 精确恢复完成；r13 TEST 证书复用修复待桌面/双机验收
 
 用户确认两窗口 STOPPED。独立恢复程序实际 exit0：精确匹配 r12 issuer/Store/verifier/backup，durable clients 和 verifier 退役、Headscale nodes/users/preauthkeys 归零、原 file policy 与三个正式服务恢复、正式 Store 和 Nginx 摘要未变；本轮 Mac 隔离 journal inspect/cleanup-test 实际通过。不把独立恢复写成原失败协调器 STOPPED/exit0；未知历史身份和证据保留，未批量删除。
