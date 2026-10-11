@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r11 真实显式重连失败：relay回执遗漏已修复，现场收尾待完成
+
+用户确认两个新窗口就绪后，实际执行r11 split-consent.py --compiled-reconnect，最终exit1。在线waiter/native probe、matching fresh pair构建上传、OS签名邀请/拒绝/审批、节点注册/错误签名拒绝/同身份重启/绑定、精确正向payload与反向拒绝、两个旧helper实际join/交接均PASS。初始真实product TLS/pongs跨初始lease、隔离authority暂停/HTTPS503且旧ACL残留、Mac实际fault join/native retirement/exit、Windowsfault join/native retirement、同verifier恢复/fresh signed same binding/旧owners仍closed全部PASS。双方reconnect授权重新核验及Mac已提交journal inspect PASS。
+
+在reconnect_target_reopen阶段收到helper_unknown，随后协调finally的CompiledPair.close因relay实际exit非0失败，原协调未完成STOPPED/exit0。在线owner签名revoke已PASS，但未进入后续节点回收/原policy恢复/正式基线最终验收，不能算已清理或重连通过。保留Windows stage/run与公开包，未强杀或清理未知凭据。
+
+代码定位：desktop-relay转发owner_reopened回执后，terminal status列表缺少该状态，立即退出private_protocol_denied并输出failed；协调读到首次ACK后再查session_state失败。新的只读relay连接实际确认BORROWER_IDLE_CONFIRMED=True、READONLY_RELAY_EXIT_ZERO=True，证明Windows新owner已实际成功重开idle，不是native replacement失败。尚未发起新target产品Start或新Mac产品进程，旧Mac产品已经实际故障退出。
+
+已修复desktop-relay：reopen_fault仅接受exact owner_reopened/started=false两字段回执，保持通道用于后续state/start；其他op不能接受该ACK，非idle/错误bool/缺字段/额外字段/ready/failed均拒绝。原privatepipe仍拒重复JSON键。新增2组relay回归。desktop-relay/desktopcontrol/desktop-session/clientowner race全部PASS，relay vet PASS，Windows amd64交叉编译PASS（仅编译制品不是可信发布包），66项Python回归PASS。未覆盖运行中的旧包或部署新包，真实修复复测待fresh入口。
+
+失败后只读核验Headscale nodes/users/preauthkeys分别3/3/3，policy为zero ACL；这不是资源归零。先用户在窗口2借用owner按Enter并确认STOPPED，再窗口1creator按Enter确认STOPPED。不要强关、不要重启旧stage。随后必须以本轮公开身份/精确命名空间绑定现场，确认所有实际worker退出、回收本轮节点/凭据/journals、恢复本轮policy备份并复核原服务/Store/Nginx基线；不删除无法确认归属的历史资源。若原协调已退出，不得把独立恢复冒充原协调成功。
+
+当前r11 creator `C:\Users\jarvis\windows-desktop-reconnect-20261011-r11`，stage `C:\Users\jarvis\remoteapp-compiled-stage-3c881ec2b58f41a7` 已消费。本轮结果不包含新会话pongs、正常重连join、完整资源回收或桌面STOPPED；整体4未完成。本地提交、不推送。
+
 ## 2026-10-11 r11 显式重连验证入口已上传；等待两桌面就绪
 
 用户加载服务器专用密钥后，实际运行prepare-reconnect-r11.py --upload-built退出0。Windows管理SSH、Headscale nodes/users/preauthkeys全空、原policy、三正式服务active、Store固定SHA与Nginx基线全部PASS。当前9helper跨平台重建PASS，现有本地fresh creator manifest及隔离test_namespace/minimum_epoch=1核验通过，固定Windows产品摘要通过。仅上传公开包，所有远端文件逐个摘要校验PASS；fresh stage以当前SID/SYSTEM ACL创建，waiter摘要和三个PowerShell入口解析均PASS。未启动桌面身份、网络节点或隔离故障服务，未修改SSH持久配置或系统Tailscale。

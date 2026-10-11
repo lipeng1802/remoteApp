@@ -67,13 +67,28 @@ func run() error {
 			if status.Status == "product_ready" && req.Op == "start" {
 				continue
 			}
-			switch status.Status {
-			case "ready", "probe_passed", "session_closed", "upgraded", "product_count", "session_state", "fault_retired":
-				break
-			default:
+			if !terminalReplyAllowed(req.Op, status.Status, reply) {
 				return privatepipe.ErrProtocol
 			}
 			break
 		}
+	}
+}
+
+// A successful idle replacement is not session readiness. Forward its exact
+// ACK without terminating the relay needed for the subsequent state/start.
+func terminalReplyAllowed(op, status string, raw json.RawMessage) bool {
+	if op == "reopen_fault" {
+		var reply map[string]json.RawMessage
+		if json.Unmarshal(raw, &reply) != nil || len(reply) != 2 {
+			return false
+		}
+		return status == "owner_reopened" && string(reply["status"]) == `"owner_reopened"` && string(reply["started"]) == "false"
+	}
+	switch status {
+	case "ready", "probe_passed", "session_closed", "upgraded", "product_count", "session_state", "fault_retired":
+		return true
+	default:
+		return false
 	}
 }
