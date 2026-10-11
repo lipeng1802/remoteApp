@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 r12 relay修复实测通过，但新target产品启动失败；待桌面STOPPED和精确恢复
+
+用户确认r12两窗口就绪后，实际split-consent.py --compiled-reconnect退出1。在线probe、空控制面、当前helper、matching fresh pair上传校验、OS签名授权/负向、节点证明/同节点重启/绑定、正向payload和反向拒绝、旧helper实际join/可信交接、初始product TLS/pongs跨lease全部PASS。旧产品fault join/native retirement、旧ACL残留、同verifier恢复/fresh签名binding、旧owners保持closed、reconnect双方授权重核验/Mac journal inspect全部PASS。
+
+本轮reconnect_target_reopen实际completed，严格owner_reopened/started=false及新状态idle通过，确认333931e修复的relay通道在新回执后继续可用。随后target_start_send完成，在target_product_ready读取helper_unknown失败；尚未取得第二个产品HMAC/fingerprint，没有启动新Mac产品进程或验证新会话pongs。owner在线签名revoke PASS；finally再次stop_session因原relay退出报BrokenPipe，原协调未走STOPPED/exit0与最终资源回收，不能标成功。
+
+通过独立fresh relay核验新Windows Handle实际session_state joined=true/fault=true，再原retire_fault严格ACK通过，relay实际exit0；这是已完成故障的新owner原生退役，不是复活/重试。Headscale零规则策略确认，nodes/users/preauthkeys保留3/3/3。下一步用户窗口2borrower按Enter确认STOPPED，再窗口1creator按Enter确认STOPPED；随后沿r11的精确issuer/账本/原生租约及策略备份绑定方式恢复本轮，不能硬编码重用r11恢复目录或删除未知历史资源。
+
+代码检查发现确定的产品生命周期冲突：Windows TlsBridgeProbe Program.cs每次进程启动CreateSelfSigned产生新证书；Product.start每次publish_tls，但ProvisionBackend.publishTLS在同一grant下已有记录不相等时ErrDenied（禁止静默换pin）。已有TestTLSIdentityPossessionScopeFreshnessRestartRevocation在本轮重新race运行PASS，明确覆盖第二个有效证书被拒，不应放宽为任意覆盖。该冲突必须解决，但现泛化failed未携带实际启动阶段，尚不足断言它是本次现场唯一根因；须补受控无密钥的startup分段诊断。下一开发组先明确同一grant证书复用或显式验证轮换协议，并补负向/原生生命周期回归，之后fresh双机验收；不能简单删除旧TLSIdentity或改publishTLS允许静默换pin，也不能导出/日志记录私钥。
+
+当前creator `C:\Users\jarvis\windows-desktop-reconnect-20261011-r12`、stage `C:\Users\jarvis\remoteapp-compiled-stage-78b659da10e34fc2` 已消费，不复用。本轮没有新增产品行为代码，记录本地提交不推送；整体4仍未完成。
+
 ## 2026-10-11 r11 独立恢复完成；r12 relay修复包已准备，等待fresh两桌面
 
 用户确认r11两窗口STOPPED；只读Get-CimInstance按r11 creator/stage可执行路径确认子进程0，Mac本轮compiled目录无产品子进程。精确匹配本地compiled-live-25b41d45f41da489公开issuer与服务器 `/tmp/remoteapp-daemon-check-4212800235/config/profile.json`，相关隔离服务进程0、所有Requests已revoked/denied、2条Provisions仍bound；唯一策略备份 `/var/lib/remoteapp-poc/enrollment-mode-FC2hne` 包含原file模式。未依据mtime单独授权删除资源。
