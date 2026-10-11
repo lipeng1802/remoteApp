@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 重启后 SSH 密钥加载诊断：Windows 已恢复，服务器待加载
+
+只读诊断确认Windows接受原公钥；此前失败不能解释为jarvis公钥被删除。Mac重启后的agent为空，加密私钥无法在BatchMode下交互解锁，有效AddKeysToAgent=false。用户手动执行ssh-add --apple-use-keychain加载Windows专用密钥后，实际SSH_READY/exit0通过。未修改SSH配置、账户、公钥或持久化设置。
+
+重新执行r11上传准备，windows_management_ready通过，但首次服务器admin读取失败；上传尚未开始，未创建远端creator/stage或启动身份/网络实验。独立服务器echo检查exit255；过滤-vv结果确认server_accepts_offered_key=True、authentication_succeeded=False，不输出密钥/指纹。下一步用户在Mac终端加载 `/Users/lipeng/.ssh/remoteapp_poc_server_ed25519`，再重测服务器认证和全部基线。尚不能将服务器认证失败归因于公钥不存在。
+
+本地忽略目录准备脚本新增--upload-built，仅核验既有fresh包后使用，不覆盖重建；基线全部通过后才上传。r11仍仅本地构建通过，真实显式重连待验收。下方“Windows原公钥授权被拒绝”是此前不准确归因，以本节实际诊断为准。本次文档本地提交、不推送。
+
 ## 2026-10-11 完整显式重连开发入口完成；Windows SSH公钥拒绝，上传/实机待恢复
 
 用户要求扩大切片后，本轮联合接入Windows新owner、Mac新进程、私有授权重核验、独立 `--compiled-reconnect` 协调入口和负向/退出屏障回归。该模式复用原隔离fault服务协议，先执行完整fault join/native retirement、同verifier恢复、旧owners保持锁闭检查，再显式调用新重连；不影响原compiled/fault/revoke模式、不混用CLI参数、不改原期限或放宽ACK/实际退出。
