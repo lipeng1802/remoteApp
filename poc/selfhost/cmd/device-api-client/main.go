@@ -173,7 +173,7 @@ func run() error {
 			out.Encode(map[string]any{"status": "watch_stop", "passed": passed})
 			continue
 		}
-		if request.Op == "use_grant" {
+		if request.Op == "use_grant" || request.Op == "recheck_grant" {
 			issuer, err := hex.DecodeString(cfg.Issuer)
 			var nonce [32]byte
 			_, randomErr := rand.Read(nonce[:])
@@ -183,7 +183,8 @@ func run() error {
 			proof, proofErr := client.Request(ctx, invite.NetworkRequestBody{Action: "grant_clock", Grant: request.Grant, Challenge: challenge})
 			cancel()
 			passed := false
-			if err == nil && randomErr == nil && proofErr == nil && proof.Proof != nil && cfg.Grant == (invite.Grant{}) {
+			eligible := grantOperationAllowed(request.Op, cfg.Grant, request.Grant)
+			if err == nil && randomErr == nil && proofErr == nil && proof.Proof != nil && eligible {
 				calibrated, clockErr := invite.AuthorityClock(issuer, *proof.Proof, request.Grant.Claims.ID, challenge, start)
 				passed = clockErr == nil && invite.VerifyGrant(issuer, request.Grant, cfg.Target, cfg.Controller, calibrated())
 				if passed {
@@ -193,7 +194,7 @@ func run() error {
 			if passed {
 				cfg.Grant = request.Grant
 			}
-			out.Encode(map[string]any{"status": "use_grant", "passed": passed})
+			out.Encode(map[string]any{"status": request.Op, "passed": passed})
 			continue
 		}
 		if request.Op == "device" {
@@ -240,6 +241,9 @@ func run() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		reply, e := client.Request(ctx, invite.NetworkRequestBody{Action: action, Grant: cfg.Grant, Ticket: request.Ticket, Challenge: request.Challenge, Intent: request.Intent, Certificate: request.Certificate, CertificateProof: request.CertificateProof})
 		cancel()
+		if e == nil && action == "state" && !verifiedState(cfg.Issuer, reply.State, cfg.Grant, cfg.Target, cfg.Controller, clock()) {
+			e = invite.ErrDenied
+		}
 		if e == nil && reply.TLS != nil {
 			issuer, err := hex.DecodeString(cfg.Issuer)
 			if err != nil || !invite.VerifyTLSIdentity(issuer, *reply.TLS, cfg.Grant, request.Binding, request.Challenge, clock()) {
@@ -266,4 +270,23 @@ func run() error {
 			return io.ErrClosedPipe
 		}
 	}
+}
+
+// Rechecking cannot replace the accepted grant or bypass a fresh signed clock
+// proof. A different/tampered grant is never published to the runtime config.
+func grantOperationAllowed(op string, current, candidate invite.Grant) bool {
+	switch op {
+	case "use_grant":
+		return current == (invite.Grant{})
+	case "recheck_grant":
+		return current != (invite.Grant{}) && candidate == current
+	default:
+		return false
+	}
+}
+
+func verifiedState(issuer string, state *invite.NetworkState, grant invite.Grant, target, controller string, now time.Time) bool {
+	pub, e := hex.DecodeString(issuer)
+	return e == nil && state != nil && state.Claims.Grant == grant &&
+		invite.VerifyGrant(pub, grant, target, controller, now) && invite.VerifyNetworkState(pub, *state, now)
 }

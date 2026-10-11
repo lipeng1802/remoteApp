@@ -8,6 +8,7 @@ Explicit authority-fault mode uses the isolated coordinator only. None of
 these modes claims GUI, signed installer or live upgrade acceptance.
 """
 import base64
+import copy
 import hashlib
 import json
 import os
@@ -20,6 +21,33 @@ import time
 
 from native_bootstrap import checked_desktop_bootstrap
 from coordination_diagnostics import run_stage
+
+def verify_reconnect_authorization(apis, inputs, binding):
+    """Private trusted APIs revalidate the SAME still-active grant, not a new
+    invitation/approval. Every runtime independently verifies it again. No
+    cached lease/unsigned active response suffices to reopen a desktop owner.
+    """
+    if len(apis)!=2 or set(inputs)!={"target","controller"}:
+        raise RuntimeError("compiled_reconnect_pair_invalid")
+    grant=inputs["target"].get("Grant")
+    if not isinstance(grant,dict) or grant!=inputs["controller"].get("Grant"):
+        raise RuntimeError("compiled_reconnect_grant_mismatch")
+    for role, api in zip(("target","controller"),apis):
+        if inputs[role].get("Binding")!=binding or inputs[role].get("Server") is not (role=="target"):
+            raise RuntimeError("compiled_reconnect_binding_mismatch")
+        # Actual helper refuses substitution even with a valid foreign grant.
+        denied=copy.deepcopy(grant); denied["signature"]="invalid-reconnect-signature"
+        negative=api.request("recheck_grant",Grant=denied)
+        if (set(negative)!={"status","passed"} or negative["status"]!="recheck_grant" or negative["passed"] is not False):
+            raise RuntimeError("compiled_reconnect_invalid_grant_not_rejected")
+        positive=api.request("recheck_grant",Grant=grant)
+        if (set(positive)!={"status","passed"} or positive["status"]!="recheck_grant" or positive["passed"] is not True):
+            raise RuntimeError("compiled_reconnect_grant_not_valid")
+        fresh=api.request("network_state")
+        claims=fresh.get("network_state",{}).get("claims",{})
+        if (fresh.get("passed") is not True or claims.get("active") is not True
+                or claims.get("binding")!=binding or claims.get("grant")!=grant):
+            raise RuntimeError("compiled_reconnect_signed_binding_not_active")
 
 
 def fault_round(t, coordinator, apis, node, pair):
@@ -292,6 +320,10 @@ class CompiledPair:
         self.target = self.controller = None
         self.mac_initialized = False
         self.sessions_joined = False
+        self._reconnect_inputs = None
+        self._reconnect_attempted = False
+        self._retired_controller_proc = None
+        self._last_product_key_digest = None
 
     def attach(self, Pipe):
         d = self.desktop
@@ -312,15 +344,37 @@ class CompiledPair:
         if p.returncode != 0 or value.get("status") != "usable" or (op != "cleanup-test" and value.get("epoch") != 1):
             raise RuntimeError("compiled_mac_maintenance_failed")
 
-    def run(self, Pipe, handoff, live_revoke=False, authority_fault=False):
+    def run(self, Pipe, handoff, live_revoke=False, authority_fault=False, reconnect=False):
         if live_revoke and authority_fault:
             raise RuntimeError("compiled_conflicting_live_modes")
+        if reconnect and not authority_fault:
+            raise RuntimeError("compiled_reconnect_requires_fault")
         # Obtain private inputs only after old node owners actually joined.
         inputs = run_stage("bound_handoff",handoff.take)
         run_stage("mac_native_initialize",lambda:self.maintenance("initialize"))
         self.mac_initialized = True
+        if reconnect:
+            self._reconnect_inputs = copy.deepcopy(inputs) # private memory only
+        self._start_products(Pipe, inputs)
+        if live_revoke or authority_fault:
+            if session_state(self.target.request("session_state")) != (False, False):
+                raise RuntimeError("compiled_target_not_live_before_revoke")
+            if session_state(self.controller.request("session_state")) != (False, False):
+                raise RuntimeError("compiled_controller_not_live_before_revoke")
+            self.t.check(True, "compiled_both_sessions_live_before_authority_fault" if authority_fault else "compiled_both_sessions_live_before_signed_revoke")
+            return
+        self.stop_sessions()
+        self.t.check(True, "compiled_product_node_watch_signer_normal_join")
+
+    def _start_products(self, Pipe, inputs):
+        # Mark ownership pending BEFORE the first send/launch can create work.
+        self.sessions_joined = False
         run_stage("target_start_send",lambda:self.target.send(dict(Op="start", Config=inputs["target"])))
         key = run_stage("target_product_ready",lambda:product_secret(self.target.read()))
+        digest=hashlib.sha256(base64.b64decode(key,validate=True)).digest()
+        if digest==self._last_product_key_digest:
+            raise RuntimeError("compiled_reconnect_product_key_reused")
+        self._last_product_key_digest=digest # memory only, never logged
         def target_ready():
             if self.target.read() != dict(status="ready", port=0):
                 raise RuntimeError("compiled_target_not_ready")
@@ -337,19 +391,30 @@ class CompiledPair:
         run_stage("controller_session_ready",controller_ready)
         run_stage("product_observe",lambda:observe(self.target, self.controller))
         self.t.check(True, "compiled_actual_product_pongs_continue_beyond_initial_lease")
-        if live_revoke or authority_fault:
-            # Return with BOTH sessions active. The caller injects the isolated
-            # authority fault OR issues signed revoke before any fault join.
-            if session_state(self.target.request("session_state")) != (False, False):
-                raise RuntimeError("compiled_target_not_live_before_revoke")
-            if session_state(self.controller.request("session_state")) != (False, False):
-                raise RuntimeError("compiled_controller_not_live_before_revoke")
-            self.t.check(True, "compiled_both_sessions_live_before_authority_fault" if authority_fault else "compiled_both_sessions_live_before_signed_revoke")
-            return
-        # First end-to-end slice uses normal joined shutdown. Do not label this
-        # live-revocation: consent() sends owner revoke only after we return.
+
+    def reconnect(self, Pipe, apis, binding):
+        if self._reconnect_attempted or self._reconnect_inputs is None:
+            raise RuntimeError("compiled_reconnect_not_available")
+        self._reconnect_attempted = True # failed attempts never silently retry
+        inputs, self._reconnect_inputs = self._reconnect_inputs, None
+        self.assert_fault_latched()
+        if self._retired_controller_proc is None or self._retired_controller_proc.poll() != 1:
+            raise RuntimeError("compiled_old_controller_not_exited")
+        run_stage("reconnect_authorization",lambda:verify_reconnect_authorization(apis, inputs, binding))
+        run_stage("reconnect_mac_inspect",lambda:self.maintenance("inspect")) # no reinitialize/floor reset
+        def reopen():
+            ack=self.target.request("reopen_fault")
+            if (not isinstance(ack,dict) or set(ack)!={"status","started"}
+                    or ack["status"]!="owner_reopened" or ack["started"] is not False):
+                raise RuntimeError("compiled_reconnect_owner_ack_invalid")
+            if session_state(self.target.request("session_state")) != (False,False):
+                raise RuntimeError("compiled_reconnect_owner_not_idle")
+        run_stage("reconnect_target_reopen",reopen)
+        self._start_products(Pipe,inputs) # fresh target HMAC and fresh Mac process
+        if self.controller.proc.pid == self._retired_controller_proc.pid or self._retired_controller_proc.poll()!=1:
+            raise RuntimeError("compiled_reconnect_reused_controller")
         self.stop_sessions()
-        self.t.check(True, "compiled_product_node_watch_signer_normal_join")
+        self.t.check(True,"compiled_explicit_new_owner_product_reconnect_and_normal_join")
 
     def revoked(self):
         self.join_fault()
@@ -357,6 +422,8 @@ class CompiledPair:
     def join_fault(self):
         # No stop command/cancellation is sent before autonomous completion.
         self.controller.join_fault()
+        if self._reconnect_inputs is not None:
+            self._retired_controller_proc = self.controller.proc
         self.controller = None
         self.t.check(True, "compiled_controller_autonomous_fault_join_and_native_retirement")
         end = time.monotonic() + 20
@@ -397,6 +464,7 @@ class CompiledPair:
         self.sessions_joined = True
 
     def close(self):
+        self._reconnect_inputs = None
         # Do NOT release signer identities, delete state or restore policy if
         # any actual owner is still unjoined. No emergency kill is a success.
         if not self.sessions_joined:

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+完整显式重连入口已开发：`--compiled-reconnect` 联合故障退役/同verifier恢复、双方授权签名和绑定重新核验、Windows新owner/Mac新进程、新HMAC、持续TLS/pongs及正常退出清理。66项Python、相关Go race/vet与fresh Windows本地包构建通过；原grant必须仍有效，不是重新审批。Windows SSH目前公钥认证被拒绝，验证包未上传、真实双机重连待验收；不标整个切片通过。恢复SSH后继续，详见 [HANDOFF](docs/HANDOFF.md)。
+
 显式重连B1：已接入Windows桌面backend的同用户本地 `reopen_fault`，成功只返回idle新owner；生命周期操作串行，最终关闭当前替换owner，失败保留旧终止状态，不自动启动或复活旧会话。相关race/vet与Windows交叉编译通过；本轮未进行原生桌面或双机验收。下一步Mac新进程/授权重交接及compiled重连协调，详见 [HANDOFF](docs/HANDOFF.md)。
 
 显式重连切片A基础验收通过：只有故障成功退役后才能从同一原生保护存储打开独立idle owner，旧owner仍锁闭；拒过期/损坏/未join/退役失败，不自动启动或继承旧授权。相关Go race及macOS原生租约/epoch floor测试通过，用户已反馈Windows普通桌面验证通过。先前SSH原生初始化失败记录仍保留；尚未接入双机重连协调，不代表整体重连验收完成。下一子切片接入新owner/进程与授权交接，见 [HANDOFF](docs/HANDOFF.md)。

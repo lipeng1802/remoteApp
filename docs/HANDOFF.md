@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-11 完整显式重连开发入口完成；Windows SSH公钥拒绝，上传/实机待恢复
+
+用户要求扩大切片后，本轮联合接入Windows新owner、Mac新进程、私有授权重核验、独立 `--compiled-reconnect` 协调入口和负向/退出屏障回归。该模式复用原隔离fault服务协议，先执行完整fault join/native retirement、同verifier恢复、旧owners保持锁闭检查，再显式调用新重连；不影响原compiled/fault/revoke模式、不混用CLI参数、不改原期限或放宽ACK/实际退出。
+
+device-api-client新增 `recheck_grant`：只允许与已接受cfg.Grant完全一致的grant，不能初始化/替换；仍必须从服务获得fresh随机challenge绑定的grant_clock签名证明、AuthorityClock及VerifyGrant验证才更新校准时钟。另补所有network_state返回值的VerifyGrant、VerifyNetworkState、精确grant/subject及当前租约检查后才passed，不能仅凭TLS/HTTP200或active字段当签名通过。新增Go测试覆盖grant substitution、未知/重复use、状态签名、过期、错误grant/subject/issuer拒绝。
+
+CompiledPair仅显式重连模式在私有内存保留初始可信Config副本；旧MAC实际fault exit1后保留Popen退出证据，不保留旧HMAC。重连一次性尝试（失败不可重试），先断言old fault latched，再双方实际API拒篡改grant、重新核验同一grant和fresh signed active exact binding/grant；并非重新邀请/审批，也不代表可用过期/撤销grant。Mac仅inspect既有已提交保护存储，不initialize/floor reset；Windows严格reopen_fault idle ACK且新状态idle，才显式start产品。新target HMAC的私有内存摘要必须不同，Mac新Popen PID不得等于已退出进程，原进程仍必须exit1。两端实际pongs继续跨初始lease后正常join，随后原流程在线签名revoke、durable清理和coordinator实际STOPPED/exit0。私有Config/key不落文件/日志，最后清除待重连Config。任何新产品send前先标sessions_joined=false，失败不能跳过实际join清理屏障。
+
+66项Python全套实际PASS：双方重核验/篡改拒绝、inactive/foreign binding/grant/整数bool拒绝、单次交接与失败不重试、idle ACK、实际旧进程exit必要、send失败保持join pending、新HMAC拒复用/不启动Mac、不泄露私有输入。相关7包Go race全部PASS，device-api-client/desktop-session/clientowner/clientruntime vet PASS。当前9helper跨平台构建PASS、fresh Windows creator BUILD_READY/exit0，隔离test_namespace/min_epoch=1、本地manifest PASS。仍无新双机重连实测，不把上述模拟/编译记完整验收。
+
+准备Windows上传时第一步SSH失败，随后只读echo诊断实际exit255：`Permission denied (publickey,password,keyboard-interactive)`。Windows服务可达但jarvis原公钥授权被拒绝；不是网络超时。未自行修复SSH配置/账户/公钥，也未启动身份、节点、隔离服务或故障实验；这次未执行服务器基线核验或远端包创建/上传。
+
+本地fresh creator目录 `artifacts/connection-poc/windows-desktop-reconnect-20261011-r11` 已build-only完成；预定远端creator `C:\Users\jarvis\windows-desktop-reconnect-20261011-r11`，stage `C:\Users\jarvis\remoteapp-compiled-stage-3c881ec2b58f41a7`，目前未创建/上传，不能让用户先运行它们。恢复SSH后先重新只读确认空控制资源/原policy/正式服务/Store/Nginx基线，再manifest核验并上传当前fresh公开包（若源码已变则新目录重新可信build，不覆盖旧包），创建fresh stage及SID/SYSTEM ACL，核验waiter摘要和三入口解析；仅复用精确摘要匹配公开文件，不复用旧bootstrap/身份/state。
+
+本地prepare-reconnect-r11.py的--build-only明确跳过远端检查/上传；现local out已存在，不能直接重跑其默认路径（会拒fresh_build_destination_exists），需核验现包后单独上传或新鲜目录重新构建。用户恢复原有jarvis SSH公钥授权后再继续。两桌面正常READY/WATCH_READY且在线probe后才执行REMOTEAPP_WINDOWS_INTERACTIVE_DIR/REMOTEAPP_WINDOWS_DESKTOP_STAGE对应r11的 `split-consent.py --compiled-reconnect`。最终依旧borrower先STOPPED、creator后STOPPED；r10等已消费入口不可重用。
+
+本轮完成完整重连开发和自动回归、本地入口构建；验证包上传及真实两端验收被SSH认证阻塞，不能记该切片整体通过。不包含new invitation/approval、live upgrade、GUI/签名安装包，整体4仍未完成。本地提交不推送。
+
 ## 2026-10-11 显式重连切片B1：Windows桌面backend替换接口接入；双机重连仍待
 
 用户继续后接入desktopcontrol同用户本地可选能力 `reopen_fault`。仅Op且Config/Profile全零才调用backend.ReopenFault；未知能力、注入Config/Profile、替换失败均返回严格failed。成功固定ACK为 `owner_reopened/started=false`，不是session ready、授权或TLS通过；不传新root/profile/grant/authkey，不启动任何worker。
