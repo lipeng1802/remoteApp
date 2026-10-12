@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-12 r16 真实双机活会话撤销后新授权/新TLS PASS，actual exit0，待两桌面STOPPED
+
+用户两窗口就绪后，实际运行对应creator `windows-desktop-live-reauthorize-20261012-r16`、stage `remoteapp-compiled-stage-9c42f5b6a810de73` 的 `--compiled-live-reauthorize`，原协调actual exit0。桌面waiter live/creator native probe、当前9helpers、fresh pair构建上传逐文件摘要、borrower native probe PASS。上传耗时但本次完整核验成功，不把上一准备上传超时算本次证据。
+
+首轮OS签名注册/明确拒绝/批准、实际enroll/node持有证明/错误身份拒绝/签名binding/正向payload与反向拒绝 PASS。旧产品真实TLS pongs跨lease且两端保持live后，owner签名撤销；未预发stop，两端实际自主fault completion/join/native retirement PASS，Mac旧process实际fault exit1，旧owner保持锁闭、节点回收zero ACL PASS。旧grant online拒绝、old request/code不可复用，旧API实际join/freshAPI READY、新邀请pending/确切peer/拒自批/明确批准/不同grant、旧grant仍拒绝和新grant校时验签 PASS。
+
+新授权第二轮独立节点目录、新node、enroll/持有证明/binding、正反向网络payload与bound helper实际join PASS。旧Mac实际退出、新subject一致/不同grant/不同节点与目录/禁certificate reopen、双APIfresh signed recheck/binding、Mac原生floor inspect、Windows显式新idle owner ACK、新证书fingerprint与新HMAC不同、Mac新PID，随后新产品TLS pongs跨初始lease与两端正常join全部PASS，输出 `compiled_live_revocation_new_approval_new_tls_and_normal_join`。仅不同grant允许不同scope pin，同grant门禁不变，无安装floor重置。
+
+新grant owner签名撤销/status revoked、节点回收zero ACL、durable客户端清理、exact verifier退役、隔离目录移除与原协调STOPPED/actual exit0 PASS。control nodes/users/preauthkeys归零，原policy/线上三个服务/Store/Nginx基线不变，上传程序精确移除。Windows package/work保留等待桌面Close，不提前宣称两份certificate scope/journal最终清理。
+
+请窗口2borrower先Enter直到STOPPED，然后窗口1creator Enter直到STOPPED；收到确认后精确核验本轮Windows/Mac子进程、bootstrap、测试证书和基线。不复用已消费r16。自然过期实机、GUI、公网无SSH/正式部署与签名安装包均不在本轮，整体4未完成。仅本地提交，不推送；下方组合待验收为历史。
+
 ## 2026-10-12 r16 活TLS撤销 → 新授权/新会话组合切片，实机待验收
 
 新增独立 `--compiled-live-reauthorize`，不混用fault/reconnect/upgrade。首份已明确批准grant先真实enroll/bind/产品TLS pongs跨lease并保持两会话live，然后owner OS-signed revoke。等待两端自主fault completion/actual退出与native retirement，不预发stop/不强杀；确认节点回收零ACL和旧owner锁闭，才join旧API并开启fresh API、新邀请/pending/明确批准/不同grant。旧请求/验证码不能复用，旧grant在线拒绝检查保留。
