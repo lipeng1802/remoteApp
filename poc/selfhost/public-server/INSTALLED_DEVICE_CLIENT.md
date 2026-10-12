@@ -31,4 +31,4 @@ Go相关7包race与专用vet PASS；新增5个Runner测试包含真实本机独�
 
 ## 下一步
 
-先补新入口与原生安装存储/OS signer联合的专用验收（父进程私有管道，不打印注册码/grant），再设计长期服务的受限直接HTTPS入口、operator opt-in和公网负向/预算/故障验收。不能直接把既有 `--private-network` 反代或放宽为公网。实际开放端口/部署前明确检查现有服务与签名配置有效期、备份/回退和用户授权；不改业务443。随后接应用自主enroll/nodeproof/binding与受保护HMAC供应，最后GUI/安装。整体切片4未完成。
+r18专用[原生联合验收](INSTALLED_DEVICE_NATIVE_VALIDATION.md)已完成Mac实际新命令/native journal/OS signer/HTTPS/稳定重启/清理，Windows普通桌面待执行。可信parent发送终止stop后须半关闭专用输入再等待closed/actual exit0，不能保持输入开启并与读取线程互等；EOF不代替实际join或成功回执。随后设计长期服务的受限直接HTTPS入口、operator opt-in和公网负向/预算/故障验收。不能直接把既有 `--private-network` 反代或放宽为公网。实际开放端口/部署前明确检查现有服务与签名配置有效期、备份/回退和用户授权；不改业务443。再接应用自主enroll/nodeproof/binding与受保护HMAC供应，最后GUI/安装。整体切片4未完成。

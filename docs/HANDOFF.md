@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-12 r18 新已安装设备客户端原生联合入口，Mac实际PASS/exit0，Windows待桌面
+
+新增TEST-only devicevalidation、installed-device-validation与显式builder及PowerShell自动入口。实际运行已编译r17 installed-device-client，而非用memory signer代替新命令：固定compiled profile/根/原生journal helper/signer pin，随机测试OS identity重开签名，独立loopback TLS fixture校验真实signature/identity/nonce/replay/time；缺原生状态不repair、地址注入拒绝、live原生排他租约、register/invite、stop后closed/actual exit0/原生重开、第二进程稳定身份、最后TLSjoin/精确原生journal/identity删除都验。fixture无真实authority Store/批准grant，不代表服务器durable重启或Headscale。
+
+仅throwaway TEST根与CA在构建内存生成且不写出；loopback leaf TEST私钥编译入validator，无正式密钥上传。约23小时profile与固定回环端口，过期/占用拒绝，不换地址/时间或repair旧包。日志固定类别，不输出注册码、grant、pub/private key或raw HTTP。父子管道私有，测试数据不记终端。child deadline30秒只半关闭输入、超时判失败，实际Wait后才释放测试资源，无kill当成功；原生helper自身失败处置也不能计正常join。
+
+历史首轮/r2未通过；r3分段证据证明register/invite签名通过，失败在parent等待closed却不发EOF，child inherited-stdin读取线程无法join。旧三轮均确认精确测试journal和random identity清理，不把失败计PASS。修正validator的终止握手：stop后半关闭专用input，再严格closed/actual exit0；添加独立进程回归，不改r17生产信任/身份/退出门禁。调用新客户端的可信parent同样应遵守这一终止顺序。
+
+Mac fresh r4 `artifacts/connection-poc/installed-device-native-r18-mac-r4/installed-device-validation` actual exit0、所有检查及两类原生清理PASS，无SKIP。相关7包race/专用vet和Python78项PASS。Windows新包构建、exact manifest、逐文件upload/hash、PS解析PASS；SSH仅运行3项memory fixture/TEST guard/真实pipe half-close-zeroexit纯测试，实际PASS，不读取native credentials。未在SSH运行新native validator，没有改线上服务/Store/Nginx/ACL或Tailscale。
+
+用户普通登录Windows桌面只需一个PowerShell窗口执行（不需要READY/Enter）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-installed-device-native-20261012-r18\run-installed-device-validation.ps1"
+```
+
+末尾必须 `VALIDATION PASSED: actual compiled device client + native trust lease + OS signature direct local HTTPS + stable restart + joined test cleanup. NOT public service, Headscale, product TLS/GUI or signed installer acceptance.`；脚本只有actual exit0/成功标记且无FAIL/SKIP才返回。回复结果后记录联合入口闭环，再继续自主长期HTTPS服务与凭据供应/公开入口，不用旧双窗口或旧r17 build-only包替代。失败不要盲删Keychain/Credential Manager/lock。整体4未完成，本地提交不推送；详细边界见 `poc/selfhost/public-server/INSTALLED_DEVICE_NATIVE_VALIDATION.md`。
+
 ## 2026-10-12 r17 已安装配置设备 API 客户端开发/构建通过，原生联合验收待补
 
 第二条线开始收口SSH测试协调依赖，先补客户端信任入口，不开放公网。新增installeddevice Runner + cmd/installed-device-client：编译固定release/signer摘要，同目录helper校验、clientowner.Open/Start只读取已有原生journal的durable profile；首帧只有open/scope/expected public，OS signer重开不create/delete/export。原profile直连HTTPS，无SSH代码/Endpoint/CA/issuer/root/key/helper路径覆盖。只device注册/invite/claim/incoming/approve/status/revoke，没有enroll/bind/watch/product/HMAC。设备结果可能含邀请码/grant，只在trusted local IPC，不能当终端日志。
