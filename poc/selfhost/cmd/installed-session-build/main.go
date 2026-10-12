@@ -62,6 +62,17 @@ func run() error {
 		}
 	}
 	goexe, module, target, dest := os.Args[1], os.Args[2], os.Args[3], os.Args[4]
+	device := target == "windows-device-test" || target == "darwin-device-test"
+	if device {
+		if len(os.Args) != 10 {
+			return os.ErrInvalid
+		}
+		if target == "windows-device-test" {
+			target = "windows"
+		} else {
+			target = "darwin"
+		}
+	}
 	borrowed := target == "windows-desktop-borrowed-test"
 	macTest := target == "darwin-test"
 	if macTest {
@@ -113,7 +124,7 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	if desktop || macTest {
+	if desktop || macTest || device {
 		var nonce [16]byte
 		if _, e = rand.Read(nonce[:]); e != nil {
 			return e
@@ -121,6 +132,9 @@ func run() error {
 		prefix := "desktop-test-"
 		if macTest {
 			prefix = "compiled-mac-test-"
+		}
+		if device {
+			prefix = "device-client-test-"
 		}
 		s.Channel = prefix + hex.EncodeToString(nonce[:])
 		s.Test = true
@@ -142,7 +156,9 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	if productPin != "" {
+	if device {
+		e = trustinstall.CompileDeviceClient(ctx, goexe, module, target, filepath.Join(dest, "installed-device-client"+suffix), s, pin, time.Now())
+	} else if productPin != "" {
 		if e = write(filepath.Join(dest, "tls-product"+suffix), product, 0755); e != nil {
 			return e
 		}
@@ -199,7 +215,7 @@ func run() error {
 	if e = write(filepath.Join(dest, "build-public.json"), b, 0600); e != nil {
 		return e
 	} // runtime ignores this sidecar
-	if desktop || macTest {
+	if desktop || macTest || device {
 		manifest := map[string]string{}
 		entries, e := os.ReadDir(dest)
 		if e != nil {

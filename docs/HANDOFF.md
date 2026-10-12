@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-12 r17 已安装配置设备 API 客户端开发/构建通过，原生联合验收待补
+
+第二条线开始收口SSH测试协调依赖，先补客户端信任入口，不开放公网。新增installeddevice Runner + cmd/installed-device-client：编译固定release/signer摘要，同目录helper校验、clientowner.Open/Start只读取已有原生journal的durable profile；首帧只有open/scope/expected public，OS signer重开不create/delete/export。原profile直连HTTPS，无SSH代码/Endpoint/CA/issuer/root/key/helper路径覆盖。只device注册/invite/claim/incoming/approve/status/revoke，没有enroll/bind/watch/product/HMAC。设备结果可能含邀请码/grant，只在trusted local IPC，不能当终端日志。
+
+Owner覆盖client/signer生命周期，ready不证明远端可达；nonce/time不能由父帧传入，未知op/身份替换/initialize/upgrade/信任注入拒绝。stop/信号正常cancel实际join，安装到期fault；HTTP请求退出后client.Close、signer.CloseJoined实际ack/exit，再读取线程join和owner.Close，最后closed。EOF/坏帧fail-closed，不自动重连或修复。原生helper仍有其既有故障处置，强杀或失败join不可输出本轮正常closed。
+
+新可信CompileDeviceClient与builder两种device-test模式，随机TEST channel、无产品参数、精确5项公开manifest。没有改原desktop/product manifest，因此此前双窗口回归不受新制品数量影响。脚本 `artifacts/connection-poc/build-installed-device-r17.py` actual exit0，`installed-device-r17-darwin` / `installed-device-r17-windows`构建、逐文件manifest、Test命名空间与无product字段PASS；只build-only，未安装信任/创建身份/运行新产物/上传Windows包。
+
+验证：installeddevice/installed-device-client/trustinstall/installed-session-build/clientowner/clientruntime/invite七包race PASS，专用vet PASS；新Runner5项（含真实本机HTTPS签名register/invite，stop等待signerjoin、join失败拒成功、profile三种篡改拒绝、命令门禁、闲置cancel与deadline）及命令2项/构建1项通过。测试身份为memory signer、临时私有服务，不能当OS signer/native journal/new command联合验收。Python既有78项PASS。未访问/修改线上服务、监听、防火墙、正式Store/Nginx或Tailscale。
+
+本轮不需要用户启动Windows两个窗口；那些旧r16已经消费不能复用。下一项先准备新入口的原生保护存储/OS signer联合验收专用私有管道入口，不输出验证码/grant；再收口长期服务直接HTTPS入口与公网安全预算/负向、故障退出。正式部署/开放端口需核验当前配置时效、服务状态/备份回退和明确授权，不能把private-network直接反代或默默放宽限制。后续才接自主enroll/nodeproof/binding与产品凭据供应、GUI/安装。整体4未完成，仅本地提交、不推送。详细边界见 `poc/selfhost/public-server/INSTALLED_DEVICE_CLIENT.md`。
+
 ## 2026-10-12 r16 两桌面 STOPPED / 收尾核验 PASS，活会话失效后新授权组合闭环
 
 用户确认两窗口STOPPED后，只读 `artifacts/connection-poc/check-r16-stopped.py` 实际exit0。精确creator `windows-desktop-live-reauthorize-20261012-r16` 与borrower `remoteapp-compiled-stage-9c42f5b6a810de73/run/compiled-win` 下Windows子进程0，三个public bootstrap不存在；CurrentUser/My测试证书前缀枚举0，覆盖本轮旧/新两grant scope。远端borrower manifest摘要匹配唯一local compiled pair，对应Mac产品子进程0。Headscale nodes/users/preauthkeys全空，原policy不变，三个正式服务active，Store固定摘要与Nginx基线再次PASS。

@@ -19,6 +19,12 @@ func CompileSessionBridge(ctx context.Context, goexe, module, target, dest strin
 	return compileSession(ctx, goexe, module, target, dest, s, signerDigest, "", now)
 }
 
+// CompileDeviceClient uses the same compiled trust and sibling digest gate,
+// but exposes only device consent APIs; no runtime trust/bootstrap override.
+func CompileDeviceClient(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest string, now time.Time) error {
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, "", "./cmd/installed-device-client", now)
+}
+
 // CompileProductSession pins one trusted sibling product inside the compiled
 // owner. Empty pin is not a runtime switch back to bridge-only operation.
 func CompileProductSession(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, now time.Time) error {
