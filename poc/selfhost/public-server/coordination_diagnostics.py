@@ -6,6 +6,7 @@ STAGES = frozenset({
     "target_session_ready", "controller_start", "controller_session_ready",
     "product_observe", "controller_normal_stop", "target_normal_stop",
     "reconnect_authorization", "reconnect_target_reopen", "reconnect_mac_inspect",
+    "fresh_authorization_bound_handoff",
 })
 
 

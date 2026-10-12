@@ -50,9 +50,11 @@ def checked_ready(value, target, controller, nodes=False, fault=False, compiled=
         raise RuntimeError("invalid_split_bootstrap")
     return value
 
-def consent(target, controller, node_phase=None, reauthorize=False, fresh_clients=None):
+def consent(target, controller, node_phase=None, reauthorize=False, fresh_clients=None, old_live_phase=None, revoked_phase=None):
     if reauthorize and fresh_clients is None:
         raise RuntimeError("fresh_authorization_clients_required")
+    if (old_live_phase is None)!=(revoked_phase is None) or (old_live_phase is not None and not reauthorize):
+        raise RuntimeError("invalid_live_reauthorization_callbacks")
     def call(client, **body):
         response = client.request("device", Device=body)
         if response.get("passed") is not True:
@@ -91,7 +93,9 @@ def consent(target, controller, node_phase=None, reauthorize=False, fresh_client
     try:
         if reauthorize:
             old_grant, old_request, old_code = grant, pending["request_id"], invitation["code"]
+            if old_live_phase is not None: old_live_phase(old_grant)
             t.check(call(target, action="revoke", grant_id=old_grant["claims"]["id"])["status"] == "revoked", "split_old_grant_explicitly_revoked")
+            if revoked_phase is not None: revoked_phase()
             for client in (target, controller):
                 t.check(not client.request("recheck_grant", Grant=old_grant)["passed"], "split_revoked_grant_online_rejected")
                 t.check(not client.request("network_state")["passed"], "split_revoked_grant_no_network")
@@ -189,9 +193,9 @@ class Coordinator(Pipe):
         return self.proc.returncode
 
 def mode_flags(args):
-    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"],["--compiled-reauthorize"]): raise RuntimeError("invalid_arguments")
+    if args not in ([],["--nodes"],["--tls"],["--tls-fault"],["--compiled"],["--compiled-revoke"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"],["--compiled-reauthorize"],["--compiled-live-reauthorize"]): raise RuntimeError("invalid_arguments")
     live_revoke=args==["--compiled-revoke"]
-    compiled=live_revoke or args in (["--compiled"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"],["--compiled-reauthorize"])
+    compiled=live_revoke or args in (["--compiled"],["--compiled-fault"],["--compiled-reconnect"],["--compiled-upgrade"],["--compiled-reauthorize"],["--compiled-live-reauthorize"])
     fault=args in (["--tls-fault"],["--compiled-fault"],["--compiled-reconnect"])
     tls=args in (["--tls-fault"],["--tls"])
     nodes=compiled or tls or args==["--nodes"]
@@ -202,7 +206,8 @@ def main():
     compiled,live_revoke,fault,tls,nodes=mode_flags(sys.argv[1:])
     reconnect=sys.argv[1:]==["--compiled-reconnect"]
     live_upgrade=sys.argv[1:]==["--compiled-upgrade"]
-    reauthorize=sys.argv[1:]==["--compiled-reauthorize"]
+    live_reauthorize=sys.argv[1:]==["--compiled-live-reauthorize"]
+    reauthorize=live_reauthorize or sys.argv[1:]==["--compiled-reauthorize"]
     pipe_type=Pipe
     if compiled:
         from joined_pipe import JoinedPipe
@@ -307,11 +312,14 @@ def main():
             return tuple(clients)
         if nodes:
             import split_nodes
-            def node_phase(grant):
-                node=split_nodes.run(t,pipe_type,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders)
+            def node_phase(grant, initial_live=False):
+                node=split_nodes.run(t,pipe_type,identities,ready,clients,(remote_port,local_port),work,grant,node_helpers,folders,fresh_scope=live_reauthorize)
                 node_result.append(node)
                 if compiled:
-                    compiled_pair.run(pipe_type,node["compiled_handoff"],live_revoke=live_revoke,authority_fault=fault,reconnect=reconnect,live_upgrade=live_upgrade,apis=clients,binding=node["binding"])
+                    if live_reauthorize and not initial_live:
+                        compiled_pair.reauthorize(pipe_type,node["compiled_handoff"],clients,node["binding"])
+                    else:
+                        compiled_pair.run(pipe_type,node["compiled_handoff"],live_revoke=live_revoke or initial_live,authority_fault=fault,reconnect=reconnect,live_upgrade=live_upgrade,apis=clients,binding=node["binding"])
                     if fault:
                         compiled_products.fault_round(t,coordinator,clients,node,compiled_pair)
                         if reconnect:
@@ -320,7 +328,13 @@ def main():
                     active=split_tls.run(t,Pipe,ready,clients,node,grant,product_command,node_helpers)
                     if fault: active=split_tls.fault_round(t,Pipe,ready,clients,node,grant,product_command,node_helpers,coordinator,active)
                     active_tls.append(active)
-            consent(*clients,node_phase=node_phase,reauthorize=reauthorize,fresh_clients=fresh_clients)
+            def revoked_phase():
+                compiled_pair.revoked()
+                split_nodes.reclaimed(t)
+                compiled_pair.assert_fault_latched()
+            consent(*clients,node_phase=node_phase,reauthorize=reauthorize,fresh_clients=fresh_clients,
+                    old_live_phase=(lambda grant:node_phase(grant,initial_live=True)) if live_reauthorize else None,
+                    revoked_phase=revoked_phase if live_reauthorize else None)
             if live_revoke: compiled_pair.revoked()
             if tls: active_tls[0].revoked()
             split_nodes.reclaimed(t)
@@ -392,7 +406,9 @@ def main():
     t.check(status.returncode==0 and b"5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca" in status.stdout,"split_online_services_store_nginx_unchanged")
     if compiled:
         print("ACTION: verification and server/client teardown finished. Enter in BORROWER window FIRST and confirm its STOPPED, then Enter in identity creator and confirm STOPPED.",flush=True)
-        if reauthorize:
+        if live_reauthorize:
+            print("VALIDATION PASSED: live TLS signed revocation + autonomous fault join/retirement + fresh approval/grant/node scopes/owner/process/certificate/key + real new TLS and normal join/revoke. NOT natural expiry, borrower STOPPED cleanup, GUI or signed installer acceptance.",flush=True)
+        elif reauthorize:
             print("VALIDATION PASSED: revoked prior consent + fresh invitation/explicit approval/distinct grant + compiled Headscale/product TLS + normal join and signed revoke. NOT old live TLS revocation/reconnect, natural expiry, borrower STOPPED cleanup, GUI or signed installer acceptance.",flush=True)
         elif live_upgrade:
             print("VALIDATION PASSED: compiled native pair + real live TLS profile upgrade + both epoch2 floors/downgrade rejection + explicit new process/session + normal join and signed revoke. NOT native commit-failure injection, borrower STOPPED cleanup, GUI or signed installer acceptance.",flush=True)

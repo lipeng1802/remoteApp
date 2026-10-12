@@ -1,5 +1,35 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-12 r16 活TLS撤销 → 新授权/新会话组合切片，实机待验收
+
+新增独立 `--compiled-live-reauthorize`，不混用fault/reconnect/upgrade。首份已明确批准grant先真实enroll/bind/产品TLS pongs跨lease并保持两会话live，然后owner OS-signed revoke。等待两端自主fault completion/actual退出与native retirement，不预发stop/不强杀；确认节点回收零ACL和旧owner锁闭，才join旧API并开启fresh API、新邀请/pending/明确批准/不同grant。旧请求/验证码不能复用，旧grant在线拒绝检查保留。
+
+两轮Windows节点目录使用各自经过格式校验的grant-ID后缀，Mac独立随机目录；禁止旧目录或旧node key复用。新的BoundHandoff先实际join注册helper，再检查相同subject/不同grant/不同节点和目录/不得CertificateReopen；通过两端fresh signed grant+binding在线验证、Mac原生journal inspect、Windows显式新idle owner ACK后才启动。旧Mac进程必须actual fault exit1，新PID必须不同；新grant使用新scope证书与新HMAC，不允许复用旧fingerprint/key。同grant重连原pin不变门禁仍保留，没有增加生产换pin或重置安装floor接口。新会话真实TLS pongs跨lease后normaljoin，最后再签名撤销并全量收尾。
+
+Python全套78 PASS，覆盖无效live callback组合、撤销/faultjoin先于freshAPI、新grant ID/subject/目录/node拒复用、旧进程未退出/旧grant误放行/inactive binding/numeric ACK拒启动和失败不重试、新pin/HMAC不能与旧相同。相关8个Go包race与vet PASS；没有Go生产变更。回归不等于新组合真实双机结果，自然过期仍未实机，本轮也不包含GUI/公网无SSH/签名安装包或整体4完成。
+
+r16 creator本机构建及TEST namespace、9helpers与服务器空资源/基线前置PASS。初次批量公开文件上传180秒超时，不能算准备成功；用独立resume脚本精确核验目标目录无运行进程/bootstrap/重定向，只补传缺失或摘要不符的manifest白名单公开文件，没有修改任何身份/凭据。resume实际exit0：全部公开文件摘要、fresh waiter摘要、实际Windows原regex路径规则/非reparse/无run和3个入口解析均PASS，输出PREPARATION_READY。尚未启动桌面或网络，旧包保留。
+
+新的窗口1命令（公开包已最终核验成功，不复用r15）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\windows-desktop-live-reauthorize-20261012-r16\start-desktop-session.ps1"
+```
+
+READY后窗口2：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jarvis\remoteapp-compiled-stage-9c42f5b6a810de73\wait-for-compiled-borrower.ps1" -Root "C:\Users\jarvis\remoteapp-compiled-stage-9c42f5b6a810de73" -IdentityBootstrap "C:\Users\jarvis\windows-desktop-live-reauthorize-20261012-r16\interactive-bootstrap.json"
+```
+
+用户两窗口READY/WATCH_READY后运行：
+
+```sh
+REMOTEAPP_WINDOWS_INTERACTIVE_DIR='C:\Users\jarvis\windows-desktop-live-reauthorize-20261012-r16' REMOTEAPP_WINDOWS_DESKTOP_STAGE='C:\Users\jarvis\remoteapp-compiled-stage-9c42f5b6a810de73' python3 -B poc/selfhost/public-server/split-consent.py --compiled-live-reauthorize
+```
+
+actual exit0后borrower先STOPPED再creator STOPPED，然后精确核验本轮进程/bootstrap/两份grant证书scope最终清理和服务器基线。仅本地提交，不推送。
+
 ## 2026-10-11 r15 两桌面 STOPPED / 收尾核验 PASS，重新授权子切片闭环
 
 用户确认两窗口STOPPED后，执行只读 `artifacts/connection-poc/check-r15-stopped.py`，实际exit0。精确creator `windows-desktop-reauthorize-20261011-r15` 与borrower `remoteapp-compiled-stage-6d93c428f1a7be05/run/compiled-win` 下Windows子进程0，三个public bootstrap均不存在；CurrentUser/My测试证书前缀枚举0。远端borrower manifest摘要匹配唯一local compiled pair，对应Mac产品子进程0。Headscale nodes/users/preauthkeys全空，原policy不变，三个正式服务active，Store固定摘要与Nginx基线再次PASS。

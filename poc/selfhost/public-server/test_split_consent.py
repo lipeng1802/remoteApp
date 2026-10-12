@@ -18,6 +18,7 @@ class SplitConsentTests(unittest.TestCase):
         self.assertEqual(split.mode_flags(["--compiled-reconnect"]),(True,False,True,False,True))
         self.assertEqual(split.mode_flags(["--compiled-upgrade"]),(True,False,False,False,True))
         self.assertEqual(split.mode_flags(["--compiled-reauthorize"]),(True,False,False,False,True))
+        self.assertEqual(split.mode_flags(["--compiled-live-reauthorize"]),(True,False,False,False,True))
         for args in (["--compiled-revoke","--tls-fault"],["--compiled-revoke","--compiled"],["--compiled-fault","--compiled"]):
             with self.assertRaises(RuntimeError):split.mode_flags(args)
 
@@ -98,7 +99,7 @@ class SplitConsentTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): split.consent(Client(copy.deepcopy(owner)),Client(bad))
 
     def test_fresh_approval_joins_old_clients_and_only_passes_new_grant(self):
-        def run(fault=None, phase_fail=False):
+        def run(fault=None, phase_fail=False, live=False):
             grants = {"r2":{"claims":{"id":"a"*32}}, "r3":{"claims":{"id":"b"*32}}}
             if fault == "same_grant": grants["r3"]=copy.deepcopy(grants["r2"])
             events, revoked, approved = [], set(), set()
@@ -138,6 +139,7 @@ class SplitConsentTests(unittest.TestCase):
             old=[Client("owner"),Client("peer")]
             def fresh():
                 self.assertIn("r2",revoked)
+                if live: self.assertIn(("fault_joined",),events)
                 for c in old: c.stopped=True
                 events.append(("joined",))
                 return Client("owner",True),Client("peer",True)
@@ -145,15 +147,26 @@ class SplitConsentTests(unittest.TestCase):
                 self.assertEqual(grant,grants["r3"])
                 self.assertTrue(all(c.stopped for c in old))
                 if phase_fail: raise ValueError("phase_failure")
+            def old_live(grant):
+                self.assertEqual(grant,grants['r2'])
+                self.assertNotIn('r2',revoked)
+                events.append(('old_tls_live',))
+            def retired():
+                self.assertIn('r2',revoked)
+                self.assertIn(('old_tls_live',),events)
+                events.append(('fault_joined',))
             try:
-                split.consent(*old,node_phase=phase,reauthorize=True,fresh_clients=fresh)
+                split.consent(*old,node_phase=phase,reauthorize=True,fresh_clients=fresh,
+                              old_live_phase=old_live if live else None,revoked_phase=retired if live else None)
             finally:
                 if fault is None: self.assertEqual(revoked,{"r2","r3"})
             self.assertEqual(sum(e==("joined",) for e in events),1)
         run()
+        run(live=True)
         with self.assertRaises(ValueError): run(phase_fail=True)
         for fault in ("old_online","auto","same_grant"):
             with self.subTest(fault=fault),self.assertRaises(RuntimeError): run(fault=fault)
         with self.assertRaises(RuntimeError): split.consent(None,None,reauthorize=True)
+        with self.assertRaises(RuntimeError): split.consent(None,None,old_live_phase=lambda grant:None)
 
 if __name__=="__main__": unittest.main()

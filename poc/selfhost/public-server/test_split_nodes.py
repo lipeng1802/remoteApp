@@ -4,12 +4,17 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from split_nodes import upload_helper, checked_forward_probe, checked_route_status, wait_overlay_route
+from split_nodes import upload_helper, checked_forward_probe, checked_route_status, wait_overlay_route, run
 import contextlib
 import io
 
 
 class NodeUploadTests(unittest.TestCase):
+    def test_fresh_node_scope_rejects_invalid_grant_before_windows_contact(self):
+        for grant_id in (None,True,'a'*31,'A'*32,'../target','a'*33):
+            with self.subTest(grant_id=grant_id),self.assertRaises(RuntimeError):
+                run(None,None,None,None,None,None,None,{'claims':{'id':grant_id}},[],[],fresh_scope=True)
+
     def route(self,ready=True):
         return dict(status="route_status",query_ok=True,running=True,peer_known=ready,ip_matches=ready,
                     in_network_map=ready,allowed_ip=ready,in_engine=False,ready=ready)

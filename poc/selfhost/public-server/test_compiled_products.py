@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from compiled_products import CompiledPair, build_helpers, checked_borrower, observe, product_count, product_secret, verify_bundle, upload_public_bundle, wait_borrower, session_state
@@ -158,6 +159,7 @@ class CompiledProductTests(unittest.TestCase):
             def read(self):return self.replies.pop(0)
             def request(self,op):events.append(op);return dict(status="session_closed")
         class Controller:
+            proc=SimpleNamespace(pid=1,poll=lambda:1)
             def read(self):return dict(status="ready",port=12345)
             def stop(self):events.append("controller_joined")
         class Handoff:
@@ -199,6 +201,7 @@ class CompiledProductTests(unittest.TestCase):
             def read(self):return dict(status="ready",port=12345)
             def request(self,op):return dict(status="session_state",joined=False,fault=False)
             def stop(self):raise AssertionError("stop forbidden")
+            proc=SimpleNamespace(pid=1,poll=lambda:1)
             def join_fault(self):events.append("controller_fault_joined")
         class Handoff:
             def take(self):return dict(target={},controller={})

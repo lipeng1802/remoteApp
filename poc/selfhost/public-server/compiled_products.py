@@ -331,6 +331,8 @@ class CompiledPair:
         self._last_product_key_digest = None
         self._last_product_fingerprint = None
         self._maintenance_epoch = 1
+        self._accepted_inputs = None
+        self._reauthorize_attempted = False
 
     def attach(self, Pipe):
         d = self.desktop
@@ -362,6 +364,7 @@ class CompiledPair:
             raise RuntimeError("compiled_reconnect_requires_fault")
         # Obtain private inputs only after old node owners actually joined.
         inputs = run_stage("bound_handoff",handoff.take)
+        self._accepted_inputs = copy.deepcopy(inputs)
         run_stage("mac_native_initialize",lambda:self.maintenance("initialize"))
         self.mac_initialized = True
         if reconnect:
@@ -425,14 +428,16 @@ class CompiledPair:
         self.stop_sessions()
         self.t.check(True,"compiled_live_upgrade_explicit_new_session_tls_and_normal_join")
 
-    def _start_products(self, Pipe, inputs):
+    def _start_products(self, Pipe, inputs, fresh_authorization=False):
         # Mark ownership pending BEFORE the first send/launch can create work.
         self.sessions_joined = False
         run_stage("target_start_send",lambda:self.target.send(dict(Op="start", Config=inputs["target"])))
         receipt = run_stage("target_product_ready",self.target.read)
         key = product_secret(receipt)
         fingerprint=receipt["Fingerprint"]
-        if self._last_product_fingerprint is not None and fingerprint!=self._last_product_fingerprint:
+        if fresh_authorization and (self._last_product_fingerprint is None or fingerprint==self._last_product_fingerprint):
+            raise RuntimeError("compiled_new_grant_certificate_not_distinct")
+        if not fresh_authorization and self._last_product_fingerprint is not None and fingerprint!=self._last_product_fingerprint:
             raise RuntimeError("compiled_reconnect_certificate_changed")
         self._last_product_fingerprint=fingerprint # public pin, never output
         digest=hashlib.sha256(base64.b64decode(key,validate=True)).digest()
@@ -484,11 +489,49 @@ class CompiledPair:
     def revoked(self):
         self.join_fault()
 
+    def reauthorize(self, Pipe, handoff, apis, binding):
+        # This transition requires a new explicitly approved grant, never a
+        # replacement pin within the same grant. The runtime rechecks it too.
+        if self._reauthorize_attempted or self._accepted_inputs is None:
+            raise RuntimeError("compiled_new_authorization_unavailable")
+        self._reauthorize_attempted = True
+        self.assert_fault_latched()
+        if self._retired_controller_proc is None or self._retired_controller_proc.poll()!=1:
+            raise RuntimeError("compiled_old_controller_not_exited")
+        inputs = run_stage("fresh_authorization_bound_handoff", handoff.take)
+        old = self._accepted_inputs["target"]["Grant"]
+        new = inputs["target"].get("Grant")
+        if (not isinstance(new,dict) or new!=inputs["controller"].get("Grant")
+                or not isinstance(new.get("claims",{}).get("id"),str)
+                or not re.fullmatch(r"[0-9a-f]{32}",new["claims"]["id"])
+                or new.get("claims",{}).get("id")==old["claims"]["id"]
+                or any(new.get("claims",{}).get(role)!=old["claims"].get(role) for role in ("target","controller"))
+                or any(inputs[role].get("ReuseProductCertificate",False) for role in ("target","controller"))
+                or any(inputs[role].get("StateDir")==self._accepted_inputs[role].get("StateDir") for role in ("target","controller"))
+                or any(inputs[role].get("Binding",{}).get(role+"_node")==self._accepted_inputs[role].get("Binding",{}).get(role+"_node") for role in ("target","controller"))):
+            raise RuntimeError("compiled_fresh_grant_or_node_scope_invalid")
+        for api in apis:
+            response = api.request("use_grant", Grant=old)
+            if response != {"status":"use_grant","passed":False}:
+                raise RuntimeError("compiled_old_grant_not_rejected")
+        verify_reconnect_authorization(apis,inputs,binding)
+        self.maintenance("inspect")
+        ack = self.target.request("reopen_fault")
+        if ack != {"status":"owner_reopened","started":False} or type(ack.get("started")) is not bool:
+            raise RuntimeError("compiled_fresh_owner_ack_invalid")
+        if session_state(self.target.request("session_state"))!=(False,False):
+            raise RuntimeError("compiled_fresh_owner_not_idle")
+        self._start_products(Pipe,inputs,fresh_authorization=True)
+        if self.controller.proc.pid==self._retired_controller_proc.pid or self._retired_controller_proc.poll()!=1:
+            raise RuntimeError("compiled_fresh_authorization_reused_old_process")
+        self._accepted_inputs = copy.deepcopy(inputs)
+        self.stop_sessions()
+        self.t.check(True,"compiled_live_revocation_new_approval_new_tls_and_normal_join")
+
     def join_fault(self):
         # No stop command/cancellation is sent before autonomous completion.
         self.controller.join_fault()
-        if self._reconnect_inputs is not None:
-            self._retired_controller_proc = self.controller.proc
+        self._retired_controller_proc = self.controller.proc
         self.controller = None
         self.t.check(True, "compiled_controller_autonomous_fault_join_and_native_retirement")
         end = time.monotonic() + 20
@@ -530,6 +573,7 @@ class CompiledPair:
 
     def close(self):
         self._reconnect_inputs = None
+        self._accepted_inputs = None
         # Do NOT release signer identities, delete state or restore policy if
         # any actual owner is still unjoined. No emergency kill is a success.
         if not self.sessions_joined:

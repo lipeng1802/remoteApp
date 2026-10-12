@@ -1,5 +1,6 @@
 """Private nodeproof phase. Device operations stay on signed HTTPS clients."""
 import hashlib
+import re
 from pathlib import Path
 import secrets
 import subprocess
@@ -63,7 +64,13 @@ def verify_helper(t, work):
     t.check(actual.lower()==hashlib.sha256(binary.read_bytes()).hexdigest(),"split_node_helper_binary_verified")
 
 
-def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
+def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders, fresh_scope=False):
+    suffix = ""
+    if fresh_scope:
+        grant_id = grant.get("claims",{}).get("id")
+        if not isinstance(grant_id,str) or not re.fullmatch(r"[0-9a-f]{32}",grant_id):
+            raise RuntimeError("invalid_fresh_node_scope")
+        suffix = "-" + grant_id
     # Recheck before execution; no upload after the grant has been issued.
     verify_helper(t, work)
     # Helper validates its node directory against ../../artifacts/... from cwd.
@@ -73,7 +80,7 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
     local=[str(t.ARTIFACTS/"enrollment-helper")]
     parent=t.ARTIFACTS/"nodes"; parent.mkdir(mode=0o700,exist_ok=True)
     folder=Path(tempfile.mkdtemp(prefix="split-node-",dir=parent)); folders.append(folder)
-    win_dir="../../artifacts/connection-poc/nodes/target"
+    win_dir="../../artifacts/connection-poc/nodes/target"+suffix
     def prepare(command,directory,windows):
         cfg={"Op":"prepare","StateDir":str(directory),"GrantID":grant["claims"]["id"]}
         cfg.update(identities.config("native-target" if windows else "native-controller",windows))
@@ -148,7 +155,7 @@ def run(t, Pipe, identities, ready, apis, ports, work, grant, helpers, folders):
         server,peer=managed_server,managed_peer
         return managed_server,managed_peer
     from compiled_coordination import BoundHandoff, runtime_inputs
-    inputs=runtime_inputs(ready,binding,grant,work+"\\artifacts\\connection-poc\\nodes\\target",str(folder),tickets)
+    inputs=runtime_inputs(ready,binding,grant,work+"\\artifacts\\connection-poc\\nodes\\target"+suffix,str(folder),tickets)
     def stop_bound_helpers():
         nonlocal peer,server
         # No new tsnet owner may reopen either directory before actual join.

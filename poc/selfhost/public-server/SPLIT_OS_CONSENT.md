@@ -1,5 +1,9 @@
 # 4C-4G：独立进程双机 OS 授权入口
 
+## r16 活会话失效后重新授权（待实机验收）
+
+独立 `--compiled-live-reauthorize` 先保持首份grant真实TLS活跃，签名撤销后等两端自主fault join/native retirement和节点回收，旧owner保持锁闭；之后旧API实际join，新邀请/明确审批取得不同grant，用新节点目录/新node、新idle owner和Mac进程启动新TLS。新grant要求不同scope证书和HMAC，同grant禁止换pin限制不变。新TLS持续pongs后正常join，最后新grant签名撤销并恢复服务器基线。78项Python及相关8包Go race/vet已通过，尚未真实双机验证；自然过期、GUI、公网/无SSH与安装验收不在本轮。fresh Windows命令以HANDOFF为准。
+
 ## r15 重新授权入口（实机与收尾已通过）
 
 `--compiled-reauthorize` 是独立入口：节点注册前撤销首份批准授权，验证旧grant在线拒绝、旧request不可重批与旧码不可复用；实际join旧API客户端后重新邀请/明确批准，必须得到不同request/grant。新API客户端使用相同OS签名身份和固定HTTPS参数，不允许现有客户端替换已接受grant。仅新grant进入compiled Headscale/产品TLS，最后正常join、签名撤销和基线恢复。
