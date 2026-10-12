@@ -1,5 +1,6 @@
 // Package deviceservice hosts the bounded device invitation API. Network
-// forwarding is explicit loopback-only opt-in through an independent broker.
+// forwarding requires an explicit private-loopback or direct-TLS operator
+// mode through an independent authority broker. Neither mode grants consent.
 package deviceservice
 
 import (
@@ -15,6 +16,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +34,9 @@ type Config struct {
 	Broker                                  *broker.Client
 	// Operator opt-in for isolated loopback integration, not public deployment.
 	PrivateNetwork bool
+	// Explicit operator opt-in for direct TLS network ingress. Never inferred
+	// from a bind address, forwarded headers, API reply or private mode flag.
+	PublicNetwork bool
 }
 
 func read(path string, limit int64, private bool) ([]byte, error) {
@@ -94,6 +100,12 @@ func load(c Config) (trustprofile.Profile, tls.Certificate, error) {
 	}
 	if c.PrivateNetwork && (c.Broker == nil || !net.ParseIP(host).IsLoopback()) {
 		return fail()
+	}
+	if c.PublicNetwork {
+		n, err := strconv.Atoi(port)
+		if c.PrivateNetwork || c.Broker == nil || !filepath.IsAbs(c.Broker.Socket) || filepath.Clean(c.Broker.Socket) != c.Broker.Socket || err != nil || n < 1024 || n > 65535 || strconv.Itoa(n) != port || net.ParseIP(u.Hostname()) != nil || strings.EqualFold(u.Hostname(), "localhost") || strings.HasSuffix(strings.ToLower(u.Hostname()), ".localhost") {
+			return fail()
+		}
 	}
 	cert, e := read(filepath.Join(c.Directory, "server-private/api-cert.pem"), 16384, false)
 	if e != nil {
@@ -174,6 +186,9 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 		if c.PrivateNetwork {
 			device = broker.PrivateNetworkHandler(*c.Broker, p.Claims.Issuer)
 		}
+		if c.PublicNetwork {
+			device = broker.SignedNetworkHandler(*c.Broker, p.Claims.Issuer)
+		}
 	} else {
 		s, e := invite.Open(filepath.Join(c.Directory, "server-private/authority"), time.Now)
 		if e != nil {
@@ -194,7 +209,7 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 		return ErrService
 	}
 	defer l.Close()
-	// Default routes device requests only. The private opt-in forwards network
+	// Default routes device requests only. An explicit opt-in forwards network
 	// requests; all actual authorization remains inside the privileged broker.
 	h := invite.NewAdmission().Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().Unix()
@@ -203,7 +218,7 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		if r.URL.Path != "/v1/request" && !(c.PrivateNetwork && r.URL.Path == "/v1/network") {
+		if r.URL.Path != "/v1/request" && !((c.PrivateNetwork || c.PublicNetwork) && r.URL.Path == "/v1/network") {
 			w.Header().Set("Cache-Control", "no-store")
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -211,7 +226,7 @@ func Run(ctx context.Context, c Config, ready func(net.Addr)) (result error) {
 		device.ServeHTTP(w, r)
 	}))
 	server := &http.Server{Handler: h, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{pair}, NextProtos: []string{"http/1.1"}}}
-	if c.PrivateNetwork {
+	if c.PrivateNetwork || c.PublicNetwork {
 		server.WriteTimeout = 20 * time.Second
 	}
 	server.SetKeepAlivesEnabled(false)

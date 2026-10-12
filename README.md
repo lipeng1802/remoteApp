@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r19 [直接HTTPS网络入口](poc/selfhost/public-server/DIRECT_HTTPS_INGRESS.md) 代码与本机验证完成：独立运维public模式，签名域名profile/独立UID broker必需，两路共享4工作槽，默认network仍404、authority不可用503。相关race/vet及Python78项通过，Linux前端build-only；服务器只读确认8444仍回环、正式network backend未配置、基线不变。尚未部署或开放公网，本轮Windows无操作。
+
 r18 [新客户端原生联合验收](poc/selfhost/public-server/INSTALLED_DEVICE_NATIVE_VALIDATION.md) 双平台已闭环：Mac实际compiled客户端/native journal/OS签名直连本机HTTPS、稳定重启、实际退出及精确清理全PASS/exit0；用户确认Windows普通桌面入口返回完整预期VALIDATION PASSED。下一项长期服务自主HTTPS接入与受保护凭据供应；不包含公网/Headscale/GUI/安装，整体4未完成。
 
 r17 新增[已安装信任设备客户端](poc/selfhost/public-server/INSTALLED_DEVICE_CLIENT.md)：从固定编译锚和原生journal当前配置创建直连HTTPS设备API，不接受父进程地址/CA/issuer/key或helper路径；仅OS身份重开、设备授权API、实际HTTP/signer join。相关Go race/vet、本机隔离HTTPS与Python78项通过，Mac/Windows TEST包build-only通过。新入口原生组合、公网服务、自主enroll/产品凭据、GUI/安装仍待；没有改线上服务或要求新双窗口。

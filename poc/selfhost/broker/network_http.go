@@ -12,6 +12,32 @@ import (
 // installed device-only frontend. Deploy only behind trusted TLS/admission.
 // No Store or private issuer is available to this adapter.
 func PrivateNetworkHandler(c Client, issuer string) http.Handler {
+	return signedNetworkHandler(c, issuer)
+}
+
+// SignedNetworkHandler requires the bounded trusted-TLS frontend and explicit
+// operator mode. Four work slots are SHARED by device and network operations.
+// All signature, consent, binding and live-network checks remain in authority.
+func SignedNetworkHandler(c Client, issuer string) http.Handler {
+	handler := signedNetworkHandler(c, issuer)
+	slots := make(chan struct{}, 4)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.WriteHeader(503)
+			json.NewEncoder(w).Encode(map[string]string{"error": "request_unavailable"})
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func signedNetworkHandler(c Client, issuer string) http.Handler {
 	device := DeviceHandler(c, issuer)
 	slots := make(chan struct{}, 4)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

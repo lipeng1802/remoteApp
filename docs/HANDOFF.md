@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-12 r19 直接HTTPS网络前端operator模式/有界工作槽开发完成，未部署
+
+新增独立 `--public-network`/PublicNetwork opt-in；保留原private loopback-only和默认network404，混用/未知模式拒绝。必须独立broker/规范absolute socket，signed profile非localhost命名域名、规范非特权且精确匹配endpoint端口，TLS/发行根/service/floor/有效期校验及kernel UID/Store issuer握手保留。broker.SignedNetworkHandler设备与网络共享4槽；所有实际授权仍由sole authority完成，没有新Store/issuer初始化或根/审批绕过。保留32socket、admission peer/global预算、JSON/body/IPC限制和network14s/write20s预算；Origin/query/代理头不作为授权或可信peer，不支持未经设计的直接反代或分布式DDoS保证。
+
+新增服务3项+CLI模式回归；deviceservice/broker/device-frontend/installeddevice/invite五包race、专用vet及Python78项PASS。实TLS+Unix broker+独立Store验证register/replay、frontend重启durable replay、JSON alias/超长/query/Origin/health拒绝、默认network404、authority停止两路503与normaljoin；预算memory executor证明四个network工作占满后device也503，不能绕共享限制。不把本机保留测试DNS名/显式ServerName、无网络backend测试当公网或Headscale证据。Linux amd64 `device-frontend-direct-r19` 静态编译成功，未部署。
+
+服务器只读preflight actual exit0： `/var/lib/remoteapp-prerelease/client-public/service-profile.json` epoch1且当前有效，8444仅127.0.0.1绑定，frontend无private/public network参数，authority无network-config，三个正式服务active，Store固定摘要/Nginx baseline不变。初次错误/opt profile路径导致检查失败，纠正到既有/var/lib路径后成功；没有读私钥、发设备请求、上传更换binary/unit、开放端口、安全组或修改Store/策略。当前正式网络后端仍未启用，不可仅加public flag就称自主网络已完成。
+
+本轮无需用户Windows操作。下一任务先补长期authority supervised backend/verifier/权限装配与预检/备份/安全回退，再明确授权部署/候选8444公开监听并实测负向预算/故障与已安装客户端直连；不能改业务443或直接反代private模式。产品HMAC/凭据供应、自主enroll/bind、GUI/签名安装包与整体4仍待。本地提交，不推送。详细边界见 `poc/selfhost/public-server/DIRECT_HTTPS_INGRESS.md`。
+
 ## 2026-10-12 r18 Windows普通桌面联合验收通过，双平台入口闭环
 
 用户反馈执行新入口后返回完整预期 `VALIDATION PASSED: actual compiled device client + native trust lease + OS signature direct local HTTPS + stable restart + joined test cleanup. NOT public service, Headscale, product TLS/GUI or signed installer acceptance.`。该成功标记只在validator真实compiled客户端/native journal/OS signer签名请求/稳定重启/closed+actual exit0、TLS server join及精确TEST journal/random identity清理均完成且无error后输出；PowerShell另核验actual exit0与无FAIL/SKIP。证据来自用户桌面反馈，未独立获取逐项耗时，不用此前SSH纯协议测试冒充该结果。
