@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-r16 真实双机活TLS撤销后重新授权组合验收PASS，协调器actual exit0：旧会话自主fault join/原生退役、新邀请审批/不同grant、新node scope/idle owner/Mac进程/证书/HMAC、新TLS持续pongs、正常join/签名撤销及服务器资源归零/基线恢复通过。等待两桌面STOPPED及最终原生清理核验；不包含自然过期、GUI/公网无SSH或签名安装包，整体4未完成。
+r16 真实双机活TLS撤销后重新授权组合验收已闭环：协调器actual exit0、两桌面STOPPED及收尾核验exit0。旧会话自主fault join/原生退役、新邀请审批/不同grant、新node scope/idle owner/Mac进程/证书/HMAC、新TLS持续pongs、正常join/签名撤销通过。本轮双端进程/bootstrap/两份grant测试证书scope无残留，控制资源归零/正式基线不变；不包含自然过期、GUI/公网无SSH或签名安装包，整体4未完成。
 
 r16 新增活TLS签名撤销/自主fault join后新邀请审批、新grant/node scope/idle owner/process/certificate/HMAC及新TLS组合入口。Python78项、相关8包Go race/vet通过，真实双机组合验收仍待新两桌面入口；不放宽同grant pin门禁，不包含自然过期、GUI/公网或签名安装包。准备与操作见 [HANDOFF](docs/HANDOFF.md)。
 

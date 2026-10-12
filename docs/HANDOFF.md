@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-12 r16 两桌面 STOPPED / 收尾核验 PASS，活会话失效后新授权组合闭环
+
+用户确认两窗口STOPPED后，只读 `artifacts/connection-poc/check-r16-stopped.py` 实际exit0。精确creator `windows-desktop-live-reauthorize-20261012-r16` 与borrower `remoteapp-compiled-stage-9c42f5b6a810de73/run/compiled-win` 下Windows子进程0，三个public bootstrap不存在；CurrentUser/My测试证书前缀枚举0，覆盖本轮旧/新两grant scope。远端borrower manifest摘要匹配唯一local compiled pair，对应Mac产品子进程0。Headscale nodes/users/preauthkeys全空，原policy不变，三个正式服务active，Store固定摘要与Nginx基线再次PASS。
+
+原生journal/test identity删除依据普通桌面严格closed/zero-exit STOPPED与bootstrap移除；certificate不存在另经只读枚举确认，不以SSH另一凭据上下文冒充原生journal验收。本轮核验没有额外删除任何文件/凭据；公开包与work保留供审计，未知历史凭据未批量删除或宣称全清理。不重启已消费r16，两窗口可关闭。
+
+结合原协调器actual exit0，r16“活跃旧TLS签名撤销 → 两端自主fault join/native retirement → 新邀请/明确审批/不同grant → 新node scope/idle owner/process/certificate/HMAC → 实际新TLS → normaljoin/新grant签名撤销/完整收尾”已闭环。自然过期实机仍未执行，GUI/正式公网无SSH/发布签名安装包及整体4仍未完成。下一阶段优先收口客户端自主服务接入/正式信任与凭据供应，再接GUI和安装；不将SSH测试协调工具当最终用户入口。仅本地提交，不推送；下方待STOPPED为历史。
+
 ## 2026-10-12 r16 真实双机活会话撤销后新授权/新TLS PASS，actual exit0，待两桌面STOPPED
 
 用户两窗口就绪后，实际运行对应creator `windows-desktop-live-reauthorize-20261012-r16`、stage `remoteapp-compiled-stage-9c42f5b6a810de73` 的 `--compiled-live-reauthorize`，原协调actual exit0。桌面waiter live/creator native probe、当前9helpers、fresh pair构建上传逐文件摘要、borrower native probe PASS。上传耗时但本次完整核验成功，不把上一准备上传超时算本次证据。
