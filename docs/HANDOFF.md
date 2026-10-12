@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-12 r18 Windows普通桌面联合验收通过，双平台入口闭环
+
+用户反馈执行新入口后返回完整预期 `VALIDATION PASSED: actual compiled device client + native trust lease + OS signature direct local HTTPS + stable restart + joined test cleanup. NOT public service, Headscale, product TLS/GUI or signed installer acceptance.`。该成功标记只在validator真实compiled客户端/native journal/OS signer签名请求/稳定重启/closed+actual exit0、TLS server join及精确TEST journal/random identity清理均完成且无error后输出；PowerShell另核验actual exit0与无FAIL/SKIP。证据来自用户桌面反馈，未独立获取逐项耗时，不用此前SSH纯协议测试冒充该结果。
+
+结合Mac fresh r4 actual exit0，本轮新设备客户端的双平台原生联合入口闭环。自动清理已纳入成功门禁，无需额外READY/Enter或再次运行旧包。不修改或删除未知历史凭据，公开测试包保留；本机TLS fixture不是正式authority Store，不能据此宣称公网设备服务或Headscale/product/GUI/安装通过。
+
+下一项优先推进长期服务直接HTTPS入口、客户端自主接入与受保护凭据供应。服务公开监听、operator opt-in、预算/负向及故障退出、profile时效/信任分发与部署回退要分别收口；不能直接反代private-network或默默改业务443/开放端口，正式部署前核验并获取必要授权。整体切片4未完成，仅本地记录提交、不推送。下方Windows待桌面为历史。
+
 ## 2026-10-12 r18 新已安装设备客户端原生联合入口，Mac实际PASS/exit0，Windows待桌面
 
 新增TEST-only devicevalidation、installed-device-validation与显式builder及PowerShell自动入口。实际运行已编译r17 installed-device-client，而非用memory signer代替新命令：固定compiled profile/根/原生journal helper/signer pin，随机测试OS identity重开签名，独立loopback TLS fixture校验真实signature/identity/nonce/replay/time；缺原生状态不repair、地址注入拒绝、live原生排他租约、register/invite、stop后closed/actual exit0/原生重开、第二进程稳定身份、最后TLSjoin/精确原生journal/identity删除都验。fixture无真实authority Store/批准grant，不代表服务器durable重启或Headscale。

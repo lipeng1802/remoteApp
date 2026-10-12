@@ -1,6 +1,6 @@
 # r18：新设备客户端与原生身份/信任存储联合验收
 
-Mac实际新编译程序完整通过、actual exit0；Windows包上传/摘要/脚本解析与3项纯协议/进程测试通过，普通桌面原生联合验收尚待。不是公网服务、Headscale、产品TLS/GUI或安装验收。
+Mac实际新编译程序完整通过、actual exit0；用户确认Windows普通桌面入口返回完整预期VALIDATION PASSED，本轮双平台原生联合验收闭环。不是公网服务、Headscale、产品TLS/GUI或安装验收。
 
 ## 本轮链路
 
@@ -46,4 +46,4 @@ VALIDATION PASSED: actual compiled device client + native trust lease + OS signa
 
 ## 下一步
 
-收到Windows原生通过结果后记录该联合入口闭环，继续长期服务自主HTTPS接入/正式信任与受保护凭据供应。不直接公网反代现有private-network；部署前确认备份/回退、端口、材料时效和授权，再进行公网负向与服务故障验收。整体切片4未完成。
+Windows原生通过结果已由用户反馈并记录，继续长期服务自主HTTPS接入/正式信任与受保护凭据供应。不直接公网反代现有private-network；部署前确认备份/回退、端口、材料时效和授权，再进行公网负向与服务故障验收。整体切片4未完成。
