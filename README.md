@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r24 [内部受控注册与凭据消费](poc/selfhost/public-server/INSTALLED_DEVICE_CLIENT.md)：新增可信组合 EnrollmentRunner，已验证grant_clock后内部准备公钥/签署intent/直接HTTPS enroll/内存交给节点Register；仅固定passed/active=false输出，节点与签名器实际join后结束。7组新增测试及本机HTTPS正常/故障/到期组合通过。**正式编译入口未启用**：跨重启结果记录、节点原生ACL/租约、真实Headscale Up/持有证明/bind仍待，不是新的GUI/安装包验收。Windows无需开机，服务器未改。
+
 r23 [已安装客户端网络授权门禁](poc/selfhost/public-server/INSTALLED_DEVICE_CLIENT.md)：直接OS签名器接口/已安装profile请求grant_clock与state，客户端自行挑战、核验issuer/自身主体/期限/3秒状态；inactive或错误结束owner并join，不回传注册凭据/HMAC。真实本机HTTPS+内存signer联合测试、相关race/vet、双平台fresh TEST构建通过，原生网络组合/enroll/bind/watch仍待；本轮未改服务器/安装包，Windows无需开机。
 
 r22 经用户明确批准维护窗口，预发布长期网络后台已部署并完成回环故障闭环：Headscale持久database/显式零ACL、长期verifier、sole authority及独立UID前端已接通；provider故障非零退出/两路503、恢复不自动重启、显式同身份恢复通过。8444仍127.0.0.1，业务Nginx/443与Store摘要未变，未enable自启。备份/检查点与边界见 [部署交接](docs/HANDOFF.md)。Windows本轮关机且无需操作，公网/客户端自主凭据与GUI仍待。

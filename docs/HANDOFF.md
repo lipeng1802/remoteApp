@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-13 r24 已推送r23，内部注册/凭据消费组件开发与本机回归通过
+
+用户要求先推送再继续任务。fetch后HEAD比origin/codex/connection-architecture-poc领先131、落后0，工作区干净；使用http.proxy=http://127.0.0.1:1080非force push成功，origin从4d08bdd更新到f4bb336（含README）。r24新代码仍本地提交，未再次推送；不把未推送r24当作远端最新包。
+
+新增installeddevice EnrollmentRunner / EnrollmentNode可信内部组合；原Runner与compiled device-client不启用provision，首帧/根/地址/helper pins不变。可选组合仅新增provision+签名Grant，拒绝父端凭据/路径/ticket/intent/challenge/nonce/time/action/混字段。经过r23签名校时后内部离线公钥、fresh16byte nonce/OS signer接口签署intent、直接签名HTTPS enroll、仅内存交给Register。90秒/grant期限总预算与5秒HTTP预算、前后公钥/主体/期限/节点key/规范100.120 IPv4核验。输出固定network_enrollment/passed/active=false，ticket/key/IP留内部，Up不是active或持有证明。
+
+尝试副作用前one-shot锁闭只限当前owner；工厂部分资源带error也要join，未知enroll/Up不重试、不删state或冒充远端cleanup，归issuer reconciliation。credential字段所有返回分支清空、tsnet AuthKey字段Up后清空，但Go/SDK/HTTP内部string副本没有物理擦除保证。注册后本阶段仅stop可继续，grant到期timer fault关闭，node CloseJoined先于HTTP/signer实际join，未强杀。node接口要求CloseJoined即使error也真实等待完成，不能把“发出了cancel”实现为此契约。
+
+固定controlURL tsnet adapter只在可信调用者已持有原生目录lease/OS ACL的条件下使用，拒绝明显未准备/相对/不规范/末级symlink/POSIX开放路径，Windows必须另行原生DACL验证；只允许受保护空目录，任何留存材料阻止再次注册，避免旧登录使Up忽略新AuthKey。保留材料，不通过删state或换目录自动恢复。adapter不提供生产路径布局或durable attempt journal。**因此本轮不启用compiled entry**：必须先补跨重启未知结果门禁与双平台原生节点存储租约/ACL，再接native组合验收，不能靠内存attempted宣称重启安全。真实Up、实时nodeproof/bind/watch/产品TLS与GUI也未实现；已有正式服务器仍r22长期database/零ACL/回环8444，无本轮线上操作。
+
+新增7函数覆盖签署intent/credential内部消费/重试拒绝、6前置条件、9HTTP异常、6注册结果异常、实际离线节点Prepare/key重开/损坏不修复、3工厂故障、11IPC注入拒绝。真实本机HTTPS Runner扩为5组，enroll正常/fault/idle授权过期用node fixture与memory signer，两个真实join屏障；不冒充OS signer、批准Store/Mint/Headscale。5相关包race/vet PASS；darwin/windows installeddevice测试二进制build-only，未上传/执行。没有新验证安装包或Windows动作。
+
+下一项把原生节点布局/DACL/独占lease、跨重启attempt/unknown outcome和r23终止EOF native进程验收一起收口，然后启用正式入口并继续proof/bind/watch。要准备专用新验证入口，不跑旧r18设备validator冒充网络验收。整体4仍未完成，Windows暂时无需开机。详见public-server/INSTALLED_DEVICE_CLIENT.md r24。
+
 ## 2026-10-13 r23 已安装客户端直接签名网络校时/状态门禁开发完成
 
 本轮选择自主enroll前的授权门禁，不开放公网、不改服务器、不运行或上传Windows/旧安装包。已安装device-client仍固定编译root/helper摘要，当前native owner profile与OS signer接口派生直接HTTPS客户端；后续新增network帧仅grant_clock/state+签名Grant，拒绝首帧网络、混device/stop、外部nonce/time/challenge/ticket/intent/certificate及enroll/bind/TLS动作；JSON omitzero保留旧设备帧形状。

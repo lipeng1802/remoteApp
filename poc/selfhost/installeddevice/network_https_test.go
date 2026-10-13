@@ -24,12 +24,27 @@ import (
 )
 
 func TestInstalledRunnerSignedNetworkHTTPSAndTerminalJoin(t *testing.T) {
-	for _, inactive := range []bool{false, true} {
-		t.Run(map[bool]string{false: "normal", true: "inactive_fault"}[inactive], func(t *testing.T) {
+	for _, scenario := range []string{"normal", "inactive_fault", "enrollment", "enrollment_fault", "enrollment_expiry"} {
+		t.Run(scenario, func(t *testing.T) {
+			inactive := scenario == "inactive_fault"
+			expired := scenario == "enrollment_expiry"
+			enroll := scenario == "enrollment" || scenario == "enrollment_fault" || expired
+			fault := inactive || scenario == "enrollment_fault"
 			gate, grant, issuerKey, good := authorizationFixture(t)
+			if expired {
+				grant.Claims.ExpiresAt = time.Now().Unix() + 3
+				grant.Claims.IssuedAt = grant.Claims.ExpiresAt - 300
+				grant.Signature = testSignature(issuerKey, "remoteapp-invite-grant-v1\n", grant.Claims)
+			}
 			signer := gate.signer.(*testSigner)
 			join := make(chan struct{})
 			signer.join = join
+			nodeJoin := make(chan struct{})
+			node := nodeFixture()
+			node.join = nodeJoin
+			if scenario == "enrollment_fault" {
+				node.err = invite.ErrDenied
+			}
 			pub, key, _ := ed25519.GenerateKey(rand.Reader)
 			now := time.Now()
 			ca := &x509.Certificate{SerialNumber: big.NewInt(1), NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}}
@@ -49,7 +64,18 @@ func TestInstalledRunnerSignedNetworkHTTPSAndTerminalJoin(t *testing.T) {
 					w.WriteHeader(403)
 					return
 				}
-				reply, _ := good(r.Context(), e.Body)
+				var reply invite.NetworkReply
+				if e.Body.Action == "enroll" {
+					rawIntent, _ := json.Marshal(e.Body.Intent.Body)
+					sigIntent, _ := hex.DecodeString(e.Body.Intent.Signature)
+					if !enroll || e.Body.Intent.Body.NodeKey != node.key || e.Body.Intent.Body.GrantID != grant.Claims.ID || e.Body.Intent.PublicKey != hex.EncodeToString(gate.public) || !ed25519.Verify(gate.public, append([]byte("remoteapp-provision-intent-v1\n"), rawIntent...), sigIntent) {
+						w.WriteHeader(403)
+						return
+					}
+					reply = enrollmentReply()
+				} else {
+					reply, _ = good(r.Context(), e.Body)
+				}
 				if inactive && reply.State != nil {
 					reply.State.Claims.Active = false
 					reply.State.Signature = testSignature(issuerKey, "remoteapp-network-state-v1\n", reply.State.Claims)
@@ -85,7 +111,13 @@ func TestInstalledRunnerSignedNetworkHTTPSAndTerminalJoin(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			go func() {
-				done <- Runner(release, func() (clientruntime.Signer, error) { return signer, nil }, commands, func(v any) error { replies <- v; return nil })(ctx, profile)
+				open := func() (clientruntime.Signer, error) { return signer, nil }
+				output := func(v any) error { replies <- v; return nil }
+				run := Runner(release, open, commands, output)
+				if enroll {
+					run = EnrollmentRunner(release, open, commands, output, func(context.Context) (EnrollmentNode, error) { return node, nil })
+				}
+				done <- run(ctx, profile)
 			}()
 			read := func() any {
 				select {
@@ -101,11 +133,18 @@ func TestInstalledRunnerSignedNetworkHTTPSAndTerminalJoin(t *testing.T) {
 			if r := read().(authorizationResult); !r.Passed || r.Phase != "grant_clock" {
 				t.Fatal("issuer clock not verified")
 			}
-			commands <- Request{Op: "network", Network: invite.NetworkRequestBody{Action: "state", Grant: grant}}
-			if r := read().(authorizationResult); !r.Passed || r.Active == inactive {
-				t.Fatal("network state not verified")
+			if enroll {
+				commands <- Request{Op: "provision", Network: invite.NetworkRequestBody{Grant: grant}}
+				if r := read().(enrollmentResult); r.Passed == fault || r.Active {
+					t.Fatal("enrollment result invalid")
+				}
+			} else {
+				commands <- Request{Op: "network", Network: invite.NetworkRequestBody{Action: "state", Grant: grant}}
+				if r := read().(authorizationResult); !r.Passed || r.Active == inactive {
+					t.Fatal("network state not verified")
+				}
 			}
-			if !inactive {
+			if !fault && !expired {
 				commands <- Request{Op: "stop"}
 			}
 			select {
@@ -114,10 +153,21 @@ func TestInstalledRunnerSignedNetworkHTTPSAndTerminalJoin(t *testing.T) {
 			case <-time.After(20 * time.Millisecond):
 			}
 			close(join)
+			if enroll {
+				select {
+				case <-done:
+					t.Fatal("node join barrier skipped")
+				case <-time.After(20 * time.Millisecond):
+				}
+				close(nodeJoin)
+			}
 			select {
 			case err := <-done:
-				if (err != nil) != inactive {
+				if (err != nil) != (fault || expired) {
 					t.Fatal("inactive state not terminal")
+				}
+				if enroll && (node.closes != 1 || node.registers != 1) {
+					t.Fatal("node consumption/join missing")
 				}
 			case <-time.After(5 * time.Second):
 				t.Fatal("signer not joined")

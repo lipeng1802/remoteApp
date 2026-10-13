@@ -52,10 +52,25 @@ func validCommand(r Request) bool {
 	return false
 }
 
+func validProvision(r Request) bool {
+	return r.Op == "provision" && r.VaultScope == "" && r.ExpectedPublic == "" && r.Device == (invite.Body{}) && r.Network.Grant != (invite.Grant{}) && r.Network == (invite.NetworkRequestBody{Grant: r.Network.Grant})
+}
+
 // Runner is started only by clientowner.Open/Start, which supplies the durable
 // current profile and monotonic lifetime. The output is a trusted private pipe,
 // not a log or public peer interface; device results can contain invite/grant.
 func Runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error) clientowner.Runner {
+	return runner(release, open, commands, output, nil)
+}
+
+// EnrollmentRunner adds a trusted internal node owner, not an IPC-selected path
+// or credential. The compiled entry intentionally remains Runner until native
+// node-storage ownership and recovery provisioning are installed and verified.
+func EnrollmentRunner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory) clientowner.Runner {
+	return runner(release, open, commands, output, factory)
+}
+
+func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory) clientowner.Runner {
 	return func(ctx context.Context, profile trustprofile.Profile) (result error) {
 		if ctx.Err() != nil || open == nil || output == nil || commands == nil {
 			return trustprofile.ErrTrust
@@ -81,11 +96,26 @@ func Runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		}
 		defer client.Close()
 		gate := newAuthorizationGate(profile, signer)
+		var enrolled enrollment
+		defer func() {
+			if err := enrolled.closeJoined(); err != nil {
+				result = trustprofile.ErrTrust
+			}
+		}()
+		var expires <-chan time.Time
+		var expiry *time.Timer
+		defer func() {
+			if expiry != nil {
+				expiry.Stop()
+			}
+		}()
 		if err := output(map[string]string{"status": "ready"}); err != nil {
 			return err
 		}
 		for {
 			select {
+			case <-expires:
+				return trustprofile.ErrTrust
 			case <-ctx.Done():
 				if ctx.Err() == context.Canceled {
 					return nil
@@ -95,11 +125,24 @@ func Runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 				if !exists {
 					return nil
 				}
-				if !validCommand(request) {
+				provision := validProvision(request)
+				if (!validCommand(request) && !(provision && factory != nil)) || (enrolled.attempted && request.Op != "stop") {
 					return trustprofile.ErrTrust
 				}
 				if request.Op == "stop" {
 					return nil
+				}
+				if provision {
+					reply, err := enrolled.start(ctx, gate, client, factory, request.Network.Grant)
+					if outErr := output(reply); outErr != nil {
+						return outErr
+					}
+					if err != nil {
+						return trustprofile.ErrTrust
+					}
+					expiry = time.NewTimer(time.Unix(gate.grant.Claims.ExpiresAt, 0).Sub(gate.clock()))
+					expires = expiry.C
+					continue
 				}
 				if request.Op == "network" {
 					reply, err := gate.request(ctx, client, request.Network)

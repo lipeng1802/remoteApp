@@ -1,5 +1,19 @@
 # r17：已安装信任设备 API 客户端（开发与构建通过，原生组合待验收）
 
+## r24：内部受控注册组件（不是已启用的原生入口）
+
+`installeddevice.EnrollmentRunner` 为可信本机组合增加 EnrollmentFactory；普通 Runner / 编译 device-client 保持拒绝 provision，不改变已发布入口。工厂是可信代码注入，不由IPC/下载profile选择路径或可执行文件。在该组合内，先 grant_clock 校时，再允许 `Op=provision` 和仅含 Grant 的 Network；拒绝外部action、nonce/time、ticket、intent、challenge、certificate/proof及混device/scope/public。成功后本阶段仅接受stop，后续bind/watch尚未开发，不能拿passed当数据能力。
+
+流程在当前owner租约/安装profile/固定issuer/签名器下生成节点公钥与16byte随机nonce、签署provision intent；直接签名HTTPS获取一次性注册credential，内部调用node.Register，不经父帧、命令行、环境变量、日志或配置文件输送secret。总prepare/enroll/Up受90秒和grant剩余寿命约束，HTTP单独5秒；前后重验身份/期限/同节点公钥及规范100.120.0.0/24非保留IPv4。ticket/节点地址只留内部，输出固定network_enrollment、passed、active=false；真实节点Up不等于持有证明/绑定/策略放行。grant到期独立timer结束owner，node CloseJoined先于HTTP/signer join；不强杀。
+
+尝试标记在副作用前锁闭，**只覆盖本次owner生命周期**。工厂返回部分资源即使带error仍由runner实际join。未知HTTP/Up、混secret回复、身份变化、过期、取消等失败不重试；node状态留存、远端清理归authority reconciliation，不擅自声称票据已清理。credential字段在包括错误分支的返回前清空，tsnet AuthKey字段Up返回后清空；Go不可变string/SDK/HTTP缓冲区的所有副本没有保证物理擦除，不能宣称内存零残留。
+
+`TSNetEnrollmentFactory` 是固定mk.fengmap.com:8443的内部tsnet适配器，离线Prepare后直接Up，日志禁用，不开放proof或产品listener。它仅接受预先保护的空目录：任何留存材料均拒绝再次注册，避免已登录节点使Up忽略新AuthKey；不删除/修复材料，也不提供换目录自动恢复。调用者必须预先持有覆盖该目录的原生独占lease、完成OS ACL且路径来自可信安装布局；adapter只补POSIX mode/目录检查，不以Windows mode替代DACL、也不提供生产跨重启结果journal。因此 **没有连接到正式编译入口**，不能由GUI直接使用，也不能重复启动它当作恢复方案。实际tsnet Up/SDK close与双机Headscale尚未运行验收；本机测试该adapter仅离线准备/保留key（直接nodeidentity重读）/留存与损坏材料拒绝/路径拒绝。
+
+证据：新增7个测试函数（意图签名/仅内部消费/one-shot、6类前置拒绝、9类HTTP未知/混reply、6类Up结果拒绝、真实离线节点材料、3类准备故障、11类父字段注入）；已有真实本机HTTPS Runner测试扩为5组，注册正常/注册fault/idle grant到期均用memory signer和node fixture，实际等待两个join屏障。它不是OS signer、真实批准Store/Mint或Headscale网络证明。相关5包race与vet通过；r24两平台测试二进制仅交叉build，不当作原生执行证据。
+
+下一项优先在同一组合中补固定安装节点布局、Windows DACL/macOS原生独占与持久尝试/未知结果门禁、真实native process故障/EOF验收，再启用compiled入口并接实时nodeproof/bind/watch。不要跳过持久结果门禁直接把父供AuthKey旧fixture迁移过来。服务器/公网/原GUI/安装包本轮均未改，Windows关机即可。
+
 ## r23：直接签名网络授权门禁（开发/本机HTTPS通过）
 
 新增后续私有帧 `Op=network`，仅允许 `Network.Action=grant_clock|state` 及签名 `Network.Grant`。open/stop/device不允许混带network操作；nonce/time/challenge/ticket/intent/certificate/proof由父帧注入均拒绝，enroll/bind/clock/publish_tls/tls_identity仍不开放。零Network字段在JSON输出中省略，保留旧设备帧形状。首帧仍禁止grant/网络操作和运行时根/地址覆盖。
