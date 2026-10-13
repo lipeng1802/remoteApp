@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-13 r25 原生注册状态/节点目录与真实拒绝退出路径，Mac通过，Windows待验
+
+接r24新增enrollmentstore，Scope由release稳定channelScope、本机vault scope与expected public独立域哈希生成，不含grant/epoch/path。Initialize与Open分离，运行时不补装/修复。原生journal复用Keychain/Credential Manager immutable chunks/manifest CAS与回读；macOS current UID/0700/0600/no-follow/nlink/inode，Windows KnownFolder+显式current SID owner/仅该SID protected inheritable DACL、reparse/multi-link拒绝、目录handle不共享delete。Windows native mutex线程固定，进程内scope registry另防递归打开。SDK node private key仍是权限保护文件，不宣称其全部在OS vault或额外磁盘加密；不抵抗同用户/管理员/整机回滚。
+
+状态idle→attempted→registered，不提供生产reset/retry/delete。Begin native提交及回读成功先于Prepare/HTTP；NativeEnrollmentFactory已组合Open/Begin/固定保护dir/tsnet adapter，原始公钥/overlay/ctx有效才登记结果。失败未知留attempted，成功registered，重启/stop/到期不会变idle。node真正CloseJoined先于native lease释放；join失败保留lease。恢复需要后续明确authority reconciliation与授权，不允许换scope/identity/目录自动重试。缺失/损坏材料失败保留，不做明文metadata文件fallback。
+
+4函数通用record状态机测试（重开拒绝、写失败/提交未知/回读错、9类坏材料/权限不修复、scope/非法完成）+Mac真实permission/hardlink/symlink/namespace replacement负向PASS；Windows Everyone DACL拒绝测试build-only。Native存储validator使用fresh random TEST scope、实际NativeEnrollmentFactory离线prepare、第二子进程两轮拒绝且释放后同程序可读、attempted/registered跨进程拒绝、精确TEST state/private key/native record清理PASS。registered fixture public IP非Headscale observation，没有Up。Mac `enrollment-storage-r25-mac-r2` 打包后两个exe实际运行exit0 PASS，前期r25-mac/r2独立程序及r25-mac bundle也通过；空TEST目录/native lock保留。失败模拟只在内存journal，不冒充实机断电/OS写错误。
+
+devicevalidation增加真实compiled客户端负向：正确本机subject但零签名Grant，network_authorization/false后先半关闭stdin，再failed/actual exit1，signer与native journal释放、原epoch1可重开。Mac fresh `installed-device-native-r25-mac` 完整实际exit0，原device HTTPS注册/邀请/正常重启与清理亦通过。仅无效issuer grant本地拒绝，不发network HTTP；有效clock/state/HTTP异常/inactive/实际enroll的原生组合仍未覆盖，不将此负向推广为完整自主注册退出。新成功标记包含terminal network grant rejection/EOF/actual exit。
+
+相关enrollmentstore/nativejournal/installeddevice/devicevalidation/installed-device-client/clientowner 6包race、专用vet PASS；Windows fresh `enrollment-storage-r25-win-r3`（脚本先跑单测含DACL，再native程序）与 `installed-device-native-r25-win`（借用r18 pinned native helper bytes，fresh客户端/profile/validator/manifest）build-only。未上传/执行Windows、未启动关机机器、无服务器/端口/GUI/安装包改变。详细新入口见public-server/ENROLLMENT_STORAGE.md；第二Windows包TEST profile23小时有效，过期要fresh构建，不改时钟/生产信任。旧r18脚本/包不证明新负向。
+
+compiled device-client **仍未启用provision**。当前Darwin entry构建CGO=0，直接nativejournal不支持，后续必须选择CGO native entry稳定签名或pinned专用storage helper并验收，不能仅换成NativeEnrollmentFactory就算完成。先Windows原生DACL/Credential Manager/新EOF桌面反馈，再固定编译/可信初始化及有效签名HTTPS注册的原生组合，然后真实Headscale Up/nodeproof/bind/watch。在线服务verifier/凭据供应不能走父帧或日志；8444公网开放仍需单独授权。整体4未完成。本轮本地提交，不推送。
+
 ## 2026-10-13 r24 已推送r23，内部注册/凭据消费组件开发与本机回归通过
 
 用户要求先推送再继续任务。fetch后HEAD比origin/codex/connection-architecture-poc领先131、落后0，工作区干净；使用http.proxy=http://127.0.0.1:1080非force push成功，origin从4d08bdd更新到f4bb336（含README）。r24新代码仍本地提交，未再次推送；不把未推送r24当作远端最新包。

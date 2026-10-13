@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -320,5 +321,40 @@ func Run(release trustinstall.Release, fixture TLSFixture, signerDigest, clientD
 		return ErrValidation
 	}
 	pass("actual_os_signature_https_registration_invitation_and_stable_restart")
+	// A structurally valid local network command with an invalid issuer grant
+	// must retire this real native client, not fall back to device retry behavior.
+	// It intentionally does not exercise online clock/state proof acceptance.
+	fault, err := launch(executable)
+	if err != nil {
+		return err
+	}
+	defer fault.cleanup()
+	if fault.encode.Encode(open) != nil {
+		return ErrValidation
+	}
+	if v, e := fault.receipt("ready"); e != nil || len(v) != 1 {
+		return ErrValidation
+	}
+	if _, e := offline.Inspect(); e == nil {
+		return ErrValidation
+	}
+	id := sha256.Sum256(creator.PublicKey())
+	grant := invite.Grant{Claims: invite.Claims{Version: 1, ID: strings.Repeat("a", 32), Target: hex.EncodeToString(id[:]), Controller: strings.Repeat("b", 64), Permission: "fixed-payload", IssuedAt: time.Now().Unix() - 1, ExpiresAt: time.Now().Unix() + 299}, Signature: strings.Repeat("0", 128)}
+	if fault.encode.Encode(installeddevice.Request{Op: "network", Network: invite.NetworkRequestBody{Action: "grant_clock", Grant: grant}}) != nil {
+		return ErrValidation
+	}
+	value, err = fault.receipt("network_authorization")
+	if err != nil || len(value) != 4 || value["passed"] != false || value["active"] != false {
+		return ErrValidation
+	}
+	fault.in.Close() // terminal result -> half-close FIRST, then wait final/exit
+	value, err = fault.receipt("failed")
+	if err != nil || len(value) != 1 || fault.wait(1) != nil {
+		return ErrValidation
+	}
+	if p, e := offline.Inspect(); e != nil || p.Claims.Epoch != 1 {
+		return ErrValidation
+	}
+	pass("actual_native_network_denial_input_eof_failed_exit_and_lease_reopen")
 	return nil
 }

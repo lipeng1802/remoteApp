@@ -18,7 +18,7 @@ func main() {
 		fmt.Println("VALIDATION FAILED: installed device native acceptance; preserve test evidence")
 		os.Exit(1)
 	}
-	fmt.Println("VALIDATION PASSED: actual compiled device client + native trust lease + OS signature direct local HTTPS + stable restart + joined test cleanup. NOT public service, Headscale, product TLS/GUI or signed installer acceptance.")
+	fmt.Println("VALIDATION PASSED: actual compiled device client + native trust lease + OS signature direct local HTTPS + stable restart + terminal network grant rejection/EOF/actual exit + joined test cleanup. NOT online network authorization, Headscale, product TLS/GUI or signed installer acceptance.")
 }
 
 func run() error {
