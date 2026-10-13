@@ -1,5 +1,25 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-13 r22 用户批准维护窗口，长期后台部署与真实回环故障闭环通过
+
+用户明确回答“允许现在维护预发布服务”，授权持久Headscale database切换/长期verifier/预发布authority与回环前端配置更换，未授权公网端口/业务Nginx与443改变；Windows关机，本轮没有Windows动作。
+
+新增root-local Python2兼容 `network-maintenance.py` 与 `deploy-network.py` 显式 `--maintenance-approved`/固定root-private stage/逐文件SHA manifest门禁；阶段prepare/activate/fault/resume/rollback，服务器私有检查点持久化。备份原unit/二进制/control/policy及停止后Store审计副本，不自动rollback、不kill、不删锁、不恢复Store旧快照。现有provision工作/控制面非空/路径symlink/未知材料拒绝；显式rollback仅允许原或候选摘要匹配的配置，先实际退出/无锁/精确Retire本轮身份，再恢复原配置，保留当前Store与退休journal。备份不传Mac或客户端。
+
+新Linux `network-deployment-check` 以remoteapp-pre实际UID运行：固定现有安装anchor/profile，验证root/service/floor/有效期与TLS CA/hostname，固定Dial回环8444、禁代理/重定向；内核broker issuer匹配，signed unknown network state被真实ready后台403，空device envelope在签名门禁前拒绝403。不得用签名unknown device请求（会写durable replay/budget）；无register/approve/grant/凭据。网络alias/超长/Origin/query/GET/health负向检查通过，不修改正式Store。最终检查程序额外编译固定operator发行根（`-X main.releaseRoot=<既有可信公开根>`），空pin或前端可写anchor与编译pin不匹配直接拒绝，不能只信任前端可写anchor/profile自洽。`refresh-probe` 逐文件验证后仅更新检查程序/manifest/持久operator副本，不更改服务，实际独立UID/TLS/负向与Store不变复测通过。
+
+初次prepare只停止旧前端即暂停：旧二进制不输出STOPPED frontend。维护工具拒绝计PASS，显式rollback实际恢复旧服务/原配置；没有切换策略或准备身份。新增仅针对备份摘要匹配、旧device-only模板的迁移分支：实际PID消失/systemd状态0/8444无监听，且旧binary摘要保持一致；新前端仍强制STOPPED回执。对应5种负向/正常条件回归通过，未以缺失回执冒充新前端回执。
+
+第二轮stage `/run/remoteapp-network-maint-a3817bf2d4c690e5` 四阶段actual exit0：旧前端/authority正常退出、writer锁释放，Headscale切database/显式零ACL；verifier首次create READY→TERM→STOPPED/actual0，长期身份留存，daemon启动仅重开无Mint；安装r21能力/停止预算候选unit和新frontend，Wants而非Requires避免故障依赖停止吞掉503。前端显式public-network协议模式但仅绑定127.0.0.1（共享4预算，不代表公网开放）。三服务active，独立UID/TLS/负向/issuer通过，正式Store摘要完全未变。
+
+真实fault阶段stop remoteapp-poc后authority FAIL/非零实际退出、writer/owner锁释放、broker消失；前端继续运行，device/network均503。恢复provider后无自动后台重启、两路仍503；resume明确启动新authority实例后原verifier key/IP恢复、两路拒绝/负向通过、显式零ACL、Store原摘要不变，checkpoint为verified_active。原业务Nginx所有基线OK；8444仅127.0.0.1，三个服务仍disabled（未enable自启）。service profile仍当前有效epoch1/原issuer/root，没有重签或换信任根。
+
+恢复材料在服务器root私有 `/var/lib/remoteapp-network-maintenance/remoteapp-network-maint-a3817bf2d4c690e5`：original-*配置/旧binary、store-for-audit-only.json（严禁恢复覆盖）、checkpoint.json/deny.json及operator/完整工具/manifest/产物。operator拷贝持久保存，因为/run stage重启会丢失。第一次失败并回退的备份位于同父目录 `remoteapp-network-maint-6f291da4ec30b872`。两份备份和stage有意保留，未删除材料；后续清理必须精确且确认维护完成。长期 `/var/lib/remoteapp-verifier`、`/var/lib/remoteapp-network-policy`、`/etc/remoteapp-authority/network.json` 为正式私有材料，**不能用r21临时Retire/空控制面restore脚本或r19空资源断言清理**。现在长期verifier占有节点/工单，运行中有锁是正常状态，不再期待全空；实际只读计数及零ACL复核见本轮收尾输出。
+
+Go deviceservice/broker/verifier三包race、Linux入口vet/静态构建通过；Python81项PASS（新增maintenance路径/atomic/旧前端迁移门禁）；Linux检查程序无独立本机fixture单测，以实际部署UID/TLS负向与故障往返为证据，不冒充native OS signer/设备客户端/跨机注册或产品TLS。
+
+下一项：先明确凭据供应和客户端自主注册/网络绑定的端到端入口（不再依赖SSH输送注册凭据/HMAC），或补服务重启运维入口与公网admission门禁；公网8444开放仍需单独授权及信任分发验收。未做自然过期、实际重启整台服务器/自启、真实授权数据面双机、GUI/签名安装包，整体4未完成。Windows可保持关机，需要双机时提前通知。本地提交，不推送。
+
 ## 2026-10-13 r21 隔离候选systemd服务真实生命周期验收通过
 
 新增 `daemon-network.py --systemd` 和Linux checker随机runtime unit后端，用仓库候选模板替换为隔离public pins/路径，禁止参数注入/正式路径残留及不安全Restart/停止预算/依赖。实验位于/run，保留PrivateTmp/PrivateDevices/ProtectHome/ProtectSystem/NoNewPrivileges；不安装正式/etc unit或enable。用户补充Windows已关机，本輪不依赖Windows，也未使用桌面签名器。

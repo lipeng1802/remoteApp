@@ -1,5 +1,11 @@
 # r20 长期网络后端部署准备（未部署）
 
+**r22 已在用户明确维护授权下完成预发布后台部署和回环故障闭环**，下文r20/r21状态为历史。Headscale当前持久database、长期verifier/sole authority已启用，前端协议模式public-network但8444仍仅127.0.0.1，未开放公网/enable自启。不得再用要求控制面全空的临时验收脚本或恢复原file策略；长期节点/锁是运行中真实资源。最新备份/恢复材料和边界见主HANDOFF。
+
+运维入口 `deploy-network.py --maintenance-approved --stage /run/remoteapp-network-maint-<16hex> <stage|prepare|activate|fault|resume|rollback|refresh-probe>`，必须真实运维授权，不由HTTP/IPC传入。既有安装和未知长期材料拒绝自动重部署；源码/二进制摘要验证、root私有备份/检查点、实际join与身份保持是门禁。回退需明确执行且先退出/Retire，保留Store现有状态；审计Store副本不用于恢复。/run工具目录重启会消失，本轮operator材料另保存在root私有持久备份中，恢复必须从该精确工单重新准备工具并先核验，不代表已验收整机重启/自动恢复。三个服务仍disabled，开机启用属于后续任务。
+
+Linux维护探针需独立编译operator认可的既有公开发行根：`go build -ldflags '-X main.releaseRoot=<trusted-existing-release-root>' ./cmd/network-deployment-check`。不接受运行时地址/根覆盖，不仅依赖前端可写的anchor/profile；最终pin版以真实部署UID/TLS复测。refresh-probe只在verified_active阶段更新探针/manifest/持久工具并复核Store不变，不更换后台配置或开放监听。
+
 r20 提供只读代码预检与候选 unit，当时未上传/部署。后续 r21 通过随机 `/run/systemd/system` 测试unit进行目标CentOS候选验收，记录见 [候选服务验收](SYSTEMD_NETWORK_ACCEPTANCE.md)。正式服务仍 device-only；未创建长期 verifier、未持久迁移策略、未开放端口。候选仍不是已验收的生产配置。
 
 ## 只读入口

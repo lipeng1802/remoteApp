@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r22 经用户明确批准维护窗口，预发布长期网络后台已部署并完成回环故障闭环：Headscale持久database/显式零ACL、长期verifier、sole authority及独立UID前端已接通；provider故障非零退出/两路503、恢复不自动重启、显式同身份恢复通过。8444仍127.0.0.1，业务Nginx/443与Store摘要未变，未enable自启。备份/检查点与边界见 [部署交接](docs/HANDOFF.md)。Windows本轮关机且无需操作，公网/客户端自主凭据与GUI仍待。
+
 r21 [候选systemd网络服务验收](poc/selfhost/public-server/SYSTEMD_NETWORK_ACCEPTANCE.md) 完成：目标CentOS随机runtime unit/真实verifier与Headscale、跨UID拒绝、正常join、provider故障非零退出、无自动恢复、显式同身份重启及精确清理通过。修复组权限、依赖停止语义、CLI/overlay所需能力及systemd停止回执兼容。正式后台仍device-only，未开放公网；Windows本轮关机且无需参与。
 
 r20 [长期后端部署准备](poc/selfhost/public-server/NETWORK_DEPLOYMENT_PREPARATION.md)：新增只读authority预检、严格权限/锁/恢复材料检查及候选systemd unit与回退门禁。不会启用网络、创建verifier或修改策略；候选unit与长期后端实机组合仍待验证。
