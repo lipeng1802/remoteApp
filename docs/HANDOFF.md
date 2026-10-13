@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-13 r20 长期authority网络后端只读预检与候选部署配置
+
+新增 `--check-network-config`：复用严格网络配置，检查签名profile/root/service/floor/有效期、同UID私有Store/恢复journal/node文件及目录隔离，拒绝任何writer/owner锁。只读，不打开Store/verifier、不创建锁/身份/节点、不执行CLI或网络，不自动修复。成功仅固定CHECK PASSED（明确不是live provider/policy/issuer/network验收），真实启动仍重验与独占。
+
+新增候选unit（不安装），ExecStartPre+network-config、专属可写目录、停止预算45秒避免旧10秒早于daemon30秒join。候选仍需目标CentOS7解析与隔离真实网络实测，不把模板当部署。部署/备份/权限/迁移/回退步骤见 `poc/selfhost/public-server/NETWORK_DEPLOYMENT_PREPARATION.md`：不自动删遗留锁，不用旧Store快照覆盖新合法授权/撤销，故障或强杀不算join。现网file策略与database要求仍是启用前门禁。
+
+两项新增预检测试（12类负向子项）确认成功重复运行/失败不改写文件或创建锁；broker/verifier/authority-daemon相关race及vet PASS，Linux amd64静态authority-daemon-preflight-r20 build-only通过。authority-daemon入口包本身无独立CLI测试；候选unit没有目标systemd实机解析或启动证据，不将本机预检材料当真实长期node一致性验收。
+
+本轮无线上改动或Windows操作。下一项隔离Linux候选unit+真实长期后台生命周期组合，再明确维护窗口部署；公网8444/凭据供应/GUI/签名安装包及整体4仍待。本地提交、不推送。
+
 ## 2026-10-12 r19 直接HTTPS网络前端operator模式/有界工作槽开发完成，未部署
 
 新增独立 `--public-network`/PublicNetwork opt-in；保留原private loopback-only和默认network404，混用/未知模式拒绝。必须独立broker/规范absolute socket，signed profile非localhost命名域名、规范非特权且精确匹配endpoint端口，TLS/发行根/service/floor/有效期校验及kernel UID/Store issuer握手保留。broker.SignedNetworkHandler设备与网络共享4槽；所有实际授权仍由sole authority完成，没有新Store/issuer初始化或根/审批绕过。保留32socket、admission peer/global预算、JSON/body/IPC限制和network14s/write20s预算；Origin/query/代理头不作为授权或可信peer，不支持未经设计的直接反代或分布式DDoS保证。

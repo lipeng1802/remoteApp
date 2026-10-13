@@ -204,6 +204,16 @@ func handle(s string) bool {
 	}
 	return s != "0" && s[0] != '0'
 }
+
+// CheckResumeJournal is read-only. It neither acquires ownership nor contacts
+// the provider. A passing snapshot is not proof of a live node or successful Up.
+func CheckResumeJournal(dir string) error {
+	s, err := load(dir)
+	if err != nil || (s.Phase != "issued" && s.Phase != "ready") {
+		return ErrVerifier
+	}
+	return nil
+}
 func lease(dir string, create bool) (func() error, error) {
 	if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir {
 		return nil, ErrVerifier

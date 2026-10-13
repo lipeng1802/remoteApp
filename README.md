@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r20 [长期后端部署准备](poc/selfhost/public-server/NETWORK_DEPLOYMENT_PREPARATION.md)：新增只读authority预检、严格权限/锁/恢复材料检查及候选systemd unit与回退门禁。不会启用网络、创建verifier或修改策略；候选unit与长期后端实机组合仍待验证。
+
 r19 [直接HTTPS网络入口](poc/selfhost/public-server/DIRECT_HTTPS_INGRESS.md) 代码与本机验证完成：独立运维public模式，签名域名profile/独立UID broker必需，两路共享4工作槽，默认network仍404、authority不可用503。相关race/vet及Python78项通过，Linux前端build-only；服务器只读确认8444仍回环、正式network backend未配置、基线不变。尚未部署或开放公网，本轮Windows无操作。
 
 r18 [新客户端原生联合验收](poc/selfhost/public-server/INSTALLED_DEVICE_NATIVE_VALIDATION.md) 双平台已闭环：Mac实际compiled客户端/native journal/OS签名直连本机HTTPS、稳定重启、实际退出及精确清理全PASS/exit0；用户确认Windows普通桌面入口返回完整预期VALIDATION PASSED。下一项长期服务自主HTTPS接入与受保护凭据供应；不包含公网/Headscale/GUI/安装，整体4未完成。

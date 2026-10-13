@@ -13,7 +13,8 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 9 && (len(os.Args) != 11 || os.Args[9] != "--network-config") {
+	check := len(os.Args) == 11 && os.Args[9] == "--check-network-config"
+	if len(os.Args) != 9 && (len(os.Args) != 11 || (os.Args[9] != "--network-config" && !check)) {
 		fmt.Println("FAIL authority_arguments")
 		os.Exit(1)
 	}
@@ -29,6 +30,14 @@ func main() {
 	c := broker.DaemonConfig{Profile: os.Args[1], ReleaseRoot: os.Args[2], Service: os.Args[3], MinimumEpoch: floor, StateDirectory: os.Args[5], Socket: os.Args[6], PeerUID: uint32(peer), GroupID: uint32(group)}
 	if len(os.Args) == 11 {
 		c.NetworkConfig = os.Args[10]
+	}
+	if check {
+		if broker.CheckNetworkPreparation(c) != nil {
+			fmt.Println("FAIL network_preparation")
+			os.Exit(1)
+		}
+		fmt.Println("CHECK PASSED: idle files and signed profile only; NOT live provider, policy mode, issuer match or network acceptance")
+		return
 	}
 	if broker.RunDaemon(ctx, c, func() {
 		if c.NetworkConfig == "" {

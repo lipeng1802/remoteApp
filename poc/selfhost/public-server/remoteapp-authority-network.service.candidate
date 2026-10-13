@@ -1,0 +1,32 @@
+# Candidate ONLY. Not installed/enabled by a build or preflight.
+# Substitute reviewed public anchor/UID/GID; network.json is operator-local.
+[Unit]
+Description=RemoteApp sole authority with supervised network (candidate)
+After=network.target remoteapp-poc.service
+Requires=remoteapp-poc.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStartPre=/opt/remoteapp-prerelease/authority-daemon /etc/remoteapp-authority/service-profile.json @RELEASE_ROOT@ remoteapp-prerelease 1 /var/lib/remoteapp-authority /run/remoteapp-authority/authority.sock @FRONTEND_UID@ @FRONTEND_GID@ --check-network-config /etc/remoteapp-authority/network.json
+ExecStart=/opt/remoteapp-prerelease/authority-daemon /etc/remoteapp-authority/service-profile.json @RELEASE_ROOT@ remoteapp-prerelease 1 /var/lib/remoteapp-authority /run/remoteapp-authority/authority.sock @FRONTEND_UID@ @FRONTEND_GID@ --network-config /etc/remoteapp-authority/network.json
+Restart=no
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=full
+ReadOnlyDirectories=/var/lib/remoteapp-prerelease /etc/remoteapp-authority
+ReadWriteDirectories=/var/lib/remoteapp-authority /run/remoteapp-authority /var/lib/remoteapp-verifier /var/lib/remoteapp-network-policy
+CapabilityBoundingSet=CAP_CHOWN
+LimitNOFILE=128
+# Daemon allows 30 seconds for actual network join. A forced systemd timeout
+# is NOT graceful shutdown; retain locks/state and require operator review.
+TimeoutStopSec=45
+StandardOutput=journal
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target
