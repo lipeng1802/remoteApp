@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-13 r21 隔离候选systemd服务真实生命周期验收通过
+
+新增 `daemon-network.py --systemd` 和Linux checker随机runtime unit后端，用仓库候选模板替换为隔离public pins/路径，禁止参数注入/正式路径残留及不安全Restart/停止预算/依赖。实验位于/run，保留PrivateTmp/PrivateDevices/ProtectHome/ProtectSystem/NoNewPrivileges；不安装正式/etc unit或enable。用户补充Windows已关机，本輪不依赖Windows，也未使用桌面签名器。
+
+实机暴露并修复：r20 Store父目录组应为effective GID而不是socket共享GID；Requires改Wants/After避免provider停止吞掉Runtime故障语义；私有Headscale admin socket跨服务UID访问需要DAC override；pinned root/CentOS overlay绑定另需NET_RAW（相同身份仅加该能力后READY/STOPPED成功，不授予NET_ADMIN，不改provider私有权限）；systemd正常停止会清空ExecMainPID/Code，验收器必须保留实际运行PID并检查同PID STOPPED/真实退出，而不是只看inactive。新增固定阶段诊断，不输出身份/地址/错误正文/私钥。没有把第一次失败或单次诊断成功当组合PASS。
+
+最终 `daemon-network.py --systemd` actual exit0：Linux候选渲染/受限精确恢复/正常回执三项测试PASS无SKIP；真实verifier首次create后stop，unit ExecStartPre通过、后台仅重开既有journal，三次独立随机unit实际READY/显式零ACL；批准nobody身份/无grant403、私有读取拒绝，错误root peer由kernel拒绝。正常stop/join保留key/IP，实际stop remoteapp-poc后后台非零FAIL/实际PID退出；provider恢复不自动重启broker，旧身份恢复，显式新unit重启成功，issuer/实验Store未变，最终正常join/零ACL。精确Retire本轮ticket、实验目录/runtime units及上传程序删除，原file模式/原PoC策略恢复，控制nodes/users/preauthkeys归零，三个正式服务active，Nginx原摘要通过。
+
+失败两轮曾保留实验材料和策略备份；显式恢复核对精确随机unit/实际退出/无锁后Retire工单，未kill或删锁/恢复正式Store快照，两轮资源和策略均恢复后再做最终验收。该过程的操作脚本留在ignored artifacts，正式维护入口仅限checker `cleanup-failed-systemd`，拒绝正式路径/单位或活进程。
+
+broker/verifier/authority-daemon相关race PASS，新增诊断隐私/失败门禁回归PASS；Linux静态checker/daemon/test编译与Linux vet通过；Python既有78项PASS。服务端无grant、跨机nodeproof、产品TLS/GUI或签名安装，不把控制面零ACL回读当真实双向网络拒绝。详情见 `poc/selfhost/public-server/SYSTEMD_NETWORK_ACCEPTANCE.md`。
+
+下一项长期后台部署门禁：确定维护窗口与正式verifier所有权/策略database迁移，先保持前端回环完成独立UID真实后台接通与故障闭环，再考虑公网8444。现网正式authority/frontend仍device-only、8444仍127.0.0.1，HMAC/凭据供应、自主enroll/bind、GUI/安装与整体4仍未完成。Windows继续保持关机即可，双机/客户端任务前需提前通知用户。本地提交，不推送。
+
 ## 2026-10-13 r20 长期authority网络后端只读预检与候选部署配置
 
 新增 `--check-network-config`：复用严格网络配置，检查签名profile/root/service/floor/有效期、同UID私有Store/恢复journal/node文件及目录隔离，拒绝任何writer/owner锁。只读，不打开Store/verifier、不创建锁/身份/节点、不执行CLI或网络，不自动修复。成功仅固定CHECK PASSED（明确不是live provider/policy/issuer/network验收），真实启动仍重验与独占。

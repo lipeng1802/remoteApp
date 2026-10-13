@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r21 [候选systemd网络服务验收](poc/selfhost/public-server/SYSTEMD_NETWORK_ACCEPTANCE.md) 完成：目标CentOS随机runtime unit/真实verifier与Headscale、跨UID拒绝、正常join、provider故障非零退出、无自动恢复、显式同身份重启及精确清理通过。修复组权限、依赖停止语义、CLI/overlay所需能力及systemd停止回执兼容。正式后台仍device-only，未开放公网；Windows本轮关机且无需参与。
+
 r20 [长期后端部署准备](poc/selfhost/public-server/NETWORK_DEPLOYMENT_PREPARATION.md)：新增只读authority预检、严格权限/锁/恢复材料检查及候选systemd unit与回退门禁。不会启用网络、创建verifier或修改策略；候选unit与长期后端实机组合仍待验证。
 
 r19 [直接HTTPS网络入口](poc/selfhost/public-server/DIRECT_HTTPS_INGRESS.md) 代码与本机验证完成：独立运维public模式，签名域名profile/独立UID broker必需，两路共享4工作槽，默认network仍404、authority不可用503。相关race/vet及Python78项通过，Linux前端build-only；服务器只读确认8444仍回环、正式network backend未配置、基线不变。尚未部署或开放公网，本轮Windows无操作。

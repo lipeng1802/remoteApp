@@ -28,6 +28,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	c := broker.DaemonConfig{Profile: os.Args[1], ReleaseRoot: os.Args[2], Service: os.Args[3], MinimumEpoch: floor, StateDirectory: os.Args[5], Socket: os.Args[6], PeerUID: uint32(peer), GroupID: uint32(group)}
+	c.Report = func(stage string) { fmt.Println("DIAGNOSTIC network_" + stage) }
 	if len(os.Args) == 11 {
 		c.NetworkConfig = os.Args[10]
 	}

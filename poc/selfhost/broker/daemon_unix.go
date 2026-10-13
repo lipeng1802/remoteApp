@@ -19,12 +19,16 @@ type DaemonConfig struct {
 	PeerUID, GroupID                                      uint32
 	// Empty retains the deployed device-only behavior. Trusted local path only.
 	NetworkConfig string
+	// Optional fixed stage labels only; never provider errors or private values.
+	Report func(string)
 }
 
 // RunDaemon owns the sole existing Store. It has NO TLS listener or generic
 // privileged operations. Network is opt-in via trusted local configuration.
 func RunDaemon(ctx context.Context, c DaemonConfig, ready func()) (result error) {
-	return runDaemon(ctx, c, ready, startDaemonNetwork)
+	return runDaemon(ctx, c, ready, func(ctx context.Context, s *invite.Store, n DaemonNetworkConfig) (daemonNetworkOwner, error) {
+		return startDaemonNetworkReported(ctx, s, n, c.Report)
+	})
 }
 
 func runDaemon(ctx context.Context, c DaemonConfig, ready func(), start networkStarter) (result error) {

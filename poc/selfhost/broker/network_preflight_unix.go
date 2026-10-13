@@ -25,9 +25,9 @@ func CheckNetworkPreparation(c DaemonConfig) error {
 	if !filepath.IsAbs(c.Socket) || filepath.Clean(c.Socket) != c.Socket {
 		return ErrBroker
 	}
-	for _, dir := range []string{filepath.Dir(c.StateDirectory), filepath.Dir(c.Socket)} {
+	for dir, gid := range map[string]uint32{filepath.Dir(c.StateDirectory): uint32(os.Getegid()), filepath.Dir(c.Socket): c.GroupID} {
 		real, err := filepath.EvalSymlinks(dir)
-		if err != nil || real != dir || !safeDirectory(dir, c.GroupID) {
+		if err != nil || real != dir || !safeDirectory(dir, gid) {
 			return ErrBroker
 		}
 	}

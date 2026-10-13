@@ -102,11 +102,20 @@ type daemonNetwork struct {
 }
 
 func startDaemonNetwork(ctx context.Context, st *invite.Store, c DaemonNetworkConfig) (daemonNetworkOwner, error) {
+	return startDaemonNetworkReported(ctx, st, c, nil)
+}
+func startDaemonNetworkReported(ctx context.Context, st *invite.Store, c DaemonNetworkConfig, report func(string)) (daemonNetworkOwner, error) {
+	fail := func(stage string) {
+		if report != nil {
+			report(stage)
+		}
+	}
 	// No creation, registration credential or rekey fallback in service startup.
 	// Parent shutdown must first join supervisor/broker workers. Runtime owns
 	// its own health cancellation; Open's existing 30s startup budget remains.
-	v, e := verifier.Open(context.WithoutCancel(ctx), c.VerifierDirectory, false, &headscale.Driver{Run: headscale.LocalRunner()}, verifier.NewOverlay)
+	v, e := verifier.OpenReported(context.WithoutCancel(ctx), c.VerifierDirectory, false, &headscale.Driver{Run: headscale.LocalRunner()}, func(dir, key string) verifier.Node { return verifier.NewOverlayReported(dir, key, report) }, report)
 	if e != nil {
+		fail("verifier_open_failed")
 		return nil, ErrBroker
 	}
 	n := &daemonNetwork{runtime: v}
@@ -115,6 +124,7 @@ func startDaemonNetwork(ctx context.Context, st *invite.Store, c DaemonNetworkCo
 	}
 	s, e := StartHeadscaleNetworkSupervisor(ctx, st, v, c.PolicyDirectory, time.Second)
 	if e != nil {
+		fail("supervisor_start_failed")
 		return n, ErrBroker
 	}
 	n.supervisor = s
@@ -125,10 +135,13 @@ func startDaemonNetwork(ctx context.Context, st *invite.Store, c DaemonNetworkCo
 	for !s.Ready() {
 		select {
 		case <-ctx.Done():
+			fail("supervisor_ready_cancelled")
 			return n, ErrBroker
 		case <-s.Done():
+			fail("supervisor_ready_fault")
 			return n, ErrBroker
 		case <-timer.C:
+			fail("supervisor_ready_timeout")
 			return n, ErrBroker
 		case <-tick.C:
 		}

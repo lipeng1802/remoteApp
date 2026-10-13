@@ -52,6 +52,8 @@ type child struct {
 	done                  chan error
 	joined                bool
 	readyLabel, stopLabel string
+	unit                  string
+	pid                   int
 }
 
 func launch(binary string, args []string) (*child, error) {
@@ -79,6 +81,9 @@ func launchCommand(command *exec.Cmd) (*child, error) {
 	return p, nil
 }
 func (p *child) ready() error {
+	if p.unit != "" {
+		return p.serviceReady()
+	}
 	timer := time.NewTimer(45 * time.Second)
 	defer timer.Stop()
 	select {
@@ -92,6 +97,9 @@ func (p *child) ready() error {
 	}
 }
 func (p *child) wait(normal bool) error {
+	if p.unit != "" {
+		return p.serviceWait(normal)
+	}
 	timer := time.NewTimer(40 * time.Second)
 	defer timer.Stop()
 	select {
@@ -120,6 +128,12 @@ func (p *child) wait(normal bool) error {
 func (p *child) stop() error {
 	if p == nil || p.joined {
 		return nil
+	}
+	if p.unit != "" {
+		if _, err := serviceCommand("stop", p.unit); err != nil {
+			return denied
+		}
+		return p.wait(true)
 	}
 	if p.cmd.Process.Signal(syscall.SIGTERM) != nil {
 		return denied
@@ -197,13 +211,18 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 	}
 	// A non-root peer must be able to traverse the experiment's public parent.
 	// Never loosen the existing PoC service's private state directory.
-	base, e := os.MkdirTemp("/tmp", "remoteapp-daemon-check-")
+	parent := "/tmp"
+	if candidatePath != "" {
+		parent = "/run"
+	}
+	base, e := os.MkdirTemp(parent, "remoteapp-daemon-check-")
 	if e != nil {
 		return denied
 	}
 	d := &headscale.Driver{Run: headscale.LocalRunner()}
 	var current *child
 	var front *child
+	var services []*child
 	frozen := false
 	providerStopped := false
 	vd := filepath.Join(base, "verifier")
@@ -258,6 +277,13 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 				return
 			}
 			fmt.Println("PASS exact_verifier_ticket_retired")
+		}
+		for _, s := range services {
+			if !s.joined || s.removeService() != nil {
+				result = denied
+				fmt.Println("PRESERVED " + base)
+				return
+			}
 		}
 		if os.RemoveAll(base) != nil {
 			result = denied
@@ -349,12 +375,22 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 	args := []string{profile, a.ReleaseRoot, a.Service, "1", state, socket, strconv.Itoa(uid), strconv.Itoa(gid), "--network-config", np}
 	start := func() error {
 		var e error
-		current, e = launch(binary, args)
+		if candidatePath != "" {
+			current, e = launchService(binary, args, base)
+			if current != nil {
+				services = append(services, current)
+			}
+		} else {
+			current, e = launch(binary, args)
+		}
 		if e != nil {
 			return e
 		}
 		if current.ready() != nil {
 			return denied
+		}
+		if candidatePath != "" {
+			fmt.Println("PASS isolated_systemd_candidate_preflight_and_actual_daemon_ready")
 		}
 		return check(policyZero(d), "real_daemon_ready_projects_explicit_zero_acl")
 	}
@@ -641,12 +677,17 @@ func run(binary, frontend string, consent *consentPins) (result error) {
 }
 func main() {
 	var e error
-	if len(os.Args) >= 3 && os.Args[1] == "peer" {
+	if len(os.Args) == 4 && os.Args[1] == "cleanup-failed-systemd" {
+		e = cleanupFailedService(os.Args[2], os.Args[3])
+	} else if len(os.Args) >= 3 && os.Args[1] == "peer" {
 		e = peer(os.Args[2], os.Args[3:])
 	} else if len(os.Args) == 2 {
 		e = run(os.Args[1], "", nil)
 	} else if len(os.Args) == 4 && os.Args[2] == "--frontend" {
 		e = run(os.Args[1], os.Args[3], nil)
+	} else if len(os.Args) == 4 && os.Args[2] == "--systemd-candidate" {
+		candidatePath = os.Args[3]
+		e = run(os.Args[1], "", nil)
 	} else if len(os.Args) == 7 && os.Args[2] == "--frontend" && (os.Args[4] == "--os-consent" || os.Args[4] == "--os-nodes" || os.Args[4] == "--os-tls-fault" || os.Args[4] == "--os-compiled" || os.Args[4] == "--os-compiled-fault") {
 		pins, err := parseConsentPins(os.Args[5], os.Args[6])
 		if err != nil {

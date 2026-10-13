@@ -24,44 +24,59 @@ def upload(source, target):
     t.check(p.returncode==0 and p.stdout.decode().split()[0]==hashlib.sha256(source.read_bytes()).hexdigest(),"uploaded_artifact_hash_verified")
 
 def main():
-    if sys.argv[1:] not in ([],["--frontend"]):
+    if sys.argv[1:] not in ([],["--frontend"],["--systemd"]):
         raise RuntimeError("invalid_arguments")
     with_frontend=sys.argv[1:]==["--frontend"]
+    with_systemd=sys.argv[1:]==["--systemd"]
     t.check(not t.admin("nodes","list") and not t.admin("users","list") and not t.admin("preauthkeys","list"),"isolated_control_plane_empty_before_daemon_test")
-    prefix="/tmp/remoteapp-daemon-check-"+secrets.token_hex(8)
+    prefix=("/run/" if with_systemd else "/tmp/")+"remoteapp-daemon-check-"+secrets.token_hex(8)
     program,daemon,mode=prefix+"-check",prefix+"-daemon",prefix+"-mode.py"
     frontend=prefix+"-frontend"
+    candidate=prefix+"-candidate"
+    tests=prefix+"-tests"
     backup=None
+    joined=False
     try:
         upload(t.ARTIFACTS/"daemon-network-check",program)
         upload(t.ARTIFACTS/"authority-daemon-network",daemon)
         upload(Path(__file__).with_name("enrollment-mode.py"),mode)
         if with_frontend:
             upload(t.ARTIFACTS/"device-frontend-private",frontend)
+        if with_systemd:
+            upload(Path(__file__).with_name("remoteapp-authority-network.service.candidate"),candidate)
+            upload(t.ARTIFACTS/"daemon-network-tests-r21",tests)
+            p=subprocess.run(t.SERVER+["REMOTEAPP_CANDIDATE_TEST="+candidate+" "+tests+" '-test.run=Test(CandidateRendering|FailedServiceRecovery|StoppedReceipt)' -test.v"],capture_output=True,timeout=20)
+            t.check(p.returncode==0 and all(label in p.stdout for label in [b"--- PASS: TestCandidateRendering",b"--- PASS: TestFailedServiceRecovery",b"--- PASS: TestStoppedReceipt"]) and b"SKIP" not in p.stdout,"linux_candidate_rendering_and_join_receipt_constraints_passed")
         p=subprocess.run(t.SERVER+["python "+mode+" prepare"],capture_output=True,timeout=45)
         lines=p.stdout.splitlines()
         if lines:
             backup=json.loads(lines[0]).get("backup")
         t.check(p.returncode==0 and backup is not None,"isolated_database_deny_policy_prepared")
         # Program emits only fixed labels and a non-secret retained directory.
-        command=program+" "+daemon+(" --frontend "+frontend if with_frontend else "")
+        command=program+" "+daemon+(" --frontend "+frontend if with_frontend else "")+(" --systemd-candidate "+candidate if with_systemd else "")
         p=subprocess.Popen(t.SERVER+[command],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
         for raw in p.stdout:
             line=raw.decode().strip()
-            if line.startswith(("PASS ","FAIL ","PRESERVED /tmp/remoteapp-daemon-check-")):
+            if line=="STOPPED isolated_coordinator_resources_joined":
+                joined=True
+            if line.startswith(("PASS ","FAIL ","PRESERVED /tmp/remoteapp-daemon-check-","PRESERVED /run/remoteapp-daemon-check-","STOPPED isolated_coordinator_resources_joined")):
                 print(line,flush=True)
         p.wait(timeout=15)
-        t.check(p.returncode==0,"real_daemon_cross_uid_lifecycle_acceptance_completed")
+        t.check(p.returncode==0 and joined,"real_daemon_cross_uid_lifecycle_acceptance_completed")
         t.check(not t.admin("nodes","list") and not t.admin("users","list") and not t.admin("preauthkeys","list"),"scoped_verifier_resources_all_reclaimed")
     finally:
+        if not joined and with_systemd:
+            # Do not remove files needed by possibly live/unjoined services.
+            print("PRESERVED systemd_test_artifacts_require_review",flush=True)
         if backup is not None:
             p=subprocess.run(t.SERVER+["python "+mode+" restore "+backup],capture_output=True,timeout=45)
             if p.returncode != 0:
                 print("PRESERVED_POLICY_BACKUP "+backup,flush=True)
             t.check(p.returncode==0,"original_file_policy_mode_restored")
         # Only uploaded executables/script, never journal or retained resources.
-        p=subprocess.run(t.SERVER+["rm -- "+program+" "+daemon+" "+mode+(" "+frontend if with_frontend else "")],capture_output=True,timeout=15)
-        t.check(p.returncode==0,"temporary_uploaded_programs_removed")
+        if joined or not with_systemd:
+            p=subprocess.run(t.SERVER+["rm -- "+program+" "+daemon+" "+mode+(" "+frontend if with_frontend else "")+(" "+candidate+" "+tests if with_systemd else "")],capture_output=True,timeout=15)
+            t.check(p.returncode==0,"temporary_uploaded_programs_removed")
     t.check(t.admin("policy","get")=={"acls":[{"action":"accept","src":["100.120.0.2"],"dst":["100.120.0.1:47476"]}]},"original_poc_policy_unchanged")
     p=subprocess.run(t.SERVER+["systemctl is-active remoteapp-authority remoteapp-frontend remoteapp-poc && sha256sum --check /opt/remoteapp-prerelease/nginx-baseline.sha256"],capture_output=True,timeout=15)
     t.check(p.returncode==0,"online_services_active_nginx_baseline_unchanged")

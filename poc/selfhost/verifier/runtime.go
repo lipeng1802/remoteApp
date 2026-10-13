@@ -270,11 +270,23 @@ func observation(d Driver, ctx context.Context, s snapshot, i Info) (invite.Prov
 // unknown outcomes/failed registration NEVER trigger an automatic second Mint.
 // Registration credentials exist only in this call's memory, not the journal.
 func Open(ctx context.Context, dir string, create bool, d Driver, f Factory) (*Runtime, error) {
+	return OpenReported(ctx, dir, create, d, f, nil)
+}
+
+// OpenReported emits fixed failure stages only, never identities, credentials
+// or provider error strings. Nil preserves the original quiet API.
+func OpenReported(ctx context.Context, dir string, create bool, d Driver, f Factory, report func(string)) (*Runtime, error) {
+	fail := func(stage string) {
+		if report != nil {
+			report(stage)
+		}
+	}
 	if d == nil || f == nil || ctx.Err() != nil {
 		return nil, ErrVerifier
 	}
 	release, e := lease(dir, create)
 	if e != nil {
+		fail("verifier_lease_failed")
 		return nil, e
 	}
 	owned := true
@@ -287,6 +299,7 @@ func Open(ctx context.Context, dir string, create bool, d Driver, f Factory) (*R
 	if !create {
 		s, e = load(dir)
 		if e != nil || s.Phase != "issued" && s.Phase != "ready" {
+			fail("verifier_journal_failed")
 			return nil, ErrVerifier
 		}
 	}
@@ -298,6 +311,7 @@ func Open(ctx context.Context, dir string, create bool, d Driver, f Factory) (*R
 	}
 	key, e := nodeidentity.Prepare(nodeDir, Control)
 	if e != nil {
+		fail("verifier_node_state_failed")
 		return nil, ErrVerifier
 	}
 	secret := ""
@@ -324,6 +338,7 @@ func Open(ctx context.Context, dir string, create bool, d Driver, f Factory) (*R
 		}
 		secret = credential.Secret
 	} else if key != s.Record.NodeKey {
+		fail("verifier_node_key_mismatch")
 		return nil, ErrVerifier
 	}
 	n := f(nodeDir, key)
@@ -340,17 +355,20 @@ func Open(ctx context.Context, dir string, create bool, d Driver, f Factory) (*R
 	info, e := n.Up(up, secret)
 	secret = ""
 	if e != nil || !validInfo(info, s.Record.NodeKey) {
+		fail("verifier_overlay_up_failed")
 		cancel()
 		return nil, ErrVerifier
 	}
 	o, e := observation(d, up, s, info)
 	cancel()
 	if e != nil || ctx.Err() != nil {
+		fail("verifier_provider_observation_failed")
 		return nil, ErrVerifier
 	}
 	s.Observation = o
 	s.Phase = "ready"
 	if save(dir, s) != nil {
+		fail("verifier_journal_commit_failed")
 		return nil, ErrVerifier
 	}
 	run, stop := context.WithCancel(ctx)

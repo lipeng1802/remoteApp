@@ -3,7 +3,9 @@
 [Unit]
 Description=RemoteApp sole authority with supervised network (candidate)
 After=network.target remoteapp-poc.service
-Requires=remoteapp-poc.service
+# Runtime supervision must observe an outage and exit nonzero. Requires would
+# let systemd turn provider loss into an apparently normal dependent stop.
+Wants=remoteapp-poc.service
 
 [Service]
 Type=simple
@@ -20,7 +22,11 @@ ProtectHome=true
 ProtectSystem=full
 ReadOnlyDirectories=/var/lib/remoteapp-prerelease /etc/remoteapp-authority
 ReadWriteDirectories=/var/lib/remoteapp-authority /run/remoteapp-authority /var/lib/remoteapp-verifier /var/lib/remoteapp-network-policy
-CapabilityBoundingSet=CAP_CHOWN
+# Fixed provider CLI uses its 0600 admin socket beneath another service UID's
+# 0700 directory. Root needs DAC override; do not loosen provider permissions.
+# Pinned tsnet on root/CentOS needs SO_BINDTODEVICE when SO_MARK is unavailable.
+# CAP_NET_RAW permits that fallback without granting CAP_NET_ADMIN.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_NET_RAW
 LimitNOFILE=128
 # Daemon allows 30 seconds for actual network join. A forced systemd timeout
 # is NOT graceful shutdown; retain locks/state and require operator review.

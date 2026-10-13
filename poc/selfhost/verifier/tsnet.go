@@ -6,17 +6,24 @@ import (
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/nodeidentity"
 	"remoteapp.local/selfhost-poc/nodeproof"
+	"strings"
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/tsnet"
 )
 
-type overlay struct{ s *tsnet.Server }
+type overlay struct {
+	s      *tsnet.Server
+	report func(string)
+}
 
 // NewOverlay must run in a dedicated process: ConfigureOnline changes only
 // this process's inherited environment, not the installed system Tailscale.
 func NewOverlay(dir, key string) Node {
+	return NewOverlayReported(dir, key, nil)
+}
+func NewOverlayReported(dir, key string, report func(string)) Node {
 	nodeidentity.ConfigureOnline()
-	return &overlay{&tsnet.Server{Dir: dir, Hostname: "remoteapp-verifier", ControlURL: Control, Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}}
+	return &overlay{s: &tsnet.Server{Dir: dir, Hostname: "remoteapp-verifier", ControlURL: Control, Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}, report: report}
 }
 func status(st *ipnstate.Status) Info {
 	if st == nil || st.Self == nil {
@@ -38,9 +45,33 @@ func (n *overlay) Up(ctx context.Context, secret string) (Info, error) {
 	st, e := n.s.Up(ctx)
 	n.s.AuthKey = ""
 	if e != nil {
+		if n.report != nil {
+			n.report(overlayFailureStage(e))
+		}
 		return Info{}, ErrVerifier
 	}
 	return status(st), nil
+}
+
+func overlayFailureStage(err error) string {
+	// Classify locally; never expose paths, addresses, identities, credentials
+	// or error text. Matching a word is a stage hint, not proof of root cause.
+	s := strings.ToLower(err.Error())
+	for _, c := range []struct{ word, label string }{
+		{"operation not permitted", "overlay_up_error_os_permission"},
+		{"permission denied", "overlay_up_error_file_permission"},
+		{"read-only file system", "overlay_up_error_readonly"},
+		{"deadline", "overlay_up_error_deadline"},
+		{"certificate", "overlay_up_error_certificate"},
+		{"address already in use", "overlay_up_error_address_in_use"},
+		{"too many open files", "overlay_up_error_descriptor_limit"},
+		{"bind", "overlay_up_error_bind"},
+	} {
+		if strings.Contains(s, c.word) {
+			return c.label
+		}
+	}
+	return "overlay_up_error_other"
 }
 func (n *overlay) Status(ctx context.Context) (Info, error) {
 	lc, e := n.s.LocalClient()

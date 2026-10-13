@@ -1,6 +1,6 @@
 # r20 长期网络后端部署准备（未部署）
 
-本轮提供只读代码预检与候选 unit，不创建长期 verifier、不切换 Headscale 模式、不上传或安装 unit、不改端口。正式服务仍 device-only。候选不是已验收的生产配置。
+r20 提供只读代码预检与候选 unit，当时未上传/部署。后续 r21 通过随机 `/run/systemd/system` 测试unit进行目标CentOS候选验收，记录见 [候选服务验收](SYSTEMD_NETWORK_ACCEPTANCE.md)。正式服务仍 device-only；未创建长期 verifier、未持久迁移策略、未开放端口。候选仍不是已验收的生产配置。
 
 ## 只读入口
 
@@ -16,7 +16,9 @@
 
 ## 候选 unit 与启用前门禁
 
-`remoteapp-authority-network.service.candidate` 增加 ExecStartPre、显式network-config、专属verifier/policy可写目录和45秒停止预算（旧unit为10秒，短于daemon的30秒join预算）。保留root authority、跨UID前端、Restart=no；不会自动enable。路径必须与严格network.json一致，替换公开root/UID/GID后再校验。requires provider不代表provider健康。候选在目标CentOS7/systemd版本上的解析、实际权限、CLI/overlay、正常与故障停止仍需隔离实测。
+`remoteapp-authority-network.service.candidate` 增加 ExecStartPre、显式network-config、专属verifier/policy可写目录和45秒停止预算（旧unit为10秒，短于daemon的30秒join预算）。保留root authority、跨UID前端、Restart=no；不会自动enable。路径必须与严格network.json一致，替换公开root/UID/GID后再校验。使用Wants/After而不是Requires，避免provider停止被systemd转换为普通依赖停止；依赖并不代表provider健康。
+
+r21 实测修正候选能力边界：`CAP_CHOWN CAP_DAC_OVERRIDE CAP_NET_RAW`。固定CLI需要访问另一服务UID的0700目录/0600 admin socket，DAC override保留原provider私有权限；pinned tsnet在root/CentOS且SO_MARK不可用时的SO_BINDTODEVICE回退需要NET_RAW，不授予NET_ADMIN。该能力组合只用于可信sole authority固定操作，不给前端或客户端；未来拆分CLI权限需要独立设计，不能宣称它是所有平台的最小能力。保留PrivateTmp、PrivateDevices、ProtectHome、ProtectSystem、NoNewPrivileges。正式安装/长期运行门禁仍需后续完成。
 
 启用顺序必须在受控维护窗口执行，本轮没有执行：
 
