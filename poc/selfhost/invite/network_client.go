@@ -190,11 +190,8 @@ func (c *NetworkClient) DeviceRequest(ctx context.Context, b Body) (Result, erro
 	if e != nil || len(data) > 8192 {
 		return Result{}, ErrDenied
 	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
 	var result Result
-	var extra any
-	if dec.Decode(&result) != nil || dec.Decode(&extra) != io.EOF {
+	if decodeHTTP(bytes.NewReader(data), &result) != nil {
 		return Result{}, ErrDenied
 	}
 	if b.Action == "register" && result.DeviceID != deviceID(c.signer.PublicKey()) {
@@ -239,11 +236,8 @@ func (c *NetworkClient) Request(ctx context.Context, b NetworkRequestBody) (Netw
 	if e != nil || len(data) > 8192 {
 		return NetworkReply{}, ErrDenied
 	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
 	var result NetworkReply
-	var extra any
-	if dec.Decode(&result) != nil || dec.Decode(&extra) != io.EOF {
+	if decodeHTTP(bytes.NewReader(data), &result) != nil {
 		return NetworkReply{}, ErrDenied
 	}
 	switch b.Action {

@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-13 r23 已安装客户端直接签名网络校时/状态门禁开发完成
+
+本轮选择自主enroll前的授权门禁，不开放公网、不改服务器、不运行或上传Windows/旧安装包。已安装device-client仍固定编译root/helper摘要，当前native owner profile与OS signer接口派生直接HTTPS客户端；后续新增network帧仅grant_clock/state+签名Grant，拒绝首帧网络、混device/stop、外部nonce/time/challenge/ticket/intent/certificate及enroll/bind/TLS动作；JSON omitzero保留旧设备帧形状。
+
+授权gate校验固定issuer、canonical grant/ID/两个不同主体、自身公钥SHA主体与签名。签名结构初验使用issuer颁发时点，不当作仍有效授权；grant_clock独立32byte随机挑战、5秒budget/完整monotonic RTT校验issuer clock proof，再用AuthorityClock重验grant期限。每次state要求已校时同grant、签名/合法binding/严格3秒租约及grant未过期。重复旧proof、错误issuer/签名/grant、父字段注入、签名前后身份改变、HTTP/解析/ctx取消/超时均失败清clock并结束owner；真实signed inactive可报告passed=true/active=false但同样终止。没有缓存状态放行、自动恢复、连续watch或node启动。
+
+输出仅固定network_authorization、phase、passed/active，不包含proof/state/binding/ticket/credential/TLS/HMAC；clock passed不是network active，active观测不是隧道能力。NetworkClient两类HTTP回复复用decodeHTTP严格嵌套重复/大小写重复/未知/尾随检查，不以TLS/JSON shape当签名授权。原设备API失败处理保留，网络授权失败独立fault语义。
+
+native command沿用输入EOF握手：父端发送stop或收到网络终止结果（passed=false，或state/active=false）后，先半关闭专用输入，再等最终failed/closed及actual exit；不能反过来。当前证据仅Runner/signer join，未覆盖新增网络故障的真实native子进程退出，需后续专用fixture收口，不宣称自主完整process join已经通过。
+
+新授权7个测试函数（含normal/inactive两组真实本机HTTPS Runner+memory signer+实际signer join屏障、nonce replay/cancel/issuer/identity/期限/secret混入等子项）；HTTP回复1个测试含9组真实TLS parser正负项。fixture无真实批准Store/Headscale，不冒充OS signer/native journal/完整注册验收。测试最初grant域名前缀误写导致失败，按现有remoteapp-invite-grant-v1纠正fixture后全部重跑，没有改协议或弱化校验。
+
+installeddevice/invite/installed-device-client/devicevalidation/clientowner五包race与专用vet PASS。fresh `installed-device-network-r23-mac` / `installed-device-network-r23-win` 用r18既有native helper bytes、固定编译TEST profile/root/helper pin与manifest build-only通过，未执行/安装/上传。validator仍是旧设备API基线，不验证新增network授权，不要要求用户跑它后声称新原生网络通过。Windows可继续关机，GUI/安装包未更新。
+
+下一项把已验证校时门禁接入helper内部受控enroll/注册凭据消费（不经父帧/日志/文件传secret），再接实时持有证明/bind与连续状态watch、TLS/HMAC供应；需要专用native授权组合fixture，不复用r18验证码测试冒充新能力。r22长期后台继续database/1节点/零ACL/回环8444运行；未经授权不得公开端口或Retire长期身份。整体4仍未完成。本地提交，不推送。
+
 ## 2026-10-13 r22 用户批准维护窗口，长期后台部署与真实回环故障闭环通过
 
 用户明确回答“允许现在维护预发布服务”，授权持久Headscale database切换/长期verifier/预发布authority与回环前端配置更换，未授权公网端口/业务Nginx与443改变；Windows关机，本轮没有Windows动作。

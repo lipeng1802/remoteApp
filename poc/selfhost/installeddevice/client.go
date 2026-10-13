@@ -17,6 +17,7 @@ import (
 type Request struct {
 	Op, VaultScope, ExpectedPublic string
 	Device                         invite.Body
+	Network                        invite.NetworkRequestBody `json:",omitzero"`
 }
 
 func canonical(value string, size int) bool {
@@ -25,7 +26,7 @@ func canonical(value string, size int) bool {
 }
 
 func ValidOpen(r Request) bool {
-	return r.Op == "open" && canonical(r.VaultScope, 16) && canonical(r.ExpectedPublic, 32) && r.Device == (invite.Body{})
+	return r.Op == "open" && canonical(r.VaultScope, 16) && canonical(r.ExpectedPublic, 32) && r.Device == (invite.Body{}) && r.Network == (invite.NetworkRequestBody{})
 }
 
 func validCommand(r Request) bool {
@@ -33,7 +34,13 @@ func validCommand(r Request) bool {
 		return false
 	}
 	if r.Op == "stop" {
-		return r.Device == (invite.Body{})
+		return r.Device == (invite.Body{}) && r.Network == (invite.NetworkRequestBody{})
+	}
+	if r.Op == "network" {
+		return r.Device == (invite.Body{}) && (r.Network.Action == "grant_clock" || r.Network.Action == "state") && r.Network.Grant != (invite.Grant{}) && r.Network == (invite.NetworkRequestBody{Action: r.Network.Action, Grant: r.Network.Grant})
+	}
+	if r.Network != (invite.NetworkRequestBody{}) {
+		return false
 	}
 	if r.Op != "device" || r.Device.Nonce != "" || r.Device.IssuedAt != 0 {
 		return false
@@ -73,6 +80,7 @@ func Runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 			return trustprofile.ErrTrust
 		}
 		defer client.Close()
+		gate := newAuthorizationGate(profile, signer)
 		if err := output(map[string]string{"status": "ready"}); err != nil {
 			return err
 		}
@@ -92,6 +100,18 @@ func Runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 				}
 				if request.Op == "stop" {
 					return nil
+				}
+				if request.Op == "network" {
+					reply, err := gate.request(ctx, client, request.Network)
+					if outErr := output(reply); outErr != nil {
+						return outErr
+					}
+					// Authorization/transport failure retires this owner. No cached
+					// permission or automatic retry/recovery for a later session.
+					if err != nil {
+						return trustprofile.ErrTrust
+					}
+					continue
 				}
 				call, cancel := context.WithTimeout(ctx, 15*time.Second)
 				value, err := client.DeviceRequest(call, request.Device)
