@@ -182,14 +182,11 @@ func (d *winDirectory) Close() error {
 
 func (d *winDirectory) ClearTestMaterials() error {
 	entries, e := os.ReadDir(d.path)
-	if e != nil || len(entries) > 1 {
+	if e != nil || !knownSDKMaterials(entries) || d.Check(false) != nil {
 		return ErrStorage
 	}
-	if len(entries) == 1 {
-		if entries[0].Name() != "tailscaled.state" || d.Check(false) != nil {
-			return ErrStorage
-		}
-		if os.Remove(filepath.Join(d.path, "tailscaled.state")) != nil {
+	for _, entry := range entries {
+		if os.Remove(filepath.Join(d.path, entry.Name())) != nil {
 			return ErrStorage
 		}
 	}

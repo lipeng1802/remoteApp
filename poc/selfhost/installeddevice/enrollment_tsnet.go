@@ -19,6 +19,10 @@ import (
 // State is retained on stop/unknown outcomes; server reconciliation must precede
 // any explicit fresh authorization. The compiled device entry does not enable it.
 func TSNetEnrollmentFactory(dir string) EnrollmentFactory {
+	return tsNetEnrollmentFactory(dir, clientruntime.ControlURL)
+}
+
+func tsNetEnrollmentFactory(dir, controlURL string) EnrollmentFactory {
 	return func(ctx context.Context) (EnrollmentNode, error) {
 		if ctx.Err() != nil || !filepath.IsAbs(dir) || filepath.Clean(dir) != dir {
 			return nil, invite.ErrDenied
@@ -34,11 +38,11 @@ func TSNetEnrollmentFactory(dir string) EnrollmentFactory {
 		if err != nil || len(entries) != 0 {
 			return nil, invite.ErrDenied
 		}
-		pub, err := nodeidentity.Prepare(dir, clientruntime.ControlURL)
+		pub, err := nodeidentity.Prepare(dir, controlURL)
 		if err != nil || ctx.Err() != nil {
 			return nil, invite.ErrDenied
 		}
-		return &tsnetEnrollment{key: pub, node: &tsnet.Server{Dir: dir, Hostname: "remoteapp-enrollment", ControlURL: clientruntime.ControlURL, Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}}, nil
+		return &tsnetEnrollment{key: pub, node: &tsnet.Server{Dir: dir, Hostname: "remoteapp-enrollment", ControlURL: controlURL, Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}}, nil
 	}
 }
 
@@ -59,7 +63,7 @@ func (n *tsnetEnrollment) Register(ctx context.Context, secret string) (string, 
 	n.node.AuthKey = secret
 	defer func() { n.node.AuthKey = "" }()
 	st, err := n.node.Up(ctx)
-	if err != nil || ctx.Err() != nil || st.Self == nil || st.Self.PublicKey.String() != n.key {
+	if err != nil || ctx.Err() != nil || st == nil || st.Self == nil || st.Self.PublicKey.String() != n.key {
 		return "", "", invite.ErrDenied
 	}
 	address := ""

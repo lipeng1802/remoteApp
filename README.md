@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r27 [原生真实SDK退出验证](poc/selfhost/public-server/NATIVE_SDK_LIFECYCLE.md)：真实tsnet Up访问固定本机失败服务、取消后同步退出、原生attempted保留/拒绝再次注册及精确清理；Mac重复通过，Windows新入口仅构建。补齐SDK四个已知文件的TEST清理、未知文件整组拒绝，以及独立helper进程级禁止日志上传。这不是成功Headscale入网，不与r26替身测试拼接为端到端通过。
+
 r26 [原生注册组合验证](poc/selfhost/public-server/NATIVE_REGISTRATION_COMBINATION.md)：真实OS签名器/已安装profile租约/节点原生存储、签名HTTPS校时与enroll、内部TEST凭据消费及重开不重试串联；Mac同包重复通过，注册响应未知仍只触发一次请求。发现并修复TEST清理回执后仍残留记录的问题，改逐项删除/复核空。Windows新包仅构建；节点Up是离线替身，不是Headscale、正式客户端IPC或GUI验收。
 
 r25 [原生注册状态与节点目录](poc/selfhost/public-server/ENROLLMENT_STORAGE.md)：macOS Keychain/私有目录与Windows Credential Manager/受保护DACL，稳定身份scope、原生独占lease、注册前提交attempted，重启后未知/已注册均拒绝重试。Mac实际原生存储/多进程及新客户端网络拒绝→EOF→真实退出组合通过，相关race/vet通过；Windows新包build-only，待桌面验证。正式enroll入口仍未启用，真实Up/proof/bind/watch与整体4未完成。

@@ -139,14 +139,11 @@ func (d *macDirectory) Close() error {
 
 func (d *macDirectory) ClearTestMaterials() error {
 	entries, e := os.ReadDir(d.path)
-	if e != nil || len(entries) > 1 {
+	if e != nil || !knownSDKMaterials(entries) || d.Check(false) != nil {
 		return ErrStorage
 	}
-	if len(entries) == 1 {
-		if entries[0].Name() != "tailscaled.state" || d.Check(false) != nil {
-			return ErrStorage
-		}
-		if unix.Unlinkat(d.node, "tailscaled.state", 0) != nil || unix.Fsync(d.node) != nil {
+	for _, entry := range entries {
+		if unix.Unlinkat(d.node, entry.Name(), 0) != nil || unix.Fsync(d.node) != nil {
 			return ErrStorage
 		}
 	}

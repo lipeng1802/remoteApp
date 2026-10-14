@@ -3,6 +3,7 @@ package nodeidentity
 import (
 	"os"
 	"tailscale.com/envknob"
+	"tailscale.com/logtail"
 )
 
 // ConfigureOnline affects only this independent helper process. Do not inherit
@@ -12,6 +13,9 @@ func ConfigureOnline() {
 		os.Unsetenv(name)
 	}
 	envknob.SetNoLogsNoSupport()
+	// Pinned tsnet creates its own logger; the environment knob alone is not
+	// consumed by that constructor. Disable uploads at the process-wide source.
+	logtail.Disable()
 	envknob.Setenv("TS_USE_CACHED_NETMAP", "false")
 	// ALWAYS_USE_DERP reproduced leaking dummy sockets in the pinned SDK.
 	envknob.Setenv("TS_DEBUG_ALWAYS_USE_DERP", "false")

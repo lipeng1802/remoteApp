@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-14 r27 原生真实SDK失败注册/取消退出与精确清理
+
+用户继续。检查旧enrollment-network.py要求空nodes/users且会切换/重置策略，不兼容r22长期verifier/database，未执行。无服务器/Windows动作，不开放端口、不Mint或修改正式Store。新enrollment-sdk-validation显式随机TEST Initialize、NativeSDKRejectionValidationFactory固定true TEST namespace/本机http127.0.0.1:18443，地址/路径/secret均无父帧或参数覆盖；普通NativeEnrollmentFactory仍固定正式controlURL，compiled device-client未启用provision。
+
+真实tsnet Up用公开无效字符串访问本机503 fixture，实际请求计数非零，4秒ctx取消、Register拒绝；live native排他仍成立，实际同步SDK Close后才释放native租约。重开phase attempted、Begin与factory第二次拒绝，最后SDK/node原生记录、本机HTTP实际join及精确TEST清理才输出最终PASS。不计cancel/超时/kill/删锁为join，无成功IP、真实Headscale Observe或服务端拒绝证明。
+
+首次Mac程序实际SDK请求/退出通过但精确清理失败，保留TEST证据，不计最终PASS：SDK额外生成tailscaled.log.conf/log1.txt/log2.txt，原清理只允许state。新清理先整组允许且最多四个固定名称，再沿原UID/DACL/链接/路径门禁删精确文件；未知文件/目录拒绝且不先删已知材料。新增通用名单负向与双平台native未知第五文件不删证据/去掉公开fixture后清空回归。首次failed TEST namespace 4396a18924ad7b6a62d728acc0a612ac有意保留，不扫历史凭据或生产存储；成功运行清理仅本轮随机TEST SDK key/log/native record，空目录/锁仍留。
+
+检查pinned SDK startLogger发现环境NoLogsNoSupport不配置独立tsnet logger；ConfigureOnline额外调用logtail.Disable，独立helper进程级不可再开启上传，不在GUI调用。保留原env开关，本地日志文件仍会生成；不输出其内容/日志身份/private key。production adapter同时补st=nil防御，没有开放controlURL runtime参数。
+
+Mac r2 actual exit0，r3两次exit0；最终源码fresh enrollment-sdk-r27-mac-r4将本机服务join提前到精确清理前，同样两次完整实际exit0。5包enrollmentstore/nodeidentity/installeddevice/nativejournal/registrationvalidation race与Mac/Windows相关vet PASS。Windows artifacts/connection-poc/enrollment-sdk-r27-win包含fresh exe、原生存储tests exe及单窗口自动脚本（独立重定向stderr，非零/FAIL/SKIP/无完整标记或超时拒绝，不强杀）；仅build-only，无上传/桌面执行。r25/r26 Windows也仍待，旧包不证明新SDK路径。
+
+下一项受控独立资源的真实credential→SDK Up→Headscale Observe→精确Retire与退出组合，必须保护r22长期身份/零ACL。r26签名HTTPS+替身消费与本轮实际失败Up不是一个端到端成功链，不能拼接宣称注册完成。有效nodeproof/verifier可信供应、bind/watch、正式客户端native初始化/入口、Mac稳定签名、GUI/签名安装器与整体4仍待。本轮仅本地提交，不推送。
+
 ## 2026-10-14 r26 原生注册组件联合验证与TEST清理修复，Mac重复通过
 
 用户继续任务，Windows按上轮关机处理，无Windows/服务器动作。独立CGO原生validator固定TEST release/profile/root/issuer/helper摘要，真实profile owner/OS signer/native node journal+目录、直接HTTPS grant_clock/内部intent/enroll接通。NativeEnrollmentValidationFactory只用TEST namespace，Register消费替身credential（哈希+一次CAS）/返回fixture IP，**没有SDK Up**、实时证明或产品数据面，也不是compiled device-client stdin IPC。普通真实NativeEnrollmentFactory和原device-client默认入口未改变。
