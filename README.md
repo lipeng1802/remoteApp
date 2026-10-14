@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r31 [Windows 1/2 新版验收准备](poc/selfhost/public-server/WINDOWS_ENROLLMENT_PREFLIGHT.md)：已构建独立单窗口预检包，合并最新原生存储/权限、OS签名本机HTTPS与真实SDK取消/join检查；另补齐联合入口的Windows helper/构建支持及严格包清单。Windows关机，只有构建证据，原生执行与真实服务器注册/持有证明绑定仍待；未联系Windows/服务器，3/4保持暂停。
+
 r30 切片4的1/2已完成Mac＋真实服务器的隔离联合验收：原生OS签名HTTPS注册/批准/校时/enroll→真实SDK→issuer verifier permit→实时nodeproof/backend bind→实际join/本机清理及服务端工单回收，actual exit0。客户端不通过SSH接收凭据；私有HTTPS暂经SSH回环转发，claimant为memory signer测试角色，无第二SDK/数据规则。维护后原服务、长期1资源、零ACL、正式Store、Nginx均恢复；修复清理状态转换与READY恢复顺序。Windows/正式客户端入口/公网/GUI安装仍待，3/4未开展。
 
 r29 优先推进切片4的1/2：新增authority签名的短期verifier信息、nonce/授权/设备/工单/节点绑定，可信内部注册→proof listener就绪→bind路径及退出join。下列r29组件证据已由r30隔离联合验收补齐Mac＋server链路，仍不是Windows或产品安装完成。

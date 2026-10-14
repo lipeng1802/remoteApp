@@ -1,4 +1,4 @@
-// Package autonomousvalidation is Mac-only isolated acceptance, not GUI/installer.
+// Package autonomousvalidation is desktop native isolated acceptance, not GUI/installer.
 // Client has NO SSH credential supplier. All device/network calls go to the
 // compiled signed HTTPS profile and actual server approval/provision backend.
 package autonomousvalidation
@@ -35,11 +35,15 @@ func Run(release trustinstall.Release, digest, dir string, pass func(string)) (r
 			pass("diagnostic_" + stage)
 		}
 	}()
-	if runtime.GOOS != "darwin" || !release.Specification().Test || pass == nil {
+	if (runtime.GOOS != "darwin" && runtime.GOOS != "windows") || !release.Specification().Test || pass == nil {
 		return ErrValidation
 	}
-	vault := filepath.Join(dir, "identity-vault")
-	journal := filepath.Join(dir, "trust-journal")
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	vault := filepath.Join(dir, "identity-vault"+suffix)
+	journal := filepath.Join(dir, "trust-journal"+suffix)
 	real, e := filepath.EvalSymlinks(vault)
 	if e != nil || real != vault {
 		return ErrValidation

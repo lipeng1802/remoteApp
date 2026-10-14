@@ -24,5 +24,5 @@ func main() {
 		fmt.Println("VALIDATION FAILED: native signed HTTPS enrollment/binding; retain scoped evidence")
 		os.Exit(1)
 	}
-	fmt.Println("VALIDATION PASSED: actual OS signed HTTPS approval/enroll + native real SDK + issuer verifier permit + real backend bind + joined native TEST cleanup. NOT continuous watch, payload TLS/GUI, Windows or installer acceptance.")
+	fmt.Println("VALIDATION PASSED: actual OS signed HTTPS approval/enroll + native real SDK + issuer verifier permit + real backend bind + joined native TEST cleanup. NOT continuous watch, payload TLS/GUI, other-platform or installer acceptance.")
 }

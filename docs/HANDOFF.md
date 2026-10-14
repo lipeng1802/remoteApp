@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-14 r31 继续1/2，Windows关机时准备新版单窗口预检与联合入口
+
+用户继续1、2；不进入3/4，无Windows/服务器联系、服务维护、上传/策略/Store/端口动作。新增windows-enrollment-preflight-build，fresh编译Windows CM/journal/signature helper，复用storage/registration可信builder生成新23小时TEST profile，组合最新全enrollmentstore原生测试、storage验证、OS签名本机HTTPS正常/未知结果（node仍替身）、真实SDK固定127.0.0.1:18443失败Up/cancel/同步Close/精确清理。一条普通桌面PowerShell命令，不依赖旧安装包/Go/双READY窗口，不删除Tailscale。新包artifacts/connection-poc/windows-enrollment-preflight-r31.zip，仅build-ready，Windows尚未执行。过期重新构建，不改时钟/生产trust或用旧bundle。
+
+脚本验证固定文件集合与全部SHA256，额外/缺失/链接/损坏拒绝；SHA只是完整性，不是签名安装信任。进程stdout/stderr分别异步收集，FAIL/SKIP/非零/无最终标记或180s无actual exit均拒绝，不强杀/删锁/自动重试，后续步骤停止，保留TEST证据。成功终标PREFLIGHT PASSED明确排除真实Headscale/verifier bind/GUI安装。
+
+autonomousvalidation原Mac-only门禁扩为Mac/Windows桌面，Windows固定.exe helper；同r30实际组合代码未改授权或proof流程。可信autonomous builder新增TARGET参数、Windows amd64/CGO0与脚本/manifest，拒绝TLS_OUT进入分发目录/父目录alias，公开issuer严格字段/尾随/非零32byte，server私钥仍独立0600文件。未启用正式device-client/GUI/provision。输出不再说Windows一律未验，而说other-platform未验；只有实际运行该平台才算其联合证据。
+
+六包Go race（两个builder＋devicevalidation/installeddevice/enrollmentstore/trustprofile）PASS；autonomousvalidation无独立流程单测，Windows实际执行未发生。本机无pwsh，PS运行门禁未验。Windows新预检全部exe fresh build；联合入口crossbuild与完整builder smoke通过，smoke目录autonomous-native-r31-win-builder-smoke仅用r30公开issuer编译，配套server-private TLS留Mac ignored独立文件，不上传、不分发smoke、不复用r30 restored stage。本次没有把build-only当Windows PASS。
+
+下一步用户Windows开机后先新包预检，反馈完整终标；然后新的批准维护窗口/fresh isolated server stage/publicissuer/fresh Windows联合包/匹配profile的私有HTTPS转发完成真实1/2验收与回收恢复。不能向Windows复制管理SSH私钥或TLS/issuer私钥，不输送注册凭据。服务器本轮仍r30恢复状态，新版operator同PID READY顺序需在下一真实维护往返复验；3持续watch/撤销/实际拒绝与4产品TLS/HMAC保持待。操作详见public-server/WINDOWS_ENROLLMENT_PREFLIGHT.md。本地切片提交，不自动推送。
+
 ## 2026-10-14 r30 用户批准维护，1/2 Mac＋真实服务器隔离联合验收通过并恢复
 
 用户明确“允许”预发布维护。新增Linux root-local native-enrollment-authority与Python2维护operator、Mac autonomousvalidation/固定编译builder。客户端bundle无SSH credential supplier，也不包含TLS/issuer私钥；NewAuthorityMaterial把服务端隔离Store的真实public issuer固定进签名TEST profile，TLS leaf与issuer角色分离。TLS leaf私钥单独root600上传服务器，release/CA私钥仅构建内存不输出。HTTPS因预发布仍只回环监听，通过已知host SSH -L转发固定本机profile端口，SDK/control/nodeproof走实际Headscale/DERP，不经这个管理转发输送AuthKey。
