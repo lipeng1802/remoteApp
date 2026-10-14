@@ -32,6 +32,15 @@ type TLSFixture struct{ Certificate, Key string }
 // NewMaterial generates throwaway TEST signing roots only in memory. Only a
 // loopback fixture leaf key is embedded in the validator, not a CA/release key.
 func NewMaterial(journal []byte, now time.Time) (trustinstall.Specification, TLSFixture, error) {
+	return newMaterial(journal, now, false)
+}
+
+// NewNetworkMaterial reuses ONLY the throwaway TEST leaf as the fixture issuer.
+// This is not production key-role separation. No release/CA key is exported.
+func NewNetworkMaterial(journal []byte, now time.Time) (trustinstall.Specification, TLSFixture, error) {
+	return newMaterial(journal, now, true)
+}
+func newMaterial(journal []byte, now time.Time, network bool) (trustinstall.Specification, TLSFixture, error) {
 	if len(journal) == 0 {
 		return trustinstall.Specification{}, TLSFixture{}, ErrValidation
 	}
@@ -71,6 +80,9 @@ func NewMaterial(journal []byte, now time.Time) (trustinstall.Specification, TLS
 	issuer, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return trustinstall.Specification{}, TLSFixture{}, err
+	}
+	if network {
+		issuer = leafPub
 	}
 	ca := &x509.Certificate{SerialNumber: big.NewInt(1), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign, NotBefore: now.Add(-time.Minute), NotAfter: now.Add(24 * time.Hour)}
 	caDER, err := x509.CreateCertificate(rand.Reader, ca, ca, caPub, caKey)

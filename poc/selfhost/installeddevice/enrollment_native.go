@@ -12,6 +12,10 @@ import (
 // identity), never a grant/path/epoch. Call and Close on the Runner goroutine.
 // The compiled entry is still gated on dedicated native process acceptance.
 func NativeEnrollmentFactory(scope string, test bool) EnrollmentFactory {
+	return protectedEnrollmentFactory(scope, test, TSNetEnrollmentFactory)
+}
+
+func protectedEnrollmentFactory(scope string, test bool, prepare func(string) EnrollmentFactory) EnrollmentFactory {
 	return func(ctx context.Context) (EnrollmentNode, error) {
 		if ctx.Err() != nil {
 			return nil, invite.ErrDenied
@@ -24,7 +28,7 @@ func NativeEnrollmentFactory(scope string, test bool) EnrollmentFactory {
 			s.Close()
 			return nil, invite.ErrDenied
 		}
-		n, err := TSNetEnrollmentFactory(s.NodeDir())(ctx)
+		n, err := prepare(s.NodeDir())(ctx)
 		if err != nil || n == nil {
 			if n != nil {
 				return &nativeEnrollment{node: n, store: s, key: n.PublicKey()}, invite.ErrDenied

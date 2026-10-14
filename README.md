@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r26 [原生注册组合验证](poc/selfhost/public-server/NATIVE_REGISTRATION_COMBINATION.md)：真实OS签名器/已安装profile租约/节点原生存储、签名HTTPS校时与enroll、内部TEST凭据消费及重开不重试串联；Mac同包重复通过，注册响应未知仍只触发一次请求。发现并修复TEST清理回执后仍残留记录的问题，改逐项删除/复核空。Windows新包仅构建；节点Up是离线替身，不是Headscale、正式客户端IPC或GUI验收。
+
 r25 [原生注册状态与节点目录](poc/selfhost/public-server/ENROLLMENT_STORAGE.md)：macOS Keychain/私有目录与Windows Credential Manager/受保护DACL，稳定身份scope、原生独占lease、注册前提交attempted，重启后未知/已注册均拒绝重试。Mac实际原生存储/多进程及新客户端网络拒绝→EOF→真实退出组合通过，相关race/vet通过；Windows新包build-only，待桌面验证。正式enroll入口仍未启用，真实Up/proof/bind/watch与整体4未完成。
 
 r24 [内部受控注册与凭据消费](poc/selfhost/public-server/INSTALLED_DEVICE_CLIENT.md)：新增可信组合 EnrollmentRunner，已验证grant_clock后内部准备公钥/签署intent/直接HTTPS enroll/内存交给节点Register；仅固定passed/active=false输出，节点与签名器实际join后结束。7组新增测试及本机HTTPS正常/故障/到期组合通过。**正式编译入口未启用**：跨重启结果记录、节点原生ACL/租约、真实Headscale Up/持有证明/bind仍待，不是新的GUI/安装包验收。Windows无需开机，服务器未改。

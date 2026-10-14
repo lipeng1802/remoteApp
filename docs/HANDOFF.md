@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-14 r26 原生注册组件联合验证与TEST清理修复，Mac重复通过
+
+用户继续任务，Windows按上轮关机处理，无Windows/服务器动作。独立CGO原生validator固定TEST release/profile/root/issuer/helper摘要，真实profile owner/OS signer/native node journal+目录、直接HTTPS grant_clock/内部intent/enroll接通。NativeEnrollmentValidationFactory只用TEST namespace，Register消费替身credential（哈希+一次CAS）/返回fixture IP，**没有SDK Up**、实时证明或产品数据面，也不是compiled device-client stdin IPC。普通真实NativeEnrollmentFactory和原device-client默认入口未改变。
+
+NewNetworkMaterial仅TEST fixture将TLS leaf作issuer以签grant/proof，无release/CA私钥输出；原NewMaterial默认保持独立issuer。此设计不可迁移生产密钥角色。native父pipe不承载credential：请求/回复仅HTTPS与内部回调，OS签名器只签允许域，helper仍摘要固定。每组随机TEST identity，两轮同身份/scope owner：正常消费1次并registered，重开拒绝第二enroll；unknown fixture模拟服务已处理却503，消费0、attempted保留，重开也拒绝。每组clock=2/enroll=1，未知副作用只计数fixture，非真实Headscale资源。各轮真实signer/Runner join、Close或RetireFault实际native helper关闭后才清理。
+
+初次r2无阶段诊断失败，未计PASS；r3/r4单次组合成功但重复在native_profile_create失败。r5加入TestEmpty只读属性检查确认：删除回执后profile不可读但namespace非空，r5失败不计PASS。修复Mac ClearTest精确service+已知manifest/data账户名逐项删除、128上限/重复或未知名拒绝、确认ItemNotFound；通用CleanupTest再确认Empty。新增内存回归禁止“成功删除回执但还残留”计成功。不将此现象归因Apple默认只删一个，官方默认删除全部匹配，改动是本项目实机清理门禁与逐项实现。
+
+新journal helper `trust-journal-r26-mac`，fresh `enrollment-registration-r26-mac-r6` 实际连续两次exit0：正常/unknown组两轮+原生metadata重开拒绝、OS签名HTTPS、profile无record且namespace Empty、服务/身份/SDK离线key/原生TEST record清理PASS。原生direct key在SDK权限文件，未宣称其额外加密或全部Keychain。空TEST目录/锁保留；旧失败r2-r5包的TEST公有profile残留未扫除，保留诊断材料，不使用旧helper作修复证明。未修改生产Keychain/安装root/正式Store/Headscale节点或端口。
+
+新registrationvalidation签名/nonce replay/intent/unknown回复单测+nativejournal删除回执负向回归，相关7包race/vet通过。Windows fresh `enrollment-registration-r26-win-r4` 使用新journal helper/旧pinned identity-vault字节构建，仅build-only、未上传/执行；普通桌面新一条脚本无需READY窗口/Go/旧安装包。详见public-server/NATIVE_REGISTRATION_COMBINATION.md。23小时TEST profile过期必须重建，不调时钟/使用生产trust。r25 Windows真实DACL/native反馈也仍待，不能跳过或计PASS。
+
+下一项固定编译原生存储初始化/打开及真实SDK入网/退出组合，Windows开机后进行r25/r26桌面新包验收；macOS prod稳定签名/原生helper方案仍未选择落地，device-client仍CGO0/不支持provision。实际Headscale、实时proof/bind/watch、GUI/签名安装器与整体4都未闭环。补服务verifier可信供应时不能父帧输入secret或换scope重试。仅本地提交，不推送。
+
 ## 2026-10-13 r25 原生注册状态/节点目录与真实拒绝退出路径，Mac通过，Windows待验
 
 接r24新增enrollmentstore，Scope由release稳定channelScope、本机vault scope与expected public独立域哈希生成，不含grant/epoch/path。Initialize与Open分离，运行时不补装/修复。原生journal复用Keychain/Credential Manager immutable chunks/manifest CAS与回读；macOS current UID/0700/0600/no-follow/nlink/inode，Windows KnownFolder+显式current SID owner/仅该SID protected inheritable DACL、reparse/multi-link拒绝、目录handle不共享delete。Windows native mutex线程固定，进程内scope registry另防递归打开。SDK node private key仍是权限保护文件，不宣称其全部在OS vault或额外磁盘加密；不抵抗同用户/管理员/整机回滚。

@@ -104,7 +104,39 @@ func CleanupTest(scope string) error {
 		return e
 	}
 	defer kv.Close()
-	return kv.ClearTest()
+	return clearTestVerified(kv)
+}
+
+func clearTestVerified(kv keyValues) error {
+	if e := kv.ClearTest(); e != nil {
+		return e
+	}
+	empty, e := kv.Empty()
+	if e != nil {
+		return e
+	}
+	if !empty {
+		return ErrUnavailable
+	}
+	return nil
+}
+
+// TestEmpty inspects only TEST namespace attributes under the native lease.
+// It does not return payloads, initialize records or inspect production keys.
+// Caller must retain Windows OS-thread affinity for this operation.
+func TestEmpty(scope string) (bool, error) {
+	if !canonical(scope, 16) {
+		return false, ErrUnavailable
+	}
+	kv, e := openNative(scope, true)
+	if e != nil {
+		return false, e
+	}
+	empty, e := kv.Empty()
+	if next := kv.Close(); e == nil {
+		e = next
+	}
+	return empty, e
 }
 
 func decodeManifest(b []byte) (manifest, error) {

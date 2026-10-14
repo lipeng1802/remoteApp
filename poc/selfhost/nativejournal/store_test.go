@@ -44,6 +44,17 @@ func memoryStore() (*Store, *memoryValues) {
 	k := &memoryValues{items: map[string][]byte{"manifest": append([]byte(nil), pending...)}}
 	return &Store{kv: k, fresh: true, test: true}, k
 }
+
+func TestClearAcknowledgementDoesNotProveEmptyNamespace(t *testing.T) {
+	k := &memoryValues{items: map[string][]byte{"manifest": []byte("public-fixture")}}
+	if clearTestVerified(k) == nil {
+		t.Fatal("delete acknowledgement accepted with residual record")
+	}
+	delete(k.items, "manifest")
+	if clearTestVerified(k) != nil {
+		t.Fatal("verified empty namespace refused")
+	}
+}
 func TestNativeJournalManifestSelectionAndMaximumRecord(t *testing.T) {
 	s, k := memoryStore()
 	old := bytes.Repeat([]byte("a"), 8191)

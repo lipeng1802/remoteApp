@@ -57,6 +57,21 @@ static OSStatus journalEmpty(const char *service) {
 static OSStatus journalDelete(const char *service,const char *account) {
  CFMutableDictionaryRef q=journalQuery(service,account);OSStatus s=SecItemDelete(q);CFRelease(q);return s;
 }
+static OSStatus journalFirstAccount(const char *service,char **account) {
+ CFMutableDictionaryRef q=journalQuery(service,NULL);
+ CFDictionarySetValue(q,kSecReturnAttributes,kCFBooleanTrue);
+ CFDictionarySetValue(q,kSecMatchLimit,kSecMatchLimitOne);
+ CFTypeRef result=NULL;OSStatus status=SecItemCopyMatching(q,&result);CFRelease(q);
+ if(status!=errSecSuccess)return status;
+ if(!result||CFGetTypeID(result)!=CFDictionaryGetTypeID()){if(result)CFRelease(result);return errSecDecode;}
+ CFTypeRef a=CFDictionaryGetValue((CFDictionaryRef)result,kSecAttrAccount);
+ CFTypeRef s=CFDictionaryGetValue((CFDictionaryRef)result,kSecAttrService);
+ CFStringRef wanted=CFStringCreateWithCString(NULL,service,kCFStringEncodingUTF8);
+ if(!a||!s||CFGetTypeID(a)!=CFStringGetTypeID()||!CFEqual(s,wanted)){CFRelease(wanted);CFRelease(result);return errSecDecode;}
+ CFRelease(wanted);char buffer[256];
+ if(!CFStringGetCString((CFStringRef)a,buffer,sizeof(buffer),kCFStringEncodingUTF8)){CFRelease(result);return errSecDecode;}
+ *account=strdup(buffer);CFRelease(result);return *account?errSecSuccess:errSecAllocate;
+}
 */
 import "C"
 
@@ -190,11 +205,29 @@ func (d *darwinValues) ClearTest() error {
 	}
 	s := C.CString(d.service)
 	defer C.free(unsafe.Pointer(s))
-	status := C.journalDelete(s, nil)
-	if status != C.errSecSuccess && status != C.errSecItemNotFound {
-		return keychainError(status)
+	// Delete exact validated accounts and confirm exhaustion. Do not accept a
+	// broad delete acknowledgement as proof that all native chunks are gone.
+	seen := map[string]bool{}
+	for count := 0; count < 128; count++ {
+		var account *C.char
+		status := C.journalFirstAccount(s, &account)
+		if status == C.errSecItemNotFound {
+			return nil
+		}
+		if status != C.errSecSuccess {
+			return keychainError(status)
+		}
+		name := C.GoString(account)
+		C.free(unsafe.Pointer(account))
+		if !validName(name) || seen[name] {
+			return ErrUnavailable
+		}
+		seen[name] = true
+		if d.Remove(name) != nil {
+			return ErrUnavailable
+		}
 	}
-	return nil
+	return ErrUnavailable
 }
 func (d *darwinValues) Close() error {
 	e := unix.Close(d.lock)

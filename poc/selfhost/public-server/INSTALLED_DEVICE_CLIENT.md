@@ -1,5 +1,9 @@
 # r17：已安装信任设备 API 客户端（开发与构建通过，原生组合待验收）
 
+## r26：独立原生组件组合验证
+
+真实OS signer/profile/node journal+签名HTTPS与内部TEST注册消费、正常/unknown重开拒绝已在Mac组合验证；修复TEST清理回执后的残留记录并重复通过。不是正式device-client IPC或Headscale Up。新窗口、构建及密钥角色/清理边界见 [原生注册组合](NATIVE_REGISTRATION_COMBINATION.md)，Windows仍仅build-only。
+
 ## r25：原生注册存储组件与真实拒绝退出验证
 
 补充NativeEnrollmentFactory与OS状态journal/固定保护目录；注册前提交attempted、重启后拒绝未知或已注册结果重试，node join后才释放lease。Mac实际存储/多进程、权限负向，以及fresh compiled device-client无效Grant→终止结果→输入EOF→failed/actual exit1→租约重开均PASS；Windows新包仅构建。仍未启用正式provision，不能把本地无效Grant负向当有效网络校时或真实注册。范围、原生/构建限制与新Windows入口见 [原生注册存储](ENROLLMENT_STORAGE.md)。下方r24未完成的存储说明为历史，原生注册/Headscale/GUI组合仍待。
