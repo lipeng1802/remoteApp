@@ -30,7 +30,11 @@ PREFLIGHT PASSED: Windows native storage + OS signed local HTTPS + actual SDK ca
 
 待预检通过后，协调人需要在新的获准预发布维护窗口建立独立 stage、读取其公开 issuer、构建新的短期包与独立 server-only TLS 材料，准备 Windows 侧可达且匹配编译 profile 的私有 HTTPS 转发。不要复用 r30 已 restored 的 stage/端点或本轮 builder-smoke 包。不向 Windows 复制管理 SSH 私钥或 server TLS/issuer 私钥，不将注册凭据经 SSH 交付给客户端。
 
+联合客户端完成后还会显式检查：profile helper已实际退出、精确删除成功，并且同一TEST命名空间的原生属性为空。删除回执本身不再算清理PASS；Windows必须给出自己的结果，不能用Mac的Keychain证据替代Credential Manager证据。
+
 新联合包运行 `run-autonomous-native-validation.ps1`，但只有协调人确认维护/转发/后端 READY 后才执行。此脚本只接受 fresh one-shot 包；生成 public-recovery.json 后不允许自动再跑。必须等实际客户端退出，再允许服务器回收和恢复。服务器新版 operator 的当前 PID READY 顺序修复也需在该次完整往返复测；r30 手动恢复不是新版 operator 全流程通过。
+
+新版operator的READY/STOPPED回执绑定本boot、当前PID和本次ExecStart单调时间，防止PID复用或旧日志误判。恢复中断后checkpoint保持`resuming`，只能由操作者明确执行`finish-resume`续接；它不重启failed实例、不跳过candidate join或baseline检查。服务恢复后再执行只读`verify-restored`，确认当前实例READY及正式Store/资源/零规则/unit/Nginx基线仍一致。
 
 可信构建命令接口现为：
 

@@ -21,12 +21,24 @@ import (
 	"remoteapp.local/selfhost-poc/enrollmentstore"
 	"remoteapp.local/selfhost-poc/installeddevice"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/nativejournal"
 	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
 
 var ErrValidation = errors.New("autonomous_native_validation_unavailable")
+
+func cleanupProfile(journal, scope string) error {
+	if trustprofile.DeleteTestDesktopJournal(journal, scope) != nil { return ErrValidation }
+	// Inspect attributes only after the helper has actually exited. A successful
+	// deletion receipt alone is not proof of an empty native TEST namespace.
+	runtime.LockOSThread()
+	empty, e := nativejournal.TestEmpty(scope)
+	runtime.UnlockOSThread()
+	if e != nil || !empty { return ErrValidation }
+	return nil
+}
 
 func Run(release trustinstall.Release, digest, dir string, pass func(string)) (result error) {
 	stage := "profile_prepare"
@@ -257,9 +269,10 @@ func Run(release trustinstall.Release, digest, dir string, pass func(string)) (r
 		state.Close()
 		return ErrValidation
 	}
-	if trustprofile.DeleteTestDesktopJournal(journal, release.Scope()) != nil {
+	if cleanupProfile(journal, release.Scope()) != nil {
 		return ErrValidation
 	}
+	pass("native_profile_namespace_empty_after_joined_cleanup")
 	pass("proof_sdk_signer_profile_joined_and_exact_native_test_cleanup")
 	return nil
 }

@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-14 r32 继续1/2，原生清理空命名空间与维护恢复身份门禁
+
+Windows仍关机，r31包未执行/不计PASS；3持续watch/撤销/实际拒绝及4产品TLS/HMAC继续暂停。本轮没有上传、停止/启动服务、维护窗口、Store/策略/端口或Windows动作。
+
+autonomousvalidation完成profile精确清理门禁：owner/proof/SDK/signer/profile helper实际join后，DeleteTestDesktopJournal成功还不够；main进程锁定OS线程调用nativejournal.TestEmpty只读检查同release scope TEST属性为空，失败保持整体验收FAIL；新增固定CHECK native_profile_namespace_empty_after_joined_cleanup。Mac用fresh当前源码trust-journal实测同一随机scope两轮InitializeInstallation→close→TestEmpty false→reopen Current不变→helper cleanup实际exit→TestEmpty true→同scope重新create，actual PASS。Windows交叉vet通过但无执行，不能沿用Mac结论。
+
+native-registration-maintenance将恢复回执从“当前PID日志含文本”加强为同boot journal JSON中_PID匹配且__MONOTONIC_TIMESTAMP不早于ExecMainStartTimestampMonotonic；日志读取后重核PID/start identity，authority READY后才启动frontend，frontend READY后再次重核provider及两个服务实例未重启。STOPPED同样绑定被停止实例的PID/start，并要求inactive/MainPID0/status0。stage metadata使用O_NOFOLLOW、root/0600/regular/single-link/size/inode稳定读取，PID bool/无效回执拒绝。
+
+resume只接受paused且开始前两个原服务均已实际join；写入resuming后任一步失败保留阶段。新增显式finish-resume只接受resuming：复用仍健康且当前实例READY的原服务，只启动inactive/status0的缺失服务；failed服务、provider故障、baseline变化、live candidate均拒绝，不自动重启/回滚/换身份。authority inactive而frontend仍active视为恢复顺序不明，拒绝复用。verify-restored严格只读，要求restored、candidate join、当前实例READY与两次baseline一致，不写checkpoint或服务。18项operator回归覆盖完整prepare/pause/resume/只读audit、authority无READY不启动frontend、frontend start失败显式续接且不重启authority、failed服务/基线变化/live或缺失candidate/依赖后续重启等；全部22项Python回归PASS。
+
+相关autonomousvalidation/nativejournal/trustprofile/devicevalidation/installeddevice/enrollmentstore/invite/nodeproof/broker九包race PASS，Linux candidate vet及Windows autonomous vet PASS。服务器只读检查systemd 219实际提供ExecMainStartTimestampMonotonic，当前authority/frontend各有一条与当前PID/start相符的本boot READY；没有运行新版operator完整维护往返，不能把回归或只读检查当实际resume PASS。下一真实Windows1/2窗口需要上传fresh operator至fresh stage，按prepare→pause→candidate→client actual join→candidate stop/join→retire→resume/必要时显式finish-resume→verify-restored完成；仍需当时明确维护许可。
+
+本地切片提交，不自动推送。
+
 ## 2026-10-14 r31 继续1/2，Windows关机时准备新版单窗口预检与联合入口
 
 用户继续1、2；不进入3/4，无Windows/服务器联系、服务维护、上传/策略/Store/端口动作。新增windows-enrollment-preflight-build，fresh编译Windows CM/journal/signature helper，复用storage/registration可信builder生成新23小时TEST profile，组合最新全enrollmentstore原生测试、storage验证、OS签名本机HTTPS正常/未知结果（node仍替身）、真实SDK固定127.0.0.1:18443失败Up/cancel/同步Close/精确清理。一条普通桌面PowerShell命令，不依赖旧安装包/Go/双READY窗口，不删除Tailscale。新包artifacts/connection-poc/windows-enrollment-preflight-r31.zip，仅build-ready，Windows尚未执行。过期重新构建，不改时钟/生产trust或用旧bundle。
