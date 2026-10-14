@@ -33,6 +33,7 @@ type NetworkReply struct {
 	State      *NetworkState           `json:"network_state,omitempty"`
 	Proof      *ClockProof             `json:"proof,omitempty"`
 	TLS        *TLSIdentity            `json:"tls_identity,omitempty"`
+	Verifier   *VerifierPermit         `json:"verifier_permit,omitempty"`
 }
 
 func networkRequestBytes(b NetworkRequestBody) []byte {
@@ -88,7 +89,7 @@ func (s *Store) authorizeNetworkRequest(e NetworkRequest) error {
 	next.LastTime = now
 	budget := "network:" + id
 	limit := 240
-	if e.Body.Action == "enroll" || e.Body.Action == "bind" {
+	if e.Body.Action == "enroll" || e.Body.Action == "bind" || e.Body.Action == "verifier" {
 		budget = "network-provision:" + id
 		limit = 6
 	}
@@ -137,6 +138,11 @@ func (s *Store) authorizeNetworkRequest(e NetworkRequest) error {
 		if e.Body.Ticket != "" || e.Body.Challenge != "" || e.Body.Intent.PublicKey != e.PublicKey {
 			return ErrDenied
 		}
+	case "verifier":
+		r, ok := s.state.Provisions[e.Body.Ticket]
+		if !ok || r.Device != id || r.Grant != g || r.Status != "issued" || !canonicalHex(e.Body.Challenge, 32) || e.Body.Intent != (ProvisionEnvelope{}) {
+			return ErrDenied
+		}
 	case "bind":
 		r, ok := s.state.Provisions[e.Body.Ticket]
 		if !ok || r.Device != id || r.Grant != g || e.Body.Challenge != "" || e.Body.Intent != (ProvisionEnvelope{}) {
@@ -167,6 +173,13 @@ func (b *ProvisionBackend) ExecuteNetworkRequest(ctx context.Context, e NetworkR
 		return NetworkReply{}, err
 	}
 	switch e.Body.Action {
+	case "verifier":
+		pub, _ := hex.DecodeString(e.PublicKey)
+		p, err := b.VerifierPermit(ctx, e.Body.Grant, deviceID(pub), e.Body.Ticket, e.Body.Challenge)
+		if err != nil {
+			return NetworkReply{}, err
+		}
+		return NetworkReply{Verifier: &p}, nil
 	case "publish_tls":
 		return NetworkReply{}, b.publishTLS(e)
 	case "tls_identity":

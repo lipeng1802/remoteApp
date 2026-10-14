@@ -108,6 +108,12 @@ func TestNetworkAPIRealHTTPSAndEnrollment(t *testing.T) {
 	if err != nil || enrolled.Credential == nil || enrolled.Credential.Secret == "" || enrolled.Ticket == "" {
 		t.Fatal("authenticated enrollment")
 	}
+	b.VerifierSource = func(context.Context) (string, error) { return "nodekey:" + strings.Repeat("c", 64), nil }
+	challenge := strings.Repeat("d", 64)
+	permit, err := client.Request(context.Background(), NetworkRequestBody{Action: "verifier", Grant: g, Ticket: enrolled.Ticket, Challenge: challenge})
+	if err != nil || permit.Verifier == nil || !VerifyVerifierPermit(f.s.PublicKey(), *permit.Verifier, g, f.target.DeviceID, enrolled.Ticket, "nodekey:"+strings.Repeat("a", 64), challenge, f.now) {
+		t.Fatal("authenticated verifier permit over actual HTTPS")
+	}
 	if _, err = client.Request(context.Background(), NetworkRequestBody{Action: "bind", Grant: g, Ticket: enrolled.Ticket}); err != nil {
 		t.Fatal("device bind")
 	}

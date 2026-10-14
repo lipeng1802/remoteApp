@@ -15,6 +15,18 @@ func NativeEnrollmentFactory(scope string, test bool) EnrollmentFactory {
 	return protectedEnrollmentFactory(scope, test, TSNetEnrollmentFactory)
 }
 
+func (n *nativeEnrollment) StartProof(ctx context.Context, s invite.DeviceSigner, p invite.VerifierPermit) error {
+	proof, ok := n.node.(proofEnrollmentNode)
+	if !ok || n.store.Check() != nil || n.store.State().Phase != "registered" || p.Claims.NodeKey != n.key {
+		return invite.ErrDenied
+	}
+	return proof.StartProof(ctx, s, p)
+}
+func (n *nativeEnrollment) ProofReady() bool {
+	p, ok := n.node.(proofEnrollmentNode)
+	return ok && p.ProofReady()
+}
+
 func protectedEnrollmentFactory(scope string, test bool, prepare func(string) EnrollmentFactory) EnrollmentFactory {
 	return func(ctx context.Context) (EnrollmentNode, error) {
 		if ctx.Err() != nil {

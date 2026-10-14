@@ -240,7 +240,14 @@ func (c *NetworkClient) Request(ctx context.Context, b NetworkRequestBody) (Netw
 	if decodeHTTP(bytes.NewReader(data), &result) != nil {
 		return NetworkReply{}, ErrDenied
 	}
+	if b.Action != "verifier" && result.Verifier != nil {
+		return NetworkReply{}, ErrDenied
+	}
 	switch b.Action {
+	case "verifier":
+		if result.Verifier == nil || result.Verifier.Claims.GrantID != b.Grant.Claims.ID || result.Verifier.Claims.Ticket != b.Ticket || result.Verifier.Claims.Challenge != b.Challenge || result.TLS != nil || result.Credential != nil || result.State != nil || result.Proof != nil || result.Ticket != "" {
+			return NetworkReply{}, ErrDenied
+		}
 	case "publish_tls":
 		if result != (NetworkReply{}) {
 			return NetworkReply{}, ErrDenied

@@ -185,11 +185,54 @@ func serveWithSigner(ctx context.Context, s *tsnet.Server, signer invite.DeviceS
 	if signer == nil || len(signer.PublicKey()) != 32 || verifierNode == "" {
 		return invite.ErrDenied
 	}
-	pub := append(ed25519.PublicKey(nil), signer.PublicKey()...)
 	ln, e := s.Listen("tcp", ":"+Port)
 	if e != nil {
 		return e
 	}
+	return serveListener(ctx, s, signer, verifierNode, report, allowed, ln)
+}
+
+// StartPermitted opens the listener synchronously before bind may be sent.
+// Trusted caller must verify issuer/time/nonce/bindings of permit first.
+func StartPermitted(ctx context.Context, s *tsnet.Server, signer invite.DeviceSigner, c invite.VerifierClaims) (*ProofOwner, error) {
+	if ctx.Err() != nil || signer == nil || len(signer.PublicKey()) != 32 || !boundGrant(c.GrantID, c.GrantID) || !boundGrant(c.Ticket, c.Ticket) || c.Device != identity(signer.PublicKey()) || c.VerifierKey == "" || c.NodeKey == "" || c.VerifierKey == c.NodeKey {
+		return nil, invite.ErrDenied
+	}
+	ln, e := s.Listen("tcp", ":"+Port)
+	if e != nil {
+		return nil, invite.ErrDenied
+	}
+	run, cancel := context.WithCancel(ctx)
+	p := &ProofOwner{cancel: cancel, done: make(chan struct{})}
+	go func() {
+		defer close(p.done)
+		p.err = serveListener(run, s, signer, c.VerifierKey, nil, func(v challenge) bool { return permittedChallenge(c, v) }, ln)
+	}()
+	return p, nil
+}
+
+func permittedChallenge(c invite.VerifierClaims, v challenge) bool {
+	return v.Ticket == c.Ticket && v.Grant == c.GrantID && v.Device == c.Device && v.Node == c.NodeKey
+}
+
+type ProofOwner struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+	err    error
+}
+
+func (p *ProofOwner) Ready() bool {
+	select {
+	case <-p.done:
+		return false
+	default:
+		return true
+	}
+}
+func (p *ProofOwner) CloseJoined() error { p.cancel(); <-p.done; return p.err }
+
+func serveListener(ctx context.Context, s *tsnet.Server, signer invite.DeviceSigner, verifierNode string, report func(string), allowed func(challenge) bool, ln net.Listener) error {
+	pub := append(ed25519.PublicKey(nil), signer.PublicKey()...)
 	defer ln.Close()
 	done := make(chan struct{})
 	joined := make(chan struct{})

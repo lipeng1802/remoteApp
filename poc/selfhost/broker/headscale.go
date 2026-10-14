@@ -31,5 +31,11 @@ func StartHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *v
 		pub, e := st.DevicePublicKey(r.Device)
 		return e == nil && v.Verify(ctx, r, o, pub)
 	}
-	return StartNetworkSupervisor(ctx, &invite.ProvisionBackend{Store: st, Driver: d}, v, interval)
+	return StartNetworkSupervisor(ctx, &invite.ProvisionBackend{Store: st, Driver: d, VerifierSource: func(call context.Context) (string, error) {
+		info := v.Info()
+		if call.Err() != nil || !info.Healthy || !v.Live() {
+			return "", invite.ErrDenied
+		}
+		return info.Key, nil
+	}}, v, interval)
 }

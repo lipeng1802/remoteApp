@@ -28,6 +28,7 @@ type enrollment struct {
 	node                 EnrollmentNode
 	ticket, key, address string
 	attempted            bool
+	proofCancel          context.CancelFunc
 }
 
 type enrollmentResult struct {
@@ -91,7 +92,7 @@ func (e *enrollment) start(ctx context.Context, g *authorizationGate, client net
 	if reply.Credential != nil {
 		defer func() { *reply.Credential = invite.RegistrationCredential{} }()
 	}
-	if err != nil || httpFailed || call.Err() != nil || !canonical(reply.Ticket, 16) || reply.Credential == nil || reply.Credential.Secret == "" || len(reply.Credential.Secret) > 256 || reply.State != nil || reply.Proof != nil || reply.TLS != nil || !g.validGrant(grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
+	if err != nil || httpFailed || call.Err() != nil || !canonical(reply.Ticket, 16) || reply.Credential == nil || reply.Credential.Secret == "" || len(reply.Credential.Secret) > 256 || reply.State != nil || reply.Proof != nil || reply.TLS != nil || reply.Verifier != nil || !g.validGrant(grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
 		return deny()
 	}
 	e.ticket = reply.Ticket // private, for the later live-proof/bind phase only
@@ -106,6 +107,9 @@ func (e *enrollment) start(ctx context.Context, g *authorizationGate, client net
 }
 
 func (e *enrollment) closeJoined() error {
+	if e.proofCancel != nil {
+		e.proofCancel()
+	}
 	if e.node == nil {
 		return nil
 	}

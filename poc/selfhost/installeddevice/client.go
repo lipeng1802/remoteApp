@@ -60,17 +60,22 @@ func validProvision(r Request) bool {
 // current profile and monotonic lifetime. The output is a trusted private pipe,
 // not a log or public peer interface; device results can contain invite/grant.
 func Runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error) clientowner.Runner {
-	return runner(release, open, commands, output, nil)
+	return runner(release, open, commands, output, nil, false)
 }
 
 // EnrollmentRunner adds a trusted internal node owner, not an IPC-selected path
 // or credential. The compiled entry intentionally remains Runner until native
 // node-storage ownership and recovery provisioning are installed and verified.
 func EnrollmentRunner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory) clientowner.Runner {
-	return runner(release, open, commands, output, factory)
+	return runner(release, open, commands, output, factory, false)
 }
 
-func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory) clientowner.Runner {
+// Trusted opt-in composition only; ordinary installed entry stays disabled.
+func BoundEnrollmentRunner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory) clientowner.Runner {
+	return runner(release, open, commands, output, factory, true)
+}
+
+func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding bool) clientowner.Runner {
 	return func(ctx context.Context, profile trustprofile.Profile) (result error) {
 		if ctx.Err() != nil || open == nil || output == nil || commands == nil {
 			return trustprofile.ErrTrust
@@ -134,6 +139,9 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 				}
 				if provision {
 					reply, err := enrolled.start(ctx, gate, client, factory, request.Network.Grant)
+					if err == nil && binding {
+						reply, err = enrolled.bind(ctx, gate, client)
+					}
 					if outErr := output(reply); outErr != nil {
 						return outErr
 					}

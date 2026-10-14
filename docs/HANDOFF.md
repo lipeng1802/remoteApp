@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-14 r29 用户指定优先1/2，可信verifier供应与内部绑定核心接入
+
+用户要求先完成切片4剩余1（签名HTTPS自主注册）和2（实时持有证明绑定），3/4暂不开展。本轮接通可信信息缺口与内部组合，未部署/接触服务器或Windows、未修改现网策略/正式Store/端口。不能将本轮组件PASS与r26/r28分离的证据拼为1/2完成。
+
+invite新增verifier签名API：同已签名网络请求/设备注册/批准grant/持久nonce replay/6次provision预算；仅本设备issued ticket，challenge32bytes，拒绝intent/混字段。Backend.VerifierSource仅可信server composition，Headscale Supervisor程序集从Live Runtime.Info取节点key，nil/故障不给descriptor，不接父端key。issuer签permit绑定grant/device/ticket/node/verifier/challenge、≤30秒且不越ticket/grant期限。客户端从固定profile issuer核验grant与permit签名/时效/本机随机challenge/捕获public/node，其他network回复混Verifier拒绝；descriptor不是Binding或active permission。
+
+BoundEnrollmentRunner显式可信opt-in，原Runner/EnrollmentRunner/compiled device-client默认入口未变。provision内部签名HTTPS enroll+真实factory后自动verifier→StartProof同步Listen就绪→12s bind；父帧仅grant，不接受ticket/key/challenge。仅固定network_binding/passed/active=false输出，未知HTTP/混reply/身份变化/签名过期/start或proof失效皆fault，无retry。Native proof adapter要求本机registered/完整lease，再委托tsnet节点；nodeproof.StartPermitted按可信verifier WhoIs限制来源、exact ticket/grant/device/node限制challenge、既有fresh transcript签名与local status/IP检查；listener相对issuer clock限时，close先cancel/join proof再SDK Close再native lease/HTTP/OS signer join。用户仍不能用本轮直接启动正式provision。
+
+2组server permit测试（签名绑定/期限/foreign/missing-live/bound拒绝、signed API replay/混intent），客户端binding正常与9类故障、离线factory/expired grant禁止HTTP，nodeproof exact session challenge负向；既有真实HTTPS注册用批准temp Store/memory driver扩充新verifier request/签名验证，然后fixture bind。该HTTPS测试使用memory signer/driver，客户端binding用proof fixture，不冒充真实OS signer或overlay Proof。7包invite/installeddevice/nodeproof/broker/registrationvalidation/enrollmentstore/clientruntime race PASS，Mac/Windows相关vet PASS；Linux authority-verifier-r29-linux build-only未上传。后续nodeproof小重构/新增session test另race/vet复跑，服务端候选需随最终源码fresh构建，旧candidate不当作最终部署包。
+
+下一步同一个隔离联合入口把真实OS signer/原生profile与node lease/签名HTTPS批准Store/Mint/SDK Up/verifier descriptor/实时proof/bind串联，完成1/2，不开展3的持续watch/数据规则与4的产品TLS/HMAC。当前现网长期authority已持有verifier/唯一策略writer，不能旁开另一policy writer或覆盖正式Store做fixture；应申请短时维护预发布authority/前端，使用隔离测试Store借用既有verifier身份，并在真正join后恢复原服务/零ACL。未经确认不停止现网/改业务Nginx443/开公网8444。Windows可保持关机，先Mac+server联合验收、Windows native待验仍单列。批准维护后再实现准备/审计/恢复入口，不能假设此段方案已执行。整体4、1/2仍未标记完成。本轮仅本地提交，未推送。
+
 ## 2026-10-14 r28 Mac原生真实Headscale注册/精确回收两轮通过
 
 用户继续，Windows关机不联系。只读发现r22已有1 node/user/key、database显式零ACL/固定正式Store；旧空控制面enrollment-network.py未运行。新增Mac operator cmd/enrollment-headscale-validation显式--run-scoped-headscale，固定SSH known_hosts/密钥路径/host与CLI。它是受限私有管理员验收，不是最终客户端凭据供应：真实Driver.Mint secret由SSH stdout仅在验收进程内直接交NativeEnrollmentFactory(scope,true)→固定HTTPS8443 SDK Up，不经父IPC、文件/日志，不用正式authority Store批准grant/enroll。原device-client provision/GUI/安装包入口未启用。

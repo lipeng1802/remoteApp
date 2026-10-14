@@ -9,6 +9,7 @@ import (
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/nodeidentity"
+	"remoteapp.local/selfhost-poc/nodeproof"
 	"tailscale.com/tsnet"
 )
 
@@ -50,6 +51,7 @@ type tsnetEnrollment struct {
 	key     string
 	node    *tsnet.Server
 	started bool
+	proof   *nodeproof.ProofOwner
 }
 
 func (n *tsnetEnrollment) PublicKey() string { return n.key }
@@ -82,11 +84,28 @@ func (n *tsnetEnrollment) Register(ctx context.Context, secret string) (string, 
 }
 
 func (n *tsnetEnrollment) CloseJoined() error {
+	var proofErr error
+	if n.proof != nil {
+		proofErr = n.proof.CloseJoined()
+	}
 	if !n.started {
 		return nil
 	}
 	// Synchronous SDK close is completion, not merely a cancellation request.
 	err := n.node.Close()
 	n.node.AuthKey = ""
+	if proofErr != nil {
+		return proofErr
+	}
 	return err
 }
+
+func (n *tsnetEnrollment) StartProof(ctx context.Context, s invite.DeviceSigner, p invite.VerifierPermit) error {
+	if !n.started || n.proof != nil || p.Claims.NodeKey != n.key {
+		return invite.ErrDenied
+	}
+	var err error
+	n.proof, err = nodeproof.StartPermitted(ctx, n.node, s, p.Claims)
+	return err
+}
+func (n *tsnetEnrollment) ProofReady() bool { return n.proof != nil && n.proof.Ready() }

@@ -72,7 +72,7 @@ func (g *authorizationGate) request(ctx context.Context, client networkRequester
 		b.Challenge = hex.EncodeToString(challenge[:])
 		start := time.Now()
 		reply, err := client.Request(call, b)
-		if err != nil || call.Err() != nil || !bytes.Equal(g.public, g.signer.PublicKey()) || reply.Proof == nil || reply.Credential != nil || reply.State != nil || reply.TLS != nil || reply.Ticket != "" {
+		if err != nil || call.Err() != nil || !bytes.Equal(g.public, g.signer.PublicKey()) || reply.Proof == nil || reply.Credential != nil || reply.State != nil || reply.TLS != nil || reply.Verifier != nil || reply.Ticket != "" {
 			return fail()
 		}
 		clock, err := invite.AuthorityClock(g.issuer, *reply.Proof, b.Grant.Claims.ID, b.Challenge, start)
@@ -88,7 +88,7 @@ func (g *authorizationGate) request(ctx context.Context, client networkRequester
 			return fail()
 		}
 		reply, err := client.Request(call, b)
-		if err != nil || call.Err() != nil || !bytes.Equal(g.public, g.signer.PublicKey()) || reply.State == nil || reply.Proof != nil || reply.Credential != nil || reply.TLS != nil || reply.Ticket != "" || reply.State.Claims.Grant != g.grant || !invite.VerifyNetworkState(g.issuer, *reply.State, g.clock()) || !g.validGrant(g.grant, g.clock()) {
+		if err != nil || call.Err() != nil || !bytes.Equal(g.public, g.signer.PublicKey()) || reply.State == nil || reply.Proof != nil || reply.Credential != nil || reply.TLS != nil || reply.Verifier != nil || reply.Ticket != "" || reply.State.Claims.Grant != g.grant || !invite.VerifyNetworkState(g.issuer, *reply.State, g.clock()) || !g.validGrant(g.grant, g.clock()) {
 			return fail()
 		}
 		result.Passed = true
