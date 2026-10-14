@@ -138,12 +138,19 @@ func (d *macDirectory) Close() error {
 }
 
 func (d *macDirectory) ClearTestMaterials() error {
-	entries, e := os.ReadDir(d.path)
-	if e != nil || !knownSDKMaterials(entries) || d.Check(false) != nil {
+	if d.Check(false) != nil {
 		return ErrStorage
 	}
-	for _, entry := range entries {
-		if unix.Unlinkat(d.node, entry.Name(), 0) != nil || unix.Fsync(d.node) != nil {
+	plan, e := sdkCleanupPlan(d.path)
+	if e != nil {
+		return ErrStorage
+	}
+	for _, entry := range plan {
+		flags := 0
+		if entry.directory {
+			flags = unix.AT_REMOVEDIR
+		}
+		if unix.Unlinkat(d.node, entry.path, flags) != nil || unix.Fsync(d.node) != nil {
 			return ErrStorage
 		}
 	}

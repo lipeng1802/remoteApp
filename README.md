@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r28 [原生真实Headscale注册/回收](poc/selfhost/public-server/NATIVE_HEADSCALE_REGISTRATION.md)：Mac真实Mint→SDK Up→Observe→同步退出→精确回收→原生TEST清理连续两轮通过；原长期资源、零ACL、正式Store及Nginx保持原状。修复管理传输期限余量与成功登录空缓存目录清理；失败工单已显式收口。仅管理员SSH验收，不是最终客户端凭据供应、签名grant/enroll、实时proof/bind/watch或GUI通过；Windows未执行，整体4未完成。
+
 r27 [原生真实SDK退出验证](poc/selfhost/public-server/NATIVE_SDK_LIFECYCLE.md)：真实tsnet Up访问固定本机失败服务、取消后同步退出、原生attempted保留/拒绝再次注册及精确清理；Mac重复通过，Windows新入口仅构建。补齐SDK四个已知文件的TEST清理、未知文件整组拒绝，以及独立helper进程级禁止日志上传。这不是成功Headscale入网，不与r26替身测试拼接为端到端通过。
 
 r26 [原生注册组合验证](poc/selfhost/public-server/NATIVE_REGISTRATION_COMBINATION.md)：真实OS签名器/已安装profile租约/节点原生存储、签名HTTPS校时与enroll、内部TEST凭据消费及重开不重试串联；Mac同包重复通过，注册响应未知仍只触发一次请求。发现并修复TEST清理回执后仍残留记录的问题，改逐项删除/复核空。Windows新包仅构建；节点Up是离线替身，不是Headscale、正式客户端IPC或GUI验收。

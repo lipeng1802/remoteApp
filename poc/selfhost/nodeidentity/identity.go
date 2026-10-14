@@ -18,6 +18,30 @@ import (
 
 var ErrIdentity = errors.New("private node identity unavailable")
 
+// ReadProfileID is read-only metadata for exact joined TEST cleanup. It never
+// creates a missing store, repairs state, returns keys or starts the SDK.
+func ReadProfileID(dir string) (string, error) {
+	path := filepath.Join(dir, "tailscaled.state")
+	st, e := os.Lstat(path)
+	if e != nil || !st.Mode().IsRegular() || st.Size() == 0 || st.Size() > 1<<20 {
+		return "", ErrIdentity
+	}
+	s, e := store.NewFileStore(func(string, ...any) {}, path)
+	if e != nil {
+		return "", ErrIdentity
+	}
+	b, e := s.ReadState(ipn.CurrentProfileStateKey)
+	if e != nil || len(b) != len("profile-")+4 || string(b[:8]) != "profile-" {
+		return "", ErrIdentity
+	}
+	id := string(b[8:])
+	raw, e := hex.DecodeString(id)
+	if e != nil || len(raw) != 2 || hex.EncodeToString(raw) != id {
+		return "", ErrIdentity
+	}
+	return id, nil
+}
+
 // Prepare is offline: no network, browser, credential, or fake registered NodeID.
 // The key never leaves the private StateStore. Existing corrupt state fails closed.
 // Caller owns an exclusive helper process/dir; simultaneous processes forbidden.

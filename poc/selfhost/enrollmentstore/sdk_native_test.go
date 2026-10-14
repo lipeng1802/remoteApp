@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"remoteapp.local/selfhost-poc/nodeidentity"
 	"testing"
 )
 
@@ -41,5 +42,44 @@ func TestNativeSDKCleanupRefusesUnknownBeforeAnyDeletion(t *testing.T) {
 	entries, err = os.ReadDir(s.NodeDir())
 	if err != nil || len(entries) != 0 {
 		t.Fatal("SDK files left after success")
+	}
+}
+
+func TestNativeSDKCleanupRejectsCacheContentBeforeDeletingState(t *testing.T) {
+	var raw [16]byte
+	if _, e := rand.Read(raw[:]); e != nil {
+		t.Fatal("random scope")
+	}
+	s, e := Initialize(hex.EncodeToString(raw[:]), true)
+	if e != nil {
+		t.Fatal("TEST initialize")
+	}
+	defer s.Close()
+	if _, e = nodeidentity.Prepare(s.NodeDir(), "http://127.0.0.1:18443"); e != nil {
+		t.Fatal("offline TEST state")
+	}
+	id, e := nodeidentity.ReadProfileID(s.NodeDir())
+	if e != nil {
+		t.Fatal("profile metadata")
+	}
+	cache := filepath.Join(s.NodeDir(), "profile-data", id, "netmap-cache")
+	if os.MkdirAll(cache, 0700) != nil || os.WriteFile(filepath.Join(cache, "unknown"), []byte("public fixture"), 0600) != nil {
+		t.Fatal("cache fixture")
+	}
+	if s.CleanupTestAfterJoin() == nil {
+		t.Fatal("nonempty cache cleanup accepted")
+	}
+	if _, e = os.Stat(filepath.Join(s.NodeDir(), "tailscaled.state")); e != nil {
+		t.Fatal("rejected cleanup deleted state")
+	}
+	if os.Remove(filepath.Join(cache, "unknown")) != nil {
+		t.Fatal("remove exact fixture")
+	}
+	if s.CleanupTestAfterJoin() != nil {
+		t.Fatal("known empty cache cleanup")
+	}
+	entries, e := os.ReadDir(s.NodeDir())
+	if e != nil || len(entries) != 0 {
+		t.Fatal("SDK materials remain")
 	}
 }

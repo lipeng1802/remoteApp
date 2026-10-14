@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-14 r28 Mac原生真实Headscale注册/精确回收两轮通过
+
+用户继续，Windows关机不联系。只读发现r22已有1 node/user/key、database显式零ACL/固定正式Store；旧空控制面enrollment-network.py未运行。新增Mac operator cmd/enrollment-headscale-validation显式--run-scoped-headscale，固定SSH known_hosts/密钥路径/host与CLI。它是受限私有管理员验收，不是最终客户端凭据供应：真实Driver.Mint secret由SSH stdout仅在验收进程内直接交NativeEnrollmentFactory(scope,true)→固定HTTPS8443 SDK Up，不经父IPC、文件/日志，不用正式authority Store批准grant/enroll。原device-client provision/GUI/安装包入口未启用。
+
+sdkheadscalevalidation.Guard每次副作用前fsync/回读公开恢复audit，绑定独立random ticket/user/key/node与offline公钥；禁止policy写入、服务操作、外来ID/混字段/过长duration。cleanup前重新核对精确归属、expire先于节点删除、节点空先于user销毁，额外资源拒绝。未知写回执fence，无自动Mint retry或猜测cleanup；SSH不CommandContext强杀，通信失败不证明远端完成。整个1资源原基线不满足会拒绝新一轮，不能换scope绕过遗留工单。keys原始JSON/secret仅内存，Snapshot稳定字段不含online/last_seen，审计只有基线摘要/公开句柄，不宣称Headscale DB字节不变或Go所有secret副本物理擦除。
+
+首次r3在key_create_acknowledged后Driver实际期限校验拒绝，未Up，保留audit headscale-sdk-r28-3817678294；定位远端归属检查增加RPC耗时，原本地一秒余量不足。Guard在检查后只缩短duration额外5秒，保留原绝对期限门禁，无放宽。显式--retire-joined-test原audit确认SDKJoined+native排他/原公钥、精确回收首次ticket和TEST key；actual exit0 RECOVERY PASSED但不是注册PASS。
+
+第二轮r4真实Up/Observe一致、SDK真正Close、原生registered与再注册拒绝、远端ticket精确回收及原基线恢复通过，但本地清理拒绝profile-data/current-profile/netmap-cache，整轮FAIL不计PASS；audit headscale-sdk-r28-3074162690。pinned SDK即使TS_USE_CACHED_NETMAP=false仍会建空缓存层级；ReadProfileID只读existing state不repair/no key output，TEST cleanup绑定当前4hex profile ID、至多一组且cache必须空，未知file/额外或错profile/link/权限在删除前拒绝；按底向上精确Remove/Unlinkat，无RemoveAll。r5显式恢复仅重核远端原基线（不再次删除已回收资源）后本地精确清理，RECOVERY exit0。空TEST scope/锁和公开audit保留，两个失败工单不再占远端资源/原生记录，不扫r27旧失败材料。
+
+最终同一fresh enrollment-headscale-r28-mac-r5两轮独立完整actual exit0：audit headscale-sdk-r28-1243141793 与 -568570159，均verified_cleaned/SDKJoined；实际Mint→SDK Up→control-plane公钥/IP相符→同步SDK Close→原生registered重开与Begin/factory拒绝→精确Retire→原稳定资源/零ACL/正式Store一致→TEST node/log/cache/native record清理。无强杀/删锁/超时算join。收尾独立服务器只读1 node/user/key、零ACL、三个正式服务active、Nginx baseline全部OK、Store原5c40...b33ca未变；没有上传server工具、服务重启、策略set或新端口。
+
+Guard 7函数与子项覆盖外来/策略/无journal写、未知fence、归属与expiry/delete顺序、额外key/wrongnode、严格zeroACL、5秒期限缩短及基线filter；存储增加绑定profile/空cache/额外profile/非空cache整体拒绝+Mac native证据不删负向。7包sdkheadscalevalidation/headscale/installeddevice/enrollmentstore/nodeidentity/nativejournal/registrationvalidation race、Mac/Windows相关vet PASS。Windows enrollment-sdk-r28-win-storage-tests.exe build-only（含DACL/新cache门禁测试），无上传/桌面或双机执行，r25/r26/r27待验不跳过。
+
+下一项把真实SDK和新原生组合接上固定OS signer/签名HTTPS grant/enroll，而不是产品沿SSH管理签发；随后补可信verifier供应与实时nodeproof/bind/watch。Observe不是实时持有证明，零ACL回读不是实际双机拒绝，r26替身不能与本轮SSH验收拼成最终端到端。生产原生初始化/稳定Mac签名、产品TLS/HMAC、GUI/签名安装与整体4仍待。本轮本地提交，不自动推送。详见public-server/NATIVE_HEADSCALE_REGISTRATION.md。
+
 ## 2026-10-14 r27 原生真实SDK失败注册/取消退出与精确清理
 
 用户继续。检查旧enrollment-network.py要求空nodes/users且会切换/重置策略，不兼容r22长期verifier/database，未执行。无服务器/Windows动作，不开放端口、不Mint或修改正式Store。新enrollment-sdk-validation显式随机TEST Initialize、NativeSDKRejectionValidationFactory固定true TEST namespace/本机http127.0.0.1:18443，地址/路径/secret均无父帧或参数覆盖；普通NativeEnrollmentFactory仍固定正式controlURL，compiled device-client未启用provision。

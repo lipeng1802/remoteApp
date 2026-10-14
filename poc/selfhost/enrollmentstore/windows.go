@@ -181,12 +181,15 @@ func (d *winDirectory) Close() error {
 }
 
 func (d *winDirectory) ClearTestMaterials() error {
-	entries, e := os.ReadDir(d.path)
-	if e != nil || !knownSDKMaterials(entries) || d.Check(false) != nil {
+	if d.Check(false) != nil {
 		return ErrStorage
 	}
-	for _, entry := range entries {
-		if os.Remove(filepath.Join(d.path, entry.Name())) != nil {
+	plan, e := sdkCleanupPlan(d.path)
+	if e != nil {
+		return ErrStorage
+	}
+	for _, entry := range plan {
+		if os.Remove(filepath.Join(d.path, entry.path)) != nil {
 			return ErrStorage
 		}
 	}

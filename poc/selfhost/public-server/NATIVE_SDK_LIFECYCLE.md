@@ -1,5 +1,9 @@
 # r27 原生租约与真实 SDK 失败注册生命周期
 
+r28 补充：真实成功入网额外产生 state 当前 profile 对应的空
+`profile-data/<id>/netmap-cache` 层级，TEST 清理现可验证后逐层精确删除；非空/额外 profile
+仍拒绝。r27 本机失败服务验收并未覆盖它，见 NATIVE_HEADSCALE_REGISTRATION.md。
+
 新入口 `cmd/enrollment-sdk-validation` 固定使用 TEST 原生 namespace 和
 `http://127.0.0.1:18443` 本机失败服务，不接受参数、父帧、路径、地址或实际凭据。
 端口被占用即失败，不复用/停止已有服务。无需 Tailscale 登录、旧安装包、Go 或两窗口 READY。
