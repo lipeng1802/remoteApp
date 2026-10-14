@@ -1,6 +1,8 @@
 # Personal Remote Desktop MVP
 
-r29 优先推进切片4的1/2：新增authority签名的短期verifier信息、nonce/授权/设备/工单/节点绑定，可信内部注册→proof listener就绪→bind路径及退出join。真实本机HTTPS协议与组件回归通过；尚未部署、未完成OS签名HTTPS＋真实SDK＋实时proof/bind联合验收，不能标记1/2完成。3/4暂不开展，下一步需确认预发布维护窗口以隔离测试Store验收。
+r30 切片4的1/2已完成Mac＋真实服务器的隔离联合验收：原生OS签名HTTPS注册/批准/校时/enroll→真实SDK→issuer verifier permit→实时nodeproof/backend bind→实际join/本机清理及服务端工单回收，actual exit0。客户端不通过SSH接收凭据；私有HTTPS暂经SSH回环转发，claimant为memory signer测试角色，无第二SDK/数据规则。维护后原服务、长期1资源、零ACL、正式Store、Nginx均恢复；修复清理状态转换与READY恢复顺序。Windows/正式客户端入口/公网/GUI安装仍待，3/4未开展。
+
+r29 优先推进切片4的1/2：新增authority签名的短期verifier信息、nonce/授权/设备/工单/节点绑定，可信内部注册→proof listener就绪→bind路径及退出join。下列r29组件证据已由r30隔离联合验收补齐Mac＋server链路，仍不是Windows或产品安装完成。
 
 r28 [原生真实Headscale注册/回收](poc/selfhost/public-server/NATIVE_HEADSCALE_REGISTRATION.md)：Mac真实Mint→SDK Up→Observe→同步退出→精确回收→原生TEST清理连续两轮通过；原长期资源、零ACL、正式Store及Nginx保持原状。修复管理传输期限余量与成功登录空缓存目录清理；失败工单已显式收口。仅管理员SSH验收，不是最终客户端凭据供应、签名grant/enroll、实时proof/bind/watch或GUI通过；Windows未执行，整体4未完成。
 

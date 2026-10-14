@@ -1,5 +1,25 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-14 r30 用户批准维护，1/2 Mac＋真实服务器隔离联合验收通过并恢复
+
+用户明确“允许”预发布维护。新增Linux root-local native-enrollment-authority与Python2维护operator、Mac autonomousvalidation/固定编译builder。客户端bundle无SSH credential supplier，也不包含TLS/issuer私钥；NewAuthorityMaterial把服务端隔离Store的真实public issuer固定进签名TEST profile，TLS leaf与issuer角色分离。TLS leaf私钥单独root600上传服务器，release/CA私钥仅构建内存不输出。HTTPS因预发布仍只回环监听，通过已知host SSH -L转发固定本机profile端口，SDK/control/nodeproof走实际Headscale/DERP，不经这个管理转发输送AuthKey。
+
+服务器持久root-private stage `/var/lib/remoteapp-native-acceptance/remoteapp-native-ffb077c6e18bd4ae`：prepare只建独立authority Store/公开issuer，不停服务、不Mint；维护prepare保存原Store摘要/1 node-user-key稳定字段摘要/unit与Nginx基线、candidate SHA。实际pause验证同PID STOPPED frontend/authority、状态0/锁释放、原基线不变。候选需要paused checkpoint/candidate SHA/原owner锁无存才serve，v.Open(false)重开原 `/var/lib/remoteapp-verifier`，不重建/Mint长期verifier。候选通过私有kernel UID0 broker和bounded signed TLS handler，HTTPS仅127.0.0.1随机36739；不会旁开第二policy writer或改正式Store。维护窗口与stage材料未安装为正式服务，当前已 restored。
+
+Mac fresh `artifacts/connection-poc/autonomous-native-r30-mac/autonomous-native-validation` actual exit0完整标记：TEST profile原生初始化/lease、random OS identity creator与pinned native borrower、真实服务端Store device register/invite/claim/approve、OS signed grant_clock/enroll、真实NativeEnrollmentFactory SDK Up、issuer verifier permit、proof listener就绪/真实backend Bind、stop/actual runner+proof+SDK+signer+profile join、原生registered重开拒绝Begin、精确node/log/cache/journal/随机identity清理。服务器实际输出 `PROOF_STAGE passed`。client数据/credential/grant/invite code不打印/存文件；public-recovery.json仅scope/public key。TLS/profile23小时TEST有效，旧bundle过期需fresh重建，不修改生产root/floor。
+
+claimant仅本机memory signer测试角色，用真实HTTPS向真实隔离Store签名注册/claim；target为actual OS signer/SDK。claimant无第二SDK，不产生双端payload ACL。此证据是Mac＋真实server的1/2联合路径，不是Windows/双机产品/正式installer/native installed-device-client启用。Private HTTP不等于公网；当前正式authority/前端原binary恢复，新的verifier协议仍待正式部署/入口启用。3的持续watch/数据规则、4的TLS/HMAC/画面键鼠数据面没有开展。
+
+服务端candidate收到exact /proc/exe+cmdline匹配的TERM，输出STOPPED isolated_native_authority、SSH actual exit0，所有broker/request/policy/verifier joined。首次retire Driver已回收远端ticket但private record还是bound，直接confirmed遭状态机拒绝，未计retire PASS，baseline/resume gate未绕过；修复先cleanup_pending→精确Driver.Cleanup→confirmed。独立 authority-retire-r2 binary只在这个stage执行retire，actual0；原长期verifier record不在隔离Store，未Retire。远端测试key/node/user和Mac TEST private key删除不可恢复，仅测试材料；空TEST目录/锁与公开恢复audit保留，不扫未知旧TEST记录。
+
+初次resume把systemd active误当broker READY，authority恢复后frontend抢先启动失败；首次restored checkpoint因此只作历史回执不计最终验收。按authority当前PID READY后显式启动原frontend，独立UID network-deployment-check active实际PASS；operator源码修复逐服务当前PID READY顺序，6项Python回归包括active但旧PID/无READY不能放行。修复后源码operator尚需再次实际完整维护往返测试，不把本次手动顺序修复当新版operator全流程PASS。stage原maintenance.py有意保留原版本供审计，正式配置/Store从未替换或恢复旧快照。
+
+最终独立read-only：checkpoint restored、三个原服务active、1 node/user/key、zeroACL true、Nginx全部OK、正式Store原5c40...b33ca不变，转发SSH已exact argv TERM/actual exit0结束。Stage候选隔离Store/private TLS/公有audit保留root700/600，不传客户端或自动删除；后续清理须精确stage并确认当前无live/lock。仍需服务器自然重启/自启等后续运维，不将服务恢复当整机重启。
+
+6包devicevalidation/invite/installeddevice/nodeproof/broker/enrollmentstore race PASS，autonomousvalidation无独立单测，以本次实际native+server为证据。NewAuthorityMaterial密钥分离回归PASS，6 Python维护负向/READY回归PASS，Mac新入口/builder与Linux候选vet/build PASS。Windows无联系/构建包部署/桌面操作；r25–r28待验单列。
+
+后续按用户顺序进入3/4前，建议先把本轮维护收尾修复回归和native profile namespace Empty显式验收补齐；Mac 1/2联合实测通过，Windows与正式entry/签名发行/公开接入依然待。不能宣称整体4完成。本轮本地提交，不自动推送。
+
 ## 2026-10-14 r29 用户指定优先1/2，可信verifier供应与内部绑定核心接入
 
 用户要求先完成切片4剩余1（签名HTTPS自主注册）和2（实时持有证明绑定），3/4暂不开展。本轮接通可信信息缺口与内部组合，未部署/接触服务器或Windows、未修改现网策略/正式Store/端口。不能将本轮组件PASS与r26/r28分离的证据拼为1/2完成。

@@ -32,15 +32,24 @@ type TLSFixture struct{ Certificate, Key string }
 // NewMaterial generates throwaway TEST signing roots only in memory. Only a
 // loopback fixture leaf key is embedded in the validator, not a CA/release key.
 func NewMaterial(journal []byte, now time.Time) (trustinstall.Specification, TLSFixture, error) {
-	return newMaterial(journal, now, false)
+	return newMaterial(journal, now, false, nil)
 }
 
 // NewNetworkMaterial reuses ONLY the throwaway TEST leaf as the fixture issuer.
 // This is not production key-role separation. No release/CA key is exported.
 func NewNetworkMaterial(journal []byte, now time.Time) (trustinstall.Specification, TLSFixture, error) {
-	return newMaterial(journal, now, true)
+	return newMaterial(journal, now, true, nil)
 }
-func newMaterial(journal []byte, now time.Time, network bool) (trustinstall.Specification, TLSFixture, error) {
+
+// NewAuthorityMaterial pins a separately generated server Store issuer. The
+// TEST TLS leaf is NOT an issuer, and only the server receives its private key.
+func NewAuthorityMaterial(journal []byte, now time.Time, issuer ed25519.PublicKey) (trustinstall.Specification, TLSFixture, error) {
+	if len(issuer) != 32 {
+		return trustinstall.Specification{}, TLSFixture{}, ErrValidation
+	}
+	return newMaterial(journal, now, false, issuer)
+}
+func newMaterial(journal []byte, now time.Time, network bool, fixedIssuer ed25519.PublicKey) (trustinstall.Specification, TLSFixture, error) {
 	if len(journal) == 0 {
 		return trustinstall.Specification{}, TLSFixture{}, ErrValidation
 	}
@@ -83,6 +92,9 @@ func newMaterial(journal []byte, now time.Time, network bool) (trustinstall.Spec
 	}
 	if network {
 		issuer = leafPub
+	}
+	if fixedIssuer != nil {
+		issuer = append(ed25519.PublicKey(nil), fixedIssuer...)
 	}
 	ca := &x509.Certificate{SerialNumber: big.NewInt(1), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign, NotBefore: now.Add(-time.Minute), NotAfter: now.Add(24 * time.Hour)}
 	caDER, err := x509.CreateCertificate(rand.Reader, ca, ca, caPub, caKey)
