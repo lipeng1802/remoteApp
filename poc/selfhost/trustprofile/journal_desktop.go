@@ -17,6 +17,15 @@ import (
 
 var ErrDesktopLogon = errors.New("interactive_logon_required")
 
+type JournalState string
+
+const (
+	JournalAbsent    JournalState = "absent"
+	JournalPending   JournalState = "pending"
+	JournalCommitted JournalState = "committed"
+	JournalUnusable  JournalState = "unusable"
+)
+
 // DesktopJournal owns a dedicated native helper via inherited anonymous pipes.
 // Executable/scope come from trusted installation, never peers or downloaded
 // profiles. macOS/Windows use native OS credentials, without a file fallback.
@@ -218,6 +227,75 @@ func DeleteTestDesktopJournal(executable, scope string) error {
 		return e
 	}
 	return j.finish()
+}
+
+// InspectDesktopJournalState starts the same fixed helper in a one-shot,
+// read-only mode. It returns no protected record data.
+func InspectDesktopJournalState(executable, scope string, test bool) (JournalState, error) {
+	b, err := hex.DecodeString(scope)
+	if !filepath.IsAbs(executable) || err != nil || len(b) != 16 || hex.EncodeToString(b) != scope {
+		return "", ErrTrust
+	}
+	cmd := exec.Command(executable)
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return "", ErrTrust
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		in.Close()
+		return "", ErrTrust
+	}
+	cmd.Stderr = io.Discard
+	if cmd.Start() != nil {
+		in.Close()
+		out.Close()
+		return "", ErrTrust
+	}
+	type result struct {
+		state JournalState
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		if err := json.NewEncoder(in).Encode(map[string]any{"Scope": scope, "Mode": "status", "Test": test}); err != nil {
+			_ = in.Close()
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			done <- result{err: err}
+			return
+		}
+		_ = in.Close()
+		var reply journalReply
+		readErr := privatepipe.NewBoundedReader(out, 16384).Read(&reply)
+		waitErr := cmd.Wait()
+		if readErr != nil || waitErr != nil {
+			done <- result{err: ErrTrust}
+			return
+		}
+		if reply.Status != "state" || reply.Reason != "" {
+			done <- result{err: ErrTrust}
+			return
+		}
+		state := JournalState(reply.Data)
+		switch state {
+		case JournalAbsent, JournalPending, JournalCommitted, JournalUnusable:
+			done <- result{state: state}
+		default:
+			done <- result{err: ErrTrust}
+		}
+	}()
+	select {
+	case got := <-done:
+		if got.err != nil {
+			return "", ErrTrust
+		}
+		return got.state, nil
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		<-done
+		return "", ErrTrust
+	}
 }
 func (j *DesktopJournal) FaultTest(mode string) error {
 	j.mu.Lock()

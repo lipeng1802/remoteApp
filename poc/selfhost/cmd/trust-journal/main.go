@@ -45,6 +45,13 @@ func run() error {
 		}
 		return out.Encode(map[string]string{"status": "deleted"})
 	}
+	if cfg.Mode == "status" {
+		state, e := nativejournal.InspectState(cfg.Scope, cfg.Test)
+		if e != nil {
+			return e
+		}
+		return out.Encode(map[string]string{"status": "state", "data": string(state)})
+	}
 	if cfg.Mode != "create" && cfg.Mode != "open" {
 		return privatepipe.ErrProtocol
 	}

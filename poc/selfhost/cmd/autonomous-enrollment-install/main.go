@@ -25,7 +25,76 @@ type reply struct {
 	Status          string `json:"status"`
 	PublicKey       string `json:"public_key,omitempty"`
 	EnrollmentState string `json:"enrollment_state,omitempty"`
+	Stage           string `json:"stage,omitempty"`
 	Reason          string `json:"reason,omitempty"`
+}
+
+type identityProbe func(autonomousbinding.Record) error
+
+func maintenance(stage string) reply {
+	return reply{Status: "maintenance_required", Stage: stage}
+}
+
+func diagnose(releaseScope string, test bool, records trustinstall.RecordFactory, states trustinstall.RecordState, identity identityProbe) (reply, error) {
+	if records == nil || states == nil || identity == nil {
+		return reply{}, trustprofile.ErrTrust
+	}
+	bindingScope, err := autonomousbinding.Scope(releaseScope)
+	if err != nil {
+		return reply{}, err
+	}
+	state, err := states(bindingScope, test)
+	if err != nil {
+		return reply{}, err
+	}
+	switch state {
+	case trustprofile.JournalAbsent:
+		return reply{Status: "not_installed"}, nil
+	case trustprofile.JournalPending:
+		return maintenance("binding_pending"), nil
+	case trustprofile.JournalUnusable:
+		return maintenance("binding_unusable"), nil
+	case trustprofile.JournalCommitted:
+	default:
+		return reply{}, trustprofile.ErrTrust
+	}
+	binding, err := autonomousbinding.OpenWithJournal(releaseScope, test, bindingRecords(records))
+	if err != nil {
+		return maintenance("binding_unusable"), nil
+	}
+	record := binding.Record()
+	checkErr, closeErr := binding.Check(), binding.Close()
+	if checkErr != nil || closeErr != nil {
+		return maintenance("binding_unusable"), nil
+	}
+	state, err = states(record.EnrollmentScope, test)
+	if err != nil {
+		return reply{}, err
+	}
+	switch state {
+	case trustprofile.JournalAbsent:
+		return maintenance("enrollment_missing"), nil
+	case trustprofile.JournalPending:
+		return maintenance("enrollment_pending"), nil
+	case trustprofile.JournalUnusable:
+		return maintenance("enrollment_unusable"), nil
+	case trustprofile.JournalCommitted:
+	default:
+		return reply{}, trustprofile.ErrTrust
+	}
+	enrollment, err := enrollmentstore.OpenWithJournal(record.EnrollmentScope, test, enrollmentRecords(records))
+	if err != nil {
+		return maintenance("enrollment_unusable"), nil
+	}
+	phase := enrollment.State().Phase
+	checkErr, closeErr = enrollment.Check(), enrollment.Close()
+	if checkErr != nil || closeErr != nil {
+		return maintenance("enrollment_unusable"), nil
+	}
+	if identity(record) != nil {
+		return maintenance("identity_unavailable"), nil
+	}
+	return reply{Status: "usable", PublicKey: record.PublicKey, EnrollmentState: phase}, nil
 }
 
 func bindingRecords(records trustinstall.RecordFactory) autonomousbinding.JournalFactory {
@@ -172,8 +241,46 @@ func cleanupTest(release trustinstall.Release, records trustinstall.RecordFactor
 	return reply{Status: "cleaned"}, nil
 }
 
+// reserveTest simulates interruption at the earliest durable install boundary.
+// It is compiled only into an explicitly TEST release and never creates an OS
+// identity or enrollment record.
+func reserveTest(release trustinstall.Release, records trustinstall.RecordFactory) (reply, error) {
+	if !release.Specification().Test {
+		return reply{}, trustprofile.ErrTrust
+	}
+	reservation, err := autonomousbinding.BeginWithJournal(release.Scope(), true, bindingRecords(records))
+	if err != nil {
+		return reply{}, err
+	}
+	if err = reservation.Close(); err != nil {
+		return reply{}, err
+	}
+	return maintenance("binding_pending"), nil
+}
+
+// cleanupReservationTest removes only the pending marker created by
+// reserveTest. Committed, corrupt and production records remain fail-closed.
+func cleanupReservationTest(release trustinstall.Release, states trustinstall.RecordState, journalPath string) (reply, error) {
+	if !release.Specification().Test || states == nil {
+		return reply{}, trustprofile.ErrTrust
+	}
+	bindingScope, err := autonomousbinding.Scope(release.Scope())
+	if err != nil {
+		return reply{}, err
+	}
+	state, err := states(bindingScope, true)
+	if err != nil || state != trustprofile.JournalPending {
+		return reply{}, trustprofile.ErrTrust
+	}
+	cleanup := func(scope string) error { return trustprofile.DeleteTestDesktopJournal(journalPath, scope) }
+	if err = autonomousbinding.CleanupTestWith(release.Scope(), cleanup); err != nil {
+		return reply{}, err
+	}
+	return reply{Status: "cleaned"}, nil
+}
+
 func run() (reply, error) {
-	if len(os.Args) != 2 || (os.Args[1] != "initialize" && os.Args[1] != "inspect" && os.Args[1] != "cleanup-test") {
+	if len(os.Args) != 2 || (os.Args[1] != "initialize" && os.Args[1] != "inspect" && os.Args[1] != "status" && os.Args[1] != "cleanup-test" && os.Args[1] != "reserve-test" && os.Args[1] != "cleanup-reservation-test") {
 		return reply{}, trustprofile.ErrTrust
 	}
 	release, err := trustinstall.DecodeCompiled(embeddedRelease)
@@ -200,6 +307,31 @@ func run() (reply, error) {
 	}
 	if os.Args[1] == "inspect" {
 		return inspect(release, records)
+	}
+	if os.Args[1] == "reserve-test" {
+		return reserveTest(release, records)
+	}
+	if os.Args[1] == "status" || os.Args[1] == "cleanup-reservation-test" {
+		states, err := release.NativeRecordState(journalPath)
+		if err != nil {
+			return reply{}, err
+		}
+		if os.Args[1] == "cleanup-reservation-test" {
+			return cleanupReservationTest(release, states, journalPath)
+		}
+		probe := func(record autonomousbinding.Record) error {
+			signer, err := clientruntime.NativeSigner(vaultPath, embeddedSignerDigest, record.VaultScope, record.PublicKey)()
+			if err != nil {
+				return err
+			}
+			joined, ok := signer.(interface{ CloseJoined() error })
+			if !ok {
+				signer.Close()
+				return trustprofile.ErrTrust
+			}
+			return joined.CloseJoined()
+		}
+		return diagnose(release.Scope(), release.Specification().Test, records, states, probe)
 	}
 	if os.Args[1] == "cleanup-test" {
 		return cleanupTest(release, records, journalPath, vaultPath)

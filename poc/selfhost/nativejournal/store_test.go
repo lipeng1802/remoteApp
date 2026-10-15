@@ -55,6 +55,28 @@ func TestClearAcknowledgementDoesNotProveEmptyNamespace(t *testing.T) {
 		t.Fatal("verified empty namespace refused")
 	}
 }
+
+func TestReadOnlyStateCollapsesBrokenNonemptyRecords(t *testing.T) {
+	empty := &memoryValues{items: map[string][]byte{}}
+	if state, err := inspectValues(empty, true); err != nil || state != StateAbsent {
+		t.Fatal("absent", state, err)
+	}
+	_, pendingKV := memoryStore()
+	if state, err := inspectValues(pendingKV, true); err != nil || state != StatePending {
+		t.Fatal("pending", state, err)
+	}
+	store, committedKV := memoryStore()
+	if store.Commit("", []byte("record")) != nil {
+		t.Fatal("fixture")
+	}
+	if state, err := inspectValues(committedKV, true); err != nil || state != StateCommitted {
+		t.Fatal("committed", state, err)
+	}
+	delete(committedKV.items, "manifest")
+	if state, err := inspectValues(committedKV, true); err != nil || state != StateUnusable {
+		t.Fatal("unusable", state, err)
+	}
+}
 func TestNativeJournalManifestSelectionAndMaximumRecord(t *testing.T) {
 	s, k := memoryStore()
 	old := bytes.Repeat([]byte("a"), 8191)

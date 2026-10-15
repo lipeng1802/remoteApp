@@ -22,6 +22,7 @@ type reply struct {
 	PublicKey       string `json:"public_key"`
 	EnrollmentState string `json:"enrollment_state"`
 	Epoch           uint64 `json:"epoch"`
+	Stage           string `json:"stage"`
 	Reason          string `json:"reason"`
 }
 
@@ -140,8 +141,15 @@ func run() (result error) {
 		}
 	}
 	tool := func(name string) string { return filepath.Join(dir, name+suffix) }
-	trustCreated, autonomousCreated := false, false
+	trustCreated, autonomousCreated, reservationCreated := false, false, false
 	defer func() {
+		if reservationCreated {
+			if value, err := command(tool("autonomous-enrollment-install-v2"), nil, "cleanup-reservation-test"); err != nil || value.Status != "cleaned" {
+				if result == nil {
+					result = fmt.Errorf("reservation cleanup")
+				}
+			}
+		}
 		if autonomousCreated {
 			if value, err := command(tool("autonomous-enrollment-install-v2"), nil, "cleanup-test"); err != nil || value.Status != "cleaned" {
 				if result == nil {
@@ -175,11 +183,17 @@ func run() (result error) {
 		return err
 	}
 	trustCreated = true
+	if value, statusErr := command(tool("autonomous-enrollment-install-v1"), nil, "status"); statusErr != nil || value.Status != "not_installed" || value.Stage != "" {
+		return fmt.Errorf("fresh status")
+	}
 	first, err := positive("autonomous-enrollment-install-v1", 0, "initialize")
 	if err != nil || len(first.PublicKey) != 64 || first.EnrollmentState != "idle" {
 		return fmt.Errorf("initial autonomous identity")
 	}
 	autonomousCreated = true
+	if value, statusErr := command(tool("autonomous-enrollment-install-v1"), nil, "status"); statusErr != nil || value.Status != "usable" || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
+		return fmt.Errorf("installed status")
+	}
 	if err = negative("autonomous-enrollment-install-v1", "initialize"); err != nil {
 		return err
 	}
@@ -197,6 +211,10 @@ func run() (result error) {
 		if err != nil || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
 			return fmt.Errorf("identity changed across upgrade")
 		}
+		value, err = command(tool(name), nil, "status")
+		if err != nil || value.Status != "usable" || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
+			return fmt.Errorf("status changed across upgrade")
+		}
 	}
 	if err = negative("trust-install-v1", "upgrade"); err != nil {
 		return err
@@ -213,6 +231,27 @@ func run() (result error) {
 	if err = product(tool("installed-autonomous-product-v1")); err != nil {
 		return err
 	}
+	if value, cleanupErr := command(tool("autonomous-enrollment-install-v2"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "cleaned" {
+		return fmt.Errorf("autonomous cleanup")
+	}
+	autonomousCreated = false
+	if value, reserveErr := command(tool("autonomous-enrollment-install-v2"), nil, "reserve-test"); reserveErr != nil || value.Status != "maintenance_required" || value.Stage != "binding_pending" {
+		return fmt.Errorf("pending reservation")
+	}
+	reservationCreated = true
+	if value, statusErr := command(tool("autonomous-enrollment-install-v2"), nil, "status"); statusErr != nil || value.Status != "maintenance_required" || value.Stage != "binding_pending" {
+		return fmt.Errorf("pending status")
+	}
+	if err = negative("autonomous-enrollment-install-v2", "initialize"); err != nil {
+		return err
+	}
+	if value, cleanupErr := command(tool("autonomous-enrollment-install-v2"), nil, "cleanup-reservation-test"); cleanupErr != nil || value.Status != "cleaned" {
+		return fmt.Errorf("reservation cleanup")
+	}
+	reservationCreated = false
+	if value, statusErr := command(tool("autonomous-enrollment-install-v2"), nil, "status"); statusErr != nil || value.Status != "not_installed" || value.Stage != "" {
+		return fmt.Errorf("clean status")
+	}
 	return nil
 }
 
@@ -221,5 +260,5 @@ func main() {
 		fmt.Println("VALIDATION FAILED: autonomous native upgrade lifecycle")
 		os.Exit(1)
 	}
-	fmt.Println("VALIDATION PASSED: native autonomous identity survives signed epoch upgrade; downgrade/reinitialize rejected; both compiled generations restart and join; TEST state cleaned. NOT cross-machine Headscale, GUI or signed installer acceptance.")
+	fmt.Println("VALIDATION PASSED: native autonomous identity survives signed epoch upgrade; read-only status distinguishes absent/usable/pending; interrupted TEST install stays closed until exact cleanup; both compiled generations restart and join. NOT cross-machine Headscale, GUI or signed installer acceptance.")
 }

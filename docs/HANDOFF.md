@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r42 自主安装显式维护状态
+
+用户要求继续不依赖Windows的下一任务。Windows仍关机，本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或正式安装。r40/r41两个本地提交尚未推送，本节继续形成独立本地提交。
+
+`trust-journal`新增一次性`status`协议，只返回`absent|pending|committed|unusable`，不返回任何保护记录内容。摘要固定的`NativeRecordState`每次启动前重新校验helper；`autonomous-enrollment-install status`把binding、enrollment和OS identity严格探测组合成稳定的`not_installed`、`usable`以及`binding_pending|binding_unusable|enrollment_missing|enrollment_pending|enrollment_unusable|identity_unavailable`六个`maintenance_required`stage。该路径不创建、修复、删除或重置身份，也不输出保护payload、scope或私密。
+
+另增两个仅compiled TEST release可用的中断验证命令：`reserve-test`只在创建identity/enrollment之前留下持久binding pending；`cleanup-reservation-test`只在状态精确为pending时删除该测试namespace，对committed/unusable/production全部拒绝。正式入口没有自动修复或通用reset API。
+
+本机macOS amd64用新随机TEST channel真实验收PASS：状态从`not_installed`到`usable`；epoch1→epoch2签名升级后两代入口仍是同一OS公钥与idle enrollment；两代产品均重开并join；精确清理后制造pending，`status`返回`maintenance_required/binding_pending`，再次`initialize`拒绝；只有精确TEST pending清理后才恢复`not_installed`。最终trust和全部TEST状态清理，输出`VALIDATION PASSED: native autonomous identity survives signed epoch upgrade; read-only status distinguishes absent/usable/pending...`。
+
+单元测另覆盖非空损坏记录统一折叠为`unusable`且不返回故障细节。这仍不是真实OS掉电/写回执不确定性、Windows Credential Manager实机、签名安装包或跨机Headscale/产品TLS验收。Windows恢复后应用fresh bundle执行同类原生升级与中断锁闭验收；不依赖Windows的下一项可继续收口维护操作所需的最小、不含私密的诊断输出与签名升级边界，但不应增加production reset。
+
 ## 2026-10-15 r41 macOS 自主身份原生升级与防回滚闭环
 
 用户要求继续不依赖Windows的下一任务。Windows保持关机，本轮未联系Windows，也未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或正式安装。r40本地提交`3b409ce`仍未推送；本节继续形成独立本地提交。

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r42 继续不依赖Windows的自主安装收口：`autonomous-enrollment-install status`现在通过摘要固定的原生helper只读区分`not_installed`、`usable`与六个`maintenance_required`阶段，不返回保护记录、不创建/修复/重置身份。TEST-only中断夹具证明pending安装不能重试生成第二身份，只能对精确pending测试命名空间显式清理。macOS随机TEST channel已完成原生Keychain的absent→usable→签名升级保持同身份→pending锁闭→精确清理验收；Windows关机，实机同类验收仍待补。
+
 r38 继续切片4B：新自主`ProductSession`已把固定摘要的真实产品子进程接入`SessionRuntime`。Target发布并复核证书持有后，随机HMAC与证书指纹只经已验证overlay上的一次性双端OS签名握手交付；目标签名绑定secret hash，Controller独立核验issuer短期TLS描述符同指纹后才把HMAC写入产品匿名管道。父帧提供HMAC/回调被拒；watch失效仍先锁gate，再取消并实际join tunnel与产品。相关race/交叉vet通过；正式入口仍未启用，Windows关机，真实双机产品流待验。
 
 r37 继续切片4B：新自主SessionWork改为只接收不透明`SessionRuntime`，不再直接接收可自行组合的peer值。目标角色只能在自主tsnet节点固定监听`:47476`，控制角色只能拨向issuer签名binding中的目标`:47476`；监听/拨号均重核本机node/IP与远端WhoIs，持续watch逐次更新数据gate并在退出前锁闭。listener随session context关闭，owner仍按session→watch→proof→SDK→signer顺序实际join。六包race及Windows/Linux交叉vet通过；Windows关机，真实双机overlay、产品TLS/HMAC/payload仍待。

@@ -20,6 +20,15 @@ var ErrMissing = errors.New("native_item_missing")
 var ErrFresh = errors.New("native_installation_pending")
 var ErrLogon = errors.New("interactive_logon_required")
 
+type State string
+
+const (
+	StateAbsent    State = "absent"
+	StatePending   State = "pending"
+	StateCommitted State = "committed"
+	StateUnusable  State = "unusable"
+)
+
 const chunkSize = 2048
 const maximumRecord = 8191
 
@@ -105,6 +114,43 @@ func CleanupTest(scope string) error {
 	}
 	defer kv.Close()
 	return clearTestVerified(kv)
+}
+
+// InspectState is read-only and returns no record bytes. Non-empty state that
+// cannot be fully authenticated is deliberately collapsed to unusable: callers
+// must not infer whether corruption, missing chunks or an uncertain write won.
+func InspectState(scope string, test bool) (State, error) {
+	if !canonical(scope, 16) {
+		return "", ErrUnavailable
+	}
+	kv, err := openNative(scope, test)
+	if err != nil {
+		return "", err
+	}
+	defer kv.Close()
+	return inspectValues(kv, test)
+}
+
+func inspectValues(kv keyValues, test bool) (State, error) {
+	if kv == nil {
+		return "", ErrUnavailable
+	}
+	empty, err := kv.Empty()
+	if err != nil {
+		return "", err
+	}
+	if empty {
+		return StateAbsent, nil
+	}
+	manifest, err := kv.Read("manifest")
+	if err == nil && bytes.Equal(manifest, pending) {
+		return StatePending, nil
+	}
+	s := &Store{kv: kv, test: test}
+	if _, err = s.read(); err != nil {
+		return StateUnusable, nil
+	}
+	return StateCommitted, nil
 }
 
 func clearTestVerified(kv keyValues) error {

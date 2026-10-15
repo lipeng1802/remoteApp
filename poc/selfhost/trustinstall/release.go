@@ -108,53 +108,9 @@ type Journal interface {
 }
 type Factory func(create bool) (Journal, error)
 type RecordFactory func(scope string, create, test bool) (Journal, error)
+type RecordState func(scope string, test bool) (trustprofile.JournalState, error)
 
-// NativeFactory pins the sibling helper before every start. Hash pinning is
-// transfer/content integrity, not publisher authentication or protection from
-// a malicious same-user binary replacement race; signed protected installation
-// remains required for release. No helper path comes from a downloaded profile.
-func (r Release) NativeFactory(helper string) (Factory, error) {
-	if !filepath.IsAbs(helper) || filepath.Clean(helper) != helper {
-		return nil, trustprofile.ErrTrust
-	}
-	check := func() error {
-		real, e := filepath.EvalSymlinks(helper)
-		if e != nil || real != helper {
-			return trustprofile.ErrTrust
-		}
-		f, e := os.Open(helper)
-		if e != nil {
-			return trustprofile.ErrTrust
-		}
-		defer f.Close()
-		st, e := f.Stat()
-		if e != nil || !st.Mode().IsRegular() || st.Size() < 1 || st.Size() > 100<<20 {
-			return trustprofile.ErrTrust
-		}
-		h := sha256.New()
-		if _, e = io.Copy(h, f); e != nil || hex.EncodeToString(h.Sum(nil)) != r.spec.HelperDigest {
-			return trustprofile.ErrTrust
-		}
-		return nil
-	}
-	if check() != nil {
-		return nil, trustprofile.ErrTrust
-	}
-	return func(create bool) (Journal, error) {
-		if check() != nil {
-			return nil, trustprofile.ErrTrust
-		}
-		if r.spec.Test {
-			return trustprofile.NewTestDesktopJournal(helper, r.Scope(), create)
-		}
-		return trustprofile.NewDesktopJournal(helper, r.Scope(), create)
-	}, nil
-}
-
-// NativeRecordFactory pins the same dedicated journal helper, but lets a
-// caller-owned strict record store select its own derived scope and schema.
-// Runtime data still cannot select the executable or its digest.
-func (r Release) NativeRecordFactory(helper string) (RecordFactory, error) {
+func (r Release) nativeHelperCheck(helper string) (func() error, error) {
 	if !filepath.IsAbs(helper) || filepath.Clean(helper) != helper {
 		return nil, trustprofile.ErrTrust
 	}
@@ -181,11 +137,57 @@ func (r Release) NativeRecordFactory(helper string) (RecordFactory, error) {
 	if check() != nil {
 		return nil, trustprofile.ErrTrust
 	}
+	return check, nil
+}
+
+// NativeFactory pins the sibling helper before every start. Hash pinning is
+// transfer/content integrity, not publisher authentication or protection from
+// a malicious same-user binary replacement race; signed protected installation
+// remains required for release. No helper path comes from a downloaded profile.
+func (r Release) NativeFactory(helper string) (Factory, error) {
+	check, err := r.nativeHelperCheck(helper)
+	if err != nil {
+		return nil, err
+	}
+	return func(create bool) (Journal, error) {
+		if check() != nil {
+			return nil, trustprofile.ErrTrust
+		}
+		if r.spec.Test {
+			return trustprofile.NewTestDesktopJournal(helper, r.Scope(), create)
+		}
+		return trustprofile.NewDesktopJournal(helper, r.Scope(), create)
+	}, nil
+}
+
+// NativeRecordFactory pins the same dedicated journal helper, but lets a
+// caller-owned strict record store select its own derived scope and schema.
+// Runtime data still cannot select the executable or its digest.
+func (r Release) NativeRecordFactory(helper string) (RecordFactory, error) {
+	check, err := r.nativeHelperCheck(helper)
+	if err != nil {
+		return nil, err
+	}
 	return func(scope string, create, test bool) (Journal, error) {
 		if check() != nil {
 			return nil, trustprofile.ErrTrust
 		}
 		return trustprofile.NewRecordDesktopJournal(helper, scope, create, test)
+	}, nil
+}
+
+// NativeRecordState is a pinned, read-only state probe. It never returns the
+// protected record or creates/repairs a namespace.
+func (r Release) NativeRecordState(helper string) (RecordState, error) {
+	check, err := r.nativeHelperCheck(helper)
+	if err != nil {
+		return nil, err
+	}
+	return func(scope string, test bool) (trustprofile.JournalState, error) {
+		if check() != nil {
+			return "", trustprofile.ErrTrust
+		}
+		return trustprofile.InspectDesktopJournalState(helper, scope, test)
 	}, nil
 }
 

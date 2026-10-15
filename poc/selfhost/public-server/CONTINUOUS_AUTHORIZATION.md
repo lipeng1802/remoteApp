@@ -134,4 +134,10 @@ macOS Keychain按可执行程序访问控制；让安装器和产品各自直接
 
 macOS原生验证已证明：epoch2 compiled floor在提交升级前锁闭；可信升级提交后两代入口均读取同一OS公钥和idle enrollment；重复安装不能选择第二身份；旧bundled profile及显式旧profile都不能把epoch2降回epoch1；两代产品入口均能重开、正常停止并实际join；TEST identity/binding/enrollment/trust最终精确删除。该结果说明配置epoch升级不会替换r40安装绑定，也不会靠旧程序自动恢复旧配置。
 
+### 显式维护状态
+
+`autonomous-enrollment-install status`仅通过compiled release固定的`trust-journal`和`identity-vault`诊断已派生的binding/enrollment/identity。它只返回`not_installed`、`usable`或带稳定stage的`maintenance_required`；不返回journal payload、scope或私密，不创建、修复、删除或重置任何身份。原生helper把pending单独识别，其他任何非空但不能完整验证的记录统一折叠为`unusable`，避免向低权限调用者暴露损坏形态。
+
+TEST release另有受限的中断夹具：只能在创建身份前留下binding pending，且只有精确诊断为pending才能删除该TEST namespace。实测中二次initialize仍被拒，不会静默选择第二个OS身份。production release没有此清理命令，committed或unusable记录也不会被该夹具删除。
+
 此验证在产品真正enroll/连接前发送stop，因此不声称跨机Headscale、overlay、TLS/HMAC或活会话升级已经通过；也没有覆盖真实OS掉电/写入不确定性、Windows Credential Manager、签名安装包及升级安装目录ACL。后续需分别验收显式故障维护和Windows fresh升级，再进入双机活会话升级。
