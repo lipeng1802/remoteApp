@@ -2,6 +2,10 @@ package installeddevice
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -21,13 +25,14 @@ func activeEnrollmentForSession(t *testing.T, inactiveAfter int32) (*enrollment,
 	if r, err := e.startWatch(context.Background(), g, client); err != nil || !r.Passed || !r.Active {
 		t.Fatal("watch activation")
 	}
+	e.peers = &SessionPeers{grant: grant, binding: binding, server: true}
 	return e, e.node.(*proofNodeFixture)
 }
 
 func TestSessionRequiresLiveActiveWatch(t *testing.T) {
 	e := &enrollment{}
 	called := false
-	if err := e.startSession(context.Background(), func(context.Context) error { called = true; return nil }); err == nil || called || e.session != nil {
+	if err := e.startSession(context.Background(), func(context.Context, SessionPeers) error { called = true; return nil }); err == nil || called || e.session != nil {
 		t.Fatal("session started without active watch")
 	}
 
@@ -37,8 +42,44 @@ func TestSessionRequiresLiveActiveWatch(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("watch did not fault")
 	}
-	if err := e.startSession(context.Background(), func(context.Context) error { called = true; return nil }); err == nil || called || e.session != nil {
+	if err := e.startSession(context.Background(), func(context.Context, SessionPeers) error { called = true; return nil }); err == nil || called || e.session != nil {
 		t.Fatal("session started after watch fault")
+	}
+	if err := e.closeJoined(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSessionPeersComeOnlyFromIssuerSignedActiveBinding(t *testing.T) {
+	g, grant, issuer, e, binding := watchedFixture(t)
+	_, controller, _ := ed25519.GenerateKey(rand.Reader)
+	controllerID := sha256.Sum256(controller.Public().(ed25519.PublicKey))
+	grant.Claims.Controller = hex.EncodeToString(controllerID[:])
+	grant.Signature = testSignature(issuer, "remoteapp-invite-grant-v1\n", grant.Claims)
+	g.grant = grant
+	client := requestFunc(func(_ context.Context, b invite.NetworkRequestBody) (invite.NetworkReply, error) {
+		switch b.Action {
+		case "state":
+			return watchState(issuer, grant, binding, true, g.clock()), nil
+		case "session_identity":
+			now := g.clock()
+			claims := invite.SessionIdentityClaims{Version: 1, Grant: grant, Binding: binding, TargetPublic: hex.EncodeToString(g.public), ControllerPublic: hex.EncodeToString(controller.Public().(ed25519.PublicKey)), Challenge: b.Challenge, IssuedAt: now.UnixNano(), ExpiresAt: now.Add(3 * time.Second).UnixNano()}
+			identity := invite.SessionIdentity{Claims: claims, Signature: testSignature(issuer, "remoteapp-session-identity-v1\n", claims)}
+			return invite.NetworkReply{Session: &identity}, nil
+		default:
+			return invite.NetworkReply{}, invite.ErrDenied
+		}
+	})
+	if r, err := e.startWatch(context.Background(), g, client); err != nil || !r.Active {
+		t.Fatal("watch")
+	}
+	if err := e.prepareSessionPeers(context.Background(), g, client); err != nil || e.peers == nil || !e.peers.Server() || e.peers.Binding() != binding || e.peers.Grant() != grant {
+		t.Fatal("verified session peers", err)
+	}
+	target := e.peers.TargetPublic()
+	target[0] ^= 0xff
+	if hex.EncodeToString(e.peers.TargetPublic()) != hex.EncodeToString(g.public) || hex.EncodeToString(e.peers.ControllerPublic()) != hex.EncodeToString(controller.Public().(ed25519.PublicKey)) {
+		t.Fatal("session peer pins are mutable")
 	}
 	if err := e.closeJoined(); err != nil {
 		t.Fatal(err)
@@ -51,7 +92,7 @@ func TestWatchFaultCancelsAndJoinsSessionBeforeNode(t *testing.T) {
 	cancelled := make(chan struct{})
 	release := make(chan struct{})
 	joined := make(chan struct{})
-	if err := e.startSession(context.Background(), func(ctx context.Context) error {
+	if err := e.startSession(context.Background(), func(ctx context.Context, _ SessionPeers) error {
 		close(started)
 		<-ctx.Done()
 		close(cancelled)
@@ -91,7 +132,7 @@ func TestWatchFaultCancelsAndJoinsSessionBeforeNode(t *testing.T) {
 func TestSessionEarlyExitIsObservableAndStillJoined(t *testing.T) {
 	e, node := activeEnrollmentForSession(t, 0)
 	want := errors.New("product fixture ended")
-	if err := e.startSession(context.Background(), func(context.Context) error { return want }); err != nil {
+	if err := e.startSession(context.Background(), func(context.Context, SessionPeers) error { return want }); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -110,7 +151,7 @@ func TestSessionEarlyExitIsObservableAndStillJoined(t *testing.T) {
 func TestSessionCloseFailureCannotHideBehindCancellation(t *testing.T) {
 	e, node := activeEnrollmentForSession(t, 0)
 	want := errors.New("product join failed")
-	if err := e.startSession(context.Background(), func(ctx context.Context) error {
+	if err := e.startSession(context.Background(), func(ctx context.Context, _ SessionPeers) error {
 		<-ctx.Done()
 		return want
 	}); err != nil {

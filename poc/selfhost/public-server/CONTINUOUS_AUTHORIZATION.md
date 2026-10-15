@@ -70,3 +70,15 @@ session cancel + actual join
 ```
 
 会话在授权仍有效时提前返回会终止owner；显式取消后的真实会话错误不能被取消隐藏。当前桥只收口生命周期和join次序，还没有向它提供新自主路径的TLS descriptor、HMAC、overlay listener/dialer或画面键鼠payload；因此不是产品会话验收。
+
+## 切片4B 签名会话双端身份
+
+Grant中的target/controller是设备公钥哈希，不能直接作为产品TLS会话的验签公钥。新的`session_identity`网络API只允许已注册、属于同一已批准grant的参与者在动态策略ACTIVE时请求。返回值由issuer签名，最长3秒，同时绑定：
+
+- 完整grant和当前verified Headscale binding；
+- Store中经设备签名注册绑定的两个ed25519公钥；
+- 请求端新生成的32-byte challenge、issuer时间和grant绝对到期。
+
+撤销、inactive策略、未绑定/外来设备、坏公钥记录、坏challenge或混合reply全部失败关闭。`SessionPeers`只在installed owner内部核验后创建，返回的公钥均为副本，不向父进程输出。SessionWork开始前再核对本机OS signer、node key、binding和grant时间；它可获得已验证的公开peer/grant/binding/role，仍不获得registration credential、ticket、authority client或签名私钥。
+
+相关测试覆盖真实Store/Backend/HTTPS签名返回、两端公钥哈希绑定、签名/grant/binding/challenge/到期篡改、外来设备、撤销拒绝、重复/大小写字段与混合reply。这收口了产品会话所需的公钥来源，但还没有在新自主node上启动overlay listener/dialer、TLS product进程或HMAC交付。

@@ -32,7 +32,7 @@ func (s *enrollmentSession) Stop() {
 }
 
 func (e *enrollment) startSession(ctx context.Context, work SessionWork) error {
-	if ctx == nil || work == nil || e.session != nil || e.watch == nil || e.watch.Faulted() {
+	if ctx == nil || work == nil || e.session != nil || e.watch == nil || e.watch.Faulted() || e.peers == nil {
 		return invite.ErrDenied
 	}
 	select {
@@ -45,7 +45,7 @@ func (e *enrollment) startSession(ctx context.Context, work SessionWork) error {
 	e.session = s
 	go func() {
 		defer close(s.done)
-		s.err = work(life)
+		s.err = work(life, *e.peers)
 	}()
 	return nil
 }

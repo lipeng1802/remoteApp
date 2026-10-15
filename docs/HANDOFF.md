@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r36 记录Windows待验，切片4B签名双端会话身份
+
+用户要求Windows验收先记录并继续下一任务。r31预检、1/2 Windows真实联合验收、双机Headscale零规则/旧连接拒绝均仍是待办，本轮不联系/唤醒Windows，不修改服务器。
+
+实现issuer签名`SessionIdentity`协议和`session_identity`网络API。Grant仅包含target/controller设备ID哈希；新响应从Store的签名register记录取得两个ed25519公钥，绑定完整grant、ProvisionBackend当前verified binding、32-byte fresh challenge、issuer时间和最多3秒租约。只有同grant已注册参与者可请求，且NetworkState必须ACTIVE；撤销/过期/零策略、外来设备、损坏注册公钥、坏challenge均fail closed。
+
+NetworkClient对新reply增加严格单形状解码：其他action中出现Session字段或session_identity中混入TLS/verifier/state/proof/credential/ticket均拒绝；duplicate/case-duplicate/unknown/trailing仍由原严格JSON边界拒绝。enrollment/authorization/bind/watch所有旧reply验证也显式拒绝新字段，防止混合解释。
+
+ACTIVE watch后、SessionWork启动前，installeddevice内部自行请求并验证SessionIdentity，重核本机OS signer、node key、binding、grant时间和本机角色。`SessionPeers`只向编译期可信SessionWork提供副本化的公开target/controller key、grant、binding和server role；credential/ticket/authority client/private signer仍留在owner内部，不输出父进程。
+
+invite/installeddevice/broker/streamgate/clientruntime/nodeproof六包race及Windows/Linux交叉vet通过，覆盖Store/Backend/真实HTTPS、公钥哈希绑定、签名/grant/binding/challenge/到期篡改、外来设备、撤销拒绝、混合reply及返回副本不可变。尚未把新自主node的overlay listener/dialer、TLS product process、HMAC交付与payload接入SessionWork，不得标记产品会话或整体4完成。本轮本地提交，不自动推送。
+
 ## 2026-10-15 r35 切片4A新自主watch后的会话生命周期桥
 
 Windows仍关机，本轮没有联系Windows或服务器。r31的1/2 Windows真实联合验收仍待；r34的本机Store/Backend/watch证据不变成真实Headscale拒绝证据。

@@ -49,7 +49,7 @@ func (e *enrollment) state(ctx context.Context, g *authorizationGate, client net
 	reply, err := client.Request(call, invite.NetworkRequestBody{Action: "state", Grant: g.grant})
 	failed := call.Err() != nil
 	cancel()
-	if err != nil || failed || reply.State == nil || reply.Ticket != "" || reply.Credential != nil || reply.Proof != nil || reply.TLS != nil || reply.Verifier != nil || reply.State.Claims.Grant != g.grant || !invite.VerifyNetworkState(g.issuer, *reply.State, g.clock()) || !e.ownBinding(g, reply.State.Claims.Binding) || !g.validGrant(g.grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
+	if err != nil || failed || reply.State == nil || reply.Ticket != "" || reply.Credential != nil || reply.Proof != nil || reply.TLS != nil || reply.Session != nil || reply.Verifier != nil || reply.State.Claims.Grant != g.grant || !invite.VerifyNetworkState(g.issuer, *reply.State, g.clock()) || !e.ownBinding(g, reply.State.Claims.Binding) || !g.validGrant(g.grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
 		return deny()
 	}
 	if expected != nil && reply.State.Claims.Binding != *expected {
@@ -97,6 +97,7 @@ func (e *enrollment) startWatch(ctx context.Context, g *authorizationGate, clien
 	if ctx.Err() != nil || !g.validGrant(g.grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
 		return deny()
 	}
+	e.binding = binding
 	life, cancel := context.WithCancel(ctx)
 	w := &enrollmentWatch{cancel: cancel, done: make(chan struct{})}
 	e.watch = w

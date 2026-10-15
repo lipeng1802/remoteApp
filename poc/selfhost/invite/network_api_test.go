@@ -140,6 +140,11 @@ func TestNetworkAPIRealHTTPSAndEnrollment(t *testing.T) {
 	if err != nil || state.State == nil || !VerifyNetworkState(f.s.PublicKey(), *state.State, f.now) || !state.State.Claims.Active {
 		t.Fatal("signed state over HTTPS")
 	}
+	identityChallenge := strings.Repeat("e", 64)
+	identity, err := peer.Request(context.Background(), NetworkRequestBody{Action: "session_identity", Grant: g, Challenge: identityChallenge})
+	if err != nil || identity.Session == nil || !VerifySessionIdentity(f.s.PublicKey(), *identity.Session, g, state.State.Claims.Binding, identityChallenge, f.now) {
+		t.Fatal("signed session identity over HTTPS")
+	}
 	proof, err := client.Request(context.Background(), NetworkRequestBody{Action: "clock", Grant: g, Challenge: strings.Repeat("a", 64)})
 	if err != nil || proof.Proof == nil || proof.Proof.Claims.Nonce != strings.Repeat("a", 64) {
 		t.Fatal("bound clock proof over HTTPS")

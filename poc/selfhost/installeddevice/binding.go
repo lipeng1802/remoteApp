@@ -37,7 +37,7 @@ func (e *enrollment) bind(ctx context.Context, g *authorizationGate, client netw
 	if reply.Credential != nil {
 		*reply.Credential = invite.RegistrationCredential{}
 	}
-	if err != nil || failed || !valid() || reply.Verifier == nil || reply.Ticket != "" || reply.Credential != nil || reply.State != nil || reply.Proof != nil || reply.TLS != nil || !invite.VerifyVerifierPermit(g.issuer, *reply.Verifier, g.grant, g.self, e.ticket, e.key, challenge, g.clock()) {
+	if err != nil || failed || !valid() || reply.Verifier == nil || reply.Ticket != "" || reply.Credential != nil || reply.State != nil || reply.Proof != nil || reply.TLS != nil || reply.Session != nil || !invite.VerifyVerifierPermit(g.issuer, *reply.Verifier, g.grant, g.self, e.ticket, e.key, challenge, g.clock()) {
 		return deny()
 	}
 	remaining := time.Unix(reply.Verifier.Claims.ExpiresAt, 0).Sub(g.clock())

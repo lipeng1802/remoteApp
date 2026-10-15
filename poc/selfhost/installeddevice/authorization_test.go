@@ -212,7 +212,7 @@ func TestLocalNetworkCommandsCannotInjectCredentialsOrAuthority(t *testing.T) {
 			t.Fatal("read-only action rejected")
 		}
 	}
-	for _, action := range []string{"enroll", "bind", "publish_tls", "tls_identity", "clock"} {
+	for _, action := range []string{"enroll", "bind", "publish_tls", "tls_identity", "session_identity", "clock"} {
 		if validCommand(Request{Op: "network", Network: invite.NetworkRequestBody{Action: action, Grant: g}}) {
 			t.Fatal("secret-bearing/unbound action accepted")
 		}

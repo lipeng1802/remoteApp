@@ -182,6 +182,9 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 						return trustprofile.ErrTrust
 					}
 					if watched && work != nil {
+						if err = enrolled.prepareSessionPeers(ctx, gate, client); err != nil {
+							return trustprofile.ErrTrust
+						}
 						if err = enrolled.startSession(ctx, work); err != nil {
 							return trustprofile.ErrTrust
 						}

@@ -26,10 +26,11 @@ type EnrollmentNode interface {
 type EnrollmentFactory func(context.Context) (EnrollmentNode, error)
 
 // SessionWork is trusted, compiled in-process wiring for a product session.
-// It receives only a lifetime: enrollment secrets, binding and the authority
-// client remain inside installeddevice. Returning while authorization is still
-// active is terminal rather than an implicit reconnect request.
-type SessionWork func(context.Context) error
+// It receives only a lifetime and issuer-verified public peer material:
+// enrollment credentials, ticket and the authority client remain internal.
+// Returning while authorization is still active is terminal rather than an
+// implicit reconnect request.
+type SessionWork func(context.Context, SessionPeers) error
 
 type enrollment struct {
 	node                 EnrollmentNode
@@ -38,6 +39,8 @@ type enrollment struct {
 	proofCancel          context.CancelFunc
 	watch                *enrollmentWatch
 	session              *enrollmentSession
+	binding              invite.NetworkBinding
+	peers                *SessionPeers
 }
 
 type enrollmentResult struct {
@@ -101,7 +104,7 @@ func (e *enrollment) start(ctx context.Context, g *authorizationGate, client net
 	if reply.Credential != nil {
 		defer func() { *reply.Credential = invite.RegistrationCredential{} }()
 	}
-	if err != nil || httpFailed || call.Err() != nil || !canonical(reply.Ticket, 16) || reply.Credential == nil || reply.Credential.Secret == "" || len(reply.Credential.Secret) > 256 || reply.State != nil || reply.Proof != nil || reply.TLS != nil || reply.Verifier != nil || !g.validGrant(grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
+	if err != nil || httpFailed || call.Err() != nil || !canonical(reply.Ticket, 16) || reply.Credential == nil || reply.Credential.Secret == "" || len(reply.Credential.Secret) > 256 || reply.State != nil || reply.Proof != nil || reply.TLS != nil || reply.Session != nil || reply.Verifier != nil || !g.validGrant(grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
 		return deny()
 	}
 	e.ticket = reply.Ticket // private, for the later live-proof/bind phase only

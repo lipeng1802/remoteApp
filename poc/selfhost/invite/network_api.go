@@ -33,6 +33,7 @@ type NetworkReply struct {
 	State      *NetworkState           `json:"network_state,omitempty"`
 	Proof      *ClockProof             `json:"proof,omitempty"`
 	TLS        *TLSIdentity            `json:"tls_identity,omitempty"`
+	Session    *SessionIdentity        `json:"session_identity,omitempty"`
 	Verifier   *VerifierPermit         `json:"verifier_permit,omitempty"`
 }
 
@@ -129,7 +130,7 @@ func (s *Store) authorizeNetworkRequest(e NetworkRequest) error {
 		if id != g.Claims.Target || err != nil || len(nonce) != 32 || hex.EncodeToString(nonce) != e.Body.Challenge || e.Body.Ticket != "" || e.Body.Intent != (ProvisionEnvelope{}) {
 			return ErrDenied
 		}
-	case "tls_identity":
+	case "tls_identity", "session_identity":
 		nonce, err := hex.DecodeString(e.Body.Challenge)
 		if err != nil || len(nonce) != 32 || hex.EncodeToString(nonce) != e.Body.Challenge || e.Body.Ticket != "" || e.Body.Intent != (ProvisionEnvelope{}) {
 			return ErrDenied
@@ -188,6 +189,12 @@ func (b *ProvisionBackend) ExecuteNetworkRequest(ctx context.Context, e NetworkR
 			return NetworkReply{}, err
 		}
 		return NetworkReply{TLS: &d}, nil
+	case "session_identity":
+		d, err := b.SessionIdentity(e.Body.Grant, e.Body.Challenge)
+		if err != nil {
+			return NetworkReply{}, err
+		}
+		return NetworkReply{Session: &d}, nil
 	case "enroll":
 		id, c, err := b.Enroll(ctx, e.Body.Grant, e.Body.Intent)
 		if err != nil {

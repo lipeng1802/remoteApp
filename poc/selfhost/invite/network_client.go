@@ -243,6 +243,9 @@ func (c *NetworkClient) Request(ctx context.Context, b NetworkRequestBody) (Netw
 	if b.Action != "verifier" && result.Verifier != nil {
 		return NetworkReply{}, ErrDenied
 	}
+	if b.Action != "session_identity" && result.Session != nil {
+		return NetworkReply{}, ErrDenied
+	}
 	switch b.Action {
 	case "verifier":
 		if result.Verifier == nil || result.Verifier.Claims.GrantID != b.Grant.Claims.ID || result.Verifier.Claims.Ticket != b.Ticket || result.Verifier.Claims.Challenge != b.Challenge || result.TLS != nil || result.Credential != nil || result.State != nil || result.Proof != nil || result.Ticket != "" {
@@ -254,6 +257,10 @@ func (c *NetworkClient) Request(ctx context.Context, b NetworkRequestBody) (Netw
 		}
 	case "tls_identity":
 		if result.TLS == nil || result.TLS.Claims.Grant != b.Grant || result.TLS.Claims.Challenge != b.Challenge || result.State != nil || result.Proof != nil || result.Credential != nil || result.Ticket != "" {
+			return NetworkReply{}, ErrDenied
+		}
+	case "session_identity":
+		if result.Session == nil || result.Session.Claims.Grant != b.Grant || result.Session.Claims.Challenge != b.Challenge || result.TLS != nil || result.Verifier != nil || result.State != nil || result.Proof != nil || result.Credential != nil || result.Ticket != "" {
 			return NetworkReply{}, ErrDenied
 		}
 	case "enroll":

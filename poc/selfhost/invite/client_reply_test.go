@@ -22,6 +22,8 @@ func TestHTTPClientRejectsDuplicateAndCaseDuplicateReplies(t *testing.T) {
 		{`{"network_state":{},"NETWORK_STATE":{}}`, true, false},
 		{`{"network_state":{"claims":{"active":false,"ACTIVE":true}}}`, true, false},
 		{`{"network_state":{},"unknown":"secret"}`, true, false},
+		{`{"network_state":{},"session_identity":{}}`, true, false},
+		{`{"session_identity":{},"SESSION_IDENTITY":{}}`, true, false},
 		{`{"network_state":{}} {}`, true, false},
 	} {
 		t.Run(c.raw, func(t *testing.T) {
