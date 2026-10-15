@@ -110,3 +110,20 @@ Target与Controller在固定overlay上另做一次性`product-secret`握手。�
 自主入口从首个规范`open`帧的本机vault身份与compiled channel派生固定enrollment namespace，只能重开安装阶段已预置的原生节点存储。之后选择本节的watched enrollment、签名双端身份、固定overlay及`ProductSession`组合。它不会初始化/重置节点身份或在失败后自动换scope重试。`installed-session-build`只在显式`windows|darwin-autonomous-product[-test]`模式且提供standalone产品时生成该入口。
 
 本机已完成新增入口负向、相关包race及macOS arm64/Windows amd64实际交叉编译；既有组合测试覆盖ACTIVE门禁和watch fault时产品session先join。仍未完成真实双机新入口运行、Swift/C#产品同时启动、真实Headscale撤销旧连接、GUI或签名安装/升级验收；这些不能由构建证据推定通过。
+
+### 安装期自主身份绑定
+
+新增的`autonomous-enrollment-install`是自主产品唯一创建入口。它必须先核验同一compiled release的本机trust安装，然后按以下顺序执行：
+
+```text
+derived binding namespace pending reservation
+  -> unique OS device identity create
+  -> deterministic empty enrollment namespace initialize
+  -> immutable binding commit and receipt verification
+```
+
+binding固定release channel scope、vault scope、OS公钥及确定性enrollment scope；不含epoch，因此同一channel的可信升级重开同一身份和节点目录。pending、损坏、CAS不确定、identity/enrollment失败均不会自动清理或另选身份，必须显式维护，避免安装重试制造第二设备。runtime只接受空`open`帧并从binding取得这些值，不再从parent请求中接受身份选择。
+
+macOS Keychain按可执行程序访问控制；让安装器和产品各自直接读同一条目会导致密码提示或非交互阻塞。因此所有binding/enrollment journal访问均转交同一个固定摘要`trust-journal`，所有私钥访问均转交固定摘要`identity-vault`。helper路径和内容来自compiled release所在目录，不来自网络或parent。哈希固定只提供内容完整性，不声称抵抗恶意同用户替换竞态；正式发布仍需要签名、受保护安装目录和安装器权限验收。
+
+本机随机TEST channel已真实完成安装、跨进程inspect、产品`open/ready/stop/closed`及精确cleanup，证明该helper边界消除了跨程序Keychain阻塞。Windows只完成代码与交叉构建，尚需fresh实机安装、进程/系统重启、签名升级保持同一公钥与节点目录，以及故障后不回滚验收；之后才进行真实双机Headscale/产品TLS/HMAC/watch撤销联合验收。

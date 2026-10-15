@@ -34,11 +34,12 @@ func run() error {
 	r := privatepipe.NewReader(os.Stdin)
 	out := json.NewEncoder(os.Stdout)
 	var cfg struct {
-		Scope    string
-		Create   bool
-		Expected string
+		Scope       string
+		Create      bool
+		Expected    string
+		TestCleanup bool
 	}
-	if r.Read(&cfg) != nil || !canonical(cfg.Scope, 16) || (cfg.Create && cfg.Expected != "") || (!cfg.Create && !canonical(cfg.Expected, 32)) {
+	if r.Read(&cfg) != nil || !canonical(cfg.Scope, 16) || (cfg.Create && (cfg.Expected != "" || cfg.TestCleanup)) || (!cfg.Create && !canonical(cfg.Expected, 32)) {
 		return privatepipe.ErrProtocol
 	}
 	seed, e := devicevault.Load(cfg.Scope, cfg.Create)
@@ -76,7 +77,7 @@ func run() error {
 		if c.Op == "stop" && c.Message == "" {
 			return out.Encode(map[string]string{"status": "closed"})
 		}
-		if c.Op == "delete" && cfg.Create && c.Message == "" {
+		if c.Op == "delete" && (cfg.Create || cfg.TestCleanup) && c.Message == "" {
 			if devicevault.Delete(cfg.Scope) != nil {
 				return privatepipe.ErrProtocol
 			}

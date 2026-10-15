@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r40 安装期自主身份绑定与统一原生 helper
+
+用户要求先推送再开始下一切片。已把r39提交`ee8f03b4d83464feb6cf8c665dbaa23380735133`推送到远端`codex/connection-architecture-poc`并核对远端SHA完全一致；本节是推送后新开发，当前仅本地提交。Windows仍关机；未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx及正式安装。
+
+新增显式`autonomous-enrollment-install`，由`installed-session-build`的`windows|darwin-autonomous-product[-test]`模式一并生成。它要求同一compiled release的trust安装已存在；`initialize`先在由release channel稳定派生的原生binding namespace写入pending占位，再生成唯一OS设备身份和空的enrollment namespace，最后原子提交不可变`release scope + vault scope + public key + enrollment scope`绑定。中断或不确定提交保留pending并锁闭，重试不能静默改选身份。`inspect`只重开并核验，runtime的首帧只能是完全规范的空`open`，不再接受parent选择vault/public/enrollment；同一channel的签名epoch升级继续重用同一绑定，其他channel不能替换。
+
+macOS新增Security.framework Keychain原生device vault，使用`WhenUnlockedThisDeviceOnly`、非交互`LAContext`、32-byte seed、排他创建和精确重开；Windows创建模式也改为已有credential即拒绝，防止“创建”偷偷变成复用。为避免不同未签名可执行程序访问Keychain引发密码弹窗/阻塞，binding与enrollment记录全部通过同一个已固定SHA-256的sibling `trust-journal`匿名pipe访问，身份只通过固定`identity-vault`访问。普通产品入口没有创建、删除、修复或reset API；TEST清理由compiled TEST安装器显式门禁并经同一helper执行。
+
+本机新随机TEST channel真实生命周期通过：trust initialize→身份/enrollment/binding initialize→独立进程inspect→`installed-autonomous-product`的`open/ready/stop/closed`且exit 0→enrollment/identity/binding/trust精确cleanup。该验证实际复现并消除了先前产品进程卡在`SecItemCopyMatching`的问题，未出现密码提示。devicevault/autonomousbinding/enrollmentstore/privatepipe/clientruntime/installeddevice/trustprofile/trustinstall及4个命令包race全部PASS；identity-vault、安装入口和产品入口的macOS amd64原生构建、Windows amd64交叉构建及相关vet PASS，`git diff --check`通过。此前被中断的本轮旧随机TEST identity和binding也按精确scope清理；未触碰未知或production条目。这仍不是Windows实机、真实Headscale双节点、产品TLS双机、签名安装包或生产升级验收。下一步优先补Windows恢复后的fresh安装/重启/升级同身份联合验收，再进入真实双机自主产品流。
+
 ## 2026-10-15 r39 独立自主产品编译入口（默认仍关闭）
 
 用户要求开始下一切片。Windows仍关机；r31预检、1/2 Windows联合验收和真实双机Headscale/overlay/产品流继续待办。本轮没有联系Windows、操作服务器/策略/端口/Store/Nginx，也没有替换现有正式客户端。

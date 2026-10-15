@@ -29,6 +29,12 @@ func ValidOpen(r Request) bool {
 	return r.Op == "open" && canonical(r.VaultScope, 16) && canonical(r.ExpectedPublic, 32) && r.Device == (invite.Body{}) && r.Network == (invite.NetworkRequestBody{})
 }
 
+// ValidAutonomousOpen deliberately carries no identity selector. The explicit
+// installation binding, not the parent or peer, chooses vault and node scope.
+func ValidAutonomousOpen(r Request) bool {
+	return r == (Request{Op: "open"})
+}
+
 func validCommand(r Request) bool {
 	if r.VaultScope != "" || r.ExpectedPublic != "" {
 		return false

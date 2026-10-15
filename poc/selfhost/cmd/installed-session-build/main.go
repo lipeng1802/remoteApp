@@ -224,6 +224,11 @@ func run() error {
 	if e = trustinstall.Compile(ctx, goexe, module, target, filepath.Join(dest, "trust-install"+suffix), s, time.Now()); e != nil {
 		return e
 	}
+	if autonomousProduct {
+		if e = trustinstall.CompileAutonomousEnrollmentInstall(ctx, goexe, module, target, filepath.Join(dest, "autonomous-enrollment-install"+suffix), s, pin, time.Now()); e != nil {
+			return e
+		}
+	}
 	b, e := json.Marshal(struct {
 		Release       trustinstall.Specification `json:"release"`
 		SignerDigest  string                     `json:"signer_sha256"`

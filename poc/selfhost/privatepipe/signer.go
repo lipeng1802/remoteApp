@@ -39,6 +39,10 @@ type VaultReply struct {
 // Executable must come from the trusted installation/bootstrap, never peer
 // input. No shell, arguments, inherited network listener or stderr forwarding.
 func NewSigner(executable, scope, expected string, create bool) (*Signer, error) {
+	return newSigner(executable, scope, expected, create, false)
+}
+
+func newSigner(executable, scope, expected string, create, testCleanup bool) (*Signer, error) {
 	if !filepath.IsAbs(executable) {
 		return nil, ErrProtocol
 	}
@@ -58,8 +62,12 @@ func NewSigner(executable, scope, expected string, create bool) (*Signer, error)
 		out.Close()
 		return nil, ErrProtocol
 	}
-	s := &Signer{cmd: c, in: in, out: out, created: create, reader: NewReader(out), wait: make(chan struct{})}
-	r, e := s.rpc(map[string]any{"Scope": scope, "Create": create, "Expected": expected})
+	s := &Signer{cmd: c, in: in, out: out, created: create || testCleanup, reader: NewReader(out), wait: make(chan struct{})}
+	config := map[string]any{"Scope": scope, "Create": create, "Expected": expected}
+	if testCleanup {
+		config["TestCleanup"] = true
+	}
+	r, e := s.rpc(config)
 	pub, pe := hex.DecodeString(r.PublicKey)
 	if e != nil || r.Status != "ready" || pe != nil || len(pub) != 32 || hex.EncodeToString(pub) != r.PublicKey || (expected != "" && expected != r.PublicKey) {
 		s.abort()
@@ -71,6 +79,17 @@ func NewSigner(executable, scope, expected string, create bool) (*Signer, error)
 	}
 	s.pub = pub
 	return s, nil
+}
+
+// DeleteTestIdentity is isolated validation teardown. Production owners expose
+// no deletion call; the caller must separately pin this helper and prove that
+// the compiled release is a TEST namespace before invoking it.
+func DeleteTestIdentity(executable, scope, expected string) error {
+	s, err := newSigner(executable, scope, expected, false, true)
+	if err != nil {
+		return err
+	}
+	return s.DeleteCreatedIdentity()
 }
 func (s *Signer) abort() {
 	if !s.closed {

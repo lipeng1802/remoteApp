@@ -49,6 +49,9 @@ func Load(scope string, create bool) ([]byte, error) {
 		if c == nil || c.Size != 32 || c.Blob == nil {
 			return nil, ErrUnavailable
 		}
+		if create {
+			return nil, ErrUnavailable
+		}
 		return append([]byte(nil), unsafe.Slice(c.Blob, 32)...), nil
 	}
 	if err != windows.ERROR_NOT_FOUND || !create {

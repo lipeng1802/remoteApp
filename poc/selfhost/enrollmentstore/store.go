@@ -19,11 +19,12 @@ import (
 
 var ErrStorage = errors.New("enrollment_storage_unavailable")
 
-type journal interface {
+type Journal interface {
 	Load() ([]byte, error)
-	Commit(string, []byte) error
+	Commit([]byte, []byte) error
 	Close() error
 }
+type JournalFactory func(scope string, create, test bool) (Journal, error)
 type directory interface {
 	Path() string
 	Check(bool) error // empty=true before the first side effect
@@ -38,7 +39,7 @@ type Record struct {
 	Address string `json:"address,omitempty"`
 }
 type Store struct {
-	j              journal
+	j              Journal
 	d              directory
 	raw            []byte
 	record         Record
@@ -69,11 +70,39 @@ func Scope(channelScope, vaultScope, public string) (string, error) {
 
 // Initialize is explicit installer/TEST provisioning, never a fallback in Open.
 // Same-goroutine Close is required: Windows mutex ownership is thread-affine.
-func Initialize(scope string, test bool) (*Store, error) { return open(scope, test, true) }
-func Open(scope string, test bool) (*Store, error)       { return open(scope, test, false) }
+type nativeJournal struct{ *nativejournal.Store }
 
-func open(scope string, test, create bool) (*Store, error) {
-	if !canonical(scope, 16) {
+func (j nativeJournal) Commit(expected, next []byte) error {
+	digest := ""
+	if expected != nil {
+		digest = nativejournal.Digest(expected)
+	}
+	return j.Store.Commit(digest, next)
+}
+
+func nativeFactory(scope string, create, test bool) (Journal, error) {
+	j, err := nativejournal.Open(scope, create, test)
+	if err != nil {
+		return nil, err
+	}
+	return nativeJournal{j}, nil
+}
+
+func Initialize(scope string, test bool) (*Store, error) {
+	return open(scope, test, true, nativeFactory)
+}
+func Open(scope string, test bool) (*Store, error) {
+	return open(scope, test, false, nativeFactory)
+}
+func InitializeWithJournal(scope string, test bool, factory JournalFactory) (*Store, error) {
+	return open(scope, test, true, factory)
+}
+func OpenWithJournal(scope string, test bool, factory JournalFactory) (*Store, error) {
+	return open(scope, test, false, factory)
+}
+
+func open(scope string, test, create bool, factory JournalFactory) (*Store, error) {
+	if !canonical(scope, 16) || factory == nil {
 		return nil, ErrStorage
 	}
 	id := scope + "/production"
@@ -89,7 +118,7 @@ func open(scope string, test, create bool) (*Store, error) {
 	held.Unlock()
 	runtime.LockOSThread()
 	release := func() { runtime.UnlockOSThread(); held.Lock(); delete(held.scopes, id); held.Unlock() }
-	j, e := nativejournal.Open(scope, create, test)
+	j, e := factory(scope, create, test)
 	if e != nil {
 		release()
 		return nil, ErrStorage
@@ -145,7 +174,7 @@ func validIP(s string) bool {
 	return e == nil && ip.String() == s && netip.MustParsePrefix("100.120.0.0/24").Contains(ip) && s != "100.120.0.0" && s != "100.120.0.255"
 }
 
-func newStore(j journal, d directory, scope string, create bool) (*Store, error) {
+func newStore(j Journal, d directory, scope string, create bool) (*Store, error) {
 	s := &Store{j: j, d: d}
 	if d.Check(create) != nil {
 		return nil, ErrStorage
@@ -173,9 +202,9 @@ func newStore(j journal, d directory, scope string, create bool) (*Store, error)
 }
 func (s *Store) commit(r Record) error {
 	b, _ := json.Marshal(r)
-	expected := ""
+	var expected []byte
 	if len(s.raw) > 0 {
-		expected = nativejournal.Digest(s.raw)
+		expected = s.raw
 	}
 	if s.j.Commit(expected, b) != nil {
 		s.failed = true
@@ -228,6 +257,10 @@ func (s *Store) State() Record   { return s.record }
 // Isolated validation only, after the caller has actually joined its node.
 // Leaves empty non-secret directories; no production cleanup/reset capability.
 func (s *Store) CleanupTestAfterJoin() error {
+	return s.CleanupTestAfterJoinWith(nativejournal.CleanupTest)
+}
+
+func (s *Store) CleanupTestAfterJoinWith(cleanup func(string) error) error {
 	if !s.test || s.Check() != nil || s.d.ClearTestMaterials() != nil {
 		return ErrStorage
 	}
@@ -237,7 +270,7 @@ func (s *Store) CleanupTestAfterJoin() error {
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	if nativejournal.CleanupTest(scope) != nil {
+	if cleanup == nil || cleanup(scope) != nil {
 		return ErrStorage
 	}
 	return nil

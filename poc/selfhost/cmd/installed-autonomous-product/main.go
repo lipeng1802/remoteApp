@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"remoteapp.local/selfhost-poc/autonomousbinding"
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/enrollmentstore"
@@ -24,6 +25,18 @@ import (
 )
 
 var embeddedRelease, embeddedSignerDigest, embeddedProductDigest string
+
+func bindingRecords(records trustinstall.RecordFactory) autonomousbinding.JournalFactory {
+	return func(scope string, create, test bool) (autonomousbinding.Journal, error) {
+		return records(scope, create, test)
+	}
+}
+
+func enrollmentRecords(records trustinstall.RecordFactory) enrollmentstore.JournalFactory {
+	return func(scope string, create, test bool) (enrollmentstore.Journal, error) {
+		return records(scope, create, test)
+	}
+}
 
 func main() {
 	output := json.NewEncoder(os.Stdout).Encode
@@ -101,14 +114,28 @@ func run(output func(any) error) (result error) {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	if !installeddevice.ValidOpen(first) {
+	if !installeddevice.ValidAutonomousOpen(first) {
 		return trustprofile.ErrTrust
 	}
-	scope, err := enrollmentstore.Scope(release.Scope(), first.VaultScope, first.ExpectedPublic)
+	recordFactory, err := release.NativeRecordFactory(filepath.Join(dir, "trust-journal"+suffix))
 	if err != nil {
 		return trustprofile.ErrTrust
 	}
-	open := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, first.VaultScope, first.ExpectedPublic)
+	binding, err := autonomousbinding.OpenWithJournal(release.Scope(), release.Specification().Test, bindingRecords(recordFactory))
+	if err != nil {
+		return trustprofile.ErrTrust
+	}
+	if binding.Check() != nil {
+		_ = binding.Close()
+		return trustprofile.ErrTrust
+	}
+	defer func() {
+		if closeErr := binding.Close(); closeErr != nil {
+			result = closeErr
+		}
+	}()
+	installed := binding.Record()
+	open := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, installed.VaultScope, installed.PublicKey)
 	product := clientruntime.Product{Spec: processowner.Spec{
 		Executable: filepath.Join(dir, "tls-product"+suffix),
 		SHA256:     embeddedProductDigest,
@@ -118,7 +145,7 @@ func run(output func(any) error) (result error) {
 		open,
 		commands,
 		output,
-		installeddevice.NativeEnrollmentFactory(scope, release.Specification().Test),
+		installeddevice.NativeEnrollmentFactoryWithJournal(installed.EnrollmentScope, release.Specification().Test, enrollmentRecords(recordFactory)),
 		installeddevice.ProductSession(product),
 	)
 	handle, err := owner.Start(ctx, runner)

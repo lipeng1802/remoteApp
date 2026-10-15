@@ -107,6 +107,7 @@ type Journal interface {
 	Close() error
 }
 type Factory func(create bool) (Journal, error)
+type RecordFactory func(scope string, create, test bool) (Journal, error)
 
 // NativeFactory pins the sibling helper before every start. Hash pinning is
 // transfer/content integrity, not publisher authentication or protection from
@@ -147,6 +148,44 @@ func (r Release) NativeFactory(helper string) (Factory, error) {
 			return trustprofile.NewTestDesktopJournal(helper, r.Scope(), create)
 		}
 		return trustprofile.NewDesktopJournal(helper, r.Scope(), create)
+	}, nil
+}
+
+// NativeRecordFactory pins the same dedicated journal helper, but lets a
+// caller-owned strict record store select its own derived scope and schema.
+// Runtime data still cannot select the executable or its digest.
+func (r Release) NativeRecordFactory(helper string) (RecordFactory, error) {
+	if !filepath.IsAbs(helper) || filepath.Clean(helper) != helper {
+		return nil, trustprofile.ErrTrust
+	}
+	check := func() error {
+		real, err := filepath.EvalSymlinks(helper)
+		if err != nil || real != helper {
+			return trustprofile.ErrTrust
+		}
+		f, err := os.Open(helper)
+		if err != nil {
+			return trustprofile.ErrTrust
+		}
+		defer f.Close()
+		st, err := f.Stat()
+		if err != nil || !st.Mode().IsRegular() || st.Size() < 1 || st.Size() > 100<<20 {
+			return trustprofile.ErrTrust
+		}
+		h := sha256.New()
+		if _, err = io.Copy(h, f); err != nil || hex.EncodeToString(h.Sum(nil)) != r.spec.HelperDigest {
+			return trustprofile.ErrTrust
+		}
+		return nil
+	}
+	if check() != nil {
+		return nil, trustprofile.ErrTrust
+	}
+	return func(scope string, create, test bool) (Journal, error) {
+		if check() != nil {
+			return nil, trustprofile.ErrTrust
+		}
+		return trustprofile.NewRecordDesktopJournal(helper, scope, create, test)
 	}, nil
 }
 

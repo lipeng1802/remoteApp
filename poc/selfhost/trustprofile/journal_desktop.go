@@ -28,6 +28,7 @@ type DesktopJournal struct {
 	reader                *privatepipe.Reader
 	closed, created, test bool
 	wait                  chan error
+	installation          bool
 	waitOnce              sync.Once
 }
 type journalReply struct {
@@ -41,7 +42,7 @@ func NewDesktopJournal(executable, scope string, create bool) (*DesktopJournal, 
 	if create {
 		mode = "create"
 	}
-	return startDesktopJournal(executable, scope, mode, false)
+	return startDesktopJournal(executable, scope, mode, false, true)
 }
 
 // Separate native namespace, only for random test scopes; no production cleanup.
@@ -50,10 +51,21 @@ func NewTestDesktopJournal(executable, scope string, create bool) (*DesktopJourn
 	if create {
 		mode = "create"
 	}
-	return startDesktopJournal(executable, scope, mode, true)
+	return startDesktopJournal(executable, scope, mode, true, true)
 }
 
-func startDesktopJournal(executable, scope, mode string, test bool) (*DesktopJournal, error) {
+// NewRecordDesktopJournal owns the same pinned native helper protocol without
+// imposing the trust-profile record schema. Its caller must strictly validate
+// its own record before and after every commit.
+func NewRecordDesktopJournal(executable, scope string, create, test bool) (*DesktopJournal, error) {
+	mode := "open"
+	if create {
+		mode = "create"
+	}
+	return startDesktopJournal(executable, scope, mode, test, false)
+}
+
+func startDesktopJournal(executable, scope, mode string, test, installation bool) (*DesktopJournal, error) {
 	b, e := hex.DecodeString(scope)
 	if !filepath.IsAbs(executable) || e != nil || len(b) != 16 || hex.EncodeToString(b) != scope {
 		return nil, ErrTrust
@@ -74,7 +86,7 @@ func startDesktopJournal(executable, scope, mode string, test bool) (*DesktopJou
 		out.Close()
 		return nil, ErrTrust
 	}
-	j := &DesktopJournal{cmd: c, in: in, out: out, reader: privatepipe.NewBoundedReader(out, 16384), created: mode == "create", test: test, wait: make(chan error, 1)}
+	j := &DesktopJournal{cmd: c, in: in, out: out, reader: privatepipe.NewBoundedReader(out, 16384), created: mode == "create", test: test, wait: make(chan error, 1), installation: installation}
 	r, e := j.rpc(map[string]any{"Scope": scope, "Mode": mode, "Test": test})
 	status := "ready"
 	if mode == "cleanup" {
@@ -165,7 +177,12 @@ func (j *DesktopJournal) Load() ([]byte, error) {
 func (j *DesktopJournal) Commit(expected, next []byte) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if _, e := decodeInstallation(next); e != nil {
+	if j.installation {
+		if _, e := decodeInstallation(next); e != nil {
+			j.abort()
+			return ErrTrust
+		}
+	} else if len(next) == 0 || len(next) > 8191 {
 		j.abort()
 		return ErrTrust
 	}
@@ -196,7 +213,7 @@ func (j *DesktopJournal) Close() error {
 	return j.finish()
 }
 func DeleteTestDesktopJournal(executable, scope string) error {
-	j, e := startDesktopJournal(executable, scope, "cleanup", true)
+	j, e := startDesktopJournal(executable, scope, "cleanup", true, true)
 	if e != nil {
 		return e
 	}

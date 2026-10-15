@@ -1,6 +1,6 @@
 # 自托管连接最小实验
 
-切片 4 当前：新增独立、默认不启用的`installed-autonomous-product`编译入口，将原生enrollment/watch、签名双端身份、固定overlay及产品TLS/HMAC组合到同一owner；普通`installed-device-client`仍为device-only。相关race及macOS/Windows交叉编译通过，真实双机新入口、安装预置/升级、撤销旧连接、GUI和签名安装包仍待，不能标记整体切片完成。详见[持续授权](public-server/CONTINUOUS_AUTHORIZATION.md)和[交接](../../docs/HANDOFF.md)。下方历史描述保留。
+切片 4 当前：独立、默认不启用的`installed-autonomous-product`已有显式安装期身份/enrollment绑定入口。runtime只能重开由compiled channel绑定的OS身份与原生存储，不能由parent选择、创建、reset或替换；macOS的绑定、注册记录和身份分别固定通过同一`trust-journal`/`identity-vault` helper访问，已完成本机全生命周期及清理，避免跨可执行程序钥匙串密码提示。普通`installed-device-client`仍为device-only。Windows实机安装/重启/升级同身份、真实双机自主产品、撤销旧连接、GUI和签名安装包仍待，不能标记整体切片完成。详见[持续授权](public-server/CONTINUOUS_AUTHORIZATION.md)和[交接](../../docs/HANDOFF.md)。下方历史描述保留。
 
 切片 3 当前入口：[设备码/一次性验证码、确认及防滥用](public-server/DEVICE_FLOW_TEST.md)。设备签名 HTTPS 申请/发现/拒绝/明确批准/查询，不再预先批准测试 grant；仍由私有父脚本模拟用户动作，未接 GUI 或公开服务。下一步正式身份分发、平台安全存储/IPC 与客户端自主生命周期；下方“下一步设备码”为历史。
 

@@ -16,6 +16,12 @@ func NativeEnrollmentFactory(scope string, test bool) EnrollmentFactory {
 	return protectedEnrollmentFactory(scope, test, TSNetEnrollmentFactory)
 }
 
+func NativeEnrollmentFactoryWithJournal(scope string, test bool, factory enrollmentstore.JournalFactory) EnrollmentFactory {
+	return protectedEnrollmentFactoryWithOpen(func() (*enrollmentstore.Store, error) {
+		return enrollmentstore.OpenWithJournal(scope, test, factory)
+	}, TSNetEnrollmentFactory)
+}
+
 func (n *nativeEnrollment) StartProof(ctx context.Context, s invite.DeviceSigner, p invite.VerifierPermit) error {
 	proof, ok := n.node.(proofEnrollmentNode)
 	if !ok || n.store.Check() != nil || n.store.State().Phase != "registered" || p.Claims.NodeKey != n.key {
@@ -29,11 +35,17 @@ func (n *nativeEnrollment) ProofReady() bool {
 }
 
 func protectedEnrollmentFactory(scope string, test bool, prepare func(string) EnrollmentFactory) EnrollmentFactory {
+	return protectedEnrollmentFactoryWithOpen(func() (*enrollmentstore.Store, error) {
+		return enrollmentstore.Open(scope, test)
+	}, prepare)
+}
+
+func protectedEnrollmentFactoryWithOpen(open func() (*enrollmentstore.Store, error), prepare func(string) EnrollmentFactory) EnrollmentFactory {
 	return func(ctx context.Context) (EnrollmentNode, error) {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || open == nil {
 			return nil, invite.ErrDenied
 		}
-		s, err := enrollmentstore.Open(scope, test)
+		s, err := open()
 		if err != nil {
 			return nil, invite.ErrDenied
 		}

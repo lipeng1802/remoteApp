@@ -259,3 +259,19 @@ func TestIdleCancellationAndDeadlineJoinSigner(t *testing.T) {
 		}
 	}
 }
+
+func TestAutonomousOpenCannotSelectInstalledIdentity(t *testing.T) {
+	if !ValidAutonomousOpen(Request{Op: "open"}) {
+		t.Fatal("empty autonomous open rejected")
+	}
+	for _, request := range []Request{
+		{Op: "open", VaultScope: strings.Repeat("1", 32)},
+		{Op: "open", ExpectedPublic: strings.Repeat("2", 64)},
+		{Op: "open", Network: invite.NetworkRequestBody{Action: "state"}},
+		{Op: "stop"},
+	} {
+		if ValidAutonomousOpen(request) {
+			t.Fatal("runtime identity selector accepted")
+		}
+	}
+}

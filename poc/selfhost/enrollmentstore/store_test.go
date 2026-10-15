@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"remoteapp.local/selfhost-poc/nativejournal"
 )
 
 type memoryJournal struct {
@@ -25,8 +23,8 @@ func (j *memoryJournal) Load() ([]byte, error) {
 	}
 	return append([]byte(nil), j.data...), nil
 }
-func (j *memoryJournal) Commit(expected string, b []byte) error {
-	if j.closed || (len(j.data) > 0 && nativejournal.Digest(j.data) != expected) {
+func (j *memoryJournal) Commit(expected, b []byte) error {
+	if j.closed || !bytes.Equal(j.data, expected) {
 		return ErrStorage
 	}
 	j.commits++

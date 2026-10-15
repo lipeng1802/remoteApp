@@ -22,7 +22,7 @@ func CompileSessionBridge(ctx context.Context, goexe, module, target, dest strin
 // CompileDeviceClient uses the same compiled trust and sibling digest gate,
 // but exposes only device consent APIs; no runtime trust/bootstrap override.
 func CompileDeviceClient(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest string, now time.Time) error {
-	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, "", "./cmd/installed-device-client", now)
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, "", "./cmd/installed-device-client", false, now)
 }
 
 // CompileAutonomousProductClient is an explicit opt-in installed entry. It
@@ -33,7 +33,14 @@ func CompileAutonomousProductClient(ctx context.Context, goexe, module, target, 
 	if !canonical(productDigest, 32) || productDigest == "" {
 		return trustprofile.ErrTrust
 	}
-	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-autonomous-product", now)
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-autonomous-product", true, now)
+}
+
+// CompileAutonomousEnrollmentInstall builds the only entry allowed to create
+// the immutable local identity/enrollment binding. It requires native OS
+// credential support on macOS and never runs as part of the online client.
+func CompileAutonomousEnrollmentInstall(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest string, now time.Time) error {
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, "", "./cmd/autonomous-enrollment-install", true, now)
 }
 
 // CompileProductSession pins one trusted sibling product inside the compiled
@@ -46,7 +53,7 @@ func CompileProductSession(ctx context.Context, goexe, module, target, dest stri
 	return compileSession(ctx, goexe, module, target, dest, s, signerDigest, productDigest, now)
 }
 func compileSession(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, now time.Time) error {
-	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-session", now)
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-session", false, now)
 }
 
 // CompileDesktopTestSession is a separate test-only Windows desktop entry.
@@ -55,9 +62,9 @@ func CompileDesktopTestSession(ctx context.Context, goexe, module, dest string, 
 	if !s.Test || !canonical(productDigest, 32) || productDigest == "" {
 		return trustprofile.ErrTrust
 	}
-	return compileEntry(ctx, goexe, module, "windows", dest, s, signerDigest, productDigest, "./cmd/desktop-session", now)
+	return compileEntry(ctx, goexe, module, "windows", dest, s, signerDigest, productDigest, "./cmd/desktop-session", false, now)
 }
-func compileEntry(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, now time.Time) error {
+func compileEntry(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, native bool, now time.Time) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust
 	}
@@ -78,7 +85,14 @@ func compileEntry(ctx context.Context, goexe, module, target, dest string, s Spe
 	if target == "windows" {
 		arch = "amd64"
 	}
-	cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED=0", "GOOS="+target, "GOARCH="+arch)
+	cgo := "0"
+	if native && target == "darwin" {
+		// nativejournal uses Security.framework. A macOS autonomous product must
+		// be built on the matching Mac architecture; a CGO-disabled cross-build
+		// would compile but could never open its installed enrollment state.
+		cgo = "1"
+	}
+	cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED="+cgo, "GOOS="+target, "GOARCH="+arch)
 	if cmd.Run() != nil {
 		return trustprofile.ErrTrust
 	}
