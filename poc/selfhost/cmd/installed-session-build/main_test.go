@@ -20,3 +20,18 @@ func TestDeviceBuildRejectsProductWithoutCreatingDestination(t *testing.T) {
 		}
 	}
 }
+
+func TestAutonomousProductBuildRequiresPinnedProduct(t *testing.T) {
+	previous := os.Args
+	defer func() { os.Args = previous }()
+	for _, target := range []string{"windows-autonomous-product", "darwin-autonomous-product", "windows-autonomous-product-test", "darwin-autonomous-product-test"} {
+		out := filepath.Join(t.TempDir(), "unused")
+		os.Args = []string{"build", "/unused/go", "/unused/module", target, out, "/unused/anchor", "/unused/profile", "/unused/journal", "/unused/signer", "unused-channel"}
+		if run() == nil {
+			t.Fatal("autonomous product build accepted missing product")
+		}
+		if _, err := os.Stat(out); !os.IsNotExist(err) {
+			t.Fatal("invalid mode created output")
+		}
+	}
+}

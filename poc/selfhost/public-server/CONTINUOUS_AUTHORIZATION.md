@@ -105,4 +105,8 @@ Target与Controller在固定overlay上另做一次性`product-secret`握手。�
 
 密钥交付连接完成后，Target listener继续接受产品TLS tunnel；Controller产品只连接owner创建的loopback listener，tunnel再固定拨向签名target。产品子进程、listener和双向copy都处于SessionWork生命周期内；watch锁闭后必须先完成这些资源的取消和实际join。
 
-当前证据是协议/进程组合单测、race与交叉vet，不是实际双机产品验收。正式compiled installed entry尚未选择`ProductSession`，真实Swift/C# payload、撤销时双端关闭、GUI和安装仍待。
+当前证据是协议/进程组合单测、race与交叉编译，不是实际双机产品验收。新增的`installed-autonomous-product`是单独、显式的compiled入口：构建期固定release、两个native helper摘要和TLS产品摘要，运行时无法从parent frame切换产品、地址、trust或secret；普通`installed-device-client`仍保持device-only，默认没有静默启用产品。
+
+自主入口从首个规范`open`帧的本机vault身份与compiled channel派生固定enrollment namespace，只能重开安装阶段已预置的原生节点存储。之后选择本节的watched enrollment、签名双端身份、固定overlay及`ProductSession`组合。它不会初始化/重置节点身份或在失败后自动换scope重试。`installed-session-build`只在显式`windows|darwin-autonomous-product[-test]`模式且提供standalone产品时生成该入口。
+
+本机已完成新增入口负向、相关包race及macOS arm64/Windows amd64实际交叉编译；既有组合测试覆盖ACTIVE门禁和watch fault时产品session先join。仍未完成真实双机新入口运行、Swift/C#产品同时启动、真实Headscale撤销旧连接、GUI或签名安装/升级验收；这些不能由构建证据推定通过。

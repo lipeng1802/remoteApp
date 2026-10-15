@@ -86,7 +86,8 @@ func WatchedEnrollmentRunner(release trustinstall.Release, open clientruntime.Si
 // work is trusted compiled wiring, never supplied by a parent frame. It starts
 // only after the same enrollment watch reaches ACTIVE and is joined before the
 // watch, proof, node and signer are released. ProductSession may opt into the
-// fixed TLS/HMAC bridge; the formal installed entry remains disabled.
+// fixed TLS/HMAC bridge. The ordinary installed-device-client remains disabled;
+// a separately compiled installed-autonomous-product entry opts in explicitly.
 func WatchedEnrollmentRunnerWithSession(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, work SessionWork) clientowner.Runner {
 	return runner(release, open, commands, output, factory, true, true, work)
 }

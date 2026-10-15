@@ -62,6 +62,18 @@ func run() error {
 		}
 	}
 	goexe, module, target, dest := os.Args[1], os.Args[2], os.Args[3], os.Args[4]
+	autonomousProduct := target == "windows-autonomous-product" || target == "darwin-autonomous-product" || target == "windows-autonomous-product-test" || target == "darwin-autonomous-product-test"
+	autonomousTest := target == "windows-autonomous-product-test" || target == "darwin-autonomous-product-test"
+	if autonomousProduct {
+		if len(os.Args) != 11 {
+			return os.ErrInvalid
+		}
+		if target == "windows-autonomous-product" || target == "windows-autonomous-product-test" {
+			target = "windows"
+		} else {
+			target = "darwin"
+		}
+	}
 	device := target == "windows-device-test" || target == "darwin-device-test"
 	if device {
 		if len(os.Args) != 10 {
@@ -124,7 +136,7 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	if desktop || macTest || device {
+	if desktop || macTest || device || autonomousTest {
 		var nonce [16]byte
 		if _, e = rand.Read(nonce[:]); e != nil {
 			return e
@@ -135,6 +147,9 @@ func run() error {
 		}
 		if device {
 			prefix = "device-client-test-"
+		}
+		if autonomousTest {
+			prefix = "autonomous-product-test-"
 		}
 		s.Channel = prefix + hex.EncodeToString(nonce[:])
 		s.Test = true
@@ -156,13 +171,18 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
+	if autonomousProduct && productPin == "" {
+		return os.ErrInvalid
+	}
 	if device {
 		e = trustinstall.CompileDeviceClient(ctx, goexe, module, target, filepath.Join(dest, "installed-device-client"+suffix), s, pin, time.Now())
 	} else if productPin != "" {
 		if e = write(filepath.Join(dest, "tls-product"+suffix), product, 0755); e != nil {
 			return e
 		}
-		if desktop {
+		if autonomousProduct {
+			e = trustinstall.CompileAutonomousProductClient(ctx, goexe, module, target, filepath.Join(dest, "installed-autonomous-product"+suffix), s, pin, productPin, time.Now())
+		} else if desktop {
 			e = trustinstall.CompileDesktopTestSession(ctx, goexe, module, filepath.Join(dest, "desktop-session.exe"), s, pin, productPin, time.Now())
 		} else {
 			e = trustinstall.CompileProductSession(ctx, goexe, module, target, filepath.Join(dest, "installed-session"+suffix), s, pin, productPin, time.Now())
@@ -215,7 +235,7 @@ func run() error {
 	if e = write(filepath.Join(dest, "build-public.json"), b, 0600); e != nil {
 		return e
 	} // runtime ignores this sidecar
-	if desktop || macTest || device {
+	if desktop || macTest || device || autonomousTest {
 		manifest := map[string]string{}
 		entries, e := os.ReadDir(dest)
 		if e != nil {

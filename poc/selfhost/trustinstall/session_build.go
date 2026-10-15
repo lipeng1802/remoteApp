@@ -25,6 +25,17 @@ func CompileDeviceClient(ctx context.Context, goexe, module, target, dest string
 	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, "", "./cmd/installed-device-client", now)
 }
 
+// CompileAutonomousProductClient is an explicit opt-in installed entry. It
+// pins both native helpers and the sibling TLS product, while the ordinary
+// installed-device-client remains device-only. Runtime frames cannot select a
+// product, endpoint, trust root or enrollment namespace.
+func CompileAutonomousProductClient(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, now time.Time) error {
+	if !canonical(productDigest, 32) || productDigest == "" {
+		return trustprofile.ErrTrust
+	}
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-autonomous-product", now)
+}
+
 // CompileProductSession pins one trusted sibling product inside the compiled
 // owner. Empty pin is not a runtime switch back to bridge-only operation.
 func CompileProductSession(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, now time.Time) error {

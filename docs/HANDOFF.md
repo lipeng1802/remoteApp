@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r39 独立自主产品编译入口（默认仍关闭）
+
+用户要求开始下一切片。Windows仍关机；r31预检、1/2 Windows联合验收和真实双机Headscale/overlay/产品流继续待办。本轮没有联系Windows、操作服务器/策略/端口/Store/Nginx，也没有替换现有正式客户端。
+
+新增独立`installed-autonomous-product`入口，并新增`CompileAutonomousProductClient`。它不是给普通`installed-device-client`增加运行时开关：只有构建阶段明确选择新入口，且同时把release、trust-journal摘要、identity-vault摘要和`tls-product`摘要编译进程序，才会启用自主产品路径；普通入口仍只提供设备API。新入口不接受argv，也不从stdin接受产品路径、digest、endpoint、CA、root、enrollment scope、HMAC或证书指纹。
+
+首个私有pipe帧仍只能是规范`open`，enrollment scope由compiled release channel、本机vault scope和预期OS公钥确定性派生。后续使用`NativeEnrollmentFactory`打开安装阶段已初始化的固定原生节点存储，并选择`WatchedEnrollmentRunnerWithSession(... ProductSession(...))`。因此只有provision→自主enroll/bind→issuer签名首次ACTIVE→签名双端身份完成后才启动固定产品；watch撤销/故障仍按产品session→watch/proof→SDK→signer顺序实际join。入口本身不会初始化、修复、清除或更换enrollment存储，也不会自动重试。
+
+`installed-session-build`新增显式`windows|darwin-autonomous-product[-test]`模式，必须提供standalone产品文件，输出名固定`installed-autonomous-product[.exe]`和固定sibling `tls-product[.exe]`。`-test`使用随机TEST channel并生成摘要清单；无`-test`不改变production namespace语义。旧device、desktop和legacy installed-session模式保持不变。
+
+本机验证：新增构建入口负向测试；trustinstall/build command/installeddevice/clientruntime/session/streamgate定向测试PASS，相关包race PASS；新入口实际交叉编译为macOS arm64及Windows amd64成功；`git diff --check`通过。现有协议/进程测试仍覆盖ACTIVE后启动、私密HMAC/指纹交付、TLS tunnel及watch故障先join产品，但本轮没有新真实tsnet双节点、Swift/C#双端运行或Windows原生存储证据，不能把编译成功标记为公网产品/GUI/安装包或整体切片4验收。
+
+下一步优先补独立安装/升级对该入口的原生enrollment namespace预置与不可回滚门禁；Windows恢复后用fresh匹配包完成双机自主入口、真实产品TLS/HMAC、活会话撤销和重启拒绝验收。本轮只做本地提交，不自动推送。
+
 ## 2026-10-15 r38 新自主产品TLS与HMAC进程内交付
 
 用户要求继续下一切片。Windows仍关机，r31预检、1/2 Windows联合验收以及真实双机Headscale/overlay/产品流继续待办；本轮不联系Windows、不操作服务器/服务/端口/策略/Store/Nginx，也未启用正式客户端入口。
