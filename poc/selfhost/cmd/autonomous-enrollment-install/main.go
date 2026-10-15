@@ -26,6 +26,8 @@ type reply struct {
 	PublicKey       string `json:"public_key,omitempty"`
 	EnrollmentState string `json:"enrollment_state,omitempty"`
 	Stage           string `json:"stage,omitempty"`
+	Diagnostic      int    `json:"diagnostic_version,omitempty"`
+	TrustEpoch      uint64 `json:"trust_epoch,omitempty"`
 	Reason          string `json:"reason,omitempty"`
 }
 
@@ -35,8 +37,15 @@ func maintenance(stage string) reply {
 	return reply{Status: "maintenance_required", Stage: stage}
 }
 
-func diagnose(releaseScope string, test bool, records trustinstall.RecordFactory, states trustinstall.RecordState, identity identityProbe) (reply, error) {
-	if records == nil || states == nil || identity == nil {
+func diagnostic(epoch uint64, value reply) reply {
+	value.Diagnostic = 1
+	value.TrustEpoch = epoch
+	value.PublicKey = ""
+	return value
+}
+
+func diagnose(releaseScope string, epoch uint64, test bool, records trustinstall.RecordFactory, states trustinstall.RecordState, identity identityProbe) (reply, error) {
+	if epoch == 0 || epoch > 1<<53-1 || records == nil || states == nil || identity == nil {
 		return reply{}, trustprofile.ErrTrust
 	}
 	bindingScope, err := autonomousbinding.Scope(releaseScope)
@@ -49,23 +58,23 @@ func diagnose(releaseScope string, test bool, records trustinstall.RecordFactory
 	}
 	switch state {
 	case trustprofile.JournalAbsent:
-		return reply{Status: "not_installed"}, nil
+		return diagnostic(epoch, reply{Status: "not_installed"}), nil
 	case trustprofile.JournalPending:
-		return maintenance("binding_pending"), nil
+		return diagnostic(epoch, maintenance("binding_pending")), nil
 	case trustprofile.JournalUnusable:
-		return maintenance("binding_unusable"), nil
+		return diagnostic(epoch, maintenance("binding_unusable")), nil
 	case trustprofile.JournalCommitted:
 	default:
 		return reply{}, trustprofile.ErrTrust
 	}
 	binding, err := autonomousbinding.OpenWithJournal(releaseScope, test, bindingRecords(records))
 	if err != nil {
-		return maintenance("binding_unusable"), nil
+		return diagnostic(epoch, maintenance("binding_unusable")), nil
 	}
 	record := binding.Record()
 	checkErr, closeErr := binding.Check(), binding.Close()
 	if checkErr != nil || closeErr != nil {
-		return maintenance("binding_unusable"), nil
+		return diagnostic(epoch, maintenance("binding_unusable")), nil
 	}
 	state, err = states(record.EnrollmentScope, test)
 	if err != nil {
@@ -73,28 +82,28 @@ func diagnose(releaseScope string, test bool, records trustinstall.RecordFactory
 	}
 	switch state {
 	case trustprofile.JournalAbsent:
-		return maintenance("enrollment_missing"), nil
+		return diagnostic(epoch, maintenance("enrollment_missing")), nil
 	case trustprofile.JournalPending:
-		return maintenance("enrollment_pending"), nil
+		return diagnostic(epoch, maintenance("enrollment_pending")), nil
 	case trustprofile.JournalUnusable:
-		return maintenance("enrollment_unusable"), nil
+		return diagnostic(epoch, maintenance("enrollment_unusable")), nil
 	case trustprofile.JournalCommitted:
 	default:
 		return reply{}, trustprofile.ErrTrust
 	}
 	enrollment, err := enrollmentstore.OpenWithJournal(record.EnrollmentScope, test, enrollmentRecords(records))
 	if err != nil {
-		return maintenance("enrollment_unusable"), nil
+		return diagnostic(epoch, maintenance("enrollment_unusable")), nil
 	}
 	phase := enrollment.State().Phase
 	checkErr, closeErr = enrollment.Check(), enrollment.Close()
 	if checkErr != nil || closeErr != nil {
-		return maintenance("enrollment_unusable"), nil
+		return diagnostic(epoch, maintenance("enrollment_unusable")), nil
 	}
 	if identity(record) != nil {
-		return maintenance("identity_unavailable"), nil
+		return diagnostic(epoch, maintenance("identity_unavailable")), nil
 	}
-	return reply{Status: "usable", PublicKey: record.PublicKey, EnrollmentState: phase}, nil
+	return diagnostic(epoch, reply{Status: "usable", EnrollmentState: phase}), nil
 }
 
 func bindingRecords(records trustinstall.RecordFactory) autonomousbinding.JournalFactory {
@@ -122,17 +131,16 @@ func main() {
 	_ = json.NewEncoder(os.Stdout).Encode(value)
 }
 
-func installedRelease(release trustinstall.Release, dir, suffix string) error {
+func installedRelease(release trustinstall.Release, dir, suffix string) (trustprofile.Profile, error) {
 	factory, err := release.NativeFactory(filepath.Join(dir, "trust-journal"+suffix))
 	if err != nil {
-		return err
+		return trustprofile.Profile{}, err
 	}
 	owner, err := trustinstall.NewOfflineOwner(release, factory, time.Now)
 	if err != nil {
-		return err
+		return trustprofile.Profile{}, err
 	}
-	_, err = owner.Inspect()
-	return err
+	return owner.Inspect()
 }
 
 func inspect(release trustinstall.Release, records trustinstall.RecordFactory) (reply, error) {
@@ -298,7 +306,8 @@ func run() (reply, error) {
 	dir := filepath.Dir(exe)
 	journalPath := filepath.Join(dir, "trust-journal"+suffix)
 	vaultPath := filepath.Join(dir, "identity-vault"+suffix)
-	if err = installedRelease(release, dir, suffix); err != nil {
+	installed, err := installedRelease(release, dir, suffix)
+	if err != nil {
 		return reply{}, err
 	}
 	records, err := release.NativeRecordFactory(journalPath)
@@ -331,7 +340,7 @@ func run() (reply, error) {
 			}
 			return joined.CloseJoined()
 		}
-		return diagnose(release.Scope(), release.Specification().Test, records, states, probe)
+		return diagnose(release.Scope(), installed.Claims.Epoch, release.Specification().Test, records, states, probe)
 	}
 	if os.Args[1] == "cleanup-test" {
 		return cleanupTest(release, records, journalPath, vaultPath)

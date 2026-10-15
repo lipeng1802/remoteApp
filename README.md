@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r43 收口自主安装最小诊断协议：`status`不再输出稳定设备公钥，只返回`diagnostic_version=1`、状态/stage、必要的enrollment phase与当前原生journal已验证的签名`trust_epoch`。macOS fresh TEST验收证明epoch1升到epoch2后，无论旧/新安装入口都只能报告epoch2，不能通过旧程序产生降级诊断；pending仍拒绝重装。显式`inspect`仍保留公钥供受控身份核对。Windows关机，实机验收仍待补。
+
 r42 继续不依赖Windows的自主安装收口：`autonomous-enrollment-install status`现在通过摘要固定的原生helper只读区分`not_installed`、`usable`与六个`maintenance_required`阶段，不返回保护记录、不创建/修复/重置身份。TEST-only中断夹具证明pending安装不能重试生成第二身份，只能对精确pending测试命名空间显式清理。macOS随机TEST channel已完成原生Keychain的absent→usable→签名升级保持同身份→pending锁闭→精确清理验收；Windows关机，实机同类验收仍待补。
 
 r38 继续切片4B：新自主`ProductSession`已把固定摘要的真实产品子进程接入`SessionRuntime`。Target发布并复核证书持有后，随机HMAC与证书指纹只经已验证overlay上的一次性双端OS签名握手交付；目标签名绑定secret hash，Controller独立核验issuer短期TLS描述符同指纹后才把HMAC写入产品匿名管道。父帧提供HMAC/回调被拒；watch失效仍先锁gate，再取消并实际join tunnel与产品。相关race/交叉vet通过；正式入口仍未启用，Windows关机，真实双机产品流待验。

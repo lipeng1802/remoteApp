@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r43 最小诊断输出与签名 epoch 绑定
+
+用户要求继续下一任务切片。Windows仍关机，本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或安装。r40–r42三个本地提交尚未推送，本节继续形成独立本地提交。
+
+r42的`status`虽然没有输出私密，但在`usable`时仍返回稳定设备公钥，对普通安装器状态采集并非必需。现在只读诊断固定为`diagnostic_version=1`，并且仅返回`status`、可选`stage`、可选`enrollment_state`及`trust_epoch`；`public_key`在所有status结果中都必须为空/省略。只有显式`inspect`命令仍返回公钥，用于受控的身份一致性核对。
+
+`trust_epoch`不是来自compiled bundled profile的常量：入口先通过摘要固定的原生`trust-journal`严格`Inspect`当前已安装配置，只在签名/root/service/minimum floor/有效期全部通过后才进入自主状态诊断。因此较旧程序在新epoch已提交后也只能报告当前新epoch，不能使用自己的旧bundled profile产生降级诊断。epoch为0或超出协议安全整数范围会拒绝。
+
+本机macOS amd64 fresh随机TEST channel真实验收PASS：epoch1未安装/可用状态返回诊断版本1与trust epoch1且不含公钥；签名升级到epoch2后，v1与v2两个compiled入口均返回trust epoch2且不含公钥，而显式inspect仍证明两者是同一身份；两代产品重开/join通过；pending中断仍拒绝initialize，诊断绑定epoch2，精确TEST清理后恢复`not_installed/epoch2`。最终全部TEST状态清理。输出：`VALIDATION PASSED: minimal diagnostic omits device identity and binds every state to the verified signed trust epoch...`。
+
+这仍不是Windows Credential Manager实机、真实OS掉电/写回执不确定性、签名安装包、GUI或跨机Headscale/产品TLS验收。Windows恢复后仍需fresh bundle验收r40–r43的首装、升级保持同身份、版本化诊断和pending锁闭。不依赖Windows的下一项可继续收口签名安装布局/发布物清单与升级原子替换的代码边界，但不应在没有真实签名证书时宣称安装包验收。
+
 ## 2026-10-15 r42 自主安装显式维护状态
 
 用户要求继续不依赖Windows的下一任务。Windows仍关机，本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或正式安装。r40/r41两个本地提交尚未推送，本节继续形成独立本地提交。

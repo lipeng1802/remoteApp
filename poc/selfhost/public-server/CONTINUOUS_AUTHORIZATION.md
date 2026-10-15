@@ -136,7 +136,9 @@ macOS原生验证已证明：epoch2 compiled floor在提交升级前锁闭；可
 
 ### 显式维护状态
 
-`autonomous-enrollment-install status`仅通过compiled release固定的`trust-journal`和`identity-vault`诊断已派生的binding/enrollment/identity。它只返回`not_installed`、`usable`或带稳定stage的`maintenance_required`；不返回journal payload、scope或私密，不创建、修复、删除或重置任何身份。原生helper把pending单独识别，其他任何非空但不能完整验证的记录统一折叠为`unusable`，避免向低权限调用者暴露损坏形态。
+`autonomous-enrollment-install status`仅通过compiled release固定的`trust-journal`和`identity-vault`诊断已派生的binding/enrollment/identity。它只返回`diagnostic_version=1`、当前已验证签名配置的`trust_epoch`、`not_installed`、`usable`或带稳定stage的`maintenance_required`；不返回设备公钥、journal payload、scope或私密，不创建、修复、删除或重置任何身份。只有受控显式`inspect`保留公钥核对。原生helper把pending单独识别，其他任何非空但不能完整验证的记录统一折叠为`unusable`，避免向低权限调用者暴露损坏形态。
+
+诊断中的epoch来自当前原生trust journal的完整验签结果，而不是直接回显该程序编译时的bundled profile。因此签名升级提交后，较旧compiled入口与新入口必须都报告同一新epoch；根、service、minimum floor、签名或有效期不通过时根本不产生安装状态诊断。
 
 TEST release另有受限的中断夹具：只能在创建身份前留下binding pending，且只有精确诊断为pending才能删除该TEST namespace。实测中二次initialize仍被拒，不会静默选择第二个OS身份。production release没有此清理命令，committed或unusable记录也不会被该夹具删除。
 

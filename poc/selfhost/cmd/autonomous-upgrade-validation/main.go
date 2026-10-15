@@ -23,6 +23,8 @@ type reply struct {
 	EnrollmentState string `json:"enrollment_state"`
 	Epoch           uint64 `json:"epoch"`
 	Stage           string `json:"stage"`
+	Diagnostic      int    `json:"diagnostic_version"`
+	TrustEpoch      uint64 `json:"trust_epoch"`
 	Reason          string `json:"reason"`
 }
 
@@ -179,11 +181,18 @@ func run() (result error) {
 		}
 		return nil
 	}
+	status := func(name, wantStatus, wantStage string, epoch uint64) (reply, error) {
+		value, err := command(tool(name), nil, "status")
+		if err != nil || value.Status != wantStatus || value.Stage != wantStage || value.Diagnostic != 1 || value.TrustEpoch != epoch || value.PublicKey != "" {
+			return value, fmt.Errorf("invalid minimal diagnostic")
+		}
+		return value, nil
+	}
 	if _, err = positive("trust-install-v1", 1, "initialize"); err != nil {
 		return err
 	}
 	trustCreated = true
-	if value, statusErr := command(tool("autonomous-enrollment-install-v1"), nil, "status"); statusErr != nil || value.Status != "not_installed" || value.Stage != "" {
+	if _, statusErr := status("autonomous-enrollment-install-v1", "not_installed", "", 1); statusErr != nil {
 		return fmt.Errorf("fresh status")
 	}
 	first, err := positive("autonomous-enrollment-install-v1", 0, "initialize")
@@ -191,7 +200,7 @@ func run() (result error) {
 		return fmt.Errorf("initial autonomous identity")
 	}
 	autonomousCreated = true
-	if value, statusErr := command(tool("autonomous-enrollment-install-v1"), nil, "status"); statusErr != nil || value.Status != "usable" || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
+	if value, statusErr := status("autonomous-enrollment-install-v1", "usable", "", 1); statusErr != nil || value.EnrollmentState != "idle" {
 		return fmt.Errorf("installed status")
 	}
 	if err = negative("autonomous-enrollment-install-v1", "initialize"); err != nil {
@@ -211,8 +220,8 @@ func run() (result error) {
 		if err != nil || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
 			return fmt.Errorf("identity changed across upgrade")
 		}
-		value, err = command(tool(name), nil, "status")
-		if err != nil || value.Status != "usable" || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
+		value, err = status(name, "usable", "", 2)
+		if err != nil || value.EnrollmentState != "idle" {
 			return fmt.Errorf("status changed across upgrade")
 		}
 	}
@@ -239,7 +248,7 @@ func run() (result error) {
 		return fmt.Errorf("pending reservation")
 	}
 	reservationCreated = true
-	if value, statusErr := command(tool("autonomous-enrollment-install-v2"), nil, "status"); statusErr != nil || value.Status != "maintenance_required" || value.Stage != "binding_pending" {
+	if _, statusErr := status("autonomous-enrollment-install-v2", "maintenance_required", "binding_pending", 2); statusErr != nil {
 		return fmt.Errorf("pending status")
 	}
 	if err = negative("autonomous-enrollment-install-v2", "initialize"); err != nil {
@@ -249,7 +258,7 @@ func run() (result error) {
 		return fmt.Errorf("reservation cleanup")
 	}
 	reservationCreated = false
-	if value, statusErr := command(tool("autonomous-enrollment-install-v2"), nil, "status"); statusErr != nil || value.Status != "not_installed" || value.Stage != "" {
+	if _, statusErr := status("autonomous-enrollment-install-v2", "not_installed", "", 2); statusErr != nil {
 		return fmt.Errorf("clean status")
 	}
 	return nil
@@ -260,5 +269,5 @@ func main() {
 		fmt.Println("VALIDATION FAILED: autonomous native upgrade lifecycle")
 		os.Exit(1)
 	}
-	fmt.Println("VALIDATION PASSED: native autonomous identity survives signed epoch upgrade; read-only status distinguishes absent/usable/pending; interrupted TEST install stays closed until exact cleanup; both compiled generations restart and join. NOT cross-machine Headscale, GUI or signed installer acceptance.")
+	fmt.Println("VALIDATION PASSED: minimal diagnostic omits device identity and binds every state to the verified signed trust epoch; native autonomous identity survives upgrade; interrupted TEST install stays closed until exact cleanup. NOT cross-machine Headscale, GUI or signed installer acceptance.")
 }

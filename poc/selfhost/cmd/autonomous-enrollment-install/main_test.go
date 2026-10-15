@@ -85,20 +85,23 @@ func TestDiagnosisStagesDoNotRepairOrSelectIdentity(t *testing.T) {
 				}
 				return states[scope], nil
 			})
-			got, err := diagnose(release, true, factory, state, func(autonomousbinding.Record) error {
+			got, err := diagnose(release, 7, true, factory, state, func(autonomousbinding.Record) error {
 				identityCalls++
 				return nil
 			})
-			if err != nil || got.Status != "maintenance_required" || got.Stage != name || identityCalls != 0 {
+			if err != nil || got.Status != "maintenance_required" || got.Stage != name || got.Diagnostic != 1 || got.TrustEpoch != 7 || got.PublicKey != "" || identityCalls != 0 {
 				t.Fatalf("got %+v calls=%d err=%v", got, identityCalls, err)
 			}
 		})
 	}
-	absent, err := diagnose(release, true, factory, func(string, bool) (trustprofile.JournalState, error) {
+	absent, err := diagnose(release, 7, true, factory, func(string, bool) (trustprofile.JournalState, error) {
 		return trustprofile.JournalAbsent, nil
 	}, func(autonomousbinding.Record) error { t.Fatal("identity probe"); return nil })
-	if err != nil || absent.Status != "not_installed" || absent.Stage != "" {
+	if err != nil || absent.Status != "not_installed" || absent.Stage != "" || absent.Diagnostic != 1 || absent.TrustEpoch != 7 || absent.PublicKey != "" {
 		t.Fatal("absent", absent, err)
+	}
+	if _, err = diagnose(release, 0, true, factory, nil, func(autonomousbinding.Record) error { return nil }); err == nil {
+		t.Fatal("zero trust epoch accepted")
 	}
 }
 
@@ -127,17 +130,17 @@ func TestDiagnosisUsableAndIdentityUnavailable(t *testing.T) {
 		t.Fatal("close fixture")
 	}
 	states := trustinstall.RecordState(func(string, bool) (trustprofile.JournalState, error) { return trustprofile.JournalCommitted, nil })
-	got, err := diagnose(release, true, factory, states, func(record autonomousbinding.Record) error {
+	got, err := diagnose(release, 11, true, factory, states, func(record autonomousbinding.Record) error {
 		if record.PublicKey != public {
 			t.Fatal("wrong identity")
 		}
 		return nil
 	})
-	if err != nil || got.Status != "usable" || got.PublicKey != public || got.EnrollmentState != "idle" {
+	if err != nil || got.Status != "usable" || got.PublicKey != "" || got.EnrollmentState != "idle" || got.Diagnostic != 1 || got.TrustEpoch != 11 {
 		t.Fatal("usable", got, err)
 	}
-	got, err = diagnose(release, true, factory, states, func(autonomousbinding.Record) error { return errors.New("locked") })
-	if err != nil || got.Status != "maintenance_required" || got.Stage != "identity_unavailable" {
+	got, err = diagnose(release, 11, true, factory, states, func(autonomousbinding.Record) error { return errors.New("locked") })
+	if err != nil || got.Status != "maintenance_required" || got.Stage != "identity_unavailable" || got.PublicKey != "" || got.Diagnostic != 1 || got.TrustEpoch != 11 {
 		t.Fatal("identity unavailable", got, err)
 	}
 	cleanup, err := enrollmentstore.OpenWithJournal(enrollment, true, enrollmentFactory)
