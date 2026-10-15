@@ -251,6 +251,25 @@ func TestProductControllerUsesVerifiedDescriptorAndPrivateConfig(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestBoundProductRequiresDeliveredFingerprintToMatchIssuerDescriptor(t *testing.T) {
+	a, pub := productFixture(t)
+	p := Product{Spec: productSpec(t, "controller"), ControllerKey: testHMAC}
+	child, err := StartBoundProduct(context.Background(), p, a, pub, a.c.Grant, a.c.Binding, false, time.Now, 32123, strings.Repeat("d", 64))
+	if child != nil {
+		defer stopProduct(t, child)
+	}
+	if err == nil || child != nil {
+		t.Fatal("mismatched delivered fingerprint started product")
+	}
+	child, err = StartBoundProduct(context.Background(), p, a, pub, a.c.Grant, a.c.Binding, false, time.Now, 32123, a.fingerprint)
+	if child != nil {
+		defer stopProduct(t, child)
+	}
+	if err != nil || child == nil {
+		t.Fatal("matching delivered fingerprint rejected", err)
+	}
+}
 func TestProductDescriptorTamperRejectedBeforeProcessStart(t *testing.T) {
 	for _, mode := range []string{"signature", "challenge", "binding", "expired"} {
 		t.Run(mode, func(t *testing.T) {

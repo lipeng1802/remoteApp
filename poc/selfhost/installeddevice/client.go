@@ -85,8 +85,8 @@ func WatchedEnrollmentRunner(release trustinstall.Release, open clientruntime.Si
 // WatchedEnrollmentRunnerWithSession is the first slice-4 lifecycle bridge.
 // work is trusted compiled wiring, never supplied by a parent frame. It starts
 // only after the same enrollment watch reaches ACTIVE and is joined before the
-// watch, proof, node and signer are released. It does not yet expose product
-// TLS/HMAC capabilities or enable the formal installed entry.
+// watch, proof, node and signer are released. ProductSession may opt into the
+// fixed TLS/HMAC bridge; the formal installed entry remains disabled.
 func WatchedEnrollmentRunnerWithSession(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, work SessionWork) clientowner.Runner {
 	return runner(release, open, commands, output, factory, true, true, work)
 }

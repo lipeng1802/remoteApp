@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r38 新自主产品TLS与HMAC进程内交付
+
+用户要求继续下一切片。Windows仍关机，r31预检、1/2 Windows联合验收以及真实双机Headscale/overlay/产品流继续待办；本轮不联系Windows、不操作服务器/服务/端口/策略/Store/Nginx，也未启用正式客户端入口。
+
+新增`installeddevice.ProductSession`与`SessionRuntime.RunProduct`，只接受编译期可信、固定绝对路径及SHA-256的`clientruntime.Product`。自主路径明确拒绝调用方预填`ControllerKey`或`TargetReady`回调，防止父进程注入/截获HMAC。Target产品经私有pipe生成随机32-byte HMAC、证书与RSA持有证明；仍由本机OS signer请求`publish_tls`，并重新取得issuer签名、当前grant/binding/challenge、最多3秒的TLS descriptor确认同一指纹。
+
+HMAC不再经父fixture分发。Target和Controller先在r37固定overlay上建立一次性`product-secret`协议：双方必须通过当前grant/binding、端点和持续gate检查；fresh双nonce transcript绑定两端IP、完整grant及canonical HMAC+fingerprint的SHA-256。Target用本机OS signer签名secret hash，Controller用自己的OS signer回签后，Target才发送一次canonical key/fingerprint。Controller随后独立从authority取得TLS descriptor，并要求其指纹与已签名交付完全相同，之后才把loopback port/HMAC/pin/target通过产品匿名pipe交给固定Swift进程。authority不接收HMAC，公共输出/bootstrap/argv/文件均不含秘密。
+
+Target完成一次交付后清空owner字符串副本，固定`:47476`listener继续只承载已验证产品TLS tunnel；Controller本机loopback端口由owner创建，不从parent/peer选择。子进程由`processowner.Own`持有：watch fault/stop/cancel关闭listener和双向copy，实际Stop/join产品后SessionWork才返回，外层继续session→watch→proof→SDK→signer顺序。提前产品退出或真实Stop错误仍使owner terminal fault。
+
+新增一次性密钥正常、错误设备身份、非canonical HMAC/指纹、issuer descriptor指纹不一致及parent secret/callback拒绝测试。session/streamgate/clientruntime/installeddevice定向race通过，最终相关全套与双平台vet见本提交验证。这里没有真实tsnet双节点和Swift/C#同时运行的端到端证据，也未证明画面/输入payload、GUI或安装包；不能标记整体4完成。下一项准备不依赖Windows的正式编译入口/组合fixture，Windows恢复后执行fresh双机产品TLS/HMAC/watch撤销验收。本轮本地提交，不自动推送。
+
 ## 2026-10-15 r37 切片4B受限自主overlay capability
 
 用户要求继续下一任务；Windows仍关机，r31预检、1/2 Windows真实联合验收及双机Headscale零规则/旧连接拒绝继续记录待办。本轮未联系Windows，未登录或修改服务器，没有服务、端口、策略、Store、Nginx或安装包动作。

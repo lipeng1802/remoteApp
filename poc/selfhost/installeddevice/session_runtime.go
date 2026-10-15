@@ -2,9 +2,13 @@ package installeddevice
 
 import (
 	"context"
+	"crypto/ed25519"
 	"net"
+	"time"
 
+	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/streamgate"
 	"tailscale.com/tsnet"
 )
@@ -28,9 +32,12 @@ func enrolledSessionServer(node EnrollmentNode) *tsnet.Server {
 // local node identity/address and remote WhoIs identity before returning a
 // connection.
 type SessionRuntime struct {
-	peers *SessionPeers
-	gate  *streamgate.Gate
-	node  *tsnet.Server
+	peers  *SessionPeers
+	gate   *streamgate.Gate
+	node   *tsnet.Server
+	client clientruntime.ProductNetworkAPI
+	issuer ed25519.PublicKey
+	clock  func() time.Time
 }
 
 func (r *SessionRuntime) Peers() SessionPeers {
@@ -70,4 +77,128 @@ func (r *SessionRuntime) ConnectTLS(ctx context.Context, local net.Conn) error {
 		return invite.ErrDenied
 	}
 	return r.gate.ConnectTLS(ctx, r.node, local)
+}
+
+// ProductSession returns trusted in-process work that owns one pinned product
+// child. HMAC and certificate fingerprint never cross this callback boundary.
+func ProductSession(product clientruntime.Product) SessionWork {
+	return func(ctx context.Context, runtime *SessionRuntime) error {
+		return runtime.RunProduct(ctx, product)
+	}
+}
+
+// RunProduct starts the fixed-digest product for this signed role. The target
+// publishes certificate possession, then delivers its fresh HMAC and exact
+// fingerprint over a one-shot mutually authenticated overlay exchange. The
+// controller independently verifies the issuer TLS descriptor before its
+// product receives the secret over the private child pipe.
+func (r *SessionRuntime) RunProduct(ctx context.Context, product clientruntime.Product) error {
+	if ctx == nil || r == nil || r.peers == nil || r.gate == nil || r.node == nil || r.client == nil || len(r.issuer) != ed25519.PublicKeySize || r.clock == nil || product.ControllerKey != "" || product.TargetReady != nil {
+		return invite.ErrDenied
+	}
+	if r.peers.server {
+		return r.runTargetProduct(ctx, product)
+	}
+	return r.runControllerProduct(ctx, product)
+}
+
+func (r *SessionRuntime) runTargetProduct(ctx context.Context, product clientruntime.Product) error {
+	var key, fingerprint string
+	called := false
+	product.TargetReady = func(k, fp string) {
+		if !called {
+			called, key, fingerprint = true, k, fp
+		}
+	}
+	child, err := clientruntime.StartBoundProduct(ctx, product, r.client, r.issuer, r.peers.grant, r.peers.binding, true, r.clock, 0, "")
+	if err != nil || child == nil || !called {
+		return stopPartialProduct(child, err)
+	}
+	return processowner.Own(ctx, child, func(life context.Context) error {
+		listener, err := r.ListenOverlay(life)
+		if err != nil {
+			return err
+		}
+		defer listener.Close()
+		secretConn, err := listener.Accept()
+		if err != nil {
+			return runtimeWorkerError(life, err)
+		}
+		if err = r.gate.DeliverProductSecret(life, secretConn, key, fingerprint); err != nil {
+			return runtimeWorkerError(life, err)
+		}
+		// Erase the owner's copies as soon as the authenticated one-shot delivery
+		// finishes. The target product retains its own private session key.
+		key, fingerprint = "", ""
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return runtimeWorkerError(life, acceptErr)
+			}
+			_ = r.ServeTLS(life, conn)
+			if life.Err() != nil {
+				return nil
+			}
+		}
+	})
+}
+
+func (r *SessionRuntime) runControllerProduct(ctx context.Context, product clientruntime.Product) error {
+	if product.CertificateScope != "" || product.CertificateReopen || product.CertificateOpened != nil {
+		return invite.ErrDenied
+	}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		return invite.ErrDenied
+	}
+	defer listener.Close()
+	overlay, err := r.DialOverlay(ctx)
+	if err != nil {
+		return err
+	}
+	key, fingerprint, err := r.gate.ReceiveProductSecret(ctx, overlay)
+	if err != nil {
+		return err
+	}
+	product.ControllerKey = key
+	port := listener.Addr().(*net.TCPAddr).Port
+	child, err := clientruntime.StartBoundProduct(ctx, product, r.client, r.issuer, r.peers.grant, r.peers.binding, false, r.clock, port, fingerprint)
+	key, fingerprint = "", ""
+	product.ControllerKey = ""
+	if err != nil || child == nil {
+		return stopPartialProduct(child, err)
+	}
+	return processowner.Own(ctx, child, func(life context.Context) error {
+		closed := make(chan struct{})
+		go func() {
+			select {
+			case <-life.Done():
+				listener.Close()
+			case <-closed:
+			}
+		}()
+		defer close(closed)
+		local, err := listener.Accept()
+		if err != nil {
+			return runtimeWorkerError(life, err)
+		}
+		return runtimeWorkerError(life, r.ConnectTLS(life, local))
+	})
+}
+
+func stopPartialProduct(child *processowner.Child, cause error) error {
+	if child != nil && child.Stop(context.Background()) != nil {
+		return processowner.ErrProcess
+	}
+	if cause == nil {
+		return invite.ErrDenied
+	}
+	return cause
+}
+
+func runtimeWorkerError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	return err
 }

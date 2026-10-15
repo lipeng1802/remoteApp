@@ -77,6 +77,6 @@ func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGa
 		return invite.ErrDenied
 	}
 	e.peers = &SessionPeers{target: append(ed25519.PublicKey(nil), target...), controller: append(ed25519.PublicKey(nil), controller...), binding: e.binding, grant: g.grant, server: server}
-	e.peers.runtime = &SessionRuntime{peers: e.peers, gate: payloadGate, node: enrolledSessionServer(e.node)}
+	e.peers.runtime = &SessionRuntime{peers: e.peers, gate: payloadGate, node: enrolledSessionServer(e.node), client: client, issuer: append(ed25519.PublicKey(nil), g.issuer...), clock: g.clock}
 	return nil
 }

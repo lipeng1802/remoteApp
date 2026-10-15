@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -64,6 +65,25 @@ type proof struct {
 	Signature string `json:"signature"`
 }
 
+type productSecret struct {
+	Version     int    `json:"version"`
+	Key         string `json:"key"`
+	Fingerprint string `json:"fingerprint"`
+}
+type productSecretTranscript struct {
+	Version      int          `json:"version"`
+	Grant        invite.Grant `json:"grant"`
+	ServerNonce  string       `json:"server_nonce"`
+	ClientNonce  string       `json:"client_nonce"`
+	TargetIP     string       `json:"target_ip"`
+	ControllerIP string       `json:"controller_ip"`
+	SecretHash   string       `json:"secret_hash"`
+}
+type productSecretWelcome struct {
+	Transcript productSecretTranscript `json:"transcript"`
+	Signature  string                  `json:"signature"`
+}
+
 func Identity(pub ed25519.PublicKey) string {
 	h := sha256.Sum256(pub)
 	return hex.EncodeToString(h[:])
@@ -108,6 +128,34 @@ func (c Config) signature(role string, t transcript) (string, error) {
 func verifies(pub ed25519.PublicKey, role string, t transcript, sig string) bool {
 	b, err := hex.DecodeString(sig)
 	return err == nil && len(b) == 64 && ed25519.Verify(pub, bytesFor(role, t), b)
+}
+
+func productSecretBytes(role string, t productSecretTranscript) []byte {
+	b, _ := json.Marshal(t)
+	return append([]byte("remoteapp-session-"+role+"-v1\n"), b...)
+}
+func (c Config) productSecretSignature(role string, t productSecretTranscript, pub ed25519.PublicKey) (string, error) {
+	s, err := c.provider()
+	if err != nil {
+		return "", ErrDenied
+	}
+	sig, err := invite.CheckedSignature(s, pub, productSecretBytes(role, t))
+	return hex.EncodeToString(sig), err
+}
+func verifiesProductSecret(pub ed25519.PublicKey, role string, t productSecretTranscript, sig string) bool {
+	b, err := hex.DecodeString(sig)
+	return err == nil && len(b) == 64 && ed25519.Verify(pub, productSecretBytes(role, t), b)
+}
+func validProductSecret(s productSecret) bool {
+	key, keyErr := base64.StdEncoding.DecodeString(s.Key)
+	fingerprint, fingerprintErr := hex.DecodeString(s.Fingerprint)
+	return s.Version == 1 && keyErr == nil && len(key) == 32 && base64.StdEncoding.EncodeToString(key) == s.Key &&
+		fingerprintErr == nil && len(fingerprint) == 32 && hex.EncodeToString(fingerprint) == s.Fingerprint
+}
+func productSecretHash(s productSecret) string {
+	b, _ := json.Marshal(s)
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
 }
 func (c Config) valid(conn net.Conn, server bool) bool {
 	b := c.Binding

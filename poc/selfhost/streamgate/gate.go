@@ -304,6 +304,20 @@ func (g *Gate) check(ctx context.Context, grant invite.Grant, target, controller
 	return grant == g.cfg.Grant && target == grant.Claims.Target && controller == grant.Claims.Controller && g.active(ctx)
 }
 
+func (g *Gate) DeliverProductSecret(ctx context.Context, conn net.Conn, key, fingerprint string) error {
+	if !g.server || conn == nil {
+		return session.ErrDenied
+	}
+	return session.DeliverProductSecret(ctx, conn, g.cfg, g.check, key, fingerprint)
+}
+
+func (g *Gate) ReceiveProductSecret(ctx context.Context, conn net.Conn) (string, string, error) {
+	if g.server || conn == nil {
+		return "", "", session.ErrDenied
+	}
+	return session.ReceiveProductSecret(ctx, conn, g.cfg, g.check)
+}
+
 // The only target is the development-only product fixed-payload TLS listener.
 // No caller/peer supplied destination and no product native actions are exposed.
 func (g *Gate) ServeTLS(ctx context.Context, s *tsnet.Server, conn net.Conn) error {

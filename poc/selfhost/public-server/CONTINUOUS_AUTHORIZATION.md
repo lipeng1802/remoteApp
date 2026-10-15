@@ -96,3 +96,13 @@ Grant中的target/controller是设备公钥哈希，不能直接作为产品TLS�
 持续watch附着同一stream gate并用每次新签名state更新缓存。watch终止的defer先锁闭gate，再发布Done；owner收到Done后仍按session→watch→proof→SDK→signer顺序取消和实际join。因此新连接能力不会晚于watch故障继续开放，既有产品流的关闭仍由下一层TLS tunnel与session context共同完成。
 
 本轮只完成代码、race和Windows/Linux交叉vet。Windows关机，未做真实两节点Listen/Dial/WhoIs，也没有接入产品TLS进程、HMAC交付或画面键鼠payload；这些不能由本机负向测试推定通过。
+
+### 4B 新自主产品 TLS 与 HMAC 交付
+
+`ProductSession`将固定摘要产品子进程直接组合进`SessionRuntime`，不从parent frame接受产品路径、HMAC、证书指纹、端口或secret回调。Target先通过私有pipe取得产品随机HMAC/证书，验证RSA私钥持有并以OS signer发布证书；issuer返回的短期TLS descriptor必须匹配产品实际指纹。
+
+Target与Controller在固定overlay上另做一次性`product-secret`握手。双方fresh nonce、完整grant、固定binding/IP及HMAC+fingerprint的SHA-256进入独立签名域；Target OS signer先签，Controller OS signer回签且持续gate仍active后才发送一次canonical 32-byte HMAC和32-byte证书指纹。HMAC不进入authority、父进程、argv、公共bootstrap、日志或文件。Controller还会独立请求issuer descriptor并比对同一指纹，之后只通过匿名pipe启动固定产品。
+
+密钥交付连接完成后，Target listener继续接受产品TLS tunnel；Controller产品只连接owner创建的loopback listener，tunnel再固定拨向签名target。产品子进程、listener和双向copy都处于SessionWork生命周期内；watch锁闭后必须先完成这些资源的取消和实际join。
+
+当前证据是协议/进程组合单测、race与交叉vet，不是实际双机产品验收。正式compiled installed entry尚未选择`ProductSession`，真实Swift/C# payload、撤销时双端关闭、GUI和安装仍待。

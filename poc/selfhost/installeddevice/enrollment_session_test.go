@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/invite"
 )
 
@@ -174,6 +175,20 @@ func TestSessionRuntimeIsOpaqueAndFailsClosedWithoutNativeNode(t *testing.T) {
 	}
 	if conn, err := runtime.DialOverlay(context.Background()); err == nil || conn != nil {
 		t.Fatal("dial opened without native node")
+	}
+	if err := e.closeJoined(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProductSessionRejectsParentSecretCallbacks(t *testing.T) {
+	e, _ := activeEnrollmentForSession(t, 0)
+	runtime := e.peers.runtime
+	if err := runtime.RunProduct(context.Background(), clientruntime.Product{ControllerKey: "parent-secret"}); err == nil {
+		t.Fatal("parent supplied product secret accepted")
+	}
+	if err := runtime.RunProduct(context.Background(), clientruntime.Product{TargetReady: func(string, string) {}}); err == nil {
+		t.Fatal("parent secret callback accepted")
 	}
 	if err := e.closeJoined(); err != nil {
 		t.Fatal(err)

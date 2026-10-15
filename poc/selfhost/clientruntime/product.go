@@ -17,8 +17,9 @@ import (
 )
 
 // Product is trusted runtime wiring for the actual Swift/C# TLS probes. The
-// compiled command fixes Spec; only the TEST controller HMAC is parent-supplied
-// through its anonymous pipe. This is not final product secret distribution.
+// compiled command fixes Spec. Legacy runners may still supply ControllerKey;
+// the autonomous installeddevice path rejects that field and performs its own
+// mutually authenticated one-shot delivery into the anonymous product pipe.
 type Product struct {
 	Spec              processowner.Spec
 	ControllerKey     string
@@ -32,9 +33,10 @@ type Product struct {
 var ErrTLSCertificatePublication = errors.New("product_tls_publication_failed")
 var ErrTestCertificateOpen = errors.New("product_test_certificate_open_failed")
 
-type networkAPI interface {
+type ProductNetworkAPI interface {
 	Request(context.Context, invite.NetworkRequestBody) (invite.NetworkReply, error)
 }
+type networkAPI = ProductNetworkAPI
 type productReady struct {
 	Status           string `json:"status"`
 	Key, Fingerprint string
@@ -150,4 +152,36 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	p.Observation.bind(child, true)
 	p.TargetReady(ready.Key, ready.Fingerprint)
 	return child, nil
+}
+
+// StartBoundProduct is trusted composition for an already-authorized native
+// owner. It does not enroll a node or choose a destination; its caller must own
+// the session transport and join the returned child on every outcome.
+func StartBoundProduct(ctx context.Context, p Product, api ProductNetworkAPI, issuer ed25519.PublicKey, grant invite.Grant, binding invite.NetworkBinding, server bool, clock func() time.Time, port int, expectedFingerprint string) (*processowner.Child, error) {
+	if api == nil {
+		return nil, session.ErrDenied
+	}
+	if expectedFingerprint != "" {
+		if _, err := key(expectedFingerprint); err != nil {
+			return nil, session.ErrDenied
+		}
+		api = pinnedProductAPI{ProductNetworkAPI: api, fingerprint: expectedFingerprint}
+	}
+	return p.start(ctx, api, issuer, Config{Grant: grant, Binding: binding, Server: server}, clock, port)
+}
+
+type pinnedProductAPI struct {
+	ProductNetworkAPI
+	fingerprint string
+}
+
+func (p pinnedProductAPI) Request(ctx context.Context, request invite.NetworkRequestBody) (invite.NetworkReply, error) {
+	reply, err := p.ProductNetworkAPI.Request(ctx, request)
+	if err != nil {
+		return invite.NetworkReply{}, err
+	}
+	if request.Action == "tls_identity" && (reply.TLS == nil || reply.TLS.Claims.Fingerprint != p.fingerprint) {
+		return invite.NetworkReply{}, session.ErrDenied
+	}
+	return reply, nil
 }
