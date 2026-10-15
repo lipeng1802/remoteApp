@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r37 继续切片4B：新自主SessionWork改为只接收不透明`SessionRuntime`，不再直接接收可自行组合的peer值。目标角色只能在自主tsnet节点固定监听`:47476`，控制角色只能拨向issuer签名binding中的目标`:47476`；监听/拨号均重核本机node/IP与远端WhoIs，持续watch逐次更新数据gate并在退出前锁闭。listener随session context关闭，owner仍按session→watch→proof→SDK→signer顺序实际join。六包race及Windows/Linux交叉vet通过；Windows关机，真实双机overlay、产品TLS/HMAC/payload仍待。
+
 r36 继续切片4B：新增issuer签名、3秒有效的`session_identity`，只在已批准grant和动态策略ACTIVE时，向参与者绑定当前binding、fresh challenge及Store注册的两端公钥。新自主SessionWork启动前在owner内部验签并确认本机角色，父进程不能提供或替换peer key/binding；撤销、外来设备、混合reply及篡改全部拒绝。尚未接overlay listener/dialer、TLS product/HMAC/payload；Windows验收按用户要求继续记录为待办。
 
 r35 开始切片4A的[会话生命周期桥](poc/selfhost/public-server/CONTINUOUS_AUTHORIZATION.md)：新的显式opt-in runner只在同一自主enrollment watch首次ACTIVE后启动编译期可信session work；watch fault/到期/stop/cancel先取消并实际join session，再依次释放watch、proof、SDK、signer。提前退出或取消后真错误均锁闭owner。尚未接TLS descriptor/HMAC/overlay/payload，不是产品会话验收。

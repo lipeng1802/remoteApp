@@ -26,13 +26,14 @@ func activeEnrollmentForSession(t *testing.T, inactiveAfter int32) (*enrollment,
 		t.Fatal("watch activation")
 	}
 	e.peers = &SessionPeers{grant: grant, binding: binding, server: true}
+	e.peers.runtime = &SessionRuntime{peers: e.peers}
 	return e, e.node.(*proofNodeFixture)
 }
 
 func TestSessionRequiresLiveActiveWatch(t *testing.T) {
 	e := &enrollment{}
 	called := false
-	if err := e.startSession(context.Background(), func(context.Context, SessionPeers) error { called = true; return nil }); err == nil || called || e.session != nil {
+	if err := e.startSession(context.Background(), func(context.Context, *SessionRuntime) error { called = true; return nil }); err == nil || called || e.session != nil {
 		t.Fatal("session started without active watch")
 	}
 
@@ -42,7 +43,7 @@ func TestSessionRequiresLiveActiveWatch(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("watch did not fault")
 	}
-	if err := e.startSession(context.Background(), func(context.Context, SessionPeers) error { called = true; return nil }); err == nil || called || e.session != nil {
+	if err := e.startSession(context.Background(), func(context.Context, *SessionRuntime) error { called = true; return nil }); err == nil || called || e.session != nil {
 		t.Fatal("session started after watch fault")
 	}
 	if err := e.closeJoined(); err != nil {
@@ -92,7 +93,7 @@ func TestWatchFaultCancelsAndJoinsSessionBeforeNode(t *testing.T) {
 	cancelled := make(chan struct{})
 	release := make(chan struct{})
 	joined := make(chan struct{})
-	if err := e.startSession(context.Background(), func(ctx context.Context, _ SessionPeers) error {
+	if err := e.startSession(context.Background(), func(ctx context.Context, _ *SessionRuntime) error {
 		close(started)
 		<-ctx.Done()
 		close(cancelled)
@@ -132,7 +133,7 @@ func TestWatchFaultCancelsAndJoinsSessionBeforeNode(t *testing.T) {
 func TestSessionEarlyExitIsObservableAndStillJoined(t *testing.T) {
 	e, node := activeEnrollmentForSession(t, 0)
 	want := errors.New("product fixture ended")
-	if err := e.startSession(context.Background(), func(context.Context, SessionPeers) error { return want }); err != nil {
+	if err := e.startSession(context.Background(), func(context.Context, *SessionRuntime) error { return want }); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -151,7 +152,7 @@ func TestSessionEarlyExitIsObservableAndStillJoined(t *testing.T) {
 func TestSessionCloseFailureCannotHideBehindCancellation(t *testing.T) {
 	e, node := activeEnrollmentForSession(t, 0)
 	want := errors.New("product join failed")
-	if err := e.startSession(context.Background(), func(ctx context.Context, _ SessionPeers) error {
+	if err := e.startSession(context.Background(), func(ctx context.Context, _ *SessionRuntime) error {
 		<-ctx.Done()
 		return want
 	}); err != nil {
@@ -159,5 +160,22 @@ func TestSessionCloseFailureCannotHideBehindCancellation(t *testing.T) {
 	}
 	if err := e.closeJoined(); !errors.Is(err, want) || node.closes != 1 {
 		t.Fatal("session failure hidden or node not joined", err, node.closes)
+	}
+}
+
+func TestSessionRuntimeIsOpaqueAndFailsClosedWithoutNativeNode(t *testing.T) {
+	e, _ := activeEnrollmentForSession(t, 0)
+	runtime := e.peers.runtime
+	if runtime == nil || runtime.Peers().runtime != nil || runtime.Peers().Binding() != e.binding {
+		t.Fatal("opaque public session view")
+	}
+	if listener, err := runtime.ListenOverlay(context.Background()); err == nil || listener != nil {
+		t.Fatal("listener opened without native node")
+	}
+	if conn, err := runtime.DialOverlay(context.Background()); err == nil || conn != nil {
+		t.Fatal("dial opened without native node")
+	}
+	if err := e.closeJoined(); err != nil {
+		t.Fatal(err)
 	}
 }

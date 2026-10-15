@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"net"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -76,7 +77,44 @@ type overlayConn struct {
 func (c overlayConn) LocalAddr() net.Addr  { return c.local }
 func (c overlayConn) RemoteAddr() net.Addr { return c.remote }
 
+type overlayListener struct {
+	net.Listener
+	gate   *Gate
+	server *tsnet.Server
+	ctx    context.Context
+	done   chan struct{}
+	once   sync.Once
+}
+
+func (l *overlayListener) Accept() (net.Conn, error) {
+	if !l.gate.active(l.ctx) {
+		return nil, session.ErrDenied
+	}
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	verified, err := l.gate.peer(l.ctx, l.server, conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return verified, nil
+}
+
+func (l *overlayListener) Close() error {
+	var err error
+	l.once.Do(func() {
+		close(l.done)
+		err = l.Listener.Close()
+	})
+	return err
+}
+
 func (g *Gate) peer(ctx context.Context, s *tsnet.Server, conn net.Conn) (net.Conn, error) {
+	if s == nil || conn == nil {
+		return nil, session.ErrDenied
+	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	if !g.active(ctx) {
@@ -119,6 +157,87 @@ func (g *Gate) peer(ctx context.Context, s *tsnet.Server, conn net.Conn) (net.Co
 		return conn, nil
 	}
 	return overlayConn{conn, &net.TCPAddr{IP: net.ParseIP(localIP)}, &net.TCPAddr{IP: net.ParseIP(remoteIP), Port: 47476}}, nil
+}
+
+// ListenOverlay is the target's only overlay listener capability. The caller
+// cannot select an address or port, and the local node identity is checked
+// before the listener is exposed.
+func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener, error) {
+	if ctx == nil || s == nil || !g.server || !g.active(ctx) {
+		return nil, session.ErrDenied
+	}
+	lc, err := s.LocalClient()
+	if err != nil {
+		return nil, session.ErrDenied
+	}
+	check, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	st, err := lc.Status(check)
+	if err != nil || st.Self == nil || st.Self.PublicKey.String() != g.binding.TargetNode {
+		return nil, session.ErrDenied
+	}
+	found := false
+	for _, ip := range st.TailscaleIPs {
+		if ip.String() == g.binding.TargetIP {
+			found = true
+		}
+	}
+	if !found {
+		return nil, session.ErrDenied
+	}
+	listener, err := s.Listen("tcp", ":47476")
+	if err != nil || !g.active(ctx) {
+		if listener != nil {
+			listener.Close()
+		}
+		return nil, session.ErrDenied
+	}
+	wrapped := &overlayListener{Listener: listener, gate: g, server: s, ctx: ctx, done: make(chan struct{})}
+	go func() {
+		select {
+		case <-ctx.Done():
+			wrapped.Close()
+		case <-wrapped.done:
+		}
+	}()
+	return wrapped, nil
+}
+
+// DialOverlay is the controller's only overlay dial capability. It always
+// dials the signed target binding on port 47476, then verifies both the local
+// node and remote WhoIs identity before exposing the connection.
+func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, error) {
+	if ctx == nil || s == nil || g.server || !g.active(ctx) {
+		return nil, session.ErrDenied
+	}
+	lc, err := s.LocalClient()
+	if err != nil {
+		return nil, session.ErrDenied
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	conn, err := nodeproof.DialOnlyOverlay(dialCtx, lc, g.binding.TargetIP, 47476)
+	if err != nil {
+		cancel()
+		return nil, session.ErrDenied
+	}
+	verified, err := g.peer(ctx, s, conn)
+	if err != nil {
+		conn.Close()
+		cancel()
+		return nil, err
+	}
+	return &overlayDialConn{Conn: verified, cancel: cancel}, nil
+}
+
+type overlayDialConn struct {
+	net.Conn
+	cancel context.CancelFunc
+}
+
+func (c *overlayDialConn) Close() error {
+	err := c.Conn.Close()
+	c.cancel()
+	return err
 }
 
 func (g *Gate) Serve(ctx context.Context, s *tsnet.Server, conn net.Conn) error {

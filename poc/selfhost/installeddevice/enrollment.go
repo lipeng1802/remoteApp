@@ -26,11 +26,12 @@ type EnrollmentNode interface {
 type EnrollmentFactory func(context.Context) (EnrollmentNode, error)
 
 // SessionWork is trusted, compiled in-process wiring for a product session.
-// It receives only a lifetime and issuer-verified public peer material:
-// enrollment credentials, ticket and the authority client remain internal.
+// It receives only a lifetime and an opaque, fixed-destination session
+// capability: enrollment credentials, ticket, authority client and raw tsnet
+// server remain internal.
 // Returning while authorization is still active is terminal rather than an
 // implicit reconnect request.
-type SessionWork func(context.Context, SessionPeers) error
+type SessionWork func(context.Context, *SessionRuntime) error
 
 type enrollment struct {
 	node                 EnrollmentNode

@@ -78,6 +78,22 @@ func TestDynamicGateValidationAndLease(t *testing.T) {
 			}
 			switch mode {
 			case "valid":
+				if listener, err := g.ListenOverlay(context.Background(), nil); err == nil || listener != nil {
+					t.Fatal("target accepted missing native node")
+				}
+				if conn, err := g.DialOverlay(context.Background(), nil); err == nil || conn != nil {
+					t.Fatal("target received controller dial capability")
+				}
+				controllerGate, err := New(issuer, tp, cp, client, n, false, func() time.Time { return now })
+				if err != nil {
+					t.Fatal("controller gate")
+				}
+				if listener, err := controllerGate.ListenOverlay(context.Background(), nil); err == nil || listener != nil {
+					t.Fatal("controller received target listen capability")
+				}
+				if conn, err := controllerGate.DialOverlay(context.Background(), nil); err == nil || conn != nil {
+					t.Fatal("controller accepted missing native node")
+				}
 				now = now.Add(4 * time.Second)
 				if g.active(context.Background()) || g.Update(n) {
 					t.Fatal("expired state extended")

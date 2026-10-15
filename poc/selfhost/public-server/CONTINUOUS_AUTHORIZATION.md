@@ -81,4 +81,18 @@ Grant中的target/controller是设备公钥哈希，不能直接作为产品TLS�
 
 撤销、inactive策略、未绑定/外来设备、坏公钥记录、坏challenge或混合reply全部失败关闭。`SessionPeers`只在installed owner内部核验后创建，返回的公钥均为副本，不向父进程输出。SessionWork开始前再核对本机OS signer、node key、binding和grant时间；它可获得已验证的公开peer/grant/binding/role，仍不获得registration credential、ticket、authority client或签名私钥。
 
-相关测试覆盖真实Store/Backend/HTTPS签名返回、两端公钥哈希绑定、签名/grant/binding/challenge/到期篡改、外来设备、撤销拒绝、重复/大小写字段与混合reply。这收口了产品会话所需的公钥来源，但还没有在新自主node上启动overlay listener/dialer、TLS product进程或HMAC交付。
+相关测试覆盖真实Store/Backend/HTTPS签名返回、两端公钥哈希绑定、签名/grant/binding/challenge/到期篡改、外来设备、撤销拒绝、重复/大小写字段与混合reply。这收口了产品会话所需的公钥来源。
+
+### 4B 受限自主 overlay capability
+
+`SessionWork`不再直接接收peer值，而只接收owner创建的`SessionRuntime`。它不能取得raw tsnet server或自选网络目标；公开peer信息通过`Peers()`防御性复制读取，副本不能恢复runtime。
+
+- target只能`ListenOverlay(ctx)`，地址固定为`:47476`；
+- controller只能`DialOverlay(ctx)`，目标固定为issuer签名binding中的target IP和端口47476；
+- listen前核验本机node key/IP，Accept及dial后以LocalAPI WhoIs核验远端node key；
+- listener随session context关闭，dial的upgrade context保留到连接Close；
+- 角色错误、缺少自主native node、授权失效或任一身份不符均fail closed，不回退系统网络。
+
+持续watch附着同一stream gate并用每次新签名state更新缓存。watch终止的defer先锁闭gate，再发布Done；owner收到Done后仍按session→watch→proof→SDK→signer顺序取消和实际join。因此新连接能力不会晚于watch故障继续开放，既有产品流的关闭仍由下一层TLS tunnel与session context共同完成。
+
+本轮只完成代码、race和Windows/Linux交叉vet。Windows关机，未做真实两节点Listen/Dial/WhoIs，也没有接入产品TLS进程、HMAC交付或画面键鼠payload；这些不能由本机负向测试推定通过。

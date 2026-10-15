@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r37 切片4B受限自主overlay capability
+
+用户要求继续下一任务；Windows仍关机，r31预检、1/2 Windows真实联合验收及双机Headscale零规则/旧连接拒绝继续记录待办。本轮未联系Windows，未登录或修改服务器，没有服务、端口、策略、Store、Nginx或安装包动作。
+
+`SessionWork`参数从公开peer值收紧为不透明`*SessionRuntime`。runtime内部持有同一自主enrollment创建的tsnet server、r36 issuer签名双端身份与streamgate；不向工作函数暴露raw tsnet、authority client、credential、ticket、私有signer或可选地址。`Peers()`只返回防御性复制的公开grant/binding/双端公钥/角色，副本不含runtime。
+
+目标角色唯一网络能力是`ListenOverlay(ctx)`，固定`:47476`；控制角色唯一能力是`DialOverlay(ctx)`，固定签名binding的target IP和`:47476`。调用方不能选择目标、端口或系统网络fallback。监听前核验本机tsnet node key/IP，Accept后及拨号后均以LocalAPI WhoIs核验远端node key；角色错误、缺少自主native node、身份/IP/binding/授权异常均fail closed。listener绑定SessionWork context自动关闭，防止取消时阻塞Accept；拨号upgrade context保持到连接Close才释放。
+
+r33持续watch现在直接附着并刷新数据面gate。每个后续签名ACTIVE state必须仍是固定grant/binding；watch出现inactive、撤销、到期、身份变化或传输错误时，先`Deny`锁闭gate再发布Done，runner随后取消并join session，再依次join watch/proof/SDK/signer。它不会在同一owner上自动重连或换binding。
+
+新增runtime缺失native node/角色隔离/fixed capability负向覆盖；invite/installeddevice/broker/streamgate/clientruntime/nodeproof六包race PASS，Windows amd64与Linux amd64的installeddevice/autonomousvalidation交叉vet PASS。没有真实两节点进行Listen/Dial/WhoIs，所以不得把本轮标记为跨机overlay或产品会话验收。下一切片把既有固定产品TLS tunnel与HMAC交付接到此runtime，并保留watch锁闭与session-first join；真实Windows恢复后再做双机网络证据。本轮本地提交，不自动推送。
+
 ## 2026-10-15 r36 记录Windows待验，切片4B签名双端会话身份
 
 用户要求Windows验收先记录并继续下一任务。r31预检、1/2 Windows真实联合验收、双机Headscale零规则/旧连接拒绝均仍是待办，本轮不联系/唤醒Windows，不修改服务器。

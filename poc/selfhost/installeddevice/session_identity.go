@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/streamgate"
 )
 
 // SessionPeers is public-only trusted session material. It is constructed
@@ -19,6 +20,7 @@ type SessionPeers struct {
 	binding            invite.NetworkBinding
 	grant              invite.Grant
 	server             bool
+	runtime            *SessionRuntime
 }
 
 func (p SessionPeers) TargetPublic() ed25519.PublicKey {
@@ -63,6 +65,18 @@ func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGa
 	if !server && !bytes.Equal(g.public, controller) {
 		return invite.ErrDenied
 	}
-	e.peers = &SessionPeers{append(ed25519.PublicKey(nil), target...), append(ed25519.PublicKey(nil), controller...), e.binding, g.grant, server}
+	state, err := e.state(ctx, g, client, &e.binding)
+	if err != nil || !state.Claims.Active {
+		return invite.ErrDenied
+	}
+	payloadGate, err := streamgate.NewWithSigner(g.issuer, target, controller, g.signer, state, server, g.clock)
+	if err != nil || !e.watch.AttachGate(payloadGate) {
+		if payloadGate != nil {
+			payloadGate.Deny()
+		}
+		return invite.ErrDenied
+	}
+	e.peers = &SessionPeers{target: append(ed25519.PublicKey(nil), target...), controller: append(ed25519.PublicKey(nil), controller...), binding: e.binding, grant: g.grant, server: server}
+	e.peers.runtime = &SessionRuntime{peers: e.peers, gate: payloadGate, node: enrolledSessionServer(e.node)}
 	return nil
 }

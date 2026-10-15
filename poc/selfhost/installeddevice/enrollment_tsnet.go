@@ -54,7 +54,8 @@ type tsnetEnrollment struct {
 	proof   *nodeproof.ProofOwner
 }
 
-func (n *tsnetEnrollment) PublicKey() string { return n.key }
+func (n *tsnetEnrollment) PublicKey() string            { return n.key }
+func (n *tsnetEnrollment) sessionServer() *tsnet.Server { return n.node }
 
 func (n *tsnetEnrollment) Register(ctx context.Context, secret string) (string, string, error) {
 	if n.started || ctx.Err() != nil || secret == "" || len(secret) > 256 {

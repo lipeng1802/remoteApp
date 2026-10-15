@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/streamgate"
 )
 
 // enrollmentWatch is terminal after its first ACTIVE state. Before activation
@@ -17,13 +18,44 @@ type enrollmentWatch struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	once   sync.Once
+	mu     sync.Mutex
 	fault  atomic.Bool
+	gate   *streamgate.Gate
 }
 
 func (w *enrollmentWatch) Done() <-chan struct{} { return w.done }
 func (w *enrollmentWatch) Faulted() bool         { return w.fault.Load() }
 func (w *enrollmentWatch) Stop() {
 	w.once.Do(func() { w.cancel(); <-w.done })
+}
+func (w *enrollmentWatch) AttachGate(g *streamgate.Gate) bool {
+	if g == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	select {
+	case <-w.done:
+		return false
+	default:
+	}
+	if w.fault.Load() || w.gate != nil {
+		return false
+	}
+	w.gate = g
+	return true
+}
+func (w *enrollmentWatch) updateGate(state invite.NetworkState) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.gate == nil || w.gate.Update(state)
+}
+func (w *enrollmentWatch) denyGate() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.gate != nil {
+		w.gate.Deny()
+	}
 }
 
 func (e *enrollment) ownBinding(g *authorizationGate, b invite.NetworkBinding) bool {
@@ -103,6 +135,7 @@ func (e *enrollment) startWatch(ctx context.Context, g *authorizationGate, clien
 	e.watch = w
 	go func() {
 		defer close(w.done)
+		defer w.denyGate()
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -111,7 +144,7 @@ func (e *enrollment) startWatch(ctx context.Context, g *authorizationGate, clien
 				return
 			case <-ticker.C:
 				state, err := e.state(life, g, client, &binding)
-				if err != nil || !state.Claims.Active {
+				if err != nil || !state.Claims.Active || !w.updateGate(state) {
 					w.fault.Store(true)
 					return
 				}

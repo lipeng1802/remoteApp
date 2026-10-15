@@ -5,6 +5,7 @@ import (
 
 	"remoteapp.local/selfhost-poc/enrollmentstore"
 	"remoteapp.local/selfhost-poc/invite"
+	"tailscale.com/tsnet"
 )
 
 // NativeEnrollmentFactory only reopens an explicitly provisioned fixed OS
@@ -59,6 +60,12 @@ type nativeEnrollment struct {
 }
 
 func (n *nativeEnrollment) PublicKey() string { return n.node.PublicKey() }
+func (n *nativeEnrollment) sessionServer() *tsnet.Server {
+	if node, ok := n.node.(sessionEnrollmentNode); ok {
+		return node.sessionServer()
+	}
+	return nil
+}
 func (n *nativeEnrollment) Register(ctx context.Context, secret string) (string, string, error) {
 	if n.store.Check() != nil || n.node.PublicKey() != n.key {
 		return "", "", invite.ErrDenied
