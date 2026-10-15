@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r33 开始切片3的[持续授权桥接](poc/selfhost/public-server/CONTINUOUS_AUTHORIZATION.md)：新增显式`WatchedEnrollmentRunner`，自主enroll/proof/bind后先在12秒内等待双方策略ACTIVE，首次ACTIVE后固定binding并持续刷新签名state；inactive、撤销/到期、binding/身份变化或请求失败永久fault，退出顺序为watch→proof→SDK→signer实际join。5组新回归及相关6包race/双平台vet通过。尚未接正式入口或双实际节点，未作真实零规则/旧连接拒绝，切片3未完成；Windows 1/2验收仍待，4未启用。
+
 r32 继续收口1/2的不依赖Windows部分：原生联合验收在helper实际join/删除回执后，再以native TEST属性只读确认profile命名空间为空；Mac同scope连续两轮真实Keychain创建/重开/清理通过。预发布维护operator把READY/STOPPED绑定当前boot、PID与ExecStart单调时间，新增显式finish-resume与verify-restored、中途失败/基线变化/candidate仍live门禁；18项operator及全部22项Python回归、相关9包race和双平台vet通过。服务器仅只读确认现运行服务具备所需systemd属性及当前READY回执，未上传/重启/维护；Windows仍关机待r31预检和真实联合验收，3/4未开始。
 
 r31 [Windows 1/2 新版验收准备](poc/selfhost/public-server/WINDOWS_ENROLLMENT_PREFLIGHT.md)：已构建独立单窗口预检包，合并最新原生存储/权限、OS签名本机HTTPS与真实SDK取消/join检查；另补齐联合入口的Windows helper/构建支持及严格包清单。Windows关机，只有构建证据，原生执行与真实服务器注册/持有证明绑定仍待；未联系Windows/服务器，3/4保持暂停。

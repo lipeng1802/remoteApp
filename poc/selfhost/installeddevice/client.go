@@ -60,22 +60,29 @@ func validProvision(r Request) bool {
 // current profile and monotonic lifetime. The output is a trusted private pipe,
 // not a log or public peer interface; device results can contain invite/grant.
 func Runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error) clientowner.Runner {
-	return runner(release, open, commands, output, nil, false)
+	return runner(release, open, commands, output, nil, false, false)
 }
 
 // EnrollmentRunner adds a trusted internal node owner, not an IPC-selected path
 // or credential. The compiled entry intentionally remains Runner until native
 // node-storage ownership and recovery provisioning are installed and verified.
 func EnrollmentRunner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory) clientowner.Runner {
-	return runner(release, open, commands, output, factory, false)
+	return runner(release, open, commands, output, factory, false, false)
 }
 
 // Trusted opt-in composition only; ordinary installed entry stays disabled.
 func BoundEnrollmentRunner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory) clientowner.Runner {
-	return runner(release, open, commands, output, factory, true)
+	return runner(release, open, commands, output, factory, true, false)
 }
 
-func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding bool) clientowner.Runner {
+// WatchedEnrollmentRunner additionally requires a first issuer-signed ACTIVE
+// state after bind, then owns a terminal continuous watch. It is the opt-in
+// bridge toward payload sessions; no binding, node or secret leaves the child.
+func WatchedEnrollmentRunner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory) clientowner.Runner {
+	return runner(release, open, commands, output, factory, true, true)
+}
+
+func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool) clientowner.Runner {
 	return func(ctx context.Context, profile trustprofile.Profile) (result error) {
 		if ctx.Err() != nil || open == nil || output == nil || commands == nil {
 			return trustprofile.ErrTrust
@@ -108,6 +115,7 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 			}
 		}()
 		var expires <-chan time.Time
+		var watchDone <-chan struct{}
 		var expiry *time.Timer
 		defer func() {
 			if expiry != nil {
@@ -119,6 +127,11 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		}
 		for {
 			select {
+			case <-watchDone:
+				if ctx.Err() == context.Canceled {
+					return nil
+				}
+				return trustprofile.ErrTrust
 			case <-expires:
 				return trustprofile.ErrTrust
 			case <-ctx.Done():
@@ -141,6 +154,12 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 					reply, err := enrolled.start(ctx, gate, client, factory, request.Network.Grant)
 					if err == nil && binding {
 						reply, err = enrolled.bind(ctx, gate, client)
+					}
+					if err == nil && watched {
+						reply, err = enrolled.startWatch(ctx, gate, client)
+						if err == nil {
+							watchDone = enrolled.watch.Done()
+						}
 					}
 					if outErr := output(reply); outErr != nil {
 						return outErr

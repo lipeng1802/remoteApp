@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r33 用户允许暂时开始3/4，先完成3A持续授权桥接
+
+用户说明Windows仍无法开机，允许暂时开始3、4。Windows r31预检与真实1/2联合验收继续列为待办，不能标记PASS；本轮无Windows/服务器/服务/策略/Store/端口动作，也未进入新的维护窗口。
+
+新增installeddevice.WatchedEnrollmentRunner显式opt-in；旧Runner/EnrollmentRunner/BoundEnrollmentRunner及正式compiled entry不变。内部仍只接受parent grant，依次真实enroll→verifier permit/proof→bind；之后startWatch最多12秒等待首次ACTIVE。预激活只允许issuer签名、当前grant、当前OS signer和本机node/IP严格匹配的state，可短暂接受inactive等待peer bind但不开payload。首次ACTIVE后固定完整binding，500ms签名HTTPS刷新；inactive、binding替换、签名/混字段/请求故障、设备/节点变化或绝对到期均终止，不自动恢复/re-enroll/换scope。固定输出仅network_watch/passed/active，无grant/binding/node/IP/ticket/credential。
+
+enrollment.closeJoined现在先Stop并join watch，再取消proof，最后SDK CloseJoined；runner的显式stop/cancel正常join，deadline或watch Done返回trust fault，外层owner据此保持故障证据。server现有Supervisor/Reconcile仍独占动态规则；客户端ACTIVE不是零规则已从真实内核移除的证据。真实3验收需两个actual native节点同时bind/watch，撤销/过期后同时确认两端owner join、服务端DenyAll/零规则及旧overlay连接失败。
+
+新增测试：一次inactive→ACTIVE后再inactive终止；ACTIVE后binding变化终止；显式stop无fault；binding/signature/mixed/transport/identity/no-proof前置拒绝；inactive激活等待受caller deadline限制。结果不泄漏私有字段。installeddevice/invite/broker/streamgate/clientruntime/nodeproof六包race PASS，Windows installeddevice/autonomous及Linux installeddevice/candidate vet PASS。
+
+当前没有真实入口调用WatchedEnrollmentRunner：r30 claimant仅memory signer无第二SDK，无法产生双端ACTIVE。下一步3B构建双native borrower协调/fixture，让两端各自自主enroll/bind/watch，并将watch内部安全借给已有clientruntime product Gate；先做本机受控组合，再等可用双机做真实网络拒绝。4的TLS/HMAC组件虽已有旧路径，不得在watch前启动，也未在新自主入口启用。详见public-server/CONTINUOUS_AUTHORIZATION.md。本地提交，不自动推送。
+
 ## 2026-10-14 r32 继续1/2，原生清理空命名空间与维护恢复身份门禁
 
 Windows仍关机，r31包未执行/不计PASS；3持续watch/撤销/实际拒绝及4产品TLS/HMAC继续暂停。本轮没有上传、停止/启动服务、维护窗口、Store/策略/端口或Windows动作。

@@ -29,6 +29,7 @@ type enrollment struct {
 	ticket, key, address string
 	attempted            bool
 	proofCancel          context.CancelFunc
+	watch                *enrollmentWatch
 }
 
 type enrollmentResult struct {
@@ -107,6 +108,9 @@ func (e *enrollment) start(ctx context.Context, g *authorizationGate, client net
 }
 
 func (e *enrollment) closeJoined() error {
+	if e.watch != nil {
+		e.watch.Stop()
+	}
 	if e.proofCancel != nil {
 		e.proofCancel()
 	}
