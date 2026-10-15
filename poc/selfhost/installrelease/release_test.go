@@ -109,6 +109,27 @@ func TestSignedImmutableReleaseActivationAndUpgrade(t *testing.T) {
 	}
 }
 
+func TestActivationScopeIsCanonicalStableAndSeparated(t *testing.T) {
+	input := "0123456789abcdef0123456789abcdef"
+	first, err := Scope(input)
+	if err != nil || len(first) != 32 || first == input {
+		t.Fatal("invalid activation scope", first, err)
+	}
+	second, err := Scope(input)
+	if err != nil || second != first {
+		t.Fatal("unstable activation scope", second, err)
+	}
+	other, err := Scope("1123456789abcdef0123456789abcdef")
+	if err != nil || other == first {
+		t.Fatal("scope collision", other, err)
+	}
+	for _, bad := range []string{"", "ABCDEF0123456789ABCDEF0123456789", "0123", input + "00"} {
+		if _, err = Scope(bad); err == nil {
+			t.Fatal("invalid release scope accepted", bad)
+		}
+	}
+}
+
 func TestManifestAndActivationFailuresStayClosed(t *testing.T) {
 	public, private, _ := ed25519.GenerateKey(rand.Reader)
 	otherPublic, _, _ := ed25519.GenerateKey(rand.Reader)

@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"time"
 
+	"remoteapp.local/selfhost-poc/installrelease"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
@@ -65,6 +66,21 @@ func target(target string) (suffix, cgo, arch string, err error) {
 	default:
 		return "", "", "", os.ErrInvalid
 	}
+}
+
+type releaseLayout struct {
+	V1Stage     string `json:"v1_stage"`
+	V1Directory string `json:"v1_directory"`
+	V2Stage     string `json:"v2_stage"`
+	V2Directory string `json:"v2_directory"`
+}
+
+func copyFile(source, destination string) error {
+	raw, err := read(source)
+	if err != nil {
+		return err
+	}
+	return write(destination, raw, 0700)
 }
 
 func run() error {
@@ -156,9 +172,79 @@ func run() error {
 	if err = compile("v1", spec); err != nil {
 		return err
 	}
+	spec1 := spec
 	spec.MinimumEpoch, spec.Bundled = 2, p2
 	if err = compile("v2", spec); err != nil {
 		return err
+	}
+	if err = os.Mkdir(filepath.Join(dest, "releases"), 0700); err != nil {
+		return err
+	}
+	makeRelease := func(version string, current trustinstall.Specification, epoch uint64) (string, installrelease.Verified, error) {
+		var stageNonce [16]byte
+		if _, err := rand.Read(stageNonce[:]); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		stageName := ".staging-" + hex.EncodeToString(stageNonce[:])
+		stage := filepath.Join(dest, "releases", stageName)
+		if err := os.Mkdir(stage, 0700); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		fixed := map[string]string{
+			"autonomous-enrollment-install" + suffix: "autonomous-enrollment-install-" + version + suffix,
+			"identity-vault" + suffix:                "identity-vault" + suffix,
+			"installed-autonomous-product" + suffix:  "installed-autonomous-product-" + version + suffix,
+			"tls-product" + suffix:                   "tls-product" + suffix,
+			"trust-install" + suffix:                 "trust-install-" + version + suffix,
+			"trust-journal" + suffix:                 "trust-journal" + suffix,
+		}
+		for destination, source := range fixed {
+			if err := copyFile(filepath.Join(dest, source), filepath.Join(stage, destination)); err != nil {
+				return "", installrelease.Verified{}, err
+			}
+		}
+		manifest, err := installrelease.BuildManifest(stage, current.Channel, goos, epoch)
+		if err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		raw, err := installrelease.SignForBuild(releaseKey, manifest)
+		if err != nil || write(filepath.Join(stage, installrelease.ManifestName), raw, 0600) != nil {
+			return "", installrelease.Verified{}, os.ErrInvalid
+		}
+		verified, err := installrelease.VerifyDirectory(stage, root, current.Channel, goos, current.MinimumEpoch)
+		return stageName, verified, err
+	}
+	stage1, verified1, err := makeRelease("v1", spec1, 1)
+	if err != nil {
+		return err
+	}
+	stage2, verified2, err := makeRelease("v2", spec, 2)
+	if err != nil {
+		return err
+	}
+	name1, err := installrelease.ReleaseDirectoryName(verified1)
+	if err != nil {
+		return err
+	}
+	name2, err := installrelease.ReleaseDirectoryName(verified2)
+	if err != nil {
+		return err
+	}
+	if err = trustinstall.CompileInstalledReleaseManager(ctx, goexe, module, goos, filepath.Join(dest, "release-manager-v1"+suffix), spec1, stage1, verified1.ManifestDigest, 1, now); err != nil {
+		return err
+	}
+	if err = trustinstall.CompileInstalledReleaseManager(ctx, goexe, module, goos, filepath.Join(dest, "release-manager-v2"+suffix), spec, stage2, verified2.ManifestDigest, 2, now); err != nil {
+		return err
+	}
+	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(dest, "release-launcher-v1"+suffix), spec1, now); err != nil {
+		return err
+	}
+	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(dest, "release-launcher-v2"+suffix), spec, now); err != nil {
+		return err
+	}
+	layout, err := json.Marshal(releaseLayout{V1Stage: stage1, V1Directory: name1, V2Stage: stage2, V2Directory: name2})
+	if err != nil || write(filepath.Join(dest, "release-layout.json"), layout, 0600) != nil {
+		return os.ErrInvalid
 	}
 	old, err := json.Marshal(p1)
 	if err != nil || write(filepath.Join(dest, "old-profile.json"), old, 0600) != nil {
@@ -171,20 +257,27 @@ func run() error {
 		return os.ErrInvalid
 	}
 	hashes := map[string]string{}
-	entries, err := os.ReadDir(dest)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+	err = filepath.WalkDir(dest, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.Type()&os.ModeSymlink != 0 {
 			return os.ErrInvalid
 		}
-		raw, err := read(filepath.Join(dest, entry.Name()))
+		if entry.IsDir() {
+			return nil
+		}
+		raw, err := read(path)
+		if err != nil {
+			return err
+		}
+		name, err := filepath.Rel(dest, path)
 		if err != nil {
 			return err
 		}
 		h := sha256.Sum256(raw)
-		hashes[entry.Name()] = hex.EncodeToString(h[:])
+		hashes[filepath.ToSlash(name)] = hex.EncodeToString(h[:])
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	manifest, err := json.Marshal(hashes)
 	if err != nil {

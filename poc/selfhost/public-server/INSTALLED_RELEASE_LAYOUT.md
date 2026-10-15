@@ -33,13 +33,19 @@ active记录只包含version/layout/channel/platform/epoch/版本目录名/manif
 
 启动器不得仅信任active指针：`OpenActive`会重新验签manifest并计算全部文件哈希，然后才返回可执行目录。
 
+## 固定管理器与启动器
+
+`installed-release-manager`的可变输入只是操作名；一个构建产物只能处理一个编译固定的隐藏候选名、manifest摘要和epoch。它从自身目录固定定位`trust-journal`/`releases`，先核验已安装trust，再晋升候选并提交activation。只有候选确实不存在时，它才能按编译固定摘要重开已晋升目录，用于处理“已rename但activation未确认”的重试；存在但损坏的staging不会回退到最终目录。
+
+`installed-release-launcher`不接受参数，不读sidecar root/path。它重开编译固定的trust和活动记录，每次重验签manifest和六个文件，然后启动活动目录内固定名产品并实际等待它退出。因此旧launcher不持有“回到旧目录”的运行时开关。
+
 ## 已验证与未验证
 
-Go测试覆盖错根/channel/floor、非规范包装、额外/缺失/篡改文件、commit失败、commit已落盘但回执不确定、降级拒绝、旧版本保留与active文件重验。macOS真实Keychain TEST journal已完成epoch1首次激活、关闭重开、epoch2 CAS升级、再次重开及精确清理。Windows x64只有交叉编译，尚未在Credential Manager运行。
+Go测试覆盖错根/channel/floor、非规范包装、额外/缺失/篡改文件、commit失败、commit已落盘但回执不确定、降级拒绝、旧版本保留与active文件重验。macOS真实Keychain TEST组合已完成v1签名staging晋升/首次激活、身份安装、v2 trust与activation升级、旧/新manager读当前epoch、回滚拒绝、旧/新launcher执行当前产品拒绝探针及TEST清理。Windows x64只有交叉编译，尚未在Credential Manager运行。
 
 未完成的安装产品工作包括：
 
-- 用compiled release根和固定activation scope接入真实updater/launcher；
+- 把已验证的管理器/launcher放入受保护的真实安装根，并由正式installer/updater调用；
 - 安装目录所有者、ACL、硬链接/重解析竞争及跨文件系统拒绝验收；
 - macOS Developer ID/公证和Windows Authenticode的真实证书链验证；
 - 连接现有DMG/Inno、安装/升级/回退UI与卸载保留策略；

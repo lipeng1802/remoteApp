@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r45 固定release管理器与无参启动器
+
+用户要求继续下一任务。Windows仍关机，本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或现有DMG/Inno。r40–r44五个本地提交尚未推送；本节形成新的独立本地提交。
+
+新增`installed-release-manager`：运行时只允许`install|upgrade|status|cleanup-test`，发布root/channel/minimum epoch、摘要固定helper、唯一`.staging-<nonce>`、期望manifest digest/epoch全部在可执行文件中编译固定。隐藏候选存在时必须完整验签并晋升；只有staging确实不存在时才允许按固定摘要重开已晋升目录，损坏候选不会被当作重试忽略。activation scope从稳定release scope用独立域分离派生，通过同一摘要固定原生helper保存CAS记录。
+
+新增`installed-release-launcher`：不接受argv或runtime root/path，只从自身目录定位helper与`releases`，先核验已安装签名trust，再打开activation并重验签manifest/六个文件，最后只启动活动目录内固定名`installed-autonomous-product`并实际等待退出。旧启动器在epoch2激活后也只能打开epoch2，不能退回自身编译时版本。
+
+`autonomous-upgrade-validation-build`已扩展为严格隔离验收包：一次性私钥只在builder内存，生成两个完整签名staging、两个固定管理器与两个无参启动器，递归SHA-256清单包括staging全部文件。macOS当前源码的CGO Keychain journal和ad-hoc签名identity vault真实验收PASS：v1首次激活、身份安装，v2签名trust升级、v2 CAS激活，旧/新manager都只读epoch2，旧manager回滚拒绝，旧/新launcher都执行当前产品的无效首帧拒绝路径，身份跨升级不变，TEST状态清理。固定成功输出为`VALIDATION PASSED: signed immutable releases + fixed candidate managers...`。
+
+重要边界：启动器验收使用产品的无效首帧拒绝路径，证明选中/执行/等待的是当前活动产品，但不启完整产品会话验收。未完成受保护安装根owner/ACL/硬链接或reparse竞争、Developer ID/公证、Authenticode、DMG/Inno接线或Windows Credential Manager实机。下一个不依赖Windows的切片应先做受保护install-root的同文件系统/符号链接/硬链接边界与安装器staging交接，仍不直接替换旧产品包。
+
 ## 2026-10-15 r44 签名 release 布局与原子激活核心
 
 用户要求继续任务。Windows仍关机，本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或安装。r40–r43四个本地提交尚未推送；本节继续形成独立本地提交。

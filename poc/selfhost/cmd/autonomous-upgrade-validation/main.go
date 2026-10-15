@@ -28,6 +28,13 @@ type reply struct {
 	Reason          string `json:"reason"`
 }
 
+type releaseLayout struct {
+	V1Stage     string `json:"v1_stage"`
+	V1Directory string `json:"v1_directory"`
+	V2Stage     string `json:"v2_stage"`
+	V2Directory string `json:"v2_directory"`
+}
+
 func command(path string, input []byte, args ...string) (reply, error) {
 	cmd := exec.Command(path, args...)
 	if input != nil {
@@ -71,9 +78,9 @@ func read(path string, limit int64) ([]byte, error) {
 	return raw, nil
 }
 
-func product(path string) error {
+func productReject(path string) error {
 	cmd := exec.Command(path)
-	cmd.Stdin = bytes.NewBufferString("{\"Op\":\"open\"}\n{\"Op\":\"stop\"}\n")
+	cmd.Stdin = bytes.NewBufferString("{\"Op\":\"invalid\"}\n")
 	var output bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &output, &output
 	if err := cmd.Start(); err != nil {
@@ -83,8 +90,8 @@ func product(path string) error {
 	go func() { done <- cmd.Wait() }()
 	select {
 	case err := <-done:
-		if err != nil {
-			return err
+		if err == nil {
+			return fmt.Errorf("invalid product request accepted")
 		}
 	case <-time.After(20 * time.Second):
 		_ = cmd.Process.Kill()
@@ -92,10 +99,10 @@ func product(path string) error {
 		return fmt.Errorf("product timeout")
 	}
 	reader := privatepipe.NewBoundedReader(bytes.NewReader(output.Bytes()), 4096)
-	var ready, closed reply
+	var failed reply
 	var extra any
-	if reader.Read(&ready) != nil || ready.Status != "ready" || reader.Read(&closed) != nil || closed.Status != "closed" || reader.Read(&extra) != io.EOF {
-		return fmt.Errorf("invalid product lifecycle")
+	if reader.Read(&failed) != nil || failed.Status != "failed" || reader.Read(&extra) != io.EOF {
+		return fmt.Errorf("invalid product rejection")
 	}
 	return nil
 }
@@ -121,12 +128,42 @@ func run() (result error) {
 	if len(manifest) > 8192 || json.Unmarshal(manifest, &hashes) != nil {
 		return fmt.Errorf("invalid manifest")
 	}
+	layoutRaw, err := read(filepath.Join(dir, "release-layout.json"), 4096)
+	var layout releaseLayout
+	if err != nil || json.Unmarshal(layoutRaw, &layout) != nil {
+		return fmt.Errorf("invalid release layout")
+	}
+	validStage := func(value string) bool {
+		if len(value) != len(".staging-")+32 || value[:len(".staging-")] != ".staging-" {
+			return false
+		}
+		raw, err := hex.DecodeString(value[len(".staging-"):])
+		return err == nil && len(raw) == 16 && hex.EncodeToString(raw) == value[len(".staging-"):]
+	}
+	validDirectory := func(value string) bool {
+		if len(value) != 16+1+16 || value[16] != '-' {
+			return false
+		}
+		raw, err := hex.DecodeString(value[:16] + value[17:])
+		return err == nil && len(raw) == 16 && hex.EncodeToString(raw) == value[:16]+value[17:]
+	}
+	if !validStage(layout.V1Stage) || !validStage(layout.V2Stage) || layout.V1Stage == layout.V2Stage || !validDirectory(layout.V1Directory) || !validDirectory(layout.V2Directory) || layout.V1Directory == layout.V2Directory {
+		return fmt.Errorf("invalid release layout values")
+	}
 	expected := []string{
 		"trust-journal" + suffix, "identity-vault" + suffix, "tls-product" + suffix,
 		"trust-install-v1" + suffix, "trust-install-v2" + suffix,
 		"autonomous-enrollment-install-v1" + suffix, "autonomous-enrollment-install-v2" + suffix,
 		"installed-autonomous-product-v1" + suffix, "installed-autonomous-product-v2" + suffix,
-		"autonomous-upgrade-validation" + suffix, "old-profile.json",
+		"release-manager-v1" + suffix, "release-manager-v2" + suffix,
+		"release-launcher-v1" + suffix, "release-launcher-v2" + suffix,
+		"autonomous-upgrade-validation" + suffix, "old-profile.json", "release-layout.json",
+	}
+	stageFiles := []string{"autonomous-enrollment-install" + suffix, "identity-vault" + suffix, "installed-autonomous-product" + suffix, "tls-product" + suffix, "trust-install" + suffix, "trust-journal" + suffix, "release-manifest.json"}
+	for _, stage := range []string{layout.V1Stage, layout.V2Stage} {
+		for _, name := range stageFiles {
+			expected = append(expected, filepath.ToSlash(filepath.Join("releases", stage, name)))
+		}
 	}
 	if len(hashes) != len(expected) {
 		return fmt.Errorf("incomplete manifest")
@@ -136,14 +173,49 @@ func run() (result error) {
 		if !ok {
 			return fmt.Errorf("missing fixture hash")
 		}
-		raw, err := read(filepath.Join(dir, name), 100<<20)
+		raw, err := read(filepath.Join(dir, filepath.FromSlash(name)), 100<<20)
 		h := sha256.Sum256(raw)
 		if err != nil || hex.EncodeToString(h[:]) != want {
 			return fmt.Errorf("fixture hash mismatch")
 		}
 	}
+	allowedDirectories := map[string]bool{
+		".": true, "releases": true,
+		filepath.ToSlash(filepath.Join("releases", layout.V1Stage)): true,
+		filepath.ToSlash(filepath.Join("releases", layout.V2Stage)): true,
+	}
+	actual := 0
+	if err = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("invalid bundle entry")
+		}
+		name, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			return relErr
+		}
+		name = filepath.ToSlash(name)
+		if entry.IsDir() {
+			if !allowedDirectories[name] {
+				return fmt.Errorf("unexpected bundle directory")
+			}
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return fmt.Errorf("invalid bundle file")
+		}
+		if name == "SHA256.json" {
+			return nil
+		}
+		if _, ok := hashes[name]; !ok {
+			return fmt.Errorf("unexpected bundle file")
+		}
+		actual++
+		return nil
+	}); err != nil || actual != len(hashes) {
+		return fmt.Errorf("bundle inventory mismatch")
+	}
 	tool := func(name string) string { return filepath.Join(dir, name+suffix) }
-	trustCreated, autonomousCreated, reservationCreated := false, false, false
+	trustCreated, autonomousCreated, reservationCreated, activationCreated := false, false, false, false
 	defer func() {
 		if reservationCreated {
 			if value, err := command(tool("autonomous-enrollment-install-v2"), nil, "cleanup-reservation-test"); err != nil || value.Status != "cleaned" {
@@ -159,6 +231,13 @@ func run() (result error) {
 				}
 			}
 		}
+		if activationCreated {
+			if value, err := command(tool("release-manager-v2"), nil, "cleanup-test"); err != nil || value.Status != "cleaned" {
+				if result == nil {
+					result = fmt.Errorf("activation cleanup")
+				}
+			}
+		}
 		if trustCreated {
 			if value, err := command(tool("trust-install-v1"), nil, "cleanup-test"); err != nil || value.Status != "usable" {
 				if result == nil {
@@ -170,7 +249,7 @@ func run() (result error) {
 	positive := func(name string, epoch uint64, args ...string) (reply, error) {
 		value, err := command(tool(name), nil, args...)
 		if err != nil || value.Status != "usable" || (epoch != 0 && value.Epoch != epoch) {
-			return value, fmt.Errorf("positive command rejected")
+			return value, fmt.Errorf("positive command rejected name=%s op=%v status=%s epoch=%d reason=%s exit=%v", name, args, value.Status, value.Epoch, value.Reason, err)
 		}
 		return value, nil
 	}
@@ -184,7 +263,7 @@ func run() (result error) {
 	status := func(name, wantStatus, wantStage string, epoch uint64) (reply, error) {
 		value, err := command(tool(name), nil, "status")
 		if err != nil || value.Status != wantStatus || value.Stage != wantStage || value.Diagnostic != 1 || value.TrustEpoch != epoch || value.PublicKey != "" {
-			return value, fmt.Errorf("invalid minimal diagnostic")
+			return value, fmt.Errorf("invalid minimal diagnostic status=%s stage=%s diagnostic=%d trust_epoch=%d reason=%s exit=%v", value.Status, value.Stage, value.Diagnostic, value.TrustEpoch, value.Reason, err)
 		}
 		return value, nil
 	}
@@ -192,8 +271,15 @@ func run() (result error) {
 		return err
 	}
 	trustCreated = true
+	if value, managerErr := command(tool("release-manager-v1"), nil, "install"); managerErr != nil || value.Status != "active" || value.Epoch != 1 {
+		return fmt.Errorf("first release activation")
+	}
+	activationCreated = true
+	if value, managerErr := command(tool("release-manager-v1"), nil, "status"); managerErr != nil || value.Status != "active" || value.Epoch != 1 {
+		return fmt.Errorf("first release status")
+	}
 	if _, statusErr := status("autonomous-enrollment-install-v1", "not_installed", "", 1); statusErr != nil {
-		return fmt.Errorf("fresh status")
+		return fmt.Errorf("fresh status: %w", statusErr)
 	}
 	first, err := positive("autonomous-enrollment-install-v1", 0, "initialize")
 	if err != nil || len(first.PublicKey) != 64 || first.EnrollmentState != "idle" {
@@ -215,6 +301,17 @@ func run() (result error) {
 	if _, err = positive("trust-install-v2", 2, "upgrade"); err != nil {
 		return err
 	}
+	if value, managerErr := command(tool("release-manager-v2"), nil, "upgrade"); managerErr != nil || value.Status != "active" || value.Epoch != 2 {
+		return fmt.Errorf("release upgrade activation")
+	}
+	for _, manager := range []string{"release-manager-v1", "release-manager-v2"} {
+		if value, managerErr := command(tool(manager), nil, "status"); managerErr != nil || value.Status != "active" || value.Epoch != 2 {
+			return fmt.Errorf("release status after upgrade")
+		}
+	}
+	if value, managerErr := command(tool("release-manager-v1"), nil, "upgrade"); managerErr == nil || value.Status != "failed" {
+		return fmt.Errorf("release rollback accepted")
+	}
 	for _, name := range []string{"autonomous-enrollment-install-v2", "autonomous-enrollment-install-v1"} {
 		value, err := positive(name, 0, "inspect")
 		if err != nil || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
@@ -234,16 +331,16 @@ func run() (result error) {
 	if _, err = positive("trust-install-v2", 2, "inspect"); err != nil {
 		return err
 	}
-	if err = product(tool("installed-autonomous-product-v2")); err != nil {
-		return err
-	}
-	if err = product(tool("installed-autonomous-product-v1")); err != nil {
-		return err
-	}
 	if value, cleanupErr := command(tool("autonomous-enrollment-install-v2"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "cleaned" {
-		return fmt.Errorf("autonomous cleanup")
+		return fmt.Errorf("autonomous cleanup status=%s reason=%s exit=%v", value.Status, value.Reason, cleanupErr)
 	}
 	autonomousCreated = false
+	if err = productReject(tool("release-launcher-v2")); err != nil {
+		return err
+	}
+	if err = productReject(tool("release-launcher-v1")); err != nil {
+		return err
+	}
 	if value, reserveErr := command(tool("autonomous-enrollment-install-v2"), nil, "reserve-test"); reserveErr != nil || value.Status != "maintenance_required" || value.Stage != "binding_pending" {
 		return fmt.Errorf("pending reservation")
 	}
@@ -266,8 +363,8 @@ func run() (result error) {
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Println("VALIDATION FAILED: autonomous native upgrade lifecycle")
+		fmt.Println("VALIDATION FAILED: autonomous native upgrade lifecycle:", err)
 		os.Exit(1)
 	}
-	fmt.Println("VALIDATION PASSED: minimal diagnostic omits device identity and binds every state to the verified signed trust epoch; native autonomous identity survives upgrade; interrupted TEST install stays closed until exact cleanup. NOT cross-machine Headscale, GUI or signed installer acceptance.")
+	fmt.Println("VALIDATION PASSED: signed immutable releases + fixed candidate managers + native CAS activation epoch 1 to 2 + old/new no-argument launchers execute the active product rejection path; native identity survives upgrade and TEST state is cleaned. NOT full product session, protected install root, GUI, signed installer or Windows acceptance.")
 }

@@ -20,3 +20,23 @@ func TestCompileAutonomousProductRejectsMissingOrNoncanonicalPinBeforeBuild(t *t
 		}
 	}
 }
+
+func TestCompileInstalledReleaseManagerRejectsRuntimeSelectableCandidate(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "entry")
+	s := Specification{MinimumEpoch: 2}
+	for _, fixture := range []struct {
+		staging string
+		digest  string
+		epoch   uint64
+	}{
+		{"candidate", strings.Repeat("1", 64), 2},
+		{".staging-" + strings.Repeat("A", 32), strings.Repeat("1", 64), 2},
+		{".staging-" + strings.Repeat("1", 32), strings.Repeat("A", 64), 2},
+		{".staging-" + strings.Repeat("1", 32), strings.Repeat("1", 64), 1},
+	} {
+		err := CompileInstalledReleaseManager(context.Background(), "/unused/go", "/unused/module", "darwin", dest, s, fixture.staging, fixture.digest, fixture.epoch, time.Now())
+		if !errors.Is(err, trustprofile.ErrTrust) {
+			t.Fatalf("invalid fixed candidate was not rejected: %v", err)
+		}
+	}
+}

@@ -2,12 +2,24 @@ package installrelease
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"path/filepath"
 
 	"remoteapp.local/selfhost-poc/privatepipe"
 )
+
+// Scope is stable across signed epochs in one compiled release channel and is
+// distinct from trust, identity, enrollment and autonomous binding records.
+func Scope(releaseScope string) (string, error) {
+	if !canonicalHex(releaseScope, 16) {
+		return "", ErrRelease
+	}
+	hash := sha256.Sum256([]byte("remoteapp-installed-release-activation-v1\n" + releaseScope))
+	return hex.EncodeToString(hash[:16]), nil
+}
 
 type Journal interface {
 	Load() ([]byte, error)

@@ -3,14 +3,58 @@ package trustinstall
 import (
 	"context"
 	"encoding/hex"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 
 	"remoteapp.local/selfhost-poc/trustprofile"
 	"time"
 )
+
+// CompileInstalledReleaseLauncher builds a no-argument launcher that derives
+// its activation namespace and release root solely from this compiled release.
+func CompileInstalledReleaseLauncher(ctx context.Context, goexe, module, target, dest string, s Specification, now time.Time) error {
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installed-release-launcher", "", now)
+}
+
+// CompileInstalledReleaseManager pins one hidden candidate name and signed
+// manifest digest. Runtime arguments can select install/upgrade/status only.
+func CompileInstalledReleaseManager(ctx context.Context, goexe, module, target, dest string, s Specification, staging, manifestDigest string, manifestEpoch uint64, now time.Time) error {
+	if len(staging) != len(".staging-")+32 || !strings.HasPrefix(staging, ".staging-") || !canonical(strings.TrimPrefix(staging, ".staging-"), 16) || !canonical(manifestDigest, 32) || manifestEpoch < s.MinimumEpoch || manifestEpoch > 1<<53-1 {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedStaging=" + staging + " -X main.embeddedManifestDigest=" + manifestDigest + " -X main.embeddedManifestEpoch=" + strconv.FormatUint(manifestEpoch, 10)
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installed-release-manager", extra, now)
+}
+
+func compileReleaseTool(ctx context.Context, goexe, module, target, dest string, s Specification, entry, extra string, now time.Time) error {
+	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
+		return trustprofile.ErrTrust
+	}
+	if _, err := os.Lstat(dest); !os.IsNotExist(err) {
+		return trustprofile.ErrTrust
+	}
+	encoded, err := EncodeForTrustedBuild(s, now)
+	if err != nil {
+		return err
+	}
+	arch, cgo := runtime.GOARCH, "0"
+	if target == "windows" {
+		arch = "amd64"
+	}
+	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags=-X main.embeddedRelease="+encoded+extra, "-o", dest, entry)
+	cmd.Dir = module
+	cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED="+cgo, "GOOS="+target, "GOARCH="+arch)
+	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	if cmd.Run() != nil {
+		return trustprofile.ErrTrust
+	}
+	return nil
+}
 
 // CompileSessionBridge is an explicit trusted build, using public release
 // material and a signer-binary digest. Runtime input cannot select either root
