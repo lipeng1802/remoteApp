@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r35 切片4A新自主watch后的会话生命周期桥
+
+Windows仍关机，本轮没有联系Windows或服务器。r31的1/2 Windows真实联合验收仍待；r34的本机Store/Backend/watch证据不变成真实Headscale拒绝证据。
+
+新增`SessionWork`和显式`WatchedEnrollmentRunnerWithSession`，不改旧Runner/EnrollmentRunner/BoundEnrollmentRunner/WatchedEnrollmentRunner和正式compiled entry。SessionWork仅为编译期可信in-process wiring，不能由parent frame选择；只获得context，不获得credential/ticket/binding/authority client/signer。active reply成功交付后才允许startSession；无watch、watch已fault、重复session均拒绝。
+
+enrollment.closeJoined现在严格先session cancel/实际join，再watch stop/join、proof cancel、node CloseJoined，外层最后signature helper join。Session在授权仍有效时提前退出使runner terminal fault；取消后返回context canceled/deadline可作正常join，其他真错误被closeJoined传播，不被stop/cancel隐藏。
+
+新4组测试覆盖无live watch/已fault禁止启动、watch fault先join session后关node、session提前错误可观测且仍join、cancel后真错误不得隐藏。installeddevice/clientruntime/streamgate race PASS，双平台vet待最终复跑。
+
+这仅是4A生命周期收口，尚未向SessionWork提供TLS descriptor/HMAC、overlay listener/dialer、真实Swift/C#产品进程或画面键鼠payload。下一步需在不暴露enrollment私有字段的前提下，构建可信内部session capability，并使用新watch/binding而不是旧`clientruntime.Config`/parent AuthKey。本轮本地提交，不自动推送。
+
 ## 2026-10-15 r34 切片3B Store/Backend/双watch撤销零规则本机闭环
 
 Windows仍无法开机，用户明确允许先开始3、4；r31预检和1/2 Windows真实联合验收继续待办，本轮没有联系/唤醒Windows，也没有服务器、端口、Store、策略或维护窗口动作。

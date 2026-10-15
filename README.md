@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r35 开始切片4A的[会话生命周期桥](poc/selfhost/public-server/CONTINUOUS_AUTHORIZATION.md)：新的显式opt-in runner只在同一自主enrollment watch首次ACTIVE后启动编译期可信session work；watch fault/到期/stop/cancel先取消并实际join session，再依次释放watch、proof、SDK、signer。提前退出或取消后真错误均锁闭owner。尚未接TLS descriptor/HMAC/overlay/payload，不是产品会话验收。
+
 r34 继续切片3B的本机跨层闭环：真实`invite.Store`双设备批准与签名撤销、真实`ProvisionBackend` enroll/bind/动态状态与两个持续watch串联；撤销后必须先同步投影零规则，再观察两端watch fault及owner资源join。策略driver/节点仍为本机fixture，不是真实Headscale内核拒绝或双机验收；Windows 1/2仍待开机执行，4的payload还未进入新自主入口。
 
 r33 开始切片3的[持续授权桥接](poc/selfhost/public-server/CONTINUOUS_AUTHORIZATION.md)：新增显式`WatchedEnrollmentRunner`，自主enroll/proof/bind后先在12秒内等待双方策略ACTIVE，首次ACTIVE后固定binding并持续刷新签名state；inactive、撤销/到期、binding/身份变化或请求失败永久fault，退出顺序为watch→proof→SDK→signer实际join。5组新回归及相关6包race/双平台vet通过。尚未接正式入口或双实际节点，未作真实零规则/旧连接拒绝，切片3未完成；Windows 1/2验收仍待，4未启用。

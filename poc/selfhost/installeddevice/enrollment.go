@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net/netip"
 	"strings"
 	"time"
@@ -24,12 +25,19 @@ type EnrollmentNode interface {
 
 type EnrollmentFactory func(context.Context) (EnrollmentNode, error)
 
+// SessionWork is trusted, compiled in-process wiring for a product session.
+// It receives only a lifetime: enrollment secrets, binding and the authority
+// client remain inside installeddevice. Returning while authorization is still
+// active is terminal rather than an implicit reconnect request.
+type SessionWork func(context.Context) error
+
 type enrollment struct {
 	node                 EnrollmentNode
 	ticket, key, address string
 	attempted            bool
 	proofCancel          context.CancelFunc
 	watch                *enrollmentWatch
+	session              *enrollmentSession
 }
 
 type enrollmentResult struct {
@@ -108,6 +116,13 @@ func (e *enrollment) start(ctx context.Context, g *authorizationGate, client net
 }
 
 func (e *enrollment) closeJoined() error {
+	var joinedErr error
+	if e.session != nil {
+		e.session.Stop()
+		if err := e.session.Err(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			joinedErr = err
+		}
+	}
 	if e.watch != nil {
 		e.watch.Stop()
 	}
@@ -115,9 +130,9 @@ func (e *enrollment) closeJoined() error {
 		e.proofCancel()
 	}
 	if e.node == nil {
-		return nil
+		return joinedErr
 	}
 	err := e.node.CloseJoined()
 	e.ticket, e.key, e.address = "", "", ""
-	return err
+	return errors.Join(joinedErr, err)
 }

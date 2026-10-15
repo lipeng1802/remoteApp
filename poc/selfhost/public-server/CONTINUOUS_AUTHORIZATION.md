@@ -54,3 +54,19 @@ signed revoke
 新增5组watch单元测试覆盖inactive→ACTIVE一次性转换、ACTIVE→inactive终止、binding替换、签名/混字段/传输/身份/no-proof拒绝、caller deadline和显式stop join；另有1组Store/Backend/双watch撤销零规则跨层测试。相关installeddevice/invite/broker/streamgate/clientruntime/nodeproof race以及Windows/Linux vet通过。
 
 当前没有正式入口调用`WatchedEnrollmentRunner`，r30 claimant只有memory signer而没有第二SDK。下一步构建双native borrower协调入口，让双方各自完成原生enroll/bind/watch，再在真实Headscale上同时验收撤销/过期后的零规则和旧连接拒绝。随后才能把watch借给切片4的产品TLS/HMAC/画面键鼠流。Windows关机期间可先完成协调代码与本机组合，但Windows实机和跨机网络验收仍待。
+
+## 切片4A 会话生命周期桥
+
+`WatchedEnrollmentRunnerWithSession`是不替换正式入口的显式opt-in组合。它只接受编译期可信的`SessionWork`，父进程帧不能传入argv、地址、密钥、binding或工作函数。`SessionWork`只获得生命周期context，enrollment credential、ticket、binding、authority client和签名器均不暴露。
+
+会话只能在同一watch首次ACTIVE且active结果已成功交付后启动。watch fault、grant到期、显式stop或owner cancel后的回收顺序固定为：
+
+```text
+session cancel + actual join
+  -> watch stop/join
+  -> proof cancel/join
+  -> node SDK close/join
+  -> OS signer join
+```
+
+会话在授权仍有效时提前返回会终止owner；显式取消后的真实会话错误不能被取消隐藏。当前桥只收口生命周期和join次序，还没有向它提供新自主路径的TLS descriptor、HMAC、overlay listener/dialer或画面键鼠payload；因此不是产品会话验收。
