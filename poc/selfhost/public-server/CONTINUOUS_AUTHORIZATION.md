@@ -127,3 +127,11 @@ binding固定release channel scope、vault scope、OS公钥及确定性enrollmen
 macOS Keychain按可执行程序访问控制；让安装器和产品各自直接读同一条目会导致密码提示或非交互阻塞。因此所有binding/enrollment journal访问均转交同一个固定摘要`trust-journal`，所有私钥访问均转交固定摘要`identity-vault`。helper路径和内容来自compiled release所在目录，不来自网络或parent。哈希固定只提供内容完整性，不声称抵抗恶意同用户替换竞态；正式发布仍需要签名、受保护安装目录和安装器权限验收。
 
 本机随机TEST channel已真实完成安装、跨进程inspect、产品`open/ready/stop/closed`及精确cleanup，证明该helper边界消除了跨程序Keychain阻塞。Windows只完成代码与交叉构建，尚需fresh实机安装、进程/系统重启、签名升级保持同一公钥与节点目录，以及故障后不回滚验收；之后才进行真实双机Headscale/产品TLS/HMAC/watch撤销联合验收。
+
+### 原生签名升级与防回滚
+
+`autonomous-upgrade-validation-build`创建完全隔离的TEST release：同一随机channel、一次性内存release key以及epoch 1/2两代compiled trust/installer/product入口。输出只包含公开profile和固定摘要程序；release私钥不会写入bundle。`autonomous-upgrade-validation`只认同目录固定文件集合及SHA-256清单，不接受operator提供root、scope、identity、profile或路径。
+
+macOS原生验证已证明：epoch2 compiled floor在提交升级前锁闭；可信升级提交后两代入口均读取同一OS公钥和idle enrollment；重复安装不能选择第二身份；旧bundled profile及显式旧profile都不能把epoch2降回epoch1；两代产品入口均能重开、正常停止并实际join；TEST identity/binding/enrollment/trust最终精确删除。该结果说明配置epoch升级不会替换r40安装绑定，也不会靠旧程序自动恢复旧配置。
+
+此验证在产品真正enroll/连接前发送stop，因此不声称跨机Headscale、overlay、TLS/HMAC或活会话升级已经通过；也没有覆盖真实OS掉电/写入不确定性、Windows Credential Manager、签名安装包及升级安装目录ACL。后续需分别验收显式故障维护和Windows fresh升级，再进入双机活会话升级。

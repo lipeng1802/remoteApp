@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r41 macOS 自主身份原生升级与防回滚闭环
+
+用户要求继续不依赖Windows的下一任务。Windows保持关机，本轮未联系Windows，也未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或正式安装。r40本地提交`3b409ce`仍未推送；本节继续形成独立本地提交。
+
+新增`autonomous-upgrade-validation-build`和`autonomous-upgrade-validation`两个TEST-only入口。builder在内存中生成一次性release签名根、同一随机channel的epoch 1/2 profile及公共bundle；私钥清零且从不落盘，不读取正式root/CA私钥。bundle同时编译两代`trust-install`、`autonomous-enrollment-install`与`installed-autonomous-product`，固定同一`trust-journal`、`identity-vault`和产品摘要，并生成严格固定文件集合的SHA-256清单。validator不接受argv、路径、scope、root或profile覆盖，只运行同目录已哈希固定的文件。
+
+本机macOS amd64真实原生验收PASS：epoch1 trust和自主身份首次安装；重复initialize拒绝；epoch2提高compiled floor后在升级前trust及自主inspect均拒绝；签名upgrade提交epoch2后，v2和v1安装入口均重开同一64位十六进制设备公钥且enrollment仍为idle；v1 bundled profile和显式old-profile对epoch2的降级均拒绝，journal仍为epoch2；v2及v1产品入口分别完成`open→ready→stop→closed`和exit0；最后精确清理identity、binding、enrollment及trust TEST状态。输出固定为`VALIDATION PASSED: native autonomous identity survives signed epoch upgrade...`。
+
+这补齐了r40在macOS上的真实“安装→签名升版→同身份重启→拒降级→清理”证据，但没有模拟真实OS写入掉电/不确定回执，也不是Windows实机、跨机Headscale、活产品TLS升级、GUI或签名安装包验收。下一项不依赖Windows时应收口自主安装中断/损坏后的显式维护状态和不可静默恢复；Windows恢复后仍需用同类fresh bundle完成原生联合验收。
+
 ## 2026-10-15 r40 安装期自主身份绑定与统一原生 helper
 
 用户要求先推送再开始下一切片。已把r39提交`ee8f03b4d83464feb6cf8c665dbaa23380735133`推送到远端`codex/connection-architecture-poc`并核对远端SHA完全一致；本节是推送后新开发，当前仅本地提交。Windows仍关机；未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx及正式安装。
