@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r44 开始签名安装布局核心：新`installrelease`对自主六件运行时定义严格、规范、Ed25519签名的release manifest，候选完整验证后进入epoch+内容摘要命名的不可变目录，当前版本只通过CAS activation journal切换；失败/不确定回执锁闭，降级拒绝，旧版本保留，每次打开active都重验签和全文件哈希。macOS真实Keychain TEST journal已完成epoch1→epoch2激活/重开/清理；Windows仅交叉构建。尚未接入现有DMG/Inno，没有正式签名证书或安装目录ACL验收，不宣称签名安装包已完成。详见[release布局](poc/selfhost/public-server/INSTALLED_RELEASE_LAYOUT.md)。
+
 r43 收口自主安装最小诊断协议：`status`不再输出稳定设备公钥，只返回`diagnostic_version=1`、状态/stage、必要的enrollment phase与当前原生journal已验证的签名`trust_epoch`。macOS fresh TEST验收证明epoch1升到epoch2后，无论旧/新安装入口都只能报告epoch2，不能通过旧程序产生降级诊断；pending仍拒绝重装。显式`inspect`仍保留公钥供受控身份核对。Windows关机，实机验收仍待补。
 
 r42 继续不依赖Windows的自主安装收口：`autonomous-enrollment-install status`现在通过摘要固定的原生helper只读区分`not_installed`、`usable`与六个`maintenance_required`阶段，不返回保护记录、不创建/修复/重置身份。TEST-only中断夹具证明pending安装不能重试生成第二身份，只能对精确pending测试命名空间显式清理。macOS随机TEST channel已完成原生Keychain的absent→usable→签名升级保持同身份→pending锁闭→精确清理验收；Windows关机，实机同类验收仍待补。

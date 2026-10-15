@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r44 签名 release 布局与原子激活核心
+
+用户要求继续任务。Windows仍关机，本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或安装。r40–r43四个本地提交尚未推送；本节继续形成独立本地提交。
+
+新增`installrelease`包和[release布局说明](../poc/selfhost/public-server/INSTALLED_RELEASE_LAYOUT.md)。`autonomous-flat-v1`只允许六个固定运行时文件（Windows带`.exe`）；manifest绑定channel/platform/epoch、每个文件的大小和SHA-256，用release Ed25519根对域分离的规范内容签名。严格解码拒绝duplicate/unknown/trailing/非规范JSON，目录验证拒绝额外/缺失文件、符号链接、目录、大小/哈希不符、错root/channel/platform/floor。普通SHA-256旁车不被当作发布签名。
+
+已验证的隐藏staging目录移动为`<epoch hex>-<manifest digest prefix>`不可变候选，移动后立即重验。这一步不激活版本；当前版本只通过受保护journal中的activation record CAS切换。首次要求nil期望值，升级要求对旧记录精确CAS、同channel/platform/layout和严格更高epoch。commit后读回不一致或回执不确定均返回错误，必须重开判定；不回滚或删除旧版本。`OpenActive`不信任指针本身，每次重验签manifest和全文件哈希。
+
+单元/race验证已覆盖正常首装/升级、降级拒绝、旧版保留、active篡改、签名/清单错误、CAS失败和“已commit但返错”显式重开。macOS amd64真实Keychain TEST journal已完成epoch1首次activation→关闭重开→epoch2 CAS upgrade→关闭重开确认→精确清理。Windows amd64交叉测试构建和vet通过，未实机运行。
+
+重要边界：本轮没有修改`packaging/macos`、`packaging/windows`或旧GUI/Agent，没有Developer ID/公证、Authenticode、安装目录owner/ACL/硬链接竞争验收，也没有launcher/updater接线。因此不是签名安装包或产品级原子升级完成。下一个不依赖Windows的切片应把compiled release根、固定activation scope、摘要固定helper与一个不接受runtime路径/root的installer/launcher入口接起来，先做隔离TEST bundle真实组合；不直接替换现有产品安装包。
+
 ## 2026-10-15 r43 最小诊断输出与签名 epoch 绑定
 
 用户要求继续下一任务切片。Windows仍关机，本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或安装。r40–r42三个本地提交尚未推送，本节继续形成独立本地提交。

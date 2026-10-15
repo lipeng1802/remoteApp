@@ -1,6 +1,6 @@
 # 自托管连接最小实验
 
-切片 4 当前：独立、默认不启用的`installed-autonomous-product`已有显式安装期身份/enrollment绑定入口。runtime只能重开由compiled channel绑定的OS身份与原生存储，不能由parent选择、创建、reset或替换；macOS已真实完成首次安装、签名epoch升级、两代入口保持同一身份、拒绝降级、产品重启及精确清理，且统一helper避免跨可执行程序钥匙串密码提示。普通`installed-device-client`仍为device-only。Windows实机安装/重启/升级同身份、真实双机自主产品、撤销旧连接、GUI和签名安装包仍待，不能标记整体切片完成。详见[持续授权](public-server/CONTINUOUS_AUTHORIZATION.md)和[交接](../../docs/HANDOFF.md)。下方历史描述保留。
+切片 4 当前：独立、默认不启用的`installed-autonomous-product`已有显式安装期身份/enrollment绑定入口。runtime只能重开由compiled channel绑定的OS身份与原生存储，不能由parent选择、创建、reset或替换；macOS已真实完成首次安装、签名epoch升级、两代入口保持同一身份、拒绝降级、产品重启及精确清理，且统一helper避免跨可执行程序钥匙串密码提示。新`installrelease`已定义签名严格发布清单、不可变版本目录和原生CAS activation核心，但尚未接现有DMG/Inno。普通`installed-device-client`仍为device-only。Windows实机安装/重启/升级同身份、真实双机自主产品、撤销旧连接、GUI和签名安装包仍待，不能标记整体切片完成。详见[发布布局](public-server/INSTALLED_RELEASE_LAYOUT.md)、[持续授权](public-server/CONTINUOUS_AUTHORIZATION.md)和[交接](../../docs/HANDOFF.md)。下方历史描述保留。
 
 切片 3 当前入口：[设备码/一次性验证码、确认及防滥用](public-server/DEVICE_FLOW_TEST.md)。设备签名 HTTPS 申请/发现/拒绝/明确批准/查询，不再预先批准测试 grant；仍由私有父脚本模拟用户动作，未接 GUI 或公开服务。下一步正式身份分发、平台安全存储/IPC 与客户端自主生命周期；下方“下一步设备码”为历史。
 
