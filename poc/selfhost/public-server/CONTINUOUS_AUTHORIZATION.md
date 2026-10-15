@@ -1,4 +1,4 @@
-# 自主注册后的持续授权（切片3A）
+# 自主注册后的持续授权（切片3A/3B）
 
 本切片把1/2的新自主注册入口从“完成bind即返回”推进到“首次ACTIVE后持续持有授权watch”。它没有启用产品GUI或正式客户端入口，也不是双机实际断网验收。
 
@@ -31,8 +31,26 @@ bind后允许最长12秒的初始激活窗口。此时只接受issuer签名、�
 
 服务端现有`NetworkSupervisor`和`ProvisionBackend.Reconcile`仍是唯一策略writer：只有两端verified bound记录和成功规则投影才签ACTIVE；撤销/过期/策略、存储或verifier故障会签inactive或关闭API，并尝试投影零规则。客户端watch不会把签名state当成Headscale规则已经从内核移除的独立证据；真实验收必须同时观察客户端owner join、服务端零规则成功以及旧overlay连接不可达。
 
+## 3B 跨层组合证据
+
+新的本机组合测试使用真实`invite.Store`执行两个设备的注册、邀请、申请、明确批准和签名撤销；两端分别签署provision intent，由真实`ProvisionBackend`执行enroll/bind。双端绑定后同一backend必须先投影唯一方向规则，才能为两端watch签发ACTIVE。
+
+撤销验收顺序被固定为：
+
+```text
+signed revoke
+  -> ProvisionBackend.Reconcile
+  -> policy driver receives zero rules
+  -> both signed-state watches terminate as faults
+  -> both enrolled owners close and join their node resources
+```
+
+测试不直接向watch注入手写inactive，而是让撤销经Store和Backend传播。这证明了服务端动态授权与新客户端watch的程序内闭环，并证明零规则投影的同步返回早于watch退出验收。
+
+策略driver仍是内存替身，节点/proof仍是fixture；这不是Headscale内核规则已更新、旧overlay流量已被拒绝或双机原生保护存储已验收的证据。
+
 ## 当前证据和剩余项
 
-新增5组测试覆盖inactive→ACTIVE一次性转换、ACTIVE→inactive终止、binding替换、签名/混字段/传输/身份/no-proof拒绝、caller deadline和显式stop join；相关installeddevice/invite/broker/streamgate/clientruntime/nodeproof race以及Windows/Linux vet通过。
+新增5组watch单元测试覆盖inactive→ACTIVE一次性转换、ACTIVE→inactive终止、binding替换、签名/混字段/传输/身份/no-proof拒绝、caller deadline和显式stop join；另有1组Store/Backend/双watch撤销零规则跨层测试。相关installeddevice/invite/broker/streamgate/clientruntime/nodeproof race以及Windows/Linux vet通过。
 
-当前没有入口调用`WatchedEnrollmentRunner`，因为真实ACTIVE要求两个实际节点；r30 claimant只有memory signer而没有第二SDK。下一步构建双native borrower协调入口，让双方各自完成自主enroll/bind/watch，再验收撤销/过期后的实际零规则和旧连接拒绝。随后才能把watch借给切片4的产品TLS/HMAC/画面键鼠流。Windows关机期间可先完成双端协调代码与本机fixture，但Windows实机和跨机网络验收仍待。
+当前没有正式入口调用`WatchedEnrollmentRunner`，r30 claimant只有memory signer而没有第二SDK。下一步构建双native borrower协调入口，让双方各自完成原生enroll/bind/watch，再在真实Headscale上同时验收撤销/过期后的零规则和旧连接拒绝。随后才能把watch借给切片4的产品TLS/HMAC/画面键鼠流。Windows关机期间可先完成协调代码与本机组合，但Windows实机和跨机网络验收仍待。

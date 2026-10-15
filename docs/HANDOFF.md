@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-15 r34 切片3B Store/Backend/双watch撤销零规则本机闭环
+
+Windows仍无法开机，用户明确允许先开始3、4；r31预检和1/2 Windows真实联合验收继续待办，本轮没有联系/唤醒Windows，也没有服务器、端口、Store、策略或维护窗口动作。
+
+在r33的`WatchedEnrollmentRunner`之上新增一组跨层组合测试：用真实`invite.Store`完成target/controller注册、invite/claim/approve和签名revoke；双方各自签provision intent，由真实`ProvisionBackend`执行Enroll/Bind/Reconcile/NetworkState；两个客户端watch经backend签名state进入ACTIVE。撤销后顺序门禁为：Store状态持久化→Backend Reconcile同步返回零规则投影成功→两个watch均fault→两端enrollment owner节点资源均CloseJoined。测试不手写inactive直接喂watch。
+
+当前策略driver、node/proof仍是进程内fixture，所以只证明仓库内真实Store/Backend/watch传播和退出次序；不证明Headscale内核已接受零ACL、旧overlay socket已不可达、双机原生存储或网络已验收。`go test -race ./installeddevice` PASS（首次依赖下载改用可达Go proxy）。
+
+下一步是双native borrower协调入口和真实Headscale撤销/过期旧连接拒绝；Windows关机时可先完成不依赖它的协调代码。切片4只能在同一watch首次ACTIVE后启动TLS/HMAC/payload，watch fault后必须join payload，不能沿用旧trusted Config路径冒充新自主入口完成。本轮本地提交，不自动推送。
+
 ## 2026-10-15 r33 用户允许暂时开始3/4，先完成3A持续授权桥接
 
 用户说明Windows仍无法开机，允许暂时开始3、4。Windows r31预检与真实1/2联合验收继续列为待办，不能标记PASS；本轮无Windows/服务器/服务/策略/Store/端口动作，也未进入新的维护窗口。
