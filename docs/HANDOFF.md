@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-16 r47 特权安装根配方与可重开回执
+
+用户要求继续任务。本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或现有DMG/Inno。r46已本地提交`2402bc4`，本节形成后续独立本地提交，不自动推送。
+
+新增`PrepareProtectedLayout`和编译固定的`install-root-provisioner`。入口不接受argv、环境或sidecar目标路径，不递归创建缺失父目录；生产根的父路径必须未经符号链接/重解析跳转、owner/权限受保护且与新根同卷。macOS/Unix生产配方要求euid 0，设为root owner与`0755`；Windows生产配方设置protected DACL，SYSTEM/Administrators完全控制、Builtin Users只读执行。TEST配方改为当前用户独占。r46的生产staging同步改为目录`0755`、manifest `0444`、可执行文件`0555`，避免root安装后普通桌面用户无法运行；TEST仍为`0700/0400/0500`。
+
+`LayoutReceipt`只输出版本、平台、配方、TEST标志、编译固定路径的SHA-256和根/`releases`的卷及对象ID，不输出明文路径、用户SID或凭据。它是已信任安装进程内的即时handoff，不是可脱离签名可执行文件验真的独立密码学证明。`ValidateLayoutReceipt`必须重开当前对象精确比较；TEST cleanup只能删除当前回执绑定且仅含空`releases`的根，production和非空根固定拒绝。
+
+新增独立`install-root-validation-build`及摘要固定的TEST validator。macOS原生运行PASS：同一固定入口首次创建、第二次幂等重开回执一致、回执当场复核与精确空TEST清理通过。单测另覆盖回执篡改、可宽泛写父目录、非空清理及非root生产创建拒绝。Windows amd64仅交叉build/vet，尚未实机执行DACL配方。
+
+边界：未触发真实sudo/UAC，未在`/Library/Application Support`或`Program Files`创建根，回执的publisher真实性仍依赖后续Developer ID/Authenticode；未接入DMG/Inno、payload、activation、GUI或卸载。下一切片应做一个编译固定的installer transaction owner，将根回执→签payload ImportStaged→manager activation串成可中断、可重开判定的单向流，仍先用隔离TEST包验收；Windows恢复后补实机ACL和普通用户只读执行。
+
 ## 2026-10-16 r46 受保护 staging 交接与安装根边界
 
 用户要求继续下一切片。本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或现有DMG/Inno。r45已本地提交`5388c24`，本节形成后续独立本地提交，不自动推送。

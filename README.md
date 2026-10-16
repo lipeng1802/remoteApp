@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r47 新增固定目标、无运行时路径参数的install-root provisioner：生产macOS/Unix只能以root设置`0755`可读执行根，Windows设置受保护DACL（SYSTEM/Administrators可写，Users只读执行）；TEST根保持当前用户私有。回执不含明文路径，绑定路径摘要、卷和两个目录对象ID，必须立即重开核验；TEST清理仅接受当前回执绑定的空布局。macOS编译固定入口原生验证已通过，Windows x64仅交叉构建；真实提权、代码签名和DMG/Inno尚未验收。
+
 r46 完成installer staging交接边界：外部签名payload必须先全量验签，再以独占创建、单硬链接、同卷方式复制到安装根内隐藏staging，并fsync文件/目录后重验。manager/launcher每次检查安装根、`releases`及活动版本的owner/权限、链接/重解析点、同卷与单链接属性；生产macOS根只接受root owner，Windows只接受SYSTEM/Administrators owner且拒绝Everyone/Authenticated Users/Users的写权。macOS用户所有TEST保护根原生组合通过，Windows仅交叉构建；正式特权根创建、DMG/Inno和代码签名仍未接入。
 
 r45 已把签名不可变release核心接到两个固定入口：管理器只接受`install|upgrade|status`操作，release root/channel/floor/helper/隐藏候选名/期望manifest摘要均在构建时固定；无参启动器从自身目录打开原生CAS activation，每次重验签全部文件后才启动当前产品。macOS隔离原生组合验收已通过v1首次激活、v2升级、拒绝回滚、旧/新启动器同指当前产品拒绝路径、身份跨升级与TEST清理。仍未改DMG/Inno，未做受保护安装根、正式代码签名、完整产品会话或Windows实机验收。详见[release布局](poc/selfhost/public-server/INSTALLED_RELEASE_LAYOUT.md)。

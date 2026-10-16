@@ -40,3 +40,41 @@ func TestCompileInstalledReleaseManagerRejectsRuntimeSelectableCandidate(t *test
 		}
 	}
 }
+
+func TestInstallRootBuildConfigurationIsCanonicalAndFixed(t *testing.T) {
+	valid := []struct {
+		target string
+		root   string
+	}{
+		{"darwin", "/Library/Application Support/PersonalRemoteDesktop"},
+		{"windows", `C:\Program Files\Personal Remote Desktop`},
+	}
+	for _, fixture := range valid {
+		if !validInstallRoot(fixture.target, fixture.root) {
+			t.Fatalf("valid fixed root rejected: %#v", fixture)
+		}
+	}
+	invalid := []struct {
+		target string
+		root   string
+	}{
+		{"darwin", "relative/root"},
+		{"darwin", "/"},
+		{"windows", `c:\Program Files\RemoteApp`},
+		{"windows", `C:\Program Files\..\RemoteApp`},
+		{"windows", `C:/Program Files/RemoteApp`},
+		{"windows", `C:\Program Files\RemoteApp\`},
+		{"linux", "/opt/remoteapp"},
+	}
+	for _, fixture := range invalid {
+		if validInstallRoot(fixture.target, fixture.root) {
+			t.Fatalf("invalid fixed root accepted: %#v", fixture)
+		}
+	}
+
+	destination := filepath.Join(t.TempDir(), "validation")
+	err := CompileInstallRootValidation(context.Background(), "/unused/go", "/unused/module", "darwin", destination, "/fixed/root", strings.Repeat("A", 64))
+	if !errors.Is(err, trustprofile.ErrTrust) {
+		t.Fatalf("noncanonical provisioner pin accepted: %v", err)
+	}
+}

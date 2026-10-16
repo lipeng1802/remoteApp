@@ -98,14 +98,19 @@ func ImportStaged(source, installRoot, stagingName string, root []byte, channel,
 		return Verified{}, err
 	}
 	destination := filepath.Join(releases, stagingName)
-	if filepath.Dir(destination) != releases || os.Mkdir(destination, 0700) != nil {
+	directoryMode := os.FileMode(0755)
+	manifestMode, executableMode := os.FileMode(0444), os.FileMode(0555)
+	if test {
+		directoryMode, manifestMode, executableMode = 0700, 0400, 0500
+	}
+	if filepath.Dir(destination) != releases || os.Mkdir(destination, directoryMode) != nil || platformProtectDirectory(destination, test) != nil {
 		return Verified{}, ErrRelease
 	}
 	names := append([]string{ManifestName}, mustExpected(platform)...)
 	for _, name := range names {
-		limit, mode := maximumFile, os.FileMode(0500)
+		limit, mode := maximumFile, executableMode
 		if name == ManifestName {
-			limit, mode = maximumManifest, 0400
+			limit, mode = maximumManifest, manifestMode
 		}
 		raw, err := readRegular(filepath.Join(source, name), limit)
 		if err != nil {

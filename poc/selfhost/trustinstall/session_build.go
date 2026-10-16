@@ -2,6 +2,7 @@ package trustinstall
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"os"
@@ -14,6 +15,65 @@ import (
 	"remoteapp.local/selfhost-poc/trustprofile"
 	"time"
 )
+
+func validInstallRoot(target, root string) bool {
+	if len(root) < 4 || len(root) > 1024 || strings.ContainsRune(root, '\x00') {
+		return false
+	}
+	if target == "darwin" {
+		return filepath.IsAbs(root) && filepath.Clean(root) == root && filepath.Dir(root) != root
+	}
+	if target != "windows" || root[0] < 'A' || root[0] > 'Z' || root[1] != ':' || root[2] != '\\' || strings.Contains(root, "/") || strings.HasSuffix(root, "\\") {
+		return false
+	}
+	for _, component := range strings.Split(root[3:], "\\") {
+		if component == "" || component == "." || component == ".." || strings.ContainsAny(component, `<>:"|?*`) {
+			return false
+		}
+	}
+	return true
+}
+
+// CompileInstallRootProvisioner pins the one directory an elevated installer
+// may prepare. The resulting helper accepts no runtime path or policy input.
+func CompileInstallRootProvisioner(ctx context.Context, goexe, module, target, dest, installRoot string, test bool) error {
+	return compileInstallRootTool(ctx, goexe, module, target, dest, installRoot, test, "", "./cmd/install-root-provisioner")
+}
+
+// CompileInstallRootValidation builds a TEST-only verifier that pins the
+// sibling provisioner digest and removes only its empty receipt-bound layout.
+func CompileInstallRootValidation(ctx context.Context, goexe, module, target, dest, installRoot, provisionerDigest string) error {
+	if !canonical(provisionerDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	return compileInstallRootTool(ctx, goexe, module, target, dest, installRoot, true, provisionerDigest, "./cmd/install-root-validation")
+}
+
+func compileInstallRootTool(ctx context.Context, goexe, module, target, dest, installRoot string, test bool, pin, entry string) error {
+	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || !validInstallRoot(target, installRoot) {
+		return trustprofile.ErrTrust
+	}
+	if _, err := os.Lstat(dest); !os.IsNotExist(err) {
+		return trustprofile.ErrTrust
+	}
+	encodedRoot := base64.RawURLEncoding.EncodeToString([]byte(installRoot))
+	flags := "-X main.embeddedInstallRoot=" + encodedRoot + " -X main.embeddedTest=" + strconv.FormatBool(test)
+	if pin != "" {
+		flags += " -X main.embeddedProvisionerDigest=" + pin
+	}
+	arch := runtime.GOARCH
+	if target == "windows" {
+		arch = "amd64"
+	}
+	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags="+flags, "-o", dest, entry)
+	cmd.Dir = module
+	cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED=0", "GOOS="+target, "GOARCH="+arch)
+	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	if cmd.Run() != nil {
+		return trustprofile.ErrTrust
+	}
+	return nil
+}
 
 // CompileInstalledReleaseLauncher builds a no-argument launcher that derives
 // its activation namespace and release root solely from this compiled release.

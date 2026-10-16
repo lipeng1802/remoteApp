@@ -7,6 +7,23 @@ import (
 	"syscall"
 )
 
+func platformPolicy(test bool) string {
+	if test {
+		return "private-current-user-v1"
+	}
+	return "root-read-execute-v1"
+}
+
+func platformProtectDirectory(path string, test bool) error {
+	if test {
+		return os.Chmod(path, 0700)
+	}
+	if os.Geteuid() != 0 || os.Chown(path, 0, 0) != nil {
+		return ErrRelease
+	}
+	return os.Chmod(path, 0755)
+}
+
 func platformIdentity(_ string, _ *os.File, info os.FileInfo, directory, test bool) (fileIdentity, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || stat.Nlink < 1 {

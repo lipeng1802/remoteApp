@@ -3,11 +3,64 @@
 package installrelease
 
 import (
+	"fmt"
 	"os"
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+func platformPolicy(test bool) string {
+	if test {
+		return "private-current-user-v1"
+	}
+	return "administrators-write-users-read-execute-v1"
+}
+
+func platformProtectDirectory(path string, test bool) error {
+	owner := "BA"
+	if test {
+		token, err := windows.OpenCurrentProcessToken()
+		if err != nil {
+			return ErrRelease
+		}
+		defer token.Close()
+		user, err := token.GetTokenUser()
+		if err != nil || user == nil || user.User.Sid == nil || broadSID(user.User.Sid) {
+			return ErrRelease
+		}
+		owner = user.User.Sid.String()
+	}
+	access := fmt.Sprintf("(A;OICI;FA;;;%s)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)", owner)
+	if !test {
+		access += "(A;OICI;GRGX;;;BU)"
+	}
+	descriptor, err := windows.SecurityDescriptorFromString("O:" + owner + "G:" + owner + "D:P" + access)
+	if err != nil {
+		return ErrRelease
+	}
+	dacl, _, err := descriptor.DACL()
+	if err != nil || dacl == nil {
+		return ErrRelease
+	}
+	ownerSID, _, err := descriptor.Owner()
+	if err != nil || ownerSID == nil {
+		return ErrRelease
+	}
+	groupSID, _, err := descriptor.Group()
+	if err != nil || groupSID == nil {
+		return ErrRelease
+	}
+	err = windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT,
+		windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
+		ownerSID, groupSID, dacl, nil)
+	runtime.KeepAlive(descriptor)
+	if err != nil {
+		return ErrRelease
+	}
+	return nil
+}
 
 func broadSID(sid *windows.SID) bool {
 	for _, kind := range []windows.WELL_KNOWN_SID_TYPE{windows.WinWorldSid, windows.WinAuthenticatedUserSid, windows.WinBuiltinUsersSid} {

@@ -45,9 +45,15 @@ installer不得把外部解包目录直接rename为可激活版本。`ImportStag
 
 生产macOS/Unix安装根、`releases`及版本目录必须root owner且不得group/other writable；Windows生产根只允许SYSTEM/Administrators owner，并拒绝三类宽泛SID的写/删除/改ACL与owner权限。TEST模式可用当前用户的隔离根，但仍拒绝可宽泛写、链接/reparse、跨卷和多硬链接。manager和launcher每次操作都重做门禁；这些API只验证，不会自动提权或改权限。
 
+## 安装根准备与回执
+
+`install-root-provisioner`只使用构建时固定的唯一根目录，不接受运行时路径或权限配方。它不创建缺失的父目录，生产时要求父路径无链接跳转、已受保护且同卷。macOS/Unix仅euid 0可以生产准备，根与`releases`是root owner、`0755`；Windows用protected DACL给SYSTEM/Administrators完全控制，Builtin Users只读执行。生产导入的版本目录/manifest/可执行文件分别为`0755/0444/0555`；TEST是当前用户私有的`0700/0400/0500`。
+
+准备回执绑定平台、配方、编译固定路径摘要、卷及根/`releases`对象ID，不包含明文路径或凭据。它必须在同一已信任安装流中立即重开比对；回执本身没有publisher签名，不能替代Developer ID/Authenticode。TEST清理只能删除该回执当前绑定的空布局，不提供production reset。
+
 ## 已验证与未验证
 
-Go测试额外覆盖外部payload导入后单链接、源硬链接、可宽泛写根、非root生产根、链接`releases`及被改宽的版本目录拒绝。macOS真实Keychain TEST组合已通过新导入交接、v1签名staging晋升/首次激活、身份安装、v2 trust与activation升级、旧/新manager读当前epoch、回滚拒绝、旧/新launcher执行当前产品拒绝探针及TEST清理。Windows x64只有交叉编译，尚未在Credential Manager运行。
+Go测试额外覆盖外部payload导入后单链接、源硬链接、可宽泛写根/父目录、非root生产根、链接`releases`、回执篡改、非空清理及被改宽的版本目录拒绝。macOS编译固定的TEST root provisioner原生验收已通过首次准备、幂等重开、回执复核与精确空根清理；真实Keychain TEST组合已通过新导入交接、v1签名staging晋升/首次激活、身份安装、v2 trust与activation升级、旧/新manager读当前epoch、回滚拒绝、旧/新launcher执行当前产品拒绝探针及TEST清理。Windows x64只有交叉编译，尚未实机运行DACL配方或Credential Manager。
 
 未完成的安装产品工作包括：
 
