@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-16 r46 受保护 staging 交接与安装根边界
+
+用户要求继续下一切片。本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或现有DMG/Inno。r45已本地提交`5388c24`，本节形成后续独立本地提交，不自动推送。
+
+`installrelease.ImportStaged`新建明确的installer交接：外部解包目录必须先通过签名manifest、固定文件集、大小/SHA-256、非符号链接与单硬链接检查；再在安装根的`releases`内独占创建编译固定的`.staging-<nonce>`，逐文件复制成新inode，fsync文件、staging与父目录，最后重新校验安装根和全部内容。中途失败保留不可激活的隐藏目录，不做路径追踪式自动删除。
+
+`ValidateProtectedLayout/ValidateProtectedRelease`在manager的install/upgrade/status及launcher启动前运行。它们要求absolute clean path，拒绝符号链接/Windows reparse point，要求install root、`releases`和版本目录同卷，文件必须单硬链接。macOS/Unix生产根必须root owner且不得group/other writable；TEST可由当前用户拥有。Windows生产根只接受LocalSystem或Builtin Administrators owner，且DACL中Everyone/Authenticated Users/Builtin Users不得有generic/file write、delete、write-DACL/owner；TEST可使用非宽泛owner。这些是验证门禁，不会自动提权或改ACL。
+
+单元测覆盖正常受保护导入、目标单链接、源硬链接拒绝、world-writable根拒绝、非root生产根拒绝、链接`releases`拒绝与版本目录变宽拒绝。macOS当前源码helper/ad-hoc identity vault真实原生组合PASS：两个外部签名payload通过新ImportStaged进入保护TEST根，v1→v2 CAS激活、拒回滚、旧/新launcher执行当前产品拒绝路径、身份保持与TEST清理通过。Windows amd64仅交叉build/vet，实机DACL/reparse/hardlink仍待。
+
+重要边界：未由特权正式installer在`/Applications`或`Program Files`创建真实生产根，未测真实权限下的并发替换，未做Developer ID/公证、Authenticode、DMG/Inno、GUI或Windows实机验收。下一切片应做不改旧产品的“特权installer根准备/ACL配方与回执”隔离入口，先在macOS临时受控根验收，Windows恢复后用独立验收包验证DACL。
+
 ## 2026-10-15 r45 固定release管理器与无参启动器
 
 用户要求继续下一任务。Windows仍关机，本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或现有DMG/Inno。r40–r44五个本地提交尚未推送；本节形成新的独立本地提交。

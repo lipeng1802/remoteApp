@@ -58,8 +58,7 @@ func anchor(release trustinstall.Release) ([]byte, error) {
 	return raw, nil
 }
 
-func expectedCandidate(root string, release trustinstall.Release, public []byte, platform string, epoch uint64) (installrelease.Verified, error) {
-	releases := filepath.Join(root, "releases")
+func expectedCandidate(releases string, release trustinstall.Release, public []byte, platform string, epoch uint64) (installrelease.Verified, error) {
 	staging := filepath.Join(releases, embeddedStaging)
 	_, statErr := os.Lstat(staging)
 	if statErr == nil {
@@ -108,6 +107,10 @@ func run() (reply, error) {
 		return reply{}, err
 	}
 	root := filepath.Dir(executable)
+	releases, err := installrelease.ValidateProtectedLayout(root, release.Specification().Test)
+	if err != nil {
+		return reply{}, err
+	}
 	suffix, platform := "", "darwin"
 	if runtime.GOOS == "windows" {
 		suffix, platform = ".exe", "windows"
@@ -142,16 +145,19 @@ func run() (reply, error) {
 		if err != nil {
 			return reply{}, err
 		}
-		active, openErr := installrelease.OpenActive(journal, filepath.Join(root, "releases"), public, release.Specification().Channel, platform, release.Specification().MinimumEpoch)
+		active, openErr := installrelease.OpenActive(journal, releases, public, release.Specification().Channel, platform, release.Specification().MinimumEpoch)
 		closeErr := journal.Close()
-		if openErr != nil || closeErr != nil {
+		if openErr != nil || closeErr != nil || installrelease.ValidateProtectedRelease(active.Directory, root, release.Specification().Test) != nil {
 			return reply{}, installrelease.ErrRelease
 		}
 		return reply{Status: "active", Epoch: active.Manifest.Epoch}, nil
 	}
-	candidate, err := expectedCandidate(root, release, public, platform, epoch)
+	candidate, err := expectedCandidate(releases, release, public, platform, epoch)
 	if err != nil {
 		return reply{}, err
+	}
+	if installrelease.ValidateProtectedRelease(candidate.Directory, root, release.Specification().Test) != nil {
+		return reply{}, installrelease.ErrRelease
 	}
 	journal, err := records(scope, os.Args[1] == "install", release.Specification().Test)
 	if err != nil {

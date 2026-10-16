@@ -155,17 +155,13 @@ func Verify(raw, root []byte, channel, platform string, minimumEpoch uint64) (Si
 }
 
 func readRegular(path string, limit int64) ([]byte, error) {
-	before, err := os.Lstat(path)
-	if err != nil || !before.Mode().IsRegular() || before.Mode()&os.ModeSymlink != 0 || before.Size() < 1 || before.Size() > limit {
-		return nil, ErrRelease
-	}
-	file, err := os.Open(path)
+	file, _, err := openChecked(path, false, false)
 	if err != nil {
-		return nil, ErrRelease
+		return nil, err
 	}
 	defer file.Close()
 	after, err := file.Stat()
-	if err != nil || !after.Mode().IsRegular() || !os.SameFile(before, after) {
+	if err != nil || after.Size() < 1 || after.Size() > limit {
 		return nil, ErrRelease
 	}
 	raw, err := io.ReadAll(io.LimitReader(file, limit+1))

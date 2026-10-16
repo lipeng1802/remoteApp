@@ -36,6 +36,10 @@ func run() error {
 		return err
 	}
 	root := filepath.Dir(executable)
+	releases, err := installrelease.ValidateProtectedLayout(root, release.Specification().Test)
+	if err != nil {
+		return err
+	}
 	suffix, platform := "", "darwin"
 	if runtime.GOOS == "windows" {
 		suffix, platform = ".exe", "windows"
@@ -69,9 +73,9 @@ func run() error {
 		_ = journal.Close()
 		return installrelease.ErrRelease
 	}
-	active, openErr := installrelease.OpenActive(journal, filepath.Join(root, "releases"), public, release.Specification().Channel, platform, release.Specification().MinimumEpoch)
+	active, openErr := installrelease.OpenActive(journal, releases, public, release.Specification().Channel, platform, release.Specification().MinimumEpoch)
 	closeErr := journal.Close()
-	if openErr != nil || closeErr != nil {
+	if openErr != nil || closeErr != nil || installrelease.ValidateProtectedRelease(active.Directory, root, release.Specification().Test) != nil {
 		return installrelease.ErrRelease
 	}
 	product := filepath.Join(active.Directory, "installed-autonomous-product"+suffix)

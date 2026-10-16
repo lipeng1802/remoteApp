@@ -366,5 +366,5 @@ func main() {
 		fmt.Println("VALIDATION FAILED: autonomous native upgrade lifecycle:", err)
 		os.Exit(1)
 	}
-	fmt.Println("VALIDATION PASSED: signed immutable releases + fixed candidate managers + native CAS activation epoch 1 to 2 + old/new no-argument launchers execute the active product rejection path; native identity survives upgrade and TEST state is cleaned. NOT full product session, protected install root, GUI, signed installer or Windows acceptance.")
+	fmt.Println("VALIDATION PASSED: protected TEST-root import + signed immutable releases + native CAS activation epoch 1 to 2 + old/new no-argument launchers execute the active product rejection path; native identity survives upgrade and TEST state is cleaned. NOT full product session, privileged production-root provisioning, GUI, signed installer or Windows acceptance.")
 }

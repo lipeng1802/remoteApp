@@ -186,10 +186,11 @@ func run() error {
 			return "", installrelease.Verified{}, err
 		}
 		stageName := ".staging-" + hex.EncodeToString(stageNonce[:])
-		stage := filepath.Join(dest, "releases", stageName)
-		if err := os.Mkdir(stage, 0700); err != nil {
+		source, err := os.MkdirTemp(filepath.Dir(dest), ".signed-release-source-")
+		if err != nil {
 			return "", installrelease.Verified{}, err
 		}
+		defer os.RemoveAll(source)
 		fixed := map[string]string{
 			"autonomous-enrollment-install" + suffix: "autonomous-enrollment-install-" + version + suffix,
 			"identity-vault" + suffix:                "identity-vault" + suffix,
@@ -198,20 +199,20 @@ func run() error {
 			"trust-install" + suffix:                 "trust-install-" + version + suffix,
 			"trust-journal" + suffix:                 "trust-journal" + suffix,
 		}
-		for destination, source := range fixed {
-			if err := copyFile(filepath.Join(dest, source), filepath.Join(stage, destination)); err != nil {
+		for destination, sourceName := range fixed {
+			if err := copyFile(filepath.Join(dest, sourceName), filepath.Join(source, destination)); err != nil {
 				return "", installrelease.Verified{}, err
 			}
 		}
-		manifest, err := installrelease.BuildManifest(stage, current.Channel, goos, epoch)
+		manifest, err := installrelease.BuildManifest(source, current.Channel, goos, epoch)
 		if err != nil {
 			return "", installrelease.Verified{}, err
 		}
 		raw, err := installrelease.SignForBuild(releaseKey, manifest)
-		if err != nil || write(filepath.Join(stage, installrelease.ManifestName), raw, 0600) != nil {
+		if err != nil || write(filepath.Join(source, installrelease.ManifestName), raw, 0600) != nil {
 			return "", installrelease.Verified{}, os.ErrInvalid
 		}
-		verified, err := installrelease.VerifyDirectory(stage, root, current.Channel, goos, current.MinimumEpoch)
+		verified, err := installrelease.ImportStaged(source, dest, stageName, root, current.Channel, goos, current.MinimumEpoch, current.Test)
 		return stageName, verified, err
 	}
 	stage1, verified1, err := makeRelease("v1", spec1, 1)
