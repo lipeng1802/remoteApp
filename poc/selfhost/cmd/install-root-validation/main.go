@@ -2,13 +2,10 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,21 +17,7 @@ import (
 var embeddedInstallRoot, embeddedTest, embeddedProvisionerDigest string
 
 func decodeReceipt(raw []byte) (installrelease.LayoutReceipt, error) {
-	if len(raw) < 2 || len(raw) > 4096 || raw[len(raw)-1] != '\n' {
-		return installrelease.LayoutReceipt{}, installrelease.ErrRelease
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	var receipt installrelease.LayoutReceipt
-	var extra struct{}
-	if decoder.Decode(&receipt) != nil || decoder.Decode(&extra) != io.EOF {
-		return installrelease.LayoutReceipt{}, installrelease.ErrRelease
-	}
-	canonical, _ := json.Marshal(receipt)
-	if !bytes.Equal(raw, append(canonical, '\n')) {
-		return installrelease.LayoutReceipt{}, installrelease.ErrRelease
-	}
-	return receipt, nil
+	return installrelease.DecodeLayoutReceipt(raw)
 }
 
 func readPinned(path string) error {

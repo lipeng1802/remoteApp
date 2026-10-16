@@ -84,10 +84,41 @@ func CompileInstalledReleaseLauncher(ctx context.Context, goexe, module, target,
 // CompileInstalledReleaseManager pins one hidden candidate name and signed
 // manifest digest. Runtime arguments can select install/upgrade/status only.
 func CompileInstalledReleaseManager(ctx context.Context, goexe, module, target, dest string, s Specification, staging, manifestDigest string, manifestEpoch uint64, now time.Time) error {
+	return compileInstalledReleaseManager(ctx, goexe, module, target, dest, s, "", staging, manifestDigest, manifestEpoch, now)
+}
+
+// CompileFixedRootInstalledReleaseManager is an installer-bundle manager. Its
+// protected target root is fixed at build time while its pinned journal helper
+// remains beside the manager in the authenticated installer bundle.
+func CompileFixedRootInstalledReleaseManager(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot, staging, manifestDigest string, manifestEpoch uint64, now time.Time) error {
+	if !validInstallRoot(target, installRoot) {
+		return trustprofile.ErrTrust
+	}
+	return compileInstalledReleaseManager(ctx, goexe, module, target, dest, s, installRoot, staging, manifestDigest, manifestEpoch, now)
+}
+
+// CompileInstallTransaction pins the protected root, payload identity,
+// provisioner and fixed-root manager. The resulting owner accepts no runtime
+// paths and can only move one signed release monotonically toward activation.
+func CompileInstallTransaction(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot, operation, staging, manifestDigest string, manifestEpoch uint64, provisionerDigest, managerDigest string, now time.Time) error {
+	if !validInstallRoot(target, installRoot) || (operation != "install" && operation != "upgrade") || len(staging) != len(".staging-")+32 || !strings.HasPrefix(staging, ".staging-") || !canonical(strings.TrimPrefix(staging, ".staging-"), 16) || !canonical(manifestDigest, 32) || manifestEpoch < s.MinimumEpoch || manifestEpoch > 1<<53-1 || !canonical(provisionerDigest, 32) || !canonical(managerDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot)) +
+		" -X main.embeddedOperation=" + operation + " -X main.embeddedStaging=" + staging +
+		" -X main.embeddedManifestDigest=" + manifestDigest + " -X main.embeddedManifestEpoch=" + strconv.FormatUint(manifestEpoch, 10) +
+		" -X main.embeddedProvisionerDigest=" + provisionerDigest + " -X main.embeddedManagerDigest=" + managerDigest
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/install-transaction", extra, now)
+}
+
+func compileInstalledReleaseManager(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot, staging, manifestDigest string, manifestEpoch uint64, now time.Time) error {
 	if len(staging) != len(".staging-")+32 || !strings.HasPrefix(staging, ".staging-") || !canonical(strings.TrimPrefix(staging, ".staging-"), 16) || !canonical(manifestDigest, 32) || manifestEpoch < s.MinimumEpoch || manifestEpoch > 1<<53-1 {
 		return trustprofile.ErrTrust
 	}
 	extra := " -X main.embeddedStaging=" + staging + " -X main.embeddedManifestDigest=" + manifestDigest + " -X main.embeddedManifestEpoch=" + strconv.FormatUint(manifestEpoch, 10)
+	if installRoot != "" {
+		extra += " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot))
+	}
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installed-release-manager", extra, now)
 }
 

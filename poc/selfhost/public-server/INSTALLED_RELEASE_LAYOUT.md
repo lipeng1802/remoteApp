@@ -51,13 +51,20 @@ installer不得把外部解包目录直接rename为可激活版本。`ImportStag
 
 准备回执绑定平台、配方、编译固定路径摘要、卷及根/`releases`对象ID，不包含明文路径或凭据。它必须在同一已信任安装流中立即重开比对；回执本身没有publisher签名，不能替代Developer ID/Authenticode。TEST清理只能删除该回执当前绑定的空布局，不提供production reset。
 
+## Installer transaction
+
+`install-transaction`是编译固定的单向owner：唯一绑定release根/channel/floor、安装根、`install|upgrade`、staging nonce、manifest digest/epoch及provisioner/manager摘要。payload仅从owner同目录的`release-payload`读取，完整验签后才导入。owner不接受argv或可替换路径，不做自动回滚、reset或删除未知状态。
+
+崩溃后重跑会重新核验root receipt和外部payload，然后只接受“无候选”、单一exact hidden staging或单一exact content-addressed final。trust initialize/upgrade若已精确到达目标epoch则幂等继续；manager若active已精确指向同manifest/epoch/directory也返回成功。任意其他混合、篡改、降级或不确定状态固定拒绝；commit回执不确定必须通过新进程重开判定，不在同一调用中猜测成功。
+
 ## 已验证与未验证
 
-Go测试额外覆盖外部payload导入后单链接、源硬链接、可宽泛写根/父目录、非root生产根、链接`releases`、回执篡改、非空清理及被改宽的版本目录拒绝。macOS编译固定的TEST root provisioner原生验收已通过首次准备、幂等重开、回执复核与精确空根清理；真实Keychain TEST组合已通过新导入交接、v1签名staging晋升/首次激活、身份安装、v2 trust与activation升级、旧/新manager读当前epoch、回滚拒绝、旧/新launcher执行当前产品拒绝探针及TEST清理。Windows x64只有交叉编译，尚未实机运行DACL配方或Credential Manager。
+Go测试额外覆盖外部payload导入后单链接、源硬链接、可宽泛写根/父目录、非root生产根、链接`releases`、回执篡改、非空清理、staging/final混合及被改宽的版本目录拒绝。macOS编译固定的TEST root provisioner原生验收已通过首次准备、幂等重开、回执复核与精确空根清理；真实Keychain TEST组合已通过v1 transaction install两次、v2 upgrade两次的幂等重开、新导入交接、严格激活、身份升级保持、回滚拒绝、旧/新launcher执行当前产品拒绝探针及TEST精确清理。Windows x64只有交叉编译，尚未实机运行DACL配方或Credential Manager。
 
 未完成的安装产品工作包括：
 
 - 把已验证的管理器/launcher放入受保护的真实安装根，并由正式installer/updater调用；
+- 定义受保护的稳定bootstrap launcher/helper manifest与原子替换，使系统入口可启动active release；
 - 由特权正式installer创建真实生产owner/ACL，并在其他用户并发替换下做实机验收；
 - macOS Developer ID/公证和Windows Authenticode的真实证书链验证；
 - 连接现有DMG/Inno、安装/升级/回退UI与卸载保留策略；

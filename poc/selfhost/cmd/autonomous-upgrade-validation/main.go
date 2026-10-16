@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"runtime"
 	"time"
 
+	"remoteapp.local/selfhost-poc/installrelease"
 	"remoteapp.local/selfhost-poc/privatepipe"
 )
 
@@ -26,6 +28,7 @@ type reply struct {
 	Diagnostic      int    `json:"diagnostic_version"`
 	TrustEpoch      uint64 `json:"trust_epoch"`
 	Reason          string `json:"reason"`
+	Phase           string `json:"phase"`
 }
 
 type releaseLayout struct {
@@ -165,6 +168,15 @@ func run() (result error) {
 			expected = append(expected, filepath.ToSlash(filepath.Join("releases", stage, name)))
 		}
 	}
+	transactionFiles := []string{"install-root-provisioner" + suffix, "install-transaction" + suffix, "installed-release-manager" + suffix, "trust-journal" + suffix}
+	for _, version := range []string{"v1", "v2"} {
+		for _, name := range transactionFiles {
+			expected = append(expected, filepath.ToSlash(filepath.Join("transaction-"+version, name)))
+		}
+		for _, name := range stageFiles {
+			expected = append(expected, filepath.ToSlash(filepath.Join("transaction-"+version, "release-payload", name)))
+		}
+	}
 	if len(hashes) != len(expected) {
 		return fmt.Errorf("incomplete manifest")
 	}
@@ -183,6 +195,9 @@ func run() (result error) {
 		".": true, "releases": true,
 		filepath.ToSlash(filepath.Join("releases", layout.V1Stage)): true,
 		filepath.ToSlash(filepath.Join("releases", layout.V2Stage)): true,
+		"transaction-v1": true, "transaction-v2": true,
+		filepath.ToSlash(filepath.Join("transaction-v1", "release-payload")): true,
+		filepath.ToSlash(filepath.Join("transaction-v2", "release-payload")): true,
 	}
 	actual := 0
 	if err = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
@@ -358,6 +373,70 @@ func run() (result error) {
 	if _, statusErr := status("autonomous-enrollment-install-v2", "not_installed", "", 2); statusErr != nil {
 		return fmt.Errorf("clean status")
 	}
+	if value, cleanupErr := command(tool("release-manager-v2"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "cleaned" {
+		return fmt.Errorf("pre-transaction activation cleanup")
+	}
+	activationCreated = false
+	if value, cleanupErr := command(tool("trust-install-v2"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "usable" {
+		return fmt.Errorf("pre-transaction trust cleanup")
+	}
+	trustCreated = false
+
+	transactionTool := func(version, name string) string {
+		return filepath.Join(dir, "transaction-"+version, name+suffix)
+	}
+	transactionRoot := filepath.Join(dir, "transaction-install-root")
+	cleanupTransaction := func(strict bool) error {
+		failed := false
+		if value, cleanupErr := command(transactionTool("v2", "installed-release-manager"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "cleaned" {
+			failed = true
+		}
+		trustCleanup := filepath.Join(dir, "transaction-v2", "release-payload", "trust-install"+suffix)
+		if value, cleanupErr := command(trustCleanup, nil, "cleanup-test"); cleanupErr != nil || value.Status != "usable" {
+			failed = true
+		}
+		for _, version := range []string{"v2", "v1"} {
+			if value, cleanupErr := command(transactionTool(version, "installed-release-manager"), nil, "cleanup-release-test"); cleanupErr != nil || value.Status != "cleaned" {
+				failed = true
+			}
+		}
+		provisioner := transactionTool("v2", "install-root-provisioner")
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		output, receiptErr := exec.CommandContext(ctx, provisioner).Output()
+		cancel()
+		receipt, decodeErr := installrelease.DecodeLayoutReceipt(output)
+		if receiptErr != nil || decodeErr != nil || installrelease.ValidateLayoutReceipt(receipt, transactionRoot, true) != nil || installrelease.CleanupProtectedTestLayout(receipt, transactionRoot) != nil {
+			failed = true
+		}
+		if strict && failed {
+			return fmt.Errorf("transaction cleanup")
+		}
+		return nil
+	}
+	transactionStarted := true
+	defer func() {
+		if transactionStarted {
+			_ = cleanupTransaction(false)
+		}
+	}()
+	for _, fixture := range []struct {
+		version string
+		epoch   uint64
+	}{
+		{"v1", 1}, {"v1", 1}, {"v2", 2}, {"v2", 2},
+	} {
+		value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
+		if transactionErr != nil || value.Status != "active" || value.Epoch != fixture.epoch || value.Phase != "committed" {
+			return fmt.Errorf("transaction %s epoch %d reopen", fixture.version, fixture.epoch)
+		}
+	}
+	if value, managerErr := command(transactionTool("v2", "installed-release-manager"), nil, "status"); managerErr != nil || value.Status != "active" || value.Epoch != 2 {
+		return fmt.Errorf("transaction active status")
+	}
+	if err = cleanupTransaction(true); err != nil {
+		return err
+	}
+	transactionStarted = false
 	return nil
 }
 
@@ -366,5 +445,5 @@ func main() {
 		fmt.Println("VALIDATION FAILED: autonomous native upgrade lifecycle:", err)
 		os.Exit(1)
 	}
-	fmt.Println("VALIDATION PASSED: protected TEST-root import + signed immutable releases + native CAS activation epoch 1 to 2 + old/new no-argument launchers execute the active product rejection path; native identity survives upgrade and TEST state is cleaned. NOT full product session, privileged production-root provisioning, GUI, signed installer or Windows acceptance.")
+	fmt.Println("VALIDATION PASSED: fixed-root installer transaction reopens root/import/trust/activation to one committed epoch, repeated install/upgrade are idempotent, protected signed releases and native identity upgrade remain valid, and TEST state is cleaned. NOT full product session, elevated production root, GUI, signed installer or Windows acceptance.")
 }

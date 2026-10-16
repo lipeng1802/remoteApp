@@ -48,6 +48,48 @@ func TestProtectedImportCreatesSingleLinkSameVolumeStage(t *testing.T) {
 	}
 }
 
+func TestReconcileCandidateReopensOnlyOneExactState(t *testing.T) {
+	public, private, _ := ed25519.GenerateKey(rand.Reader)
+	source := makeStage(t, t.TempDir(), "reconcile", "darwin", 4, private, 10)
+	verifiedSource, err := VerifyDirectory(source, public, "reconcile", "darwin", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := protectedRoot(t)
+	stage := ".staging-2123456789abcdef0123456789abcdef"
+	first, state, err := ReconcileCandidate(source, root, stage, verifiedSource.ManifestDigest, 4, public, "reconcile", "darwin", 1, true)
+	if err != nil || state != CandidateStaged || first.ManifestDigest != verifiedSource.ManifestDigest {
+		t.Fatal("fresh reconcile", state, err)
+	}
+	second, state, err := ReconcileCandidate(source, root, stage, verifiedSource.ManifestDigest, 4, public, "reconcile", "darwin", 1, true)
+	if err != nil || state != CandidateStaged || second.Directory != first.Directory {
+		t.Fatal("staged reopen", state, err)
+	}
+	promoted, err := PromoteStaged(first.Directory, filepath.Join(root, "releases"), public, "reconcile", "darwin", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, state, err := ReconcileCandidate(source, root, stage, verifiedSource.ManifestDigest, 4, public, "reconcile", "darwin", 1, true)
+	if err != nil || state != CandidatePromoted || third.Directory != promoted.Directory {
+		t.Fatal("promoted reopen", state, err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "releases", stage), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ReconcileCandidate(source, root, stage, verifiedSource.ManifestDigest, 4, public, "reconcile", "darwin", 1, true); err == nil {
+		t.Fatal("ambiguous staged and promoted state accepted")
+	}
+	if err := os.Remove(filepath.Join(root, "releases", stage)); err != nil {
+		t.Fatal(err)
+	}
+	if err := CleanupVerifiedTestRelease(promoted.Directory, root, verifiedSource.ManifestDigest, 4, public, "reconcile", "darwin", 1, true); err != nil {
+		t.Fatal("exact test release cleanup", err)
+	}
+	if _, err := os.Lstat(promoted.Directory); !os.IsNotExist(err) {
+		t.Fatal("promoted release retained", err)
+	}
+}
+
 func TestProtectedImportRejectsHardlinksAndUnsafeRoots(t *testing.T) {
 	public, private, _ := ed25519.GenerateKey(rand.Reader)
 	sourceParent := t.TempDir()

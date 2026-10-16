@@ -212,6 +212,20 @@ func run() error {
 		if err != nil || write(filepath.Join(source, installrelease.ManifestName), raw, 0600) != nil {
 			return "", installrelease.Verified{}, os.ErrInvalid
 		}
+		transactionDir := filepath.Join(dest, "transaction-"+version)
+		payload := filepath.Join(transactionDir, "release-payload")
+		if err = os.Mkdir(transactionDir, 0700); err != nil || os.Mkdir(payload, 0700) != nil {
+			return "", installrelease.Verified{}, os.ErrInvalid
+		}
+		payloadFiles, filesErr := installrelease.ExpectedFiles(goos)
+		if filesErr != nil {
+			return "", installrelease.Verified{}, filesErr
+		}
+		for _, name := range append([]string{installrelease.ManifestName}, payloadFiles...) {
+			if err = copyFile(filepath.Join(source, name), filepath.Join(payload, name)); err != nil {
+				return "", installrelease.Verified{}, err
+			}
+		}
 		verified, err := installrelease.ImportStaged(source, dest, stageName, root, current.Channel, goos, current.MinimumEpoch, current.Test)
 		return stageName, verified, err
 	}
@@ -235,6 +249,34 @@ func run() error {
 		return err
 	}
 	if err = trustinstall.CompileInstalledReleaseManager(ctx, goexe, module, goos, filepath.Join(dest, "release-manager-v2"+suffix), spec, stage2, verified2.ManifestDigest, 2, now); err != nil {
+		return err
+	}
+	transactionRoot := filepath.Join(dest, "transaction-install-root")
+	makeTransaction := func(version, operation, stage string, current trustinstall.Specification, verified installrelease.Verified, epoch uint64) error {
+		directory := filepath.Join(dest, "transaction-"+version)
+		if err := copyFile(filepath.Join(dest, "trust-journal"+suffix), filepath.Join(directory, "trust-journal"+suffix)); err != nil {
+			return err
+		}
+		provisioner := filepath.Join(directory, "install-root-provisioner"+suffix)
+		if err := trustinstall.CompileInstallRootProvisioner(ctx, goexe, module, goos, provisioner, transactionRoot, true); err != nil {
+			return err
+		}
+		manager := filepath.Join(directory, "installed-release-manager"+suffix)
+		if err := trustinstall.CompileFixedRootInstalledReleaseManager(ctx, goexe, module, goos, manager, current, transactionRoot, stage, verified.ManifestDigest, epoch, now); err != nil {
+			return err
+		}
+		provisionerRaw, provisionerErr := read(provisioner)
+		managerRaw, managerErr := read(manager)
+		if provisionerErr != nil || managerErr != nil {
+			return os.ErrInvalid
+		}
+		provisionerHash, managerHash := sha256.Sum256(provisionerRaw), sha256.Sum256(managerRaw)
+		return trustinstall.CompileInstallTransaction(ctx, goexe, module, goos, filepath.Join(directory, "install-transaction"+suffix), current, transactionRoot, operation, stage, verified.ManifestDigest, epoch, hex.EncodeToString(provisionerHash[:]), hex.EncodeToString(managerHash[:]), now)
+	}
+	if err = makeTransaction("v1", "install", stage1, spec1, verified1, 1); err != nil {
+		return err
+	}
+	if err = makeTransaction("v2", "upgrade", stage2, spec, verified2, 2); err != nil {
 		return err
 	}
 	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(dest, "release-launcher-v1"+suffix), spec1, now); err != nil {

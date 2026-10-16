@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,7 +17,7 @@ import (
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
 
-var embeddedRelease, embeddedStaging, embeddedManifestDigest, embeddedManifestEpoch string
+var embeddedRelease, embeddedInstallRoot, embeddedStaging, embeddedManifestDigest, embeddedManifestEpoch string
 
 type reply struct {
 	Status string `json:"status"`
@@ -86,7 +87,7 @@ func expectedCandidate(releases string, release trustinstall.Release, public []b
 }
 
 func run() (reply, error) {
-	if len(os.Args) != 2 || (os.Args[1] != "install" && os.Args[1] != "upgrade" && os.Args[1] != "status" && os.Args[1] != "cleanup-test") {
+	if len(os.Args) != 2 || (os.Args[1] != "install" && os.Args[1] != "upgrade" && os.Args[1] != "status" && os.Args[1] != "cleanup-test" && os.Args[1] != "cleanup-release-test") {
 		return reply{}, installrelease.ErrRelease
 	}
 	release, err := trustinstall.DecodeCompiled(embeddedRelease)
@@ -106,7 +107,18 @@ func run() (reply, error) {
 	if err != nil {
 		return reply{}, err
 	}
-	root := filepath.Dir(executable)
+	executableRoot := filepath.Dir(executable)
+	root, helperRoot := executableRoot, executableRoot
+	if embeddedInstallRoot != "" {
+		raw, decodeErr := base64.RawURLEncoding.DecodeString(embeddedInstallRoot)
+		if decodeErr != nil || base64.RawURLEncoding.EncodeToString(raw) != embeddedInstallRoot {
+			return reply{}, installrelease.ErrRelease
+		}
+		root = string(raw)
+		if !filepath.IsAbs(root) || filepath.Clean(root) != root || filepath.Dir(root) == root {
+			return reply{}, installrelease.ErrRelease
+		}
+	}
 	releases, err := installrelease.ValidateProtectedLayout(root, release.Specification().Test)
 	if err != nil {
 		return reply{}, err
@@ -115,16 +127,35 @@ func run() (reply, error) {
 	if runtime.GOOS == "windows" {
 		suffix, platform = ".exe", "windows"
 	}
-	helper := filepath.Join(root, "trust-journal"+suffix)
-	if err = installed(release, helper); err != nil {
-		return reply{}, err
-	}
+	helper := filepath.Join(helperRoot, "trust-journal"+suffix)
 	records, err := release.NativeRecordFactory(helper)
 	if err != nil {
 		return reply{}, err
 	}
 	scope, err := installrelease.Scope(release.Scope())
 	if err != nil {
+		return reply{}, err
+	}
+	if os.Args[1] == "cleanup-release-test" {
+		if !release.Specification().Test {
+			return reply{}, installrelease.ErrRelease
+		}
+		state, stateErr := release.NativeRecordState(helper)
+		if stateErr != nil {
+			return reply{}, stateErr
+		}
+		current, stateErr := state(scope, true)
+		if stateErr != nil || current != trustprofile.JournalAbsent {
+			return reply{}, installrelease.ErrRelease
+		}
+		public, publicErr := anchor(release)
+		candidate, candidateErr := expectedCandidate(releases, release, public, platform, epoch)
+		if publicErr != nil || candidateErr != nil || installrelease.CleanupVerifiedTestRelease(candidate.Directory, root, embeddedManifestDigest, epoch, public, release.Specification().Channel, platform, release.Specification().MinimumEpoch, true) != nil {
+			return reply{}, installrelease.ErrRelease
+		}
+		return reply{Status: "cleaned"}, nil
+	}
+	if err = installed(release, helper); err != nil {
 		return reply{}, err
 	}
 	if os.Args[1] == "cleanup-test" {
@@ -159,18 +190,43 @@ func run() (reply, error) {
 	if installrelease.ValidateProtectedRelease(candidate.Directory, root, release.Specification().Test) != nil {
 		return reply{}, installrelease.ErrRelease
 	}
-	journal, err := records(scope, os.Args[1] == "install", release.Specification().Test)
+	journal, openErr := records(scope, false, release.Specification().Test)
+	if openErr == nil {
+		// Upgrade must authenticate the previous signed epoch even when it is
+		// below this manager's new floor. Installed trust was already advanced;
+		// activation still requires a strictly newer exact candidate below.
+		active, activeErr := installrelease.OpenActive(journal, releases, public, release.Specification().Channel, platform, 1)
+		if activeErr != nil {
+			journal.Close()
+			return reply{}, installrelease.ErrRelease
+		}
+		if active.ManifestDigest == candidate.ManifestDigest && active.Manifest.Epoch == candidate.Manifest.Epoch && active.Directory == candidate.Directory {
+			if journal.Close() != nil {
+				return reply{}, installrelease.ErrRelease
+			}
+			return reply{Status: "active", Epoch: active.Manifest.Epoch}, nil
+		}
+		if os.Args[1] != "upgrade" {
+			journal.Close()
+			return reply{}, installrelease.ErrRelease
+		}
+		activated, activateErr := installrelease.ActivateUpgrade(journal, candidate)
+		closeErr := journal.Close()
+		if activateErr != nil || closeErr != nil {
+			return reply{}, installrelease.ErrRelease
+		}
+		return reply{Status: "active", Epoch: activated.Epoch}, nil
+	}
+	if os.Args[1] != "install" {
+		return reply{}, openErr
+	}
+	journal, err = records(scope, true, release.Specification().Test)
 	if err != nil {
 		return reply{}, err
 	}
-	var active installrelease.Activation
-	if os.Args[1] == "install" {
-		active, err = installrelease.ActivateFirst(journal, candidate)
-	} else {
-		active, err = installrelease.ActivateUpgrade(journal, candidate)
-	}
+	active, activateErr := installrelease.ActivateFirst(journal, candidate)
 	closeErr := journal.Close()
-	if err != nil || closeErr != nil {
+	if activateErr != nil || closeErr != nil {
 		return reply{}, installrelease.ErrRelease
 	}
 	return reply{Status: "active", Epoch: active.Epoch}, nil

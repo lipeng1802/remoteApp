@@ -78,3 +78,29 @@ func TestInstallRootBuildConfigurationIsCanonicalAndFixed(t *testing.T) {
 		t.Fatalf("noncanonical provisioner pin accepted: %v", err)
 	}
 }
+
+func TestInstallTransactionRejectsRuntimeSelectableOrUnpinnedInputs(t *testing.T) {
+	destination := filepath.Join(t.TempDir(), "transaction")
+	specification := Specification{MinimumEpoch: 2}
+	validStage, validDigest := ".staging-"+strings.Repeat("1", 32), strings.Repeat("2", 64)
+	for _, fixture := range []struct {
+		root      string
+		operation string
+		stage     string
+		digest    string
+		epoch     uint64
+		pin       string
+	}{
+		{"relative", "install", validStage, validDigest, 2, validDigest},
+		{"/fixed/root", "repair", validStage, validDigest, 2, validDigest},
+		{"/fixed/root", "install", "candidate", validDigest, 2, validDigest},
+		{"/fixed/root", "install", validStage, "bad", 2, validDigest},
+		{"/fixed/root", "install", validStage, validDigest, 1, validDigest},
+		{"/fixed/root", "install", validStage, validDigest, 2, "bad"},
+	} {
+		err := CompileInstallTransaction(context.Background(), "/unused/go", "/unused/module", "darwin", destination, specification, fixture.root, fixture.operation, fixture.stage, fixture.digest, fixture.epoch, fixture.pin, validDigest, time.Now())
+		if !errors.Is(err, trustprofile.ErrTrust) {
+			t.Fatalf("invalid transaction input accepted: %#v err=%v", fixture, err)
+		}
+	}
+}

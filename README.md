@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r48 将安装根回执、签名payload导入、原生trust安装/升级与release activation串成编译固定的无参数transaction owner。它仅接受唯一root/staging/manifest/epoch/operation及摘要固定的provisioner/manager；重启时只允许继续exact staging或content-addressed final，相同版本已激活视为幂等成功，混合/篡改/回退状态锁闭。macOS原生组合已通过v1 install两次、v2 upgrade两次、精确回收与原身份升级回归；Windows x64仅交叉build/vet。固定bootstrap launcher/helper安装、真实提权、代码签名及DMG/Inno尚未接入。
+
 r47 新增固定目标、无运行时路径参数的install-root provisioner：生产macOS/Unix只能以root设置`0755`可读执行根，Windows设置受保护DACL（SYSTEM/Administrators可写，Users只读执行）；TEST根保持当前用户私有。回执不含明文路径，绑定路径摘要、卷和两个目录对象ID，必须立即重开核验；TEST清理仅接受当前回执绑定的空布局。macOS编译固定入口原生验证已通过，Windows x64仅交叉构建；真实提权、代码签名和DMG/Inno尚未验收。
 
 r46 完成installer staging交接边界：外部签名payload必须先全量验签，再以独占创建、单硬链接、同卷方式复制到安装根内隐藏staging，并fsync文件/目录后重验。manager/launcher每次检查安装根、`releases`及活动版本的owner/权限、链接/重解析点、同卷与单链接属性；生产macOS根只接受root owner，Windows只接受SYSTEM/Administrators owner且拒绝Everyone/Authenticated Users/Users的写权。macOS用户所有TEST保护根原生组合通过，Windows仅交叉构建；正式特权根创建、DMG/Inno和代码签名仍未接入。

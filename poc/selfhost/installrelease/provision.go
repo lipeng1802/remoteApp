@@ -1,8 +1,11 @@
 package installrelease
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -22,6 +25,26 @@ type LayoutReceipt struct {
 	Volume         string `json:"volume"`
 	RootObject     string `json:"root_object"`
 	ReleasesObject string `json:"releases_object"`
+}
+
+// DecodeLayoutReceipt accepts only the canonical one-object JSON emitted by
+// the fixed provisioner. Object identity is checked separately on reopen.
+func DecodeLayoutReceipt(raw []byte) (LayoutReceipt, error) {
+	var receipt LayoutReceipt
+	var extra struct{}
+	if len(raw) < 2 || len(raw) > 4096 || raw[len(raw)-1] != '\n' {
+		return LayoutReceipt{}, ErrRelease
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&receipt) != nil || decoder.Decode(&extra) != io.EOF {
+		return LayoutReceipt{}, ErrRelease
+	}
+	canonical, err := json.Marshal(receipt)
+	if err != nil || !bytes.Equal(raw, append(canonical, '\n')) {
+		return LayoutReceipt{}, ErrRelease
+	}
+	return receipt, nil
 }
 
 func pathDigest(path string) string {

@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+const CandidateStaged = "staged"
+const CandidatePromoted = "promoted"
+
 type fileIdentity struct {
 	volume uint64
 	index  uint64
@@ -151,4 +154,91 @@ func ImportStaged(source, installRoot, stagingName string, root []byte, channel,
 		return Verified{}, ErrRelease
 	}
 	return verified, nil
+}
+
+// ReconcileCandidate is the crash-reopen boundary between an installer bundle
+// and the activation manager. Exactly one of the fixed hidden staging path or
+// its content-addressed promoted path may exist. Neither causes a fresh import;
+// both or any digest/epoch mismatch fail closed.
+func ReconcileCandidate(source, installRoot, stagingName, expectedDigest string, expectedEpoch uint64, root []byte, channel, platform string, minimumEpoch uint64, test bool) (Verified, string, error) {
+	if len(stagingName) != len(".staging-")+32 || !strings.HasPrefix(stagingName, ".staging-") || !canonicalHex(strings.TrimPrefix(stagingName, ".staging-"), 16) || !canonicalHex(expectedDigest, 32) || expectedEpoch == 0 || expectedEpoch > 1<<53-1 {
+		return Verified{}, "", ErrRelease
+	}
+	sourceVerified, err := VerifyDirectory(source, root, channel, platform, minimumEpoch)
+	if err != nil || sourceVerified.ManifestDigest != expectedDigest || sourceVerified.Manifest.Epoch != expectedEpoch {
+		return Verified{}, "", ErrRelease
+	}
+	releases, err := ValidateProtectedLayout(installRoot, test)
+	if err != nil {
+		return Verified{}, "", err
+	}
+	stage := filepath.Join(releases, stagingName)
+	name, err := ReleaseDirectoryName(sourceVerified)
+	if err != nil {
+		return Verified{}, "", err
+	}
+	promoted := filepath.Join(releases, name)
+	stageInfo, stageErr := os.Lstat(stage)
+	promotedInfo, promotedErr := os.Lstat(promoted)
+	stageExists, promotedExists := stageErr == nil, promotedErr == nil
+	if (stageErr != nil && !os.IsNotExist(stageErr)) || (promotedErr != nil && !os.IsNotExist(promotedErr)) || (stageExists && promotedExists) {
+		return Verified{}, "", ErrRelease
+	}
+	if stageExists {
+		if !stageInfo.IsDir() || stageInfo.Mode()&os.ModeSymlink != 0 {
+			return Verified{}, "", ErrRelease
+		}
+		verified, err := VerifyDirectory(stage, root, channel, platform, minimumEpoch)
+		if err != nil || verified.ManifestDigest != expectedDigest || verified.Manifest.Epoch != expectedEpoch || ValidateProtectedRelease(stage, installRoot, test) != nil {
+			return Verified{}, "", ErrRelease
+		}
+		return verified, CandidateStaged, nil
+	}
+	if promotedExists {
+		if !promotedInfo.IsDir() || promotedInfo.Mode()&os.ModeSymlink != 0 {
+			return Verified{}, "", ErrRelease
+		}
+		verified, err := VerifyDirectory(promoted, root, channel, platform, minimumEpoch)
+		if err != nil || verified.ManifestDigest != expectedDigest || verified.Manifest.Epoch != expectedEpoch || ValidateProtectedRelease(promoted, installRoot, test) != nil {
+			return Verified{}, "", ErrRelease
+		}
+		return verified, CandidatePromoted, nil
+	}
+	verified, err := ImportStaged(source, installRoot, stagingName, root, channel, platform, minimumEpoch, test)
+	if err != nil || verified.ManifestDigest != expectedDigest || verified.Manifest.Epoch != expectedEpoch {
+		return Verified{}, "", ErrRelease
+	}
+	return verified, CandidateStaged, nil
+}
+
+// CleanupVerifiedTestRelease removes one exact inactive TEST release. Callers
+// must separately prove that the activation record is absent; production use
+// is intentionally unavailable.
+func CleanupVerifiedTestRelease(directory, installRoot, expectedDigest string, expectedEpoch uint64, root []byte, channel, platform string, minimumEpoch uint64, test bool) error {
+	if !test || !canonicalHex(expectedDigest, 32) || expectedEpoch == 0 || ValidateProtectedRelease(directory, installRoot, true) != nil {
+		return ErrRelease
+	}
+	verified, err := VerifyDirectory(directory, root, channel, platform, minimumEpoch)
+	if err != nil || verified.ManifestDigest != expectedDigest || verified.Manifest.Epoch != expectedEpoch {
+		return ErrRelease
+	}
+	for _, name := range append([]string{ManifestName}, mustExpected(platform)...) {
+		path := filepath.Join(directory, name)
+		file, _, err := openChecked(path, false, true)
+		if err != nil || file.Close() != nil || os.Remove(path) != nil {
+			return ErrRelease
+		}
+	}
+	if os.Remove(directory) != nil {
+		return ErrRelease
+	}
+	parent, err := os.Open(filepath.Dir(directory))
+	if err != nil {
+		return ErrRelease
+	}
+	syncErr, closeErr := parent.Sync(), parent.Close()
+	if syncErr != nil || closeErr != nil {
+		return ErrRelease
+	}
+	return nil
 }

@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-16 r48 可中断重开的 installer transaction owner
+
+用户要求继续下一切片。本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或现有DMG/Inno。r47已本地提交`66c7782`，本节形成后续独立本地提交，不自动推送。
+
+新增编译固定的无参数`install-transaction`。构建时唯一绑定release trust、保护install root、`install|upgrade`操作、staging nonce、manifest SHA-256/epoch及provisioner/manager SHA-256；运行时payload只能是自身目录的固定`release-payload`，不读argv、环境、sidecar路径或服务器指令。入口顺序执行并立即复核root receipt→signed payload reconcile/import→payload内摘要/签名绑定的trust initialize/upgrade→摘要固定fixed-root manager activation→最终promoted candidate重验。
+
+`ReconcileCandidate`定义崩溃重开边界：唯一允许状态是exact外部签payload对应的“尚无目标”、单一hidden staging或单一content-addressed final；无目标才新导入，已staged/final则全量重验后继续，两者同时存在、digest/epoch不同或结构异常都锁闭。manager现在能在activation已精确指向同候选时幂等成功；升级可验证低于新floor但同root/channel签名的旧active，实际提交仍要求epoch严格增大。commit不确定仍先报错，只能重启后用exact active判定。
+
+原生验证包已扩展两个独立transaction bundle。macOS当前源码helper/ad-hoc identity vault实际PASS：原r41–r47身份/trust/release升级回归仍通过并先精确清理；新根上v1 install连续两次、v2 upgrade连续两次都返回同一committed epoch，v2 manager status为active/2；最后精确删除activation、trust、两个已验签TEST release和空root，目标根确认不存在。有一次中间验证暴露“新manager floor=2无法打开epoch1 active以升级”，已修正为仅在upgrade比较阶段用release root/channel验签旧epoch，不放宽新trust floor或严格递增commit。失败TEST状态由defer清理。
+
+定向race、Windows amd64 build/vet均PASS，但Windows没有实机运行，不计DACL/Credential Manager/进程占用验收。重要边界：transaction bundle的publisher身份尚依赖后续Developer ID/Authenticode；安装根目前只有版本目录和activation，还没有将稳定bootstrap launcher/`trust-journal`以签名、原子可升级的方式放入根，因此仍不是可从系统入口启动的完整安装产品。下一切片优先定义并验收受保护bootstrap set（固定launcher/helper manifest、原子置换、旧launcher仍跟随active），再接DMG/Inno adapter。
+
 ## 2026-10-16 r47 特权安装根配方与可重开回执
 
 用户要求继续任务。本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或现有DMG/Inno。r46已本地提交`2402bc4`，本节形成后续独立本地提交，不自动推送。
