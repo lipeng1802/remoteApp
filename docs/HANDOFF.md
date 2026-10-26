@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-26 r40 自主入口离线安装协调与 profile 防回退通过 Windows TEST 验证
+
+用户确认 Mac 暂不可用并授权本机开发。新增 autonomousinstall.Owner 和独立 autonomous-install 入口，将显式 OS 身份 provisioning 后的公钥、trust journal 和 enrollment namespace 组合：initialize 创建且拒绝覆盖，upgrade 持有双独占租约并保留节点终态，inspect 不修复。部分失败保留证据，Close/join 错误不报告成功；维护程序固定编译 release/helper digest，不接收私钥、任意端点或 root。
+
+自主产品 builder 同包输出维护程序；仅新自主 runtime 使用 OpenExactRelease，持锁核对当前 profile 与编译值一致。普通入口不变。身份首次创建沿用既有 provisioning；最终 GUI/Setup、公开绑定回执持久衔接和部分安装恢复仍待下个切片，不宣称完整安装器已实现。
+
+实测：4 项协调回归、clientowner/trustinstall/trustprofile/builder 回归与 go vet 通过。Windows 原生 TEST 现场编译两份 epoch 维护 exe，首次创建/重复拒绝、错误身份、活租约冲突、升级保留 attempted、旧维护/旧 runtime owner 拒绝、原公钥保留和精确清理/join 全通过，无 SKIP、退出码 0。Windows/macOS arm64 入口编译通过；Mac 无原生证据。流程、命令、日志见 [AUTONOMOUS_INSTALLATION.md](../poc/selfhost/public-server/AUTONOMOUS_INSTALLATION.md)。
+
+边界：这是 profile/epoch 门槛，不是历史任意二进制的系统级防回滚；r39 等无门禁程序不能追溯保护，同 profile 不同产品版本的独立下限和签名安装仍待实现。没有联系服务器、入网、更新正式客户端或修改 Tailscale/旧配对。下一本机项是可信安装 owner 的身份/回执持久衔接和恢复诊断，再做 Mac/服务器联合验收。本轮仅本地提交，不自动推送。
+
+用户另已回报旧 RemoteAgent 实体键盘紧急停止和密钥界面生命周期验证通过；属于旧 UI 产品证据，不作为新自主入口 GUI/联网验收。
+
 ## 2026-10-26 Windows r31 本机预检实机通过；联合验收仍待
 
 用户要求切换分支并继续，随后明确“先完成 Windows 本机预检”。已从 main 切换到 `codex/connection-architecture-poc`，本轮被测源码为 `ee8f03b4d834`。main 上未提交的 2026-10-02 Windows 安装记录保留在独立 stash（说明：`main Windows installation evidence before architecture branch 2026-10-26`），没有跨分支混入新交接或丢弃。

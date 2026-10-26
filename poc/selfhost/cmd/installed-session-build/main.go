@@ -221,6 +221,11 @@ func run() error {
 			}
 		}
 	}
+	if autonomousProduct {
+		if e = trustinstall.CompileAutonomousInstaller(ctx, goexe, module, target, filepath.Join(dest, "autonomous-install"+suffix), s, pin, time.Now()); e != nil {
+			return e
+		}
+	}
 	if e = trustinstall.Compile(ctx, goexe, module, target, filepath.Join(dest, "trust-install"+suffix), s, time.Now()); e != nil {
 		return e
 	}
