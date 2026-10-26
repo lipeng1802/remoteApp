@@ -1,5 +1,40 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-26 Windows r31 本机预检实机通过；联合验收仍待
+
+用户要求切换分支并继续，随后明确“先完成 Windows 本机预检”。已从 main 切换到 `codex/connection-architecture-poc`，本轮被测源码为 `ee8f03b4d834`。main 上未提交的 2026-10-02 Windows 安装记录保留在独立 stash（说明：`main Windows installation evidence before architecture branch 2026-10-26`），没有跨分支混入新交接或丢弃。
+
+### 构建与环境
+
+- Windows 普通已登录桌面进程，非管理员，SessionId 2；运行前固定本机端口 18443 空闲。
+- 本机原先没有 Go 或预检包；在忽略目录 `artifacts/connection-poc/toolchains` 下载便携 Go **1.26.6 windows/amd64**。官方 go.dev 元数据 SHA-256 `5b6c5b556525810463b5c897b50dc7a82d6a3dc0bfaf55d990a7e9f31d6b2318` 与 ZIP 一致。未安装系统软件、未修改系统 PATH；Go 依赖和构建缓存也隔离在 artifacts 下。
+- 依照 go.mod/go.sum 下载依赖后，预检 builder 测试通过；另外两个子 builder 没有独立测试文件。本轮未改产品或测试实现。
+- 从上述源码新建 `artifacts/connection-poc/windows-preflight-20261026-a`，输出 `BUILD READY windows_native_preflight`。没有复用 10 月旧包或改时钟；新 profile 仍为 23 小时 TEST 范围。
+- 包内 `SHA256.json` 的 SHA-256 为 `20105d65b5cb21f06f3a4d6fa821bf1f86aa4e368f0073acbb8318f0405ba104`。严格文件集合和全部文件哈希由原版脚本检查通过；这只是完整性证据，不是发行签名。
+
+### Windows 实测结果
+
+在普通 PowerShell 用包内 `run-windows-enrollment-preflight.ps1` 执行，退出码 **0**；没有 FAIL、SKIP、stderr 或进程退出超时：
+
+1. enrollmentstore 全部 **9 个顶层测试通过**，含 Windows 私有目录 DACL、未知文件/非空缓存清理拒绝、状态损坏及提交未知结果拒绝。
+2. 原生存储组合通过：跨进程独占租约、attempted/registered 持久重开后拒绝再次尝试、精确 TEST 凭据/节点材料清理。
+3. 本机 OS 签名 HTTPS 组合通过：正常注册消费、未知回复保留且不再次 mint、原生 profile/node 租约和 join 清理。注册节点仍是 fixture，不能当作真实入网。
+4. 真实 SDK 失败路径通过：确实访问固定本机失败服务，注册拒绝，SDK 同步 Close 返回后才能重开租约，attempted 保留/重试拒绝，精确 TEST 清理完成。
+
+最终原文标记：
+
+~~~text
+PREFLIGHT PASSED: Windows native storage + OS signed local HTTPS + actual SDK cancel/join. NOT real Headscale enrollment, verifier bind, public service, GUI or installer acceptance.
+~~~
+
+运行日志保留在包目录外的 `artifacts/connection-poc/windows-preflight-20261026-a.log`（Git 忽略）。结束后固定端口 18443 已释放，预检 exe/helper 剩余进程数 **0**。原 PersonalRemoteDesktop/Agent/v1 凭据元数据、证书元数据、Tailscale 节点和版本与运行前一致；Tailscale 仍 Running/Online。不读取或输出旧配对密钥、未删除系统 Tailscale、未重装 RemoteAgent、未访问或维护服务器。
+
+### 下一步与边界
+
+r31 Windows 本机预检待办现可关闭；真实 Windows＋服务器注册/实时证明绑定、双端 overlay、产品 TLS/HMAC、活动撤销与重启拒绝仍未验收。用户本轮限定本机预检，未执行服务器维护或双机操作。
+
+下一次依 [WINDOWS_ENROLLMENT_PREFLIGHT.md](../poc/selfhost/public-server/WINDOWS_ENROLLMENT_PREFLIGHT.md) 第二步，由 Mac/服务器侧准备新的获准维护窗口、独立 stage、公开 issuer 和 fresh Windows 联合包，确认后端/私有转发 READY 后再运行联合入口。不复用旧 r30 stage、smoke 包或过期 profile；不把管理 SSH、TLS/issuer 私钥交给 Windows。现有产品的实体键盘/干净机器等待办保持原状态。
+
 ## 2026-10-15 r39 独立自主产品编译入口（默认仍关闭）
 
 用户要求开始下一切片。Windows仍关机；r31预检、1/2 Windows联合验收和真实双机Headscale/overlay/产品流继续待办。本轮没有联系Windows、操作服务器/策略/端口/Store/Nginx，也没有替换现有正式客户端。
