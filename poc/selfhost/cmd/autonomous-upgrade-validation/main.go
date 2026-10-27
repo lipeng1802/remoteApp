@@ -504,7 +504,6 @@ func run() (result error) {
 	}{
 		{"v1", 1}, {"v2", 2},
 	} {
-		bootstrapNeedsReopen := false
 		for attempt := 0; attempt < 2; attempt++ {
 			value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
 			prepared := func(reply reply, commandErr error) bool {
@@ -543,37 +542,25 @@ func run() (result error) {
 			if confirmErr != nil || confirmed.Status != "prepared" || confirmed.Epoch != fixture.epoch || confirmed.Phase != installrelease.CandidatePromoted {
 				return fmt.Errorf("transaction %s epoch %d promotion confirmation", fixture.version, fixture.epoch)
 			}
-			value, bootstrapErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
-			if bootstrapErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
-				// ImportBootstrapStaged and ActivateBootstrap have the same
-				// Windows directory-receipt boundary as the release preparation.
-				// Give one fresh, fixed manager owner the opportunity to reopen
-				// an exact staged/promoted set or an exact active pointer.
-				reopened, reopenErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
-				if reopenErr == nil && reopened.Status == "active" && reopened.Epoch == fixture.epoch {
-					value, bootstrapErr = reopened, nil
-				} else {
-					// Windows may durably replace current.json and still fail the
-					// directory durability receipt. Accept that uncertainty only when
-					// a separate read proves the exact epoch active, and require the
-					// next manager process to reopen it successfully. No write retry or
-					// arbitrary failure is treated as success.
-					status, statusErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil, "status")
-					if attempt != 0 || statusErr != nil || status.Status != "active" || status.Epoch != fixture.epoch {
-						return fmt.Errorf("bootstrap %s epoch %d reopen", fixture.version, fixture.epoch)
-					}
-					bootstrapNeedsReopen = true
-					bootstrapStarted = true
-					continue
+			// A Windows bootstrap transition has three durable commit boundaries:
+			// import to staging, promotion to the content-addressed set, and the
+			// current.json replace. Each can complete before its directory receipt
+			// reports failure. A fresh fixed manager may advance one monotonic phase;
+			// the fourth owner must either reopen the exact active epoch normally or
+			// the validation fails. There is no delay and no failure is accepted as
+			// success.
+			bootstrapActive := false
+			for owner := 0; owner < 4; owner++ {
+				value, bootstrapErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
+				if bootstrapErr == nil && value.Status == "active" && value.Epoch == fixture.epoch {
+					bootstrapActive = true
+					break
 				}
 			}
-			if bootstrapNeedsReopen {
-				bootstrapNeedsReopen = false
+			if !bootstrapActive {
+				return fmt.Errorf("bootstrap %s epoch %d owners exhausted", fixture.version, fixture.epoch)
 			}
 			bootstrapStarted = true
-		}
-		if bootstrapNeedsReopen {
-			return fmt.Errorf("bootstrap %s epoch %d restart", fixture.version, fixture.epoch)
 		}
 		if value, statusErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil, "status"); statusErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
 			return fmt.Errorf("bootstrap %s status", fixture.version)
