@@ -4,12 +4,14 @@
 
 用户要求继续后续任务。已从当前提交 `fa40fc1` 重新编译 Windows amd64 `trust-journal` 与 `identity-vault`，并用当前 `autonomous-upgrade-validation-build` 生成全新随机 TEST channel、两代签名 release、bootstrap set 和 transaction。定向 `installrelease`/`trustinstall`/`autonomousinstall` 测试及 Windows amd64 vet 通过。
 
-新 ZIP 已通过 62 个 manifest 文件的严格 SHA-256、无符号链接、无 AppleDouble 和压缩包完整性检查。本地归档为 `artifacts/connection-poc/remoteapp-bootstrap-r49-merged-fa40fc1-r3-win-x64.zip`，大小 437709770 bytes，SHA-256 `595928111b48230334211a70bf8b2820e7a730b3632d2d3506d761ae7d097edd`。Windows 端上传后的 ZIP 已用 CertUtil 核对相同摘要，并解压到 `C:\Users\jarvis\remoteapp-bootstrap-r49-merged-fa40fc1-r3\bundle`。SSH 只用于公开验收包传输/校验，未执行原生桌面验收。
+r3 在 Windows 普通桌面正确拒绝，输出 `transaction v1 epoch 1 reopen`。原因不是 Windows 代码过旧，而是打包时固定了嵌套 TEST 根 `C:\Users\jarvis\remoteapp-bootstrap-fa40fc1\install-root`，其父目录不存在；安全配方按设计不创建缺失父目录。失败后只读检查确认安装根不存在且无进程残留；r3 不再作验收包。
+
+r4 改用已存在的 `C:\Users\jarvis` 为直接父目录，固定 TEST 根 `C:\Users\jarvis\remoteapp-bootstrap-fa40fc1-r4-install-root`。新 ZIP 已通过 62 个 manifest 文件的严格 SHA-256、无符号链接、无 AppleDouble 和压缩包完整性检查。本地归档为 `artifacts/connection-poc/remoteapp-bootstrap-r49-merged-fa40fc1-r4-win-x64.zip`，大小 465438478 bytes，SHA-256 `123584d2a078bb7e4ae3429779dcb9ac3b79674e0a57e37c68e5e46cd2aa7f22`。Windows 端上传后的 ZIP 已用 CertUtil 核对相同摘要，并解压到 `C:\Users\jarvis\remoteapp-bootstrap-r49-merged-fa40fc1-r4\bundle`。SSH 只用于公开验收包传输/校验，未执行原生桌面验收。
 
 下一步在 Windows **普通已登录桌面 PowerShell** 运行：
 
 ```powershell
-& "C:\Users\jarvis\remoteapp-bootstrap-r49-merged-fa40fc1-r3\bundle\autonomous-upgrade-validation.exe"
+& "C:\Users\jarvis\remoteapp-bootstrap-r49-merged-fa40fc1-r4\bundle\autonomous-upgrade-validation.exe"
 $LASTEXITCODE
 ```
 
