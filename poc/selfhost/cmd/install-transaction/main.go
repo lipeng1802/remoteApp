@@ -185,19 +185,17 @@ func run() (transactionReply, error) {
 	if provision(provisioner, configuration.root, configuration.release.Specification().Test) != nil {
 		return transactionReply{}, installrelease.ErrRelease
 	}
-	_, _, err = installrelease.ReconcileCandidate(payload, configuration.root, embeddedStaging, embeddedManifestDigest, configuration.epoch, public, configuration.release.Specification().Channel, platform, configuration.release.Specification().MinimumEpoch, configuration.release.Specification().Test)
+	_, state, err := installrelease.ReconcileCandidate(payload, configuration.root, embeddedStaging, embeddedManifestDigest, configuration.epoch, public, configuration.release.Specification().Channel, platform, configuration.release.Specification().MinimumEpoch, configuration.release.Specification().Test)
 	if err != nil {
 		return transactionReply{}, err
 	}
-	reply, err := invoke(manager, embeddedOperation)
-	if err != nil || reply.Status != "active" || reply.Epoch != configuration.epoch {
-		return transactionReply{}, installrelease.ErrRelease
-	}
-	final, state, err := installrelease.ReconcileCandidate(filepath.Join(bundle, "release-payload"), configuration.root, embeddedStaging, embeddedManifestDigest, configuration.epoch, public, configuration.release.Specification().Channel, platform, configuration.release.Specification().MinimumEpoch, configuration.release.Specification().Test)
-	if err != nil || state != installrelease.CandidatePromoted || final.ManifestDigest != embeddedManifestDigest {
-		return transactionReply{}, installrelease.ErrRelease
-	}
-	return transactionReply{Status: "active", Epoch: configuration.epoch, Phase: "committed"}, nil
+	// The pinned manager is deliberately not launched as a child here.
+	// Windows Credential Manager can reject the manager's immediate native
+	// trust reopen while this preparation owner is still alive, even though the
+	// exact same manager succeeds as soon as the owner exits. The trusted
+	// installer coordinator must start the already-pinned manager as a separate
+	// process, then invoke this owner again and require phase=promoted.
+	return transactionReply{Status: "prepared", Epoch: configuration.epoch, Phase: state}, nil
 }
 
 func main() {

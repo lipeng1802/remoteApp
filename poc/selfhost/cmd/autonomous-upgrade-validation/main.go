@@ -507,12 +507,28 @@ func run() (result error) {
 		bootstrapNeedsReopen := false
 		for attempt := 0; attempt < 2; attempt++ {
 			value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
-			if transactionErr != nil || value.Status != "active" || value.Epoch != fixture.epoch || value.Phase != "committed" {
+			if transactionErr != nil || value.Status != "prepared" || value.Epoch != fixture.epoch || (value.Phase != installrelease.CandidateStaged && value.Phase != installrelease.CandidatePromoted) {
 				releases := filepath.Join(transactionRoot, "releases")
 				stage := filepath.Join(releases, map[string]string{"v1": layout.TransactionV1Stage, "v2": layout.TransactionV2Stage}[fixture.version])
 				promoted := filepath.Join(releases, map[string]string{"v1": layout.TransactionV1Directory, "v2": layout.TransactionV2Directory}[fixture.version])
 				diagnostic := transactionDiagnostic(stage, promoted, transactionTool(fixture.version, "installed-release-manager"), "trust-install"+suffix, value, transactionErr)
 				return fmt.Errorf("transaction %s epoch %d attempt %d: %s", fixture.version, fixture.epoch, attempt+1, diagnostic)
+			}
+			operation := "install"
+			if fixture.version == "v2" {
+				operation = "upgrade"
+			}
+			managed, managerErr := command(transactionTool(fixture.version, "installed-release-manager"), nil, operation)
+			if managerErr != nil || managed.Status != "active" || managed.Epoch != fixture.epoch {
+				releases := filepath.Join(transactionRoot, "releases")
+				stage := filepath.Join(releases, map[string]string{"v1": layout.TransactionV1Stage, "v2": layout.TransactionV2Stage}[fixture.version])
+				promoted := filepath.Join(releases, map[string]string{"v1": layout.TransactionV1Directory, "v2": layout.TransactionV2Directory}[fixture.version])
+				diagnostic := transactionDiagnostic(stage, promoted, transactionTool(fixture.version, "installed-release-manager"), "trust-install"+suffix, managed, managerErr)
+				return fmt.Errorf("manager %s epoch %d attempt %d: %s", fixture.version, fixture.epoch, attempt+1, diagnostic)
+			}
+			confirmed, confirmErr := command(transactionTool(fixture.version, "install-transaction"), nil)
+			if confirmErr != nil || confirmed.Status != "prepared" || confirmed.Epoch != fixture.epoch || confirmed.Phase != installrelease.CandidatePromoted {
+				return fmt.Errorf("transaction %s epoch %d promotion confirmation", fixture.version, fixture.epoch)
 			}
 			value, bootstrapErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
 			if bootstrapErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
