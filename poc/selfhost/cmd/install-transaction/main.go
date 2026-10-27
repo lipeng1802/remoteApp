@@ -157,7 +157,7 @@ func run() (transactionReply, error) {
 	bundle := filepath.Dir(executable)
 	provisioner := filepath.Join(bundle, "install-root-provisioner"+configuration.suffix)
 	manager := filepath.Join(bundle, "installed-release-manager"+configuration.suffix)
-	if pinned(provisioner, embeddedProvisionerDigest) != nil || pinned(manager, embeddedManagerDigest) != nil || provision(provisioner, configuration.root, configuration.release.Specification().Test) != nil {
+	if pinned(provisioner, embeddedProvisionerDigest) != nil || pinned(manager, embeddedManagerDigest) != nil {
 		return transactionReply{}, installrelease.ErrRelease
 	}
 	public, err := hex.DecodeString(configuration.release.Specification().Root)
@@ -168,13 +168,26 @@ func run() (transactionReply, error) {
 	if runtime.GOOS == "windows" {
 		platform = "windows"
 	}
-	candidate, _, err := installrelease.ReconcileCandidate(filepath.Join(bundle, "release-payload"), configuration.root, embeddedStaging, embeddedManifestDigest, configuration.epoch, public, configuration.release.Specification().Channel, platform, configuration.release.Specification().MinimumEpoch, configuration.release.Specification().Test)
+	payload := filepath.Join(bundle, "release-payload")
+	verifiedPayload, err := installrelease.VerifyDirectory(payload, public, configuration.release.Specification().Channel, platform, configuration.release.Specification().MinimumEpoch)
+	if err != nil || verifiedPayload.ManifestDigest != embeddedManifestDigest || verifiedPayload.Manifest.Epoch != configuration.epoch {
+		return transactionReply{}, installrelease.ErrRelease
+	}
+	// Initialize or advance native trust from the already verified, stable
+	// installer payload. On Windows a just-created protected staging directory
+	// can be visible to validation before a nested executable can reliably open
+	// Credential Manager. Durable trust is therefore committed before layout
+	// provisioning; a later failure is safely resumed against the same exact
+	// signed payload and native epoch.
+	if ensureTrust(filepath.Join(payload, "trust-install"+configuration.suffix), embeddedOperation, configuration.epoch) != nil {
+		return transactionReply{}, installrelease.ErrRelease
+	}
+	if provision(provisioner, configuration.root, configuration.release.Specification().Test) != nil {
+		return transactionReply{}, installrelease.ErrRelease
+	}
+	_, _, err = installrelease.ReconcileCandidate(payload, configuration.root, embeddedStaging, embeddedManifestDigest, configuration.epoch, public, configuration.release.Specification().Channel, platform, configuration.release.Specification().MinimumEpoch, configuration.release.Specification().Test)
 	if err != nil {
 		return transactionReply{}, err
-	}
-	trust := filepath.Join(candidate.Directory, "trust-install"+configuration.suffix)
-	if ensureTrust(trust, embeddedOperation, configuration.epoch) != nil {
-		return transactionReply{}, installrelease.ErrRelease
 	}
 	reply, err := invoke(manager, embeddedOperation)
 	if err != nil || reply.Status != "active" || reply.Epoch != configuration.epoch {

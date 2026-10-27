@@ -504,6 +504,7 @@ func run() (result error) {
 	}{
 		{"v1", 1}, {"v2", 2},
 	} {
+		bootstrapNeedsReopen := false
 		for attempt := 0; attempt < 2; attempt++ {
 			value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
 			if transactionErr != nil || value.Status != "active" || value.Epoch != fixture.epoch || value.Phase != "committed" {
@@ -515,9 +516,26 @@ func run() (result error) {
 			}
 			value, bootstrapErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
 			if bootstrapErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
-				return fmt.Errorf("bootstrap %s epoch %d reopen", fixture.version, fixture.epoch)
+				// Windows may durably replace current.json and still fail the
+				// directory durability receipt. Accept that uncertainty only when
+				// a separate read proves the exact epoch active, and require the
+				// next manager process to reopen it successfully. No write retry or
+				// arbitrary failure is treated as success.
+				status, statusErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil, "status")
+				if attempt != 0 || statusErr != nil || status.Status != "active" || status.Epoch != fixture.epoch {
+					return fmt.Errorf("bootstrap %s epoch %d reopen", fixture.version, fixture.epoch)
+				}
+				bootstrapNeedsReopen = true
+				bootstrapStarted = true
+				continue
+			}
+			if bootstrapNeedsReopen {
+				bootstrapNeedsReopen = false
 			}
 			bootstrapStarted = true
+		}
+		if bootstrapNeedsReopen {
+			return fmt.Errorf("bootstrap %s epoch %d restart", fixture.version, fixture.epoch)
 		}
 		if value, statusErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil, "status"); statusErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
 			return fmt.Errorf("bootstrap %s status", fixture.version)
