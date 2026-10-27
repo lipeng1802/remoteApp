@@ -456,7 +456,7 @@ func run() (result error) {
 	transactionRoot := layout.TransactionRoot
 	bootstrapStarted := false
 	cleanupTransaction := func(strict bool) error {
-		failed := false
+		failureMask := 0
 		if bootstrapStarted {
 			_, _ = command(transactionTool("v2", "installed-bootstrap-manager"), nil, "cleanup-pointer-test")
 			for _, version := range []string{"v2", "v1"} {
@@ -469,11 +469,11 @@ func run() (result error) {
 		_, _ = command(transactionTool("v2", "installed-release-manager"), nil, "cleanup-test")
 		trustCleanup := filepath.Join(dir, "transaction-v2", "release-payload", "trust-install"+suffix)
 		if value, cleanupErr := command(trustCleanup, nil, "cleanup-test"); cleanupErr != nil || value.Status != "usable" {
-			failed = true
+			failureMask |= 1
 		}
-		for _, version := range []string{"v2", "v1"} {
+		for index, version := range []string{"v2", "v1"} {
 			if value, cleanupErr := command(transactionTool(version, "installed-release-manager"), nil, "cleanup-release-test"); cleanupErr != nil || value.Status != "cleaned" {
-				failed = true
+				failureMask |= 2 << index
 			}
 		}
 		provisioner := transactionTool("v2", "install-root-provisioner")
@@ -489,11 +489,14 @@ func run() (result error) {
 		// uncertain parent-directory durability receipt. The exact root absence
 		// is the only acceptable reopen result; any surviving object still fails.
 		_, rootErr := os.Lstat(transactionRoot)
-		if receiptErr != nil || decodeErr != nil || layoutErr != nil || !os.IsNotExist(rootErr) {
-			failed = true
+		if receiptErr != nil || decodeErr != nil || layoutErr != nil {
+			failureMask |= 8
 		}
-		if strict && failed {
-			return fmt.Errorf("transaction cleanup")
+		if !os.IsNotExist(rootErr) {
+			failureMask |= 16
+		}
+		if strict && failureMask != 0 {
+			return fmt.Errorf("transaction cleanup mask %d", failureMask)
 		}
 		return nil
 	}
