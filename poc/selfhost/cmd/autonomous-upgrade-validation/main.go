@@ -114,15 +114,19 @@ func productReject(path string) error {
 func transactionDiagnostic(stage, promoted, transaction, trust string, transactionValue reply, transactionErr error) string {
 	candidate := "absent"
 	trustStatus := "not_checked"
+	trustReason := "none"
 	trustEpoch := uint64(0)
 	if info, err := os.Lstat(stage); err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
 		candidate = "staged"
 		if value, inspectErr := command(filepath.Join(stage, trust), nil, "inspect"); inspectErr == nil {
 			trustStatus, trustEpoch = value.Status, value.Epoch
 		} else {
-			trustStatus = value.Status
+			trustStatus, trustReason = value.Status, value.Reason
 			if trustStatus == "" {
 				trustStatus = "failed"
+			}
+			if trustReason == "" {
+				trustReason = "invalid_reply"
 			}
 		}
 	} else if info, err := os.Lstat(promoted); err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
@@ -130,17 +134,23 @@ func transactionDiagnostic(stage, promoted, transaction, trust string, transacti
 		if value, inspectErr := command(filepath.Join(promoted, trust), nil, "inspect"); inspectErr == nil {
 			trustStatus, trustEpoch = value.Status, value.Epoch
 		} else {
-			trustStatus = value.Status
+			trustStatus, trustReason = value.Status, value.Reason
 			if trustStatus == "" {
 				trustStatus = "failed"
 			}
+			if trustReason == "" {
+				trustReason = "invalid_reply"
+			}
 		}
 	}
-	managerStatus, managerEpoch := "failed", uint64(0)
+	managerStatus, managerReason, managerEpoch := "failed", "none", uint64(0)
 	if value, statusErr := command(transaction, nil, "status"); statusErr == nil {
 		managerStatus, managerEpoch = value.Status, value.Epoch
 	} else if value.Status != "" {
-		managerStatus, managerEpoch = value.Status, value.Epoch
+		managerStatus, managerReason, managerEpoch = value.Status, value.Reason, value.Epoch
+		if managerReason == "" {
+			managerReason = "invalid_reply"
+		}
 	}
 	childStatus := transactionValue.Status
 	if childStatus == "" {
@@ -150,7 +160,7 @@ func transactionDiagnostic(stage, promoted, transaction, trust string, transacti
 	if transactionErr != nil {
 		childExit = "nonzero"
 	}
-	return fmt.Sprintf("candidate=%s trust=%s/%d manager=%s/%d child=%s/%s", candidate, trustStatus, trustEpoch, managerStatus, managerEpoch, childStatus, childExit)
+	return fmt.Sprintf("candidate=%s trust=%s/%d trust_reason=%s manager=%s/%d manager_reason=%s child=%s/%s", candidate, trustStatus, trustEpoch, trustReason, managerStatus, managerEpoch, managerReason, childStatus, childExit)
 }
 
 func run() (result error) {
