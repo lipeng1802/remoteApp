@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-r49 Windows完整validator的后续诊断确认：普通升级验收和transaction/bootstrap验收错误复用了同一个原生trust channel，前者清理后会使后者在完整进程内以`trust_rejected`锁闭；逐项独立执行本身均正常。提交`733f93c`已把两段验收改为两个独立随机TEST channel，并让transaction payload按自己的spec重新编译、签名和生成manifest，不使用延时/重试或放宽门禁。macOS x86_64 fresh原生完整生命周期已PASS；Windows r6已上传、解压并逐文件核对62项SHA-256，待普通已登录桌面执行。尚未接DMG/Inno、提权、Developer ID/Authenticode或完整产品会话。
+r49 Windows完整validator已在普通登录桌面Session 4完成fresh r16验收，返回`VALIDATION PASSED`且exit 0。实测收口了Windows目录持久化回执不确定、bootstrap指针只读属性阻止`MoveFileEx(REPLACE_EXISTING)`、分阶段fresh-owner重开及TEST清理最终状态证明；没有延时或把任意失败当成成功。macOS x86_64最终fresh原生组合同样PASS。覆盖两代签名release、原生trust/identity、可中断重开、bootstrap set原子升级、新旧稳定入口跟随active release及TEST状态清理。尚未接DMG/Inno、提权、Developer ID/Authenticode或完整产品会话。
 
 r49 新增受保护稳定bootstrap入口：launcher/`trust-journal`作为独立Ed25519签名、内容寻址且不可变的set导入，`current.json`只在旧set重验签后原子单调切换；稳定dispatcher和新旧launcher每次重开当前重签名bootstrap/release，不回到自身旧版本。macOS原生组合已通过v1/v2重复安装、升级、拒绝回滚与精确清理；合并后 `fa40fc1` 的 Windows r3 因打包时父目录缺失被正确拒绝，无残留，r4/r5/r5b均作为诊断包退出。尚未接DMG/Inno、提权、Developer ID/Authenticode或完整产品会话。
 

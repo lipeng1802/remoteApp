@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-27 r49 Windows 原生安装/升级完整验收已闭环
+
+用户允许通过SSH直接操作Windows。SSH仅用于上传、核对和注册临时计划任务；真实Credential Manager链路由`LogonType Interactive`计划任务在当前已登录用户`DESKTOP-AECR9RH\jarvis`、Session 4内执行，不把SSH会话当原生桌面验收。一次用户操作导致早期进程`0xC000013A`被外部终止，已使用fresh解压目录重新执行，未计为产品失败。
+
+实机逐层定位并修复三类Windows边界：
+
+- release/transaction或bootstrap staging已精确落盘，但父目录持久化回执不确定；协调器只允许编译固定的fresh owner重开同一签名staged/promoted/active状态，最终必须由新进程正常返回精确epoch，不使用sleep、无界重试或任意成功降级。
+- Windows把无写位的`os.FileMode`映射为`FILE_ATTRIBUTE_READONLY`，使epoch 2无法用`MoveFileEx(REPLACE_EXISTING|WRITE_THROUGH)`替换epoch 1指针。提交`b0260bc`让Windows指针对受信owner可替换，授权边界仍是已验证的protected DACL；macOS/Unix仍保持`0400/0444`。
+- TEST删除可在最后父目录回执失败前完成。最终判定要求trust清理成功、精确布局回执有效、安装根实际不存在；任何release/set残留都会使根删除失败。
+
+最终源码提交为`a8589e1`（前置修复`f91c19f`/`96dd637`/`cef8799`/`b0260bc`/`82a4bba`/`00c88cf`/`fee34c1`）。Windows fresh r16归档SHA-256为`5fb731949605195adcef1250373f6265849cae43cf45419f7eb3654f2abc8bdc`，62个固定文件逐项hash通过；Windows桌面实际返回完整`VALIDATION PASSED: signed bootstrap launcher/helper set switches atomically...`和`EXITCODE=0`。macOS x86_64 fresh最终原生组合也返回同一PASS。相关单测、race、Windows amd64 vet及`git diff --check`均通过。
+
+所有`RemoteApp-R8`~`R16`临时验收计划任务已从Windows删除；未删除用户文件或历史诊断包。本结论仍只是用户可写隔离TEST根的原生安装/升级验收，不代表DMG/Inno适配、提权生产根、Developer ID/Authenticode、GUI或完整产品会话通过。下一步进入DMG/Inno adapter的隔离安装/升级/卸载入口和发布签名边界，不要再运行已消费的r8–r16包。
+
 ## 2026-10-27 r6 隔离原生信任通道修复与 Windows 待验
 
 Windows fresh r5b 已把合并后完整 validator 的失败精确定位为：transaction v1 候选已进入 staging，但候选内 `trust-install inspect` 返回 `trust_rejected`，fixed manager 随后以 `release_rejected` 拒绝，子 transaction 非零退出。此前在同一普通桌面逐项运行 trust、manager、transaction 均成功，说明不是 Windows 代码、Credential Manager、release 签名或安装根失效；完整 validator 先清理普通升级验收的原生 trust，再让 transaction 在同一 channel/native scope 立即重建，两个本应独立的验收场景错误复用了原生凭据命名空间。
