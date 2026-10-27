@@ -507,7 +507,20 @@ func run() (result error) {
 		bootstrapNeedsReopen := false
 		for attempt := 0; attempt < 2; attempt++ {
 			value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
-			if transactionErr != nil || value.Status != "prepared" || value.Epoch != fixture.epoch || (value.Phase != installrelease.CandidateStaged && value.Phase != installrelease.CandidatePromoted) {
+			prepared := func(reply reply, commandErr error) bool {
+				return commandErr == nil && reply.Status == "prepared" && reply.Epoch == fixture.epoch && (reply.Phase == installrelease.CandidateStaged || reply.Phase == installrelease.CandidatePromoted)
+			}
+			if !prepared(value, transactionErr) {
+				// ImportStaged can durably create and verify the exact protected
+				// candidate before Windows reports an uncertain directory receipt.
+				// A fresh owner is allowed once; ReconcileCandidate performs no new
+				// write when the same signed staging/final candidate already exists.
+				reopened, reopenErr := command(transactionTool(fixture.version, "install-transaction"), nil)
+				if prepared(reopened, reopenErr) {
+					value, transactionErr = reopened, nil
+				}
+			}
+			if !prepared(value, transactionErr) {
 				releases := filepath.Join(transactionRoot, "releases")
 				stage := filepath.Join(releases, map[string]string{"v1": layout.TransactionV1Stage, "v2": layout.TransactionV2Stage}[fixture.version])
 				promoted := filepath.Join(releases, map[string]string{"v1": layout.TransactionV1Directory, "v2": layout.TransactionV2Directory}[fixture.version])
