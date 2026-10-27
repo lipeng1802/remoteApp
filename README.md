@@ -1,6 +1,8 @@
 # Personal Remote Desktop MVP
 
-r49 新增受保护稳定bootstrap入口：launcher/`trust-journal`作为独立Ed25519签名、内容寻址且不可变的set导入，`current.json`只在旧set重验签后原子单调切换；稳定dispatcher和新旧launcher每次重开当前重签名bootstrap/release，不回到自身旧版本。macOS原生组合已通过v1/v2重复安装、升级、拒绝回滚与精确清理；合并后 `fa40fc1` 的 Windows r3 因打包时父目录缺失被正确拒绝，无残留，修正根路径的 r4 已上传、核对并解压，待用户执行。尚未接DMG/Inno、提权、Developer ID/Authenticode或完整产品会话。
+r49 Windows完整validator的后续诊断确认：普通升级验收和transaction/bootstrap验收错误复用了同一个原生trust channel，前者清理后会使后者在完整进程内以`trust_rejected`锁闭；逐项独立执行本身均正常。提交`733f93c`已把两段验收改为两个独立随机TEST channel，并让transaction payload按自己的spec重新编译、签名和生成manifest，不使用延时/重试或放宽门禁。macOS x86_64 fresh原生完整生命周期已PASS；Windows r6已上传、解压并逐文件核对62项SHA-256，待普通已登录桌面执行。尚未接DMG/Inno、提权、Developer ID/Authenticode或完整产品会话。
+
+r49 新增受保护稳定bootstrap入口：launcher/`trust-journal`作为独立Ed25519签名、内容寻址且不可变的set导入，`current.json`只在旧set重验签后原子单调切换；稳定dispatcher和新旧launcher每次重开当前重签名bootstrap/release，不回到自身旧版本。macOS原生组合已通过v1/v2重复安装、升级、拒绝回滚与精确清理；合并后 `fa40fc1` 的 Windows r3 因打包时父目录缺失被正确拒绝，无残留，r4/r5/r5b均作为诊断包退出。尚未接DMG/Inno、提权、Developer ID/Authenticode或完整产品会话。
 
 r48 将安装根回执、签名payload导入、原生trust安装/升级与release activation串成编译固定的无参数transaction owner。它仅接受唯一root/staging/manifest/epoch/operation及摘要固定的provisioner/manager；重启时只允许继续exact staging或content-addressed final，相同版本已激活视为幂等成功，混合/篡改/回退状态锁闭。macOS原生组合已通过v1 install两次、v2 upgrade两次、精确回收与原身份升级回归；Windows x64仅交叉build/vet。固定bootstrap launcher/helper安装、真实提权、代码签名及DMG/Inno尚未接入。
 

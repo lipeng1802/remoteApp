@@ -1,5 +1,24 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-27 r6 隔离原生信任通道修复与 Windows 待验
+
+Windows fresh r5b 已把合并后完整 validator 的失败精确定位为：transaction v1 候选已进入 staging，但候选内 `trust-install inspect` 返回 `trust_rejected`，fixed manager 随后以 `release_rejected` 拒绝，子 transaction 非零退出。此前在同一普通桌面逐项运行 trust、manager、transaction 均成功，说明不是 Windows 代码、Credential Manager、release 签名或安装根失效；完整 validator 先清理普通升级验收的原生 trust，再让 transaction 在同一 channel/native scope 立即重建，两个本应独立的验收场景错误复用了原生凭据命名空间。
+
+提交 `733f93c` 将普通 release 生命周期与 transaction/bootstrap 生命周期改为两个独立随机 TEST channel。transaction payload 不再复制普通 release 的已编译 trust/enrollment/product，而是按 transaction channel 重新编译、签名、生成 release manifest 并独立记录 staging/final 名；transaction、bootstrap manager与稳定bootstrap launcher全部固定到该独立spec。validator严格校验两套布局，并在失败诊断时读取transaction自己的stage/final。没有加入延时、重试或放宽trust门禁。
+
+当前x86_64 macOS fresh原生完整bundle已实际PASS：v1/v2 install/upgrade、重复幂等重开、bootstrap切换、身份跨升级保持及TEST精确清理均闭环。相关包race、Windows amd64 vet、`git diff --check`通过。
+
+Windows r6 已从提交 `733f93c` 重新编译当前源码的 `trust-journal.exe`/`identity-vault.exe`并生成fresh随机TEST包；安装根固定为 `C:\Users\jarvis\remoteapp-bootstrap-733f93c-r6-install-root`。ZIP已上传并解压，Mac/Windows两端SHA-256一致：`b752df5ff8e417d2406609248d71fcd56e374a1668f1366adc2d2b32a2622723`。Windows端已逐项复核bundle内62个固定文件哈希，返回`MANIFEST_OK files=62`；没有执行validator，也没有创建安装根。
+
+下一步只在 Windows **普通已登录桌面 PowerShell** 执行（不能通过SSH替代原生交互登录验收）：
+
+```powershell
+& "$env:USERPROFILE\remoteapp-bootstrap-733f93c-r6\bundle\autonomous-upgrade-validation.exe"
+$LASTEXITCODE
+```
+
+通过标准是完整输出 `VALIDATION PASSED: signed bootstrap launcher/helper set switches atomically...` 且 `$LASTEXITCODE` 为 `0`。r5/r5b均为诊断包，不再运行；r6仍是用户可写隔离TEST根，不代表提权安装、Authenticode、GUI或完整产品会话验收。
+
 ## 2026-10-27 合并后 r49 Windows 验收包已就绪
 
 用户要求继续后续任务。已从当前提交 `fa40fc1` 重新编译 Windows amd64 `trust-journal` 与 `identity-vault`，并用当前 `autonomous-upgrade-validation-build` 生成全新随机 TEST channel、两代签名 release、bootstrap set 和 transaction。定向 `installrelease`/`trustinstall`/`autonomousinstall` 测试及 Windows amd64 vet 通过。
