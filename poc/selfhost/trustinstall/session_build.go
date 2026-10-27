@@ -187,6 +187,14 @@ func CompileSessionBridge(ctx context.Context, goexe, module, target, dest strin
 	return compileSession(ctx, goexe, module, target, dest, s, signerDigest, "", now)
 }
 
+// CompileAutonomousInstaller builds the legacy, externally bound offline
+// maintenance probe used by the Windows native regression. Product bundles use
+// CompileAutonomousEnrollmentInstall, whose binding is derived from the signed
+// release and cannot be selected by runtime input.
+func CompileAutonomousInstaller(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest string, now time.Time) error {
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, "", "./cmd/autonomous-install", true, now)
+}
+
 // CompileDeviceClient uses the same compiled trust and sibling digest gate,
 // but exposes only device consent APIs; no runtime trust/bootstrap override.
 func CompileDeviceClient(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest string, now time.Time) error {

@@ -1,5 +1,11 @@
 # Windows 1、2 验收准备（r31）
 
+## 2026-10-26 Windows 实机结果
+
+第一步本机预检已在 Windows 普通非管理员桌面完成：源码 `ee8f03b4d834`，fresh 包 `artifacts/connection-poc/windows-preflight-20261026-a`。9 个顶层原生存储测试、存储/租约多进程组合、本机 OS 签名 HTTPS 正常与未知回复组合、真实 SDK 固定失败服务取消/join/清理全部通过；脚本实际退出码 0，最终完整 `PREFLIGHT PASSED` 标记出现，无 FAIL/SKIP。结束后 18443 已释放、测试/helper 无剩余进程，旧配对/证书及在线 Tailscale 保持不变。
+
+该证据关闭 r31 的 Windows 本机预检与 PowerShell 执行待办；**第二步真实服务器联合验收尚未执行**。用户本轮明确只完成本机预检，没有服务器维护许可或操作。完整构建身份、日志路径与下一步见 [HANDOFF.md](../../../docs/HANDOFF.md) 顶部。以下 r31 包名为历史准备说明，不能在 23 小时有效期外直接复用。
+
 Windows 关机期间只构建新包，不连接 Windows，也不暂停服务器。3（持续 watch/撤销/实际拒绝）和4（产品 TLS/HMAC 数据面）仍暂停。
 
 ## 第一步：独立 Windows 预检包

@@ -68,7 +68,7 @@ func run(output func(any) error) (result error) {
 	if err != nil {
 		return err
 	}
-	owner, err := clientowner.Open(release, factory, time.Now)
+	owner, err := clientowner.OpenExactRelease(release, factory, time.Now)
 	if err != nil {
 		return err
 	}

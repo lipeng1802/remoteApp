@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-27 合并 Windows 已验收进度
+
+用户说明一部分功能已在 Windows 测试，本轮从远端合并提交 `1dc1189` 与 `dd6fae0` 到当前 r49 代码线。`1dc1189` 的 Windows 本机预检结果有效：enrollmentstore 9 组、原生存储、OS 签名本地 HTTPS 以及真实 SDK 取消/join 均通过；它不代表真实 Headscale 注册、公开服务、GUI 或安装器验收。`dd6fae0` 的 Windows TEST 结果有效：离线安装/升级协调、终态保持、租约冲突、未知提交与精确 release 防回退均通过；该测试基于较早的 r39 产品入口，不直接代替 r40-r49 的安装布局和 bootstrap set 验收。
+
+合并时保留 `clientowner.OpenExactRelease`，自主产品只允许与当前已提交 profile 完全一致的编译 release；普通动态轮转入口仍使用 `Open`。较早的 `autonomous-install` 继续作为 Windows 原生回归入口保留，但不再由 `installed-session-build` 装入产品 bundle；当前 bundle 只分发由签名 release 派生固定 binding、运行时不能选择 vault scope/public key 的 `autonomous-enrollment-install`。这样吸收 Windows 已验证的协调和防回退能力，同时不让旧接口覆盖 r40 之后更严格的身份绑定边界。
+
+当前仍需按合并后源码重新做 r49 Windows bundle 验收；此前 `remoteapp-bootstrap-r49-r2` 是合并前构建，只能证明当时的 bootstrap set。合并后定向单测与 race、Windows amd64 vet 均通过。Mac 新隔离包的原生重跑暴露既有 native TEST helper 的首次命令会返回拒绝、随后同一命令可成功且持久状态已产生的环境/回执问题，因此本轮不把它记录为新的原生组合 PASS，也不据此否定此前 r49 结果；在生成新的 Windows 包前应先收口该“首调失败但状态可能已提交”诊断。
+
 ## 2026-10-16 r49 签名bootstrap set与稳定启动入口
 
 用户要求继续下一切片，并确认Windows已开机可做后续验收。r48已本地提交`27fc7b6`，本节形成后续独立本地提交，不自动推送。未访问或修改服务器、Headscale、策略、Nginx、Store或正式客户端。
@@ -117,6 +125,52 @@ r42的`status`虽然没有输出私密，但在`usable`时仍返回稳定设备�
 macOS新增Security.framework Keychain原生device vault，使用`WhenUnlockedThisDeviceOnly`、非交互`LAContext`、32-byte seed、排他创建和精确重开；Windows创建模式也改为已有credential即拒绝，防止“创建”偷偷变成复用。为避免不同未签名可执行程序访问Keychain引发密码弹窗/阻塞，binding与enrollment记录全部通过同一个已固定SHA-256的sibling `trust-journal`匿名pipe访问，身份只通过固定`identity-vault`访问。普通产品入口没有创建、删除、修复或reset API；TEST清理由compiled TEST安装器显式门禁并经同一helper执行。
 
 本机新随机TEST channel真实生命周期通过：trust initialize→身份/enrollment/binding initialize→独立进程inspect→`installed-autonomous-product`的`open/ready/stop/closed`且exit 0→enrollment/identity/binding/trust精确cleanup。该验证实际复现并消除了先前产品进程卡在`SecItemCopyMatching`的问题，未出现密码提示。devicevault/autonomousbinding/enrollmentstore/privatepipe/clientruntime/installeddevice/trustprofile/trustinstall及4个命令包race全部PASS；identity-vault、安装入口和产品入口的macOS amd64原生构建、Windows amd64交叉构建及相关vet PASS，`git diff --check`通过。此前被中断的本轮旧随机TEST identity和binding也按精确scope清理；未触碰未知或production条目。这仍不是Windows实机、真实Headscale双节点、产品TLS双机、签名安装包或生产升级验收。下一步优先补Windows恢复后的fresh安装/重启/升级同身份联合验收，再进入真实双机自主产品流。
+## 2026-10-26 r40 自主入口离线安装协调与 profile 防回退通过 Windows TEST 验证
+
+用户确认 Mac 暂不可用并授权本机开发。新增 autonomousinstall.Owner 和独立 autonomous-install 入口，将显式 OS 身份 provisioning 后的公钥、trust journal 和 enrollment namespace 组合：initialize 创建且拒绝覆盖，upgrade 持有双独占租约并保留节点终态，inspect 不修复。部分失败保留证据，Close/join 错误不报告成功；维护程序固定编译 release/helper digest，不接收私钥、任意端点或 root。
+
+自主产品 builder 同包输出维护程序；仅新自主 runtime 使用 OpenExactRelease，持锁核对当前 profile 与编译值一致。普通入口不变。身份首次创建沿用既有 provisioning；最终 GUI/Setup、公开绑定回执持久衔接和部分安装恢复仍待下个切片，不宣称完整安装器已实现。
+
+实测：4 项协调回归、clientowner/trustinstall/trustprofile/builder 回归与 go vet 通过。Windows 原生 TEST 现场编译两份 epoch 维护 exe，首次创建/重复拒绝、错误身份、活租约冲突、升级保留 attempted、旧维护/旧 runtime owner 拒绝、原公钥保留和精确清理/join 全通过，无 SKIP、退出码 0。Windows/macOS arm64 入口编译通过；Mac 无原生证据。流程、命令、日志见 [AUTONOMOUS_INSTALLATION.md](../poc/selfhost/public-server/AUTONOMOUS_INSTALLATION.md)。
+
+边界：这是 profile/epoch 门槛，不是历史任意二进制的系统级防回滚；r39 等无门禁程序不能追溯保护，同 profile 不同产品版本的独立下限和签名安装仍待实现。没有联系服务器、入网、更新正式客户端或修改 Tailscale/旧配对。下一本机项是可信安装 owner 的身份/回执持久衔接和恢复诊断，再做 Mac/服务器联合验收。本轮仅本地提交，不自动推送。
+
+用户另已回报旧 RemoteAgent 实体键盘紧急停止和密钥界面生命周期验证通过；属于旧 UI 产品证据，不作为新自主入口 GUI/联网验收。
+
+## 2026-10-26 Windows r31 本机预检实机通过；联合验收仍待
+
+用户要求切换分支并继续，随后明确“先完成 Windows 本机预检”。已从 main 切换到 `codex/connection-architecture-poc`，本轮被测源码为 `ee8f03b4d834`。main 上未提交的 2026-10-02 Windows 安装记录保留在独立 stash（说明：`main Windows installation evidence before architecture branch 2026-10-26`），没有跨分支混入新交接或丢弃。
+
+### 构建与环境
+
+- Windows 普通已登录桌面进程，非管理员，SessionId 2；运行前固定本机端口 18443 空闲。
+- 本机原先没有 Go 或预检包；在忽略目录 `artifacts/connection-poc/toolchains` 下载便携 Go **1.26.6 windows/amd64**。官方 go.dev 元数据 SHA-256 `5b6c5b556525810463b5c897b50dc7a82d6a3dc0bfaf55d990a7e9f31d6b2318` 与 ZIP 一致。未安装系统软件、未修改系统 PATH；Go 依赖和构建缓存也隔离在 artifacts 下。
+- 依照 go.mod/go.sum 下载依赖后，预检 builder 测试通过；另外两个子 builder 没有独立测试文件。本轮未改产品或测试实现。
+- 从上述源码新建 `artifacts/connection-poc/windows-preflight-20261026-a`，输出 `BUILD READY windows_native_preflight`。没有复用 10 月旧包或改时钟；新 profile 仍为 23 小时 TEST 范围。
+- 包内 `SHA256.json` 的 SHA-256 为 `20105d65b5cb21f06f3a4d6fa821bf1f86aa4e368f0073acbb8318f0405ba104`。严格文件集合和全部文件哈希由原版脚本检查通过；这只是完整性证据，不是发行签名。
+
+### Windows 实测结果
+
+在普通 PowerShell 用包内 `run-windows-enrollment-preflight.ps1` 执行，退出码 **0**；没有 FAIL、SKIP、stderr 或进程退出超时：
+
+1. enrollmentstore 全部 **9 个顶层测试通过**，含 Windows 私有目录 DACL、未知文件/非空缓存清理拒绝、状态损坏及提交未知结果拒绝。
+2. 原生存储组合通过：跨进程独占租约、attempted/registered 持久重开后拒绝再次尝试、精确 TEST 凭据/节点材料清理。
+3. 本机 OS 签名 HTTPS 组合通过：正常注册消费、未知回复保留且不再次 mint、原生 profile/node 租约和 join 清理。注册节点仍是 fixture，不能当作真实入网。
+4. 真实 SDK 失败路径通过：确实访问固定本机失败服务，注册拒绝，SDK 同步 Close 返回后才能重开租约，attempted 保留/重试拒绝，精确 TEST 清理完成。
+
+最终原文标记：
+
+~~~text
+PREFLIGHT PASSED: Windows native storage + OS signed local HTTPS + actual SDK cancel/join. NOT real Headscale enrollment, verifier bind, public service, GUI or installer acceptance.
+~~~
+
+运行日志保留在包目录外的 `artifacts/connection-poc/windows-preflight-20261026-a.log`（Git 忽略）。结束后固定端口 18443 已释放，预检 exe/helper 剩余进程数 **0**。原 PersonalRemoteDesktop/Agent/v1 凭据元数据、证书元数据、Tailscale 节点和版本与运行前一致；Tailscale 仍 Running/Online。不读取或输出旧配对密钥、未删除系统 Tailscale、未重装 RemoteAgent、未访问或维护服务器。
+
+### 下一步与边界
+
+r31 Windows 本机预检待办现可关闭；真实 Windows＋服务器注册/实时证明绑定、双端 overlay、产品 TLS/HMAC、活动撤销与重启拒绝仍未验收。用户本轮限定本机预检，未执行服务器维护或双机操作。
+
+下一次依 [WINDOWS_ENROLLMENT_PREFLIGHT.md](../poc/selfhost/public-server/WINDOWS_ENROLLMENT_PREFLIGHT.md) 第二步，由 Mac/服务器侧准备新的获准维护窗口、独立 stage、公开 issuer 和 fresh Windows 联合包，确认后端/私有转发 READY 后再运行联合入口。不复用旧 r30 stage、smoke 包或过期 profile；不把管理 SSH、TLS/issuer 私钥交给 Windows。现有产品的实体键盘/干净机器等待办保持原状态。
 
 ## 2026-10-15 r39 独立自主产品编译入口（默认仍关闭）
 

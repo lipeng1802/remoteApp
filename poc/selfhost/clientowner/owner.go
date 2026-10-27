@@ -97,6 +97,24 @@ func Open(r trustinstall.Release, f trustinstall.Factory, clock func() time.Time
 		release: r, factory: f, clock: clock}, nil
 }
 
+// OpenExactRelease is the opt-in autonomous entry gate. Older compiled release
+// material cannot silently run against a newer committed profile. Ordinary
+// clients retain their existing live profile-rotation contract via Open.
+func OpenExactRelease(r trustinstall.Release, f trustinstall.Factory, clock func() time.Time) (*Owner, error) {
+	o, err := Open(r, f, clock)
+	if err != nil {
+		return nil, err
+	}
+	p, _, err := o.installed.Current()
+	if err != nil || p != r.Specification().Bundled {
+		if closeErr := o.Close(context.Background()); closeErr != nil {
+			return nil, closeErr
+		}
+		return nil, trustprofile.ErrTrust
+	}
+	return o, nil
+}
+
 func (o *Owner) lock(ctx context.Context) error {
 	if ctx == nil || ctx.Err() != nil {
 		return trustprofile.ErrTrust
