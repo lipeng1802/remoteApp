@@ -456,10 +456,7 @@ func ActivateBootstrap(installRoot, stagingNonce string, candidate VerifiedBoots
 		if !os.IsNotExist(temporaryStatErr) {
 			return ErrRelease
 		}
-		mode := os.FileMode(0444)
-		if test {
-			mode = 0400
-		}
+		mode := atomicPointerMode(test)
 		file, createErr := os.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 		if createErr != nil {
 			return ErrRelease
