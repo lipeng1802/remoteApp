@@ -545,18 +545,27 @@ func run() (result error) {
 			}
 			value, bootstrapErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
 			if bootstrapErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
-				// Windows may durably replace current.json and still fail the
-				// directory durability receipt. Accept that uncertainty only when
-				// a separate read proves the exact epoch active, and require the
-				// next manager process to reopen it successfully. No write retry or
-				// arbitrary failure is treated as success.
-				status, statusErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil, "status")
-				if attempt != 0 || statusErr != nil || status.Status != "active" || status.Epoch != fixture.epoch {
-					return fmt.Errorf("bootstrap %s epoch %d reopen", fixture.version, fixture.epoch)
+				// ImportBootstrapStaged and ActivateBootstrap have the same
+				// Windows directory-receipt boundary as the release preparation.
+				// Give one fresh, fixed manager owner the opportunity to reopen
+				// an exact staged/promoted set or an exact active pointer.
+				reopened, reopenErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
+				if reopenErr == nil && reopened.Status == "active" && reopened.Epoch == fixture.epoch {
+					value, bootstrapErr = reopened, nil
+				} else {
+					// Windows may durably replace current.json and still fail the
+					// directory durability receipt. Accept that uncertainty only when
+					// a separate read proves the exact epoch active, and require the
+					// next manager process to reopen it successfully. No write retry or
+					// arbitrary failure is treated as success.
+					status, statusErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil, "status")
+					if attempt != 0 || statusErr != nil || status.Status != "active" || status.Epoch != fixture.epoch {
+						return fmt.Errorf("bootstrap %s epoch %d reopen", fixture.version, fixture.epoch)
+					}
+					bootstrapNeedsReopen = true
+					bootstrapStarted = true
+					continue
 				}
-				bootstrapNeedsReopen = true
-				bootstrapStarted = true
-				continue
 			}
 			if bootstrapNeedsReopen {
 				bootstrapNeedsReopen = false
