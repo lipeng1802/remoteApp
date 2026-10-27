@@ -1,5 +1,20 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-27 合并后 r49 Windows 验收包已就绪
+
+用户要求继续后续任务。已从当前提交 `fa40fc1` 重新编译 Windows amd64 `trust-journal` 与 `identity-vault`，并用当前 `autonomous-upgrade-validation-build` 生成全新随机 TEST channel、两代签名 release、bootstrap set 和 transaction。定向 `installrelease`/`trustinstall`/`autonomousinstall` 测试及 Windows amd64 vet 通过。
+
+新 ZIP 已通过 62 个 manifest 文件的严格 SHA-256、无符号链接、无 AppleDouble 和压缩包完整性检查。本地归档为 `artifacts/connection-poc/remoteapp-bootstrap-r49-merged-fa40fc1-r3-win-x64.zip`，大小 437709770 bytes，SHA-256 `595928111b48230334211a70bf8b2820e7a730b3632d2d3506d761ae7d097edd`。Windows 端上传后的 ZIP 已用 CertUtil 核对相同摘要，并解压到 `C:\Users\jarvis\remoteapp-bootstrap-r49-merged-fa40fc1-r3\bundle`。SSH 只用于公开验收包传输/校验，未执行原生桌面验收。
+
+下一步在 Windows **普通已登录桌面 PowerShell** 运行：
+
+```powershell
+& "C:\Users\jarvis\remoteapp-bootstrap-r49-merged-fa40fc1-r3\bundle\autonomous-upgrade-validation.exe"
+$LASTEXITCODE
+```
+
+必须实际返回完整 `VALIDATION PASSED: signed bootstrap launcher/helper set switches atomically...` 且 `$LASTEXITCODE` 为 `0`，才能关闭合并后 r49 Windows 待验项。本包仍是用户可写的隔离 TEST 根，不是提权安装、Authenticode、GUI 或完整产品会话验收。
+
 ## 2026-10-27 macOS 非交互 Keychain 与首次运行收口
 
 用户要求先解决合并后原生组合首次运行失败。系统日志确认原 `LAContext` 查询把独立 helper 导向 Data Protection Keychain，`securityd` 返回 `-34018`（缺少受限 application/keychain-group entitlement）；ad-hoc 签名不能合法携带该 entitlement，AMFI 会终止进程，而当前机器也没有有效 Developer ID identity。现将 macOS `nativejournal` 与 `devicevault` 显式固定到 login Keychain（`kSecUseDataProtectionKeychain=false`），并使用 `kSecUseAuthenticationUIFail` 禁止密码/认证弹窗。该 API 已被 Apple 标记 deprecated，因此只是当前 PoC 的非交互兼容路径；正式发布仍应使用 Developer ID、正式 entitlement 与公证包。
