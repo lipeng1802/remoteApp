@@ -111,6 +111,48 @@ func productReject(path string) error {
 	return nil
 }
 
+func transactionDiagnostic(stage, promoted, transaction, trust string, transactionValue reply, transactionErr error) string {
+	candidate := "absent"
+	trustStatus := "not_checked"
+	trustEpoch := uint64(0)
+	if info, err := os.Lstat(stage); err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+		candidate = "staged"
+		if value, inspectErr := command(filepath.Join(stage, trust), nil, "inspect"); inspectErr == nil {
+			trustStatus, trustEpoch = value.Status, value.Epoch
+		} else {
+			trustStatus = value.Status
+			if trustStatus == "" {
+				trustStatus = "failed"
+			}
+		}
+	} else if info, err := os.Lstat(promoted); err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+		candidate = "promoted"
+		if value, inspectErr := command(filepath.Join(promoted, trust), nil, "inspect"); inspectErr == nil {
+			trustStatus, trustEpoch = value.Status, value.Epoch
+		} else {
+			trustStatus = value.Status
+			if trustStatus == "" {
+				trustStatus = "failed"
+			}
+		}
+	}
+	managerStatus, managerEpoch := "failed", uint64(0)
+	if value, statusErr := command(transaction, nil, "status"); statusErr == nil {
+		managerStatus, managerEpoch = value.Status, value.Epoch
+	} else if value.Status != "" {
+		managerStatus, managerEpoch = value.Status, value.Epoch
+	}
+	childStatus := transactionValue.Status
+	if childStatus == "" {
+		childStatus = "invalid"
+	}
+	childExit := "zero"
+	if transactionErr != nil {
+		childExit = "nonzero"
+	}
+	return fmt.Sprintf("candidate=%s trust=%s/%d manager=%s/%d child=%s/%s", candidate, trustStatus, trustEpoch, managerStatus, managerEpoch, childStatus, childExit)
+}
+
 func run() (result error) {
 	if len(os.Args) != 1 {
 		return fmt.Errorf("no arguments permitted")
@@ -447,7 +489,11 @@ func run() (result error) {
 		for attempt := 0; attempt < 2; attempt++ {
 			value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
 			if transactionErr != nil || value.Status != "active" || value.Epoch != fixture.epoch || value.Phase != "committed" {
-				return fmt.Errorf("transaction %s epoch %d reopen", fixture.version, fixture.epoch)
+				releases := filepath.Join(transactionRoot, "releases")
+				stage := filepath.Join(releases, map[string]string{"v1": layout.V1Stage, "v2": layout.V2Stage}[fixture.version])
+				promoted := filepath.Join(releases, map[string]string{"v1": layout.V1Directory, "v2": layout.V2Directory}[fixture.version])
+				diagnostic := transactionDiagnostic(stage, promoted, transactionTool(fixture.version, "installed-release-manager"), "trust-install"+suffix, value, transactionErr)
+				return fmt.Errorf("transaction %s epoch %d attempt %d: %s", fixture.version, fixture.epoch, attempt+1, diagnostic)
 			}
 			value, bootstrapErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
 			if bootstrapErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {

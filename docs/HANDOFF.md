@@ -6,12 +6,14 @@
 
 r3 在 Windows 普通桌面正确拒绝，输出 `transaction v1 epoch 1 reopen`。原因不是 Windows 代码过旧，而是打包时固定了嵌套 TEST 根 `C:\Users\jarvis\remoteapp-bootstrap-fa40fc1\install-root`，其父目录不存在；安全配方按设计不创建缺失父目录。失败后只读检查确认安装根不存在且无进程残留；r3 不再作验收包。
 
-r4 改用已存在的 `C:\Users\jarvis` 为直接父目录，固定 TEST 根 `C:\Users\jarvis\remoteapp-bootstrap-fa40fc1-r4-install-root`。新 ZIP 已通过 62 个 manifest 文件的严格 SHA-256、无符号链接、无 AppleDouble 和压缩包完整性检查。本地归档为 `artifacts/connection-poc/remoteapp-bootstrap-r49-merged-fa40fc1-r4-win-x64.zip`，大小 465438478 bytes，SHA-256 `123584d2a078bb7e4ae3429779dcb9ac3b79674e0a57e37c68e5e46cd2aa7f22`。Windows 端上传后的 ZIP 已用 CertUtil 核对相同摘要，并解压到 `C:\Users\jarvis\remoteapp-bootstrap-r49-merged-fa40fc1-r4\bundle`。SSH 只用于公开验收包传输/校验，未执行原生桌面验收。
+r4 改用已存在的 `C:\Users\jarvis` 为直接父目录，安装根/DACL、release staging、桌面 `trust-install initialize/inspect`、manager install/status 以及 transaction 首次/第二次幂等重开均已分步返回 epoch 1、exit 0；但完整 validator 仍只返回无法区分第一/第二次的 `transaction v1 epoch 1 reopen`。这证明不是 Windows 代码、Credential Manager、release 或 transaction 本身失效，待定位 validator 前置状态/嵌套时序。r4 已用于诊断，不再作最终整体验收包。
+
+validator 现在在 transaction 失败时输出固定、无私密的 attempt/candidate/trust/manager/child 状态，不输出路径、scope、公钥或凭据。定向测试和 Windows amd64 vet 通过。fresh r5 已用全新 TEST channel 及直接安装根生成；62 个 manifest 文件哈希和 ZIP 完整性通过。归档 `artifacts/connection-poc/remoteapp-bootstrap-r49-diagnostic-fa40fc1-r5-win-x64.zip`，大小 465441282 bytes，SHA-256 `8758a5aed876c73280e631f0312dfbd58b0349520d60c6639758cd497b83f849`；Windows CertUtil 核对一致，已解压到 `C:\Users\jarvis\remoteapp-bootstrap-r49-diagnostic-fa40fc1-r5\bundle`。
 
 下一步在 Windows **普通已登录桌面 PowerShell** 运行：
 
 ```powershell
-& "C:\Users\jarvis\remoteapp-bootstrap-r49-merged-fa40fc1-r4\bundle\autonomous-upgrade-validation.exe"
+& "C:\Users\jarvis\remoteapp-bootstrap-r49-diagnostic-fa40fc1-r5\bundle\autonomous-upgrade-validation.exe"
 $LASTEXITCODE
 ```
 
