@@ -104,3 +104,32 @@ func TestInstallTransactionRejectsRuntimeSelectableOrUnpinnedInputs(t *testing.T
 		}
 	}
 }
+
+func TestBootstrapBuildRejectsSelectableRootOrPointer(t *testing.T) {
+	destination := filepath.Join(t.TempDir(), "bootstrap")
+	specification := Specification{MinimumEpoch: 2}
+	stage, digest, nonce := ".staging-"+strings.Repeat("1", 32), strings.Repeat("2", 64), strings.Repeat("3", 32)
+	for _, fixture := range []struct {
+		root      string
+		operation string
+		stage     string
+		digest    string
+		epoch     uint64
+		nonce     string
+	}{
+		{"relative", "install", stage, digest, 2, nonce},
+		{"/fixed/root", "repair", stage, digest, 2, nonce},
+		{"/fixed/root", "install", "candidate", digest, 2, nonce},
+		{"/fixed/root", "install", stage, "bad", 2, nonce},
+		{"/fixed/root", "install", stage, digest, 1, nonce},
+		{"/fixed/root", "install", stage, digest, 2, "bad"},
+	} {
+		err := CompileInstalledBootstrapManager(context.Background(), "/unused/go", "/unused/module", "darwin", destination, specification, fixture.root, fixture.operation, fixture.stage, fixture.digest, fixture.epoch, fixture.nonce, time.Now())
+		if !errors.Is(err, trustprofile.ErrTrust) {
+			t.Fatalf("invalid bootstrap input accepted: %#v err=%v", fixture, err)
+		}
+	}
+	if err := CompileInstalledBootstrapLauncher(context.Background(), "/unused/go", "/unused/module", "windows", destination, specification, `c:\bad`, time.Now()); !errors.Is(err, trustprofile.ErrTrust) {
+		t.Fatalf("invalid dispatcher root accepted: %v", err)
+	}
+}

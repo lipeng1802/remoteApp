@@ -39,17 +39,23 @@ active记录只包含version/layout/channel/platform/epoch/版本目录名/manif
 
 `installed-release-launcher`不接受参数，不读sidecar root/path。它重开编译固定的trust和活动记录，每次重验签manifest和六个文件，然后启动活动目录内固定名产品并实际等待它退出。因此旧launcher不持有“回到旧目录”的运行时开关。
 
+## Stable bootstrap set
+
+系统入口是编译固定install root/release trust的`installed-bootstrap-launcher`。它打开`bootstrap/current.json`，重验`bootstrap/sets/<epoch>-<digest>`内独立签名的`bootstrap-manifest.json`、`installed-release-launcher`和`trust-journal`，再启动该launcher。
+
+bootstrap manager只能导入编译固定的hidden staging/digest/epoch/operation。文件复制为新inode并fsync，set晋升后在重验旧active set的前提下以单个原子pointer replace提交；不存在launcher/helper分别替换的半升级状态。相同set重启幂等，降级、损坏旧set、多个候选或额外文件全部拒绝。
+
 ## 受保护 staging 交接
 
 installer不得把外部解包目录直接rename为可激活版本。`ImportStaged`先在原目录核验签名和全固定文件集，拒绝符号链接、非常规文件、额外硬链接和可由group/other改写的Unix文件。它在受保护`releases`中独占创建staging，逐项复制为新单链接文件，同步文件与两层目录，再重验保护属性和内容摘要。因此实际晋升rename始终在同一`releases`文件系统内。
 
-生产macOS/Unix安装根、`releases`及版本目录必须root owner且不得group/other writable；Windows生产根只允许SYSTEM/Administrators owner，并拒绝三类宽泛SID的写/删除/改ACL与owner权限。TEST模式可用当前用户的隔离根，但仍拒绝可宽泛写、链接/reparse、跨卷和多硬链接。manager和launcher每次操作都重做门禁；这些API只验证，不会自动提权或改权限。
+生产macOS/Unix安装根、`releases`、`bootstrap`、`bootstrap/sets`及其内容目录必须root owner且不得group/other writable；Windows生产根只允许SYSTEM/Administrators owner，并拒绝三类宽泛SID的写/删除/改ACL与owner权限。TEST模式可用当前用户的隔离根，但仍拒绝可宽泛写、链接/reparse、跨卷和多硬链接。manager和launcher每次操作都重做门禁；这些API只验证，不会自动提权或改权限。
 
 ## 安装根准备与回执
 
-`install-root-provisioner`只使用构建时固定的唯一根目录，不接受运行时路径或权限配方。它不创建缺失的父目录，生产时要求父路径无链接跳转、已受保护且同卷。macOS/Unix仅euid 0可以生产准备，根与`releases`是root owner、`0755`；Windows用protected DACL给SYSTEM/Administrators完全控制，Builtin Users只读执行。生产导入的版本目录/manifest/可执行文件分别为`0755/0444/0555`；TEST是当前用户私有的`0700/0400/0500`。
+`install-root-provisioner`只使用构建时固定的唯一根目录，不接受运行时路径或权限配方。它不创建缺失的父目录，生产时要求父路径无链接跳转、已受保护且同卷。macOS/Unix仅euid 0可以生产准备，根、`releases`、`bootstrap`与`bootstrap/sets`是root owner、`0755`；Windows用protected DACL给SYSTEM/Administrators完全控制，Builtin Users只读执行。生产导入的版本目录/manifest/可执行文件分别为`0755/0444/0555`；TEST是当前用户私有的`0700/0400/0500`。
 
-准备回执绑定平台、配方、编译固定路径摘要、卷及根/`releases`对象ID，不包含明文路径或凭据。它必须在同一已信任安装流中立即重开比对；回执本身没有publisher签名，不能替代Developer ID/Authenticode。TEST清理只能删除该回执当前绑定的空布局，不提供production reset。
+准备回执绑定平台、配方、编译固定路径摘要、卷及根/`releases`/`bootstrap`/`bootstrap/sets`对象ID，不包含明文路径或凭据。它必须在同一已信任安装流中立即重开比对；回执本身没有publisher签名，不能替代Developer ID/Authenticode。TEST清理只能删除该回执当前绑定的空布局，不提供production reset。
 
 ## Installer transaction
 
@@ -59,12 +65,11 @@ installer不得把外部解包目录直接rename为可激活版本。`ImportStag
 
 ## 已验证与未验证
 
-Go测试额外覆盖外部payload导入后单链接、源硬链接、可宽泛写根/父目录、非root生产根、链接`releases`、回执篡改、非空清理、staging/final混合及被改宽的版本目录拒绝。macOS编译固定的TEST root provisioner原生验收已通过首次准备、幂等重开、回执复核与精确空根清理；真实Keychain TEST组合已通过v1 transaction install两次、v2 upgrade两次的幂等重开、新导入交接、严格激活、身份升级保持、回滚拒绝、旧/新launcher执行当前产品拒绝探针及TEST精确清理。Windows x64只有交叉编译，尚未实机运行DACL配方或Credential Manager。
+Go测试额外覆盖release与bootstrap的签名、内容寻址、单调激活、幂等重开和精确清理。macOS真实Keychain TEST组合已通过v1/v2 transaction和bootstrap manager各重复两次、回滚拒绝、旧/新稳定入口跟随当前active release、身份升级保持及TEST精确清理。Windows x64交叉构建/vet已通过，r49-r2普通桌面原生验收待回传。
 
 未完成的安装产品工作包括：
 
 - 把已验证的管理器/launcher放入受保护的真实安装根，并由正式installer/updater调用；
-- 定义受保护的稳定bootstrap launcher/helper manifest与原子替换，使系统入口可启动active release；
 - 由特权正式installer创建真实生产owner/ACL，并在其他用户并发替换下做实机验收；
 - macOS Developer ID/公证和Windows Authenticode的真实证书链验证；
 - 连接现有DMG/Inno、安装/升级/回退UI与卸载保留策略；

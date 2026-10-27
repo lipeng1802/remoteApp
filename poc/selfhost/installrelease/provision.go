@@ -16,15 +16,17 @@ import (
 // path or credential, and is useful only when immediately reopened and checked
 // by ValidateLayoutReceipt. Publisher authentication remains code signing.
 type LayoutReceipt struct {
-	Version        int    `json:"version"`
-	Status         string `json:"status"`
-	Platform       string `json:"platform"`
-	Policy         string `json:"policy"`
-	Test           bool   `json:"test"`
-	RootSHA256     string `json:"root_sha256"`
-	Volume         string `json:"volume"`
-	RootObject     string `json:"root_object"`
-	ReleasesObject string `json:"releases_object"`
+	Version             int    `json:"version"`
+	Status              string `json:"status"`
+	Platform            string `json:"platform"`
+	Policy              string `json:"policy"`
+	Test                bool   `json:"test"`
+	RootSHA256          string `json:"root_sha256"`
+	Volume              string `json:"volume"`
+	RootObject          string `json:"root_object"`
+	ReleasesObject      string `json:"releases_object"`
+	BootstrapObject     string `json:"bootstrap_object"`
+	BootstrapSetsObject string `json:"bootstrap_sets_object"`
 }
 
 // DecodeLayoutReceipt accepts only the canonical one-object JSON emitted by
@@ -70,16 +72,33 @@ func layoutReceipt(installRoot string, test bool) (LayoutReceipt, error) {
 	if rootIdentity.volume != releasesIdentity.volume {
 		return LayoutReceipt{}, ErrRelease
 	}
+	bootstrapPath := filepath.Join(installRoot, "bootstrap")
+	bootstrap, bootstrapIdentity, err := openChecked(bootstrapPath, true, test)
+	if err != nil {
+		return LayoutReceipt{}, err
+	}
+	defer bootstrap.Close()
+	setsPath := filepath.Join(bootstrapPath, "sets")
+	sets, setsIdentity, err := openChecked(setsPath, true, test)
+	if err != nil {
+		return LayoutReceipt{}, err
+	}
+	defer sets.Close()
+	if rootIdentity.volume != bootstrapIdentity.volume || rootIdentity.volume != setsIdentity.volume {
+		return LayoutReceipt{}, ErrRelease
+	}
 	return LayoutReceipt{
-		Version:        1,
-		Status:         "prepared",
-		Platform:       runtime.GOOS,
-		Policy:         platformPolicy(test),
-		Test:           test,
-		RootSHA256:     pathDigest(installRoot),
-		Volume:         hex.EncodeToString(uint64Bytes(rootIdentity.volume)),
-		RootObject:     hex.EncodeToString(uint64Bytes(rootIdentity.index)),
-		ReleasesObject: hex.EncodeToString(uint64Bytes(releasesIdentity.index)),
+		Version:             1,
+		Status:              "prepared",
+		Platform:            runtime.GOOS,
+		Policy:              platformPolicy(test),
+		Test:                test,
+		RootSHA256:          pathDigest(installRoot),
+		Volume:              hex.EncodeToString(uint64Bytes(rootIdentity.volume)),
+		RootObject:          hex.EncodeToString(uint64Bytes(rootIdentity.index)),
+		ReleasesObject:      hex.EncodeToString(uint64Bytes(releasesIdentity.index)),
+		BootstrapObject:     hex.EncodeToString(uint64Bytes(bootstrapIdentity.index)),
+		BootstrapSetsObject: hex.EncodeToString(uint64Bytes(setsIdentity.index)),
 	}, nil
 }
 
@@ -138,6 +157,12 @@ func PrepareProtectedLayout(installRoot string, test bool) (LayoutReceipt, error
 	if err = ensureDirectory(filepath.Join(installRoot, "releases"), test); err != nil {
 		return LayoutReceipt{}, err
 	}
+	if err = ensureDirectory(filepath.Join(installRoot, "bootstrap"), test); err != nil {
+		return LayoutReceipt{}, err
+	}
+	if err = ensureDirectory(filepath.Join(installRoot, "bootstrap", "sets"), test); err != nil {
+		return LayoutReceipt{}, err
+	}
 	return layoutReceipt(installRoot, test)
 }
 
@@ -162,11 +187,21 @@ func CleanupProtectedTestLayout(receipt LayoutReceipt, installRoot string) error
 	if err != nil || len(entries) != 0 {
 		return ErrRelease
 	}
-	entries, err = os.ReadDir(installRoot)
-	if err != nil || len(entries) != 1 || entries[0].Name() != "releases" || !entries[0].IsDir() {
+	sets := filepath.Join(installRoot, "bootstrap", "sets")
+	entries, err = os.ReadDir(sets)
+	if err != nil || len(entries) != 0 {
 		return ErrRelease
 	}
-	if os.Remove(releases) != nil || os.Remove(installRoot) != nil {
+	bootstrap := filepath.Join(installRoot, "bootstrap")
+	entries, err = os.ReadDir(bootstrap)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "sets" || !entries[0].IsDir() {
+		return ErrRelease
+	}
+	entries, err = os.ReadDir(installRoot)
+	if err != nil || len(entries) != 2 || entries[0].Name() != "bootstrap" || !entries[0].IsDir() || entries[1].Name() != "releases" || !entries[1].IsDir() {
+		return ErrRelease
+	}
+	if os.Remove(sets) != nil || os.Remove(bootstrap) != nil || os.Remove(releases) != nil || os.Remove(installRoot) != nil {
 		return ErrRelease
 	}
 	return nil

@@ -81,6 +81,39 @@ func CompileInstalledReleaseLauncher(ctx context.Context, goexe, module, target,
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installed-release-launcher", "", now)
 }
 
+// CompileFixedRootInstalledReleaseLauncher keeps its helper beside itself but
+// always resolves releases and activation from one build-fixed install root.
+func CompileFixedRootInstalledReleaseLauncher(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot string, now time.Time) error {
+	if !validInstallRoot(target, installRoot) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot))
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installed-release-launcher", extra, now)
+}
+
+// CompileInstalledBootstrapLauncher creates the immutable system entry. It
+// reopens the signed bootstrap pointer and delegates only to the active set.
+func CompileInstalledBootstrapLauncher(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot string, now time.Time) error {
+	if !validInstallRoot(target, installRoot) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot))
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installed-bootstrap-launcher", extra, now)
+}
+
+// CompileInstalledBootstrapManager pins one signed launcher/helper set and one
+// monotonic pointer operation. Runtime cannot choose paths, roots or epochs.
+func CompileInstalledBootstrapManager(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot, operation, staging, manifestDigest string, manifestEpoch uint64, pointerNonce string, now time.Time) error {
+	if !validInstallRoot(target, installRoot) || (operation != "install" && operation != "upgrade") || len(staging) != len(".staging-")+32 || !strings.HasPrefix(staging, ".staging-") || !canonical(strings.TrimPrefix(staging, ".staging-"), 16) || !canonical(manifestDigest, 32) || manifestEpoch < s.MinimumEpoch || manifestEpoch > 1<<53-1 || !canonical(pointerNonce, 16) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot)) +
+		" -X main.embeddedOperation=" + operation + " -X main.embeddedStaging=" + staging +
+		" -X main.embeddedManifestDigest=" + manifestDigest + " -X main.embeddedManifestEpoch=" + strconv.FormatUint(manifestEpoch, 10) +
+		" -X main.embeddedPointerNonce=" + pointerNonce
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installed-bootstrap-manager", extra, now)
+}
+
 // CompileInstalledReleaseManager pins one hidden candidate name and signed
 // manifest digest. Runtime arguments can select install/upgrade/status only.
 func CompileInstalledReleaseManager(ctx context.Context, goexe, module, target, dest string, s Specification, staging, manifestDigest string, manifestEpoch uint64, now time.Time) error {

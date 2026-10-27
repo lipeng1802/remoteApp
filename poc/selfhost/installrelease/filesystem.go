@@ -61,6 +61,57 @@ func ValidateProtectedLayout(installRoot string, test bool) (string, error) {
 	return releases, nil
 }
 
+// ValidateProtectedBootstrapLayout binds the bootstrap and sets directories to
+// the same protected filesystem object tree as the immutable releases.
+func ValidateProtectedBootstrapLayout(installRoot string, test bool) (string, error) {
+	if _, err := ValidateProtectedLayout(installRoot, test); err != nil {
+		return "", err
+	}
+	root, rootIdentity, err := openChecked(installRoot, true, test)
+	if err != nil {
+		return "", err
+	}
+	root.Close()
+	bootstrapPath := filepath.Join(installRoot, "bootstrap")
+	bootstrap, bootstrapIdentity, err := openChecked(bootstrapPath, true, test)
+	if err != nil {
+		return "", err
+	}
+	bootstrap.Close()
+	setsPath := filepath.Join(bootstrapPath, "sets")
+	sets, setsIdentity, err := openChecked(setsPath, true, test)
+	if err != nil {
+		return "", err
+	}
+	sets.Close()
+	if rootIdentity.volume != bootstrapIdentity.volume || rootIdentity.volume != setsIdentity.volume {
+		return "", ErrRelease
+	}
+	return setsPath, nil
+}
+
+// ValidateProtectedBootstrapSet requires a direct child of bootstrap/sets.
+func ValidateProtectedBootstrapSet(directory, installRoot string, test bool) error {
+	sets, err := ValidateProtectedBootstrapLayout(installRoot, test)
+	if err != nil || !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || filepath.Dir(directory) != sets {
+		return ErrRelease
+	}
+	parent, parentIdentity, err := openChecked(sets, true, test)
+	if err != nil {
+		return err
+	}
+	parent.Close()
+	child, childIdentity, err := openChecked(directory, true, test)
+	if err != nil {
+		return err
+	}
+	child.Close()
+	if parentIdentity.volume != childIdentity.volume {
+		return ErrRelease
+	}
+	return nil
+}
+
 // ValidateProtectedRelease binds one direct child directory to the already
 // protected releases root and rejects ownership, permission, link or volume
 // changes. Content authenticity is still supplied by VerifyDirectory.

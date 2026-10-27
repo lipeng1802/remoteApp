@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-16 r49 签名bootstrap set与稳定启动入口
+
+用户要求继续下一切片，并确认Windows已开机可做后续验收。r48已本地提交`27fc7b6`，本节形成后续独立本地提交，不自动推送。未访问或修改服务器、Headscale、策略、Nginx、Store或正式客户端。
+
+安装根配方现同时创建并回执绑定`releases`、`bootstrap`和`bootstrap/sets`三个同卷受保护目录。bootstrap set固定只包含`installed-release-launcher`与`trust-journal`，独立`bootstrap-manifest.json`绑定channel/platform/epoch/文件大小与SHA-256，由同release Ed25519根使用独立域分离签名。外部payload只能复制进隐藏staging，以新inode/fsync/再验签后晋升为epoch+摘要内容寻址目录。
+
+`current.json`是唯一bootstrap commit point。manager在替换前必须完整打开并重验旧指针所指签名set，再以同目录临时文件+fsync+原子replace单调切换；相同候选幂等成功，损坏旧set、降epoch、混合staging/final全部锁闭。Windows使用`MoveFileEx(REPLACE_EXISTING|WRITE_THROUGH)`，macOS/Unix使用同文件系统rename。稳定`installed-bootstrap-launcher`编译固定install root/release trust，每次重验当前bootstrap set后才执行set内launcher；set内launcher的release root同样编译固定，helper必须与set同目录。因此旧dispatcher/旧launcher都会跟随当前active release，不能选回旧版本。
+
+macOS最终r2原生组合已通过：v1/v2 release transaction与bootstrap manager各重复两次，新旧稳定入口都执行当前产品拒绝探针，回滚拒绝、原生身份跨升级保持，最后精确删除bootstrap pointer/两set/activation/trust/两release/空根。定向race通过，Windows amd64 vet及所有相关命令/测试二进制交叉构建通过。
+
+Windows最终包在`C:\Users\jarvis\remoteapp-bootstrap-r49-r2\bundle`，归档SHA-256为`01c369b4fd81400ba69fd336583110fe3c12ca63c9c1bbf2585b48d1dcb79d57`，远端已核对63个严格文件且无AppleDouble。应在普通桌面PowerShell运行`& "C:\Users\jarvis\remoteapp-bootstrap-r49-r2\bundle\autonomous-upgrade-validation.exe"`，当前待用户回传结果。旧`r49-clean`包生成时尚未加“替换前重验旧set”门禁，不作最终验收；更早首个归档还含AppleDouble，严格清单会拒绝。
+
+边界：仍是用户可写的隔离TEST根，不是`Program Files`/`/Library/Application Support`中的提权正式安装；未做Developer ID/公证、Authenticode、DMG/Inno、快捷方式/开机启动注册、完整GUI会话或卸载。下一切片在Windows r49-r2通过后，优先做DMG/Inno adapter的隔离安装/升级/卸载入口和发布签名边界，不直接替换现有MVP安装包。
+
 ## 2026-10-16 r48 可中断重开的 installer transaction owner
 
 用户要求继续下一切片。本轮未联系Windows，未访问或修改服务器、Headscale、策略、端口、Store、Nginx、正式客户端或现有DMG/Inno。r47已本地提交`66c7782`，本节形成后续独立本地提交，不自动推送。

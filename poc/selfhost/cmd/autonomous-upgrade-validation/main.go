@@ -32,10 +32,11 @@ type reply struct {
 }
 
 type releaseLayout struct {
-	V1Stage     string `json:"v1_stage"`
-	V1Directory string `json:"v1_directory"`
-	V2Stage     string `json:"v2_stage"`
-	V2Directory string `json:"v2_directory"`
+	V1Stage         string `json:"v1_stage"`
+	V1Directory     string `json:"v1_directory"`
+	V2Stage         string `json:"v2_stage"`
+	V2Directory     string `json:"v2_directory"`
+	TransactionRoot string `json:"transaction_root"`
 }
 
 func command(path string, input []byte, args ...string) (reply, error) {
@@ -150,7 +151,7 @@ func run() (result error) {
 		raw, err := hex.DecodeString(value[:16] + value[17:])
 		return err == nil && len(raw) == 16 && hex.EncodeToString(raw) == value[:16]+value[17:]
 	}
-	if !validStage(layout.V1Stage) || !validStage(layout.V2Stage) || layout.V1Stage == layout.V2Stage || !validDirectory(layout.V1Directory) || !validDirectory(layout.V2Directory) || layout.V1Directory == layout.V2Directory {
+	if !validStage(layout.V1Stage) || !validStage(layout.V2Stage) || layout.V1Stage == layout.V2Stage || !validDirectory(layout.V1Directory) || !validDirectory(layout.V2Directory) || layout.V1Directory == layout.V2Directory || !filepath.IsAbs(layout.TransactionRoot) || filepath.Clean(layout.TransactionRoot) != layout.TransactionRoot || filepath.Dir(layout.TransactionRoot) == layout.TransactionRoot {
 		return fmt.Errorf("invalid release layout values")
 	}
 	expected := []string{
@@ -160,6 +161,7 @@ func run() (result error) {
 		"installed-autonomous-product-v1" + suffix, "installed-autonomous-product-v2" + suffix,
 		"release-manager-v1" + suffix, "release-manager-v2" + suffix,
 		"release-launcher-v1" + suffix, "release-launcher-v2" + suffix,
+		"bootstrap-launcher-v1" + suffix, "bootstrap-launcher-v2" + suffix,
 		"autonomous-upgrade-validation" + suffix, "old-profile.json", "release-layout.json",
 	}
 	stageFiles := []string{"autonomous-enrollment-install" + suffix, "identity-vault" + suffix, "installed-autonomous-product" + suffix, "tls-product" + suffix, "trust-install" + suffix, "trust-journal" + suffix, "release-manifest.json"}
@@ -168,13 +170,17 @@ func run() (result error) {
 			expected = append(expected, filepath.ToSlash(filepath.Join("releases", stage, name)))
 		}
 	}
-	transactionFiles := []string{"install-root-provisioner" + suffix, "install-transaction" + suffix, "installed-release-manager" + suffix, "trust-journal" + suffix}
+	transactionFiles := []string{"install-root-provisioner" + suffix, "install-transaction" + suffix, "installed-bootstrap-manager" + suffix, "installed-release-manager" + suffix, "trust-journal" + suffix}
+	bootstrapFiles := []string{"bootstrap-manifest.json", "installed-release-launcher" + suffix, "trust-journal" + suffix}
 	for _, version := range []string{"v1", "v2"} {
 		for _, name := range transactionFiles {
 			expected = append(expected, filepath.ToSlash(filepath.Join("transaction-"+version, name)))
 		}
 		for _, name := range stageFiles {
 			expected = append(expected, filepath.ToSlash(filepath.Join("transaction-"+version, "release-payload", name)))
+		}
+		for _, name := range bootstrapFiles {
+			expected = append(expected, filepath.ToSlash(filepath.Join("transaction-"+version, "bootstrap-payload", name)))
 		}
 	}
 	if len(hashes) != len(expected) {
@@ -192,12 +198,14 @@ func run() (result error) {
 		}
 	}
 	allowedDirectories := map[string]bool{
-		".": true, "releases": true,
+		".": true, "releases": true, "bootstrap": true, filepath.ToSlash(filepath.Join("bootstrap", "sets")): true,
 		filepath.ToSlash(filepath.Join("releases", layout.V1Stage)): true,
 		filepath.ToSlash(filepath.Join("releases", layout.V2Stage)): true,
 		"transaction-v1": true, "transaction-v2": true,
-		filepath.ToSlash(filepath.Join("transaction-v1", "release-payload")): true,
-		filepath.ToSlash(filepath.Join("transaction-v2", "release-payload")): true,
+		filepath.ToSlash(filepath.Join("transaction-v1", "release-payload")):   true,
+		filepath.ToSlash(filepath.Join("transaction-v2", "release-payload")):   true,
+		filepath.ToSlash(filepath.Join("transaction-v1", "bootstrap-payload")): true,
+		filepath.ToSlash(filepath.Join("transaction-v2", "bootstrap-payload")): true,
 	}
 	actual := 0
 	if err = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
@@ -385,9 +393,20 @@ func run() (result error) {
 	transactionTool := func(version, name string) string {
 		return filepath.Join(dir, "transaction-"+version, name+suffix)
 	}
-	transactionRoot := filepath.Join(dir, "transaction-install-root")
+	transactionRoot := layout.TransactionRoot
+	bootstrapStarted := false
 	cleanupTransaction := func(strict bool) error {
 		failed := false
+		if bootstrapStarted {
+			if value, cleanupErr := command(transactionTool("v2", "installed-bootstrap-manager"), nil, "cleanup-pointer-test"); cleanupErr != nil || value.Status != "cleaned" {
+				failed = true
+			}
+			for _, version := range []string{"v2", "v1"} {
+				if value, cleanupErr := command(transactionTool(version, "installed-bootstrap-manager"), nil, "cleanup-set-test"); cleanupErr != nil || value.Status != "cleaned" {
+					failed = true
+				}
+			}
+		}
 		if value, cleanupErr := command(transactionTool("v2", "installed-release-manager"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "cleaned" {
 			failed = true
 		}
@@ -423,12 +442,28 @@ func run() (result error) {
 		version string
 		epoch   uint64
 	}{
-		{"v1", 1}, {"v1", 1}, {"v2", 2}, {"v2", 2},
+		{"v1", 1}, {"v2", 2},
 	} {
-		value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
-		if transactionErr != nil || value.Status != "active" || value.Epoch != fixture.epoch || value.Phase != "committed" {
-			return fmt.Errorf("transaction %s epoch %d reopen", fixture.version, fixture.epoch)
+		for attempt := 0; attempt < 2; attempt++ {
+			value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
+			if transactionErr != nil || value.Status != "active" || value.Epoch != fixture.epoch || value.Phase != "committed" {
+				return fmt.Errorf("transaction %s epoch %d reopen", fixture.version, fixture.epoch)
+			}
+			value, bootstrapErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil)
+			if bootstrapErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
+				return fmt.Errorf("bootstrap %s epoch %d reopen", fixture.version, fixture.epoch)
+			}
+			bootstrapStarted = true
 		}
+		if value, statusErr := command(transactionTool(fixture.version, "installed-bootstrap-manager"), nil, "status"); statusErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
+			return fmt.Errorf("bootstrap %s status", fixture.version)
+		}
+		if err = productReject(tool("bootstrap-launcher-v1")); err != nil {
+			return fmt.Errorf("old stable bootstrap at epoch %d: %w", fixture.epoch, err)
+		}
+	}
+	if err = productReject(tool("bootstrap-launcher-v2")); err != nil {
+		return fmt.Errorf("new stable bootstrap: %w", err)
 	}
 	if value, managerErr := command(transactionTool("v2", "installed-release-manager"), nil, "status"); managerErr != nil || value.Status != "active" || value.Epoch != 2 {
 		return fmt.Errorf("transaction active status")
@@ -445,5 +480,5 @@ func main() {
 		fmt.Println("VALIDATION FAILED: autonomous native upgrade lifecycle:", err)
 		os.Exit(1)
 	}
-	fmt.Println("VALIDATION PASSED: fixed-root installer transaction reopens root/import/trust/activation to one committed epoch, repeated install/upgrade are idempotent, protected signed releases and native identity upgrade remain valid, and TEST state is cleaned. NOT full product session, elevated production root, GUI, signed installer or Windows acceptance.")
+	fmt.Println("VALIDATION PASSED: signed bootstrap launcher/helper set switches atomically, old and new stable launchers follow the active release, restartable install/upgrade remain idempotent, protected native identity survives upgrade, and TEST state is cleaned. NOT full product session, elevated production root, GUI or signed installer acceptance.")
 }

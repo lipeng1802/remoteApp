@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"os"
@@ -15,7 +16,7 @@ import (
 	"remoteapp.local/selfhost-poc/trustinstall"
 )
 
-var embeddedRelease string
+var embeddedRelease, embeddedInstallRoot string
 
 func main() {
 	if run() != nil {
@@ -35,7 +36,18 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	root := filepath.Dir(executable)
+	bundle := filepath.Dir(executable)
+	root := bundle
+	if embeddedInstallRoot != "" {
+		raw, decodeErr := base64.RawURLEncoding.DecodeString(embeddedInstallRoot)
+		if decodeErr != nil || base64.RawURLEncoding.EncodeToString(raw) != embeddedInstallRoot {
+			return installrelease.ErrRelease
+		}
+		root = string(raw)
+		if !filepath.IsAbs(root) || filepath.Clean(root) != root || filepath.Dir(root) == root {
+			return installrelease.ErrRelease
+		}
+	}
 	releases, err := installrelease.ValidateProtectedLayout(root, release.Specification().Test)
 	if err != nil {
 		return err
@@ -44,7 +56,7 @@ func run() error {
 	if runtime.GOOS == "windows" {
 		suffix, platform = ".exe", "windows"
 	}
-	helper := filepath.Join(root, "trust-journal"+suffix)
+	helper := filepath.Join(bundle, "trust-journal"+suffix)
 	factory, err := release.NativeFactory(helper)
 	if err != nil {
 		return err

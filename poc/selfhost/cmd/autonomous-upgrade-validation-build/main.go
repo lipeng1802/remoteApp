@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"remoteapp.local/selfhost-poc/installrelease"
@@ -68,11 +69,24 @@ func target(target string) (suffix, cgo, arch string, err error) {
 	}
 }
 
+func validWindowsRoot(root string) bool {
+	if len(root) < 4 || len(root) > 1024 || root[0] < 'A' || root[0] > 'Z' || root[1] != ':' || root[2] != '\\' || strings.Contains(root, "/") || strings.HasSuffix(root, "\\") {
+		return false
+	}
+	for _, component := range strings.Split(root[3:], "\\") {
+		if component == "" || component == "." || component == ".." || strings.ContainsAny(component, `<>:"|?*`) {
+			return false
+		}
+	}
+	return true
+}
+
 type releaseLayout struct {
-	V1Stage     string `json:"v1_stage"`
-	V1Directory string `json:"v1_directory"`
-	V2Stage     string `json:"v2_stage"`
-	V2Directory string `json:"v2_directory"`
+	V1Stage         string `json:"v1_stage"`
+	V1Directory     string `json:"v1_directory"`
+	V2Stage         string `json:"v2_stage"`
+	V2Directory     string `json:"v2_directory"`
+	TransactionRoot string `json:"transaction_root"`
 }
 
 func copyFile(source, destination string) error {
@@ -84,7 +98,7 @@ func copyFile(source, destination string) error {
 }
 
 func run() error {
-	if len(os.Args) != 8 {
+	if len(os.Args) != 8 && len(os.Args) != 9 {
 		return os.ErrInvalid
 	}
 	goexe, module, goos, dest := os.Args[1], os.Args[2], os.Args[3], os.Args[4]
@@ -97,6 +111,15 @@ func run() error {
 	suffix, cgo, arch, err := target(goos)
 	if err != nil {
 		return err
+	}
+	transactionRoot := filepath.Join(dest, "transaction-install-root")
+	if goos == "windows" {
+		if len(os.Args) != 9 || !validWindowsRoot(os.Args[8]) {
+			return os.ErrInvalid
+		}
+		transactionRoot = os.Args[8]
+	} else if len(os.Args) != 8 {
+		return os.ErrInvalid
 	}
 	journal, err := read(journalPath)
 	if err != nil {
@@ -180,6 +203,12 @@ func run() error {
 	if err = os.Mkdir(filepath.Join(dest, "releases"), 0700); err != nil {
 		return err
 	}
+	if err = os.Mkdir(filepath.Join(dest, "bootstrap"), 0700); err != nil {
+		return err
+	}
+	if err = os.Mkdir(filepath.Join(dest, "bootstrap", "sets"), 0700); err != nil {
+		return err
+	}
 	makeRelease := func(version string, current trustinstall.Specification, epoch uint64) (string, installrelease.Verified, error) {
 		var stageNonce [16]byte
 		if _, err := rand.Read(stageNonce[:]); err != nil {
@@ -251,7 +280,6 @@ func run() error {
 	if err = trustinstall.CompileInstalledReleaseManager(ctx, goexe, module, goos, filepath.Join(dest, "release-manager-v2"+suffix), spec, stage2, verified2.ManifestDigest, 2, now); err != nil {
 		return err
 	}
-	transactionRoot := filepath.Join(dest, "transaction-install-root")
 	makeTransaction := func(version, operation, stage string, current trustinstall.Specification, verified installrelease.Verified, epoch uint64) error {
 		directory := filepath.Join(dest, "transaction-"+version)
 		if err := copyFile(filepath.Join(dest, "trust-journal"+suffix), filepath.Join(directory, "trust-journal"+suffix)); err != nil {
@@ -279,13 +307,58 @@ func run() error {
 	if err = makeTransaction("v2", "upgrade", stage2, spec, verified2, 2); err != nil {
 		return err
 	}
+	makeBootstrap := func(version, operation string, current trustinstall.Specification, epoch uint64) error {
+		directory := filepath.Join(dest, "transaction-"+version)
+		payload := filepath.Join(directory, "bootstrap-payload")
+		if err := os.Mkdir(payload, 0700); err != nil {
+			return err
+		}
+		if err := copyFile(filepath.Join(dest, "trust-journal"+suffix), filepath.Join(payload, "trust-journal"+suffix)); err != nil {
+			return err
+		}
+		if err := trustinstall.CompileFixedRootInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(payload, "installed-release-launcher"+suffix), current, transactionRoot, now); err != nil {
+			return err
+		}
+		manifest, err := installrelease.BuildBootstrapManifest(payload, current.Channel, goos, epoch)
+		if err != nil {
+			return err
+		}
+		raw, err := installrelease.SignBootstrapForBuild(releaseKey, manifest)
+		if err != nil || write(filepath.Join(payload, installrelease.BootstrapManifestName), raw, 0600) != nil {
+			return os.ErrInvalid
+		}
+		verified, err := installrelease.VerifyBootstrapDirectory(payload, root, current.Channel, goos, current.MinimumEpoch)
+		if err != nil {
+			return err
+		}
+		var stageNonce, pointerNonce [16]byte
+		if _, err = rand.Read(stageNonce[:]); err != nil {
+			return err
+		}
+		if _, err = rand.Read(pointerNonce[:]); err != nil {
+			return err
+		}
+		return trustinstall.CompileInstalledBootstrapManager(ctx, goexe, module, goos, filepath.Join(directory, "installed-bootstrap-manager"+suffix), current, transactionRoot, operation, ".staging-"+hex.EncodeToString(stageNonce[:]), verified.ManifestDigest, epoch, hex.EncodeToString(pointerNonce[:]), now)
+	}
+	if err = makeBootstrap("v1", "install", spec1, 1); err != nil {
+		return err
+	}
+	if err = makeBootstrap("v2", "upgrade", spec, 2); err != nil {
+		return err
+	}
+	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, filepath.Join(dest, "bootstrap-launcher-v1"+suffix), spec1, transactionRoot, now); err != nil {
+		return err
+	}
+	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, filepath.Join(dest, "bootstrap-launcher-v2"+suffix), spec, transactionRoot, now); err != nil {
+		return err
+	}
 	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(dest, "release-launcher-v1"+suffix), spec1, now); err != nil {
 		return err
 	}
 	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(dest, "release-launcher-v2"+suffix), spec, now); err != nil {
 		return err
 	}
-	layout, err := json.Marshal(releaseLayout{V1Stage: stage1, V1Directory: name1, V2Stage: stage2, V2Directory: name2})
+	layout, err := json.Marshal(releaseLayout{V1Stage: stage1, V1Directory: name1, V2Stage: stage2, V2Directory: name2, TransactionRoot: transactionRoot})
 	if err != nil || write(filepath.Join(dest, "release-layout.json"), layout, 0600) != nil {
 		return os.ErrInvalid
 	}
