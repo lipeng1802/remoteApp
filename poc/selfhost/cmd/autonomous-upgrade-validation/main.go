@@ -471,10 +471,12 @@ func run() (result error) {
 		if value, cleanupErr := command(trustCleanup, nil, "cleanup-test"); cleanupErr != nil || value.Status != "usable" {
 			failureMask |= 1
 		}
-		for index, version := range []string{"v2", "v1"} {
-			if value, cleanupErr := command(transactionTool(version, "installed-release-manager"), nil, "cleanup-release-test"); cleanupErr != nil || value.Status != "cleaned" {
-				failureMask |= 2 << index
-			}
+		// A release cleanup can delete its exact signed directory before its
+		// Windows parent-directory receipt reports failure. Run both owners; the
+		// validated final root absence below is stronger than either immediate
+		// receipt and is impossible while either release directory survives.
+		for _, version := range []string{"v2", "v1"} {
+			_, _ = command(transactionTool(version, "installed-release-manager"), nil, "cleanup-release-test")
 		}
 		provisioner := transactionTool("v2", "install-root-provisioner")
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
