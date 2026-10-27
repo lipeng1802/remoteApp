@@ -279,7 +279,7 @@ func run() (result error) {
 	negative := func(name string, args ...string) error {
 		value, err := command(tool(name), nil, args...)
 		if err == nil || value.Status != "failed" {
-			return fmt.Errorf("negative command accepted")
+			return fmt.Errorf("negative command accepted name=%s op=%v status=%s epoch=%d", name, args, value.Status, value.Epoch)
 		}
 		return nil
 	}

@@ -97,6 +97,30 @@ func copyFile(source, destination string) error {
 	return write(destination, raw, 0700)
 }
 
+// The macOS native vault identifies its caller through the signed executable
+// chain. Signing after hashing would invalidate pins and release manifests, so
+// every TEST executable is ad-hoc signed immediately after creation and before
+// any digest is consumed. Production packaging replaces this with Developer ID.
+func signTestExecutable(goos, path, identifier string) error {
+	if goos != "darwin" {
+		return nil
+	}
+	if identifier == "" || strings.Trim(identifier, "abcdefghijklmnopqrstuvwxyz0123456789.-") != "" {
+		return os.ErrInvalid
+	}
+	cmd := exec.Command("/usr/bin/codesign", "--force", "--sign", "-", "--identifier", identifier, path)
+	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	if cmd.Run() != nil {
+		return os.ErrInvalid
+	}
+	verify := exec.Command("/usr/bin/codesign", "--verify", "--strict", path)
+	verify.Stdout, verify.Stderr = io.Discard, io.Discard
+	if verify.Run() != nil {
+		return os.ErrInvalid
+	}
+	return nil
+}
+
 func run() error {
 	if len(os.Args) != 8 && len(os.Args) != 9 {
 		return os.ErrInvalid
@@ -141,6 +165,27 @@ func run() error {
 			return err
 		}
 	}
+	for name, identifier := range map[string]string{
+		"trust-journal" + suffix:  "com.personalremotedesktop.test.trust-journal",
+		"identity-vault" + suffix: "com.personalremotedesktop.test.identity-vault",
+		"tls-product" + suffix:    "com.personalremotedesktop.test.tls-product",
+	} {
+		if err = signTestExecutable(goos, filepath.Join(dest, name), identifier); err != nil {
+			return err
+		}
+	}
+	journal, err = read(filepath.Join(dest, "trust-journal"+suffix))
+	if err != nil {
+		return err
+	}
+	vault, err = read(filepath.Join(dest, "identity-vault"+suffix))
+	if err != nil {
+		return err
+	}
+	product, err = read(filepath.Join(dest, "tls-product"+suffix))
+	if err != nil {
+		return err
+	}
 
 	now := time.Now().Truncate(time.Second)
 	root, releaseKey, err := ed25519.GenerateKey(rand.Reader)
@@ -184,13 +229,25 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	compile := func(version string, current trustinstall.Specification) error {
-		if err := trustinstall.Compile(ctx, goexe, module, goos, filepath.Join(dest, "trust-install-"+version+suffix), current, now); err != nil {
+		trust := filepath.Join(dest, "trust-install-"+version+suffix)
+		if err := trustinstall.Compile(ctx, goexe, module, goos, trust, current, now); err != nil {
 			return err
 		}
-		if err := trustinstall.CompileAutonomousEnrollmentInstall(ctx, goexe, module, goos, filepath.Join(dest, "autonomous-enrollment-install-"+version+suffix), current, hex.EncodeToString(vaultHash[:]), now); err != nil {
+		if err := signTestExecutable(goos, trust, "com.personalremotedesktop.test.trust-install."+version); err != nil {
 			return err
 		}
-		return trustinstall.CompileAutonomousProductClient(ctx, goexe, module, goos, filepath.Join(dest, "installed-autonomous-product-"+version+suffix), current, hex.EncodeToString(vaultHash[:]), hex.EncodeToString(productHash[:]), now)
+		enrollment := filepath.Join(dest, "autonomous-enrollment-install-"+version+suffix)
+		if err := trustinstall.CompileAutonomousEnrollmentInstall(ctx, goexe, module, goos, enrollment, current, hex.EncodeToString(vaultHash[:]), now); err != nil {
+			return err
+		}
+		if err := signTestExecutable(goos, enrollment, "com.personalremotedesktop.test.autonomous-enrollment-install."+version); err != nil {
+			return err
+		}
+		installed := filepath.Join(dest, "installed-autonomous-product-"+version+suffix)
+		if err := trustinstall.CompileAutonomousProductClient(ctx, goexe, module, goos, installed, current, hex.EncodeToString(vaultHash[:]), hex.EncodeToString(productHash[:]), now); err != nil {
+			return err
+		}
+		return signTestExecutable(goos, installed, "com.personalremotedesktop.test.installed-autonomous-product."+version)
 	}
 	if err = compile("v1", spec); err != nil {
 		return err
@@ -274,10 +331,18 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if err = trustinstall.CompileInstalledReleaseManager(ctx, goexe, module, goos, filepath.Join(dest, "release-manager-v1"+suffix), spec1, stage1, verified1.ManifestDigest, 1, now); err != nil {
+	releaseManager1 := filepath.Join(dest, "release-manager-v1"+suffix)
+	if err = trustinstall.CompileInstalledReleaseManager(ctx, goexe, module, goos, releaseManager1, spec1, stage1, verified1.ManifestDigest, 1, now); err != nil {
 		return err
 	}
-	if err = trustinstall.CompileInstalledReleaseManager(ctx, goexe, module, goos, filepath.Join(dest, "release-manager-v2"+suffix), spec, stage2, verified2.ManifestDigest, 2, now); err != nil {
+	if err = signTestExecutable(goos, releaseManager1, "com.personalremotedesktop.test.release-manager.v1"); err != nil {
+		return err
+	}
+	releaseManager2 := filepath.Join(dest, "release-manager-v2"+suffix)
+	if err = trustinstall.CompileInstalledReleaseManager(ctx, goexe, module, goos, releaseManager2, spec, stage2, verified2.ManifestDigest, 2, now); err != nil {
+		return err
+	}
+	if err = signTestExecutable(goos, releaseManager2, "com.personalremotedesktop.test.release-manager.v2"); err != nil {
 		return err
 	}
 	makeTransaction := func(version, operation, stage string, current trustinstall.Specification, verified installrelease.Verified, epoch uint64) error {
@@ -289,8 +354,14 @@ func run() error {
 		if err := trustinstall.CompileInstallRootProvisioner(ctx, goexe, module, goos, provisioner, transactionRoot, true); err != nil {
 			return err
 		}
+		if err := signTestExecutable(goos, provisioner, "com.personalremotedesktop.test.install-root-provisioner."+version); err != nil {
+			return err
+		}
 		manager := filepath.Join(directory, "installed-release-manager"+suffix)
 		if err := trustinstall.CompileFixedRootInstalledReleaseManager(ctx, goexe, module, goos, manager, current, transactionRoot, stage, verified.ManifestDigest, epoch, now); err != nil {
+			return err
+		}
+		if err := signTestExecutable(goos, manager, "com.personalremotedesktop.test.fixed-release-manager."+version); err != nil {
 			return err
 		}
 		provisionerRaw, provisionerErr := read(provisioner)
@@ -299,7 +370,11 @@ func run() error {
 			return os.ErrInvalid
 		}
 		provisionerHash, managerHash := sha256.Sum256(provisionerRaw), sha256.Sum256(managerRaw)
-		return trustinstall.CompileInstallTransaction(ctx, goexe, module, goos, filepath.Join(directory, "install-transaction"+suffix), current, transactionRoot, operation, stage, verified.ManifestDigest, epoch, hex.EncodeToString(provisionerHash[:]), hex.EncodeToString(managerHash[:]), now)
+		transaction := filepath.Join(directory, "install-transaction"+suffix)
+		if err := trustinstall.CompileInstallTransaction(ctx, goexe, module, goos, transaction, current, transactionRoot, operation, stage, verified.ManifestDigest, epoch, hex.EncodeToString(provisionerHash[:]), hex.EncodeToString(managerHash[:]), now); err != nil {
+			return err
+		}
+		return signTestExecutable(goos, transaction, "com.personalremotedesktop.test.install-transaction."+version)
 	}
 	if err = makeTransaction("v1", "install", stage1, spec1, verified1, 1); err != nil {
 		return err
@@ -316,7 +391,11 @@ func run() error {
 		if err := copyFile(filepath.Join(dest, "trust-journal"+suffix), filepath.Join(payload, "trust-journal"+suffix)); err != nil {
 			return err
 		}
-		if err := trustinstall.CompileFixedRootInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(payload, "installed-release-launcher"+suffix), current, transactionRoot, now); err != nil {
+		launcher := filepath.Join(payload, "installed-release-launcher"+suffix)
+		if err := trustinstall.CompileFixedRootInstalledReleaseLauncher(ctx, goexe, module, goos, launcher, current, transactionRoot, now); err != nil {
+			return err
+		}
+		if err := signTestExecutable(goos, launcher, "com.personalremotedesktop.test.installed-release-launcher."+version); err != nil {
 			return err
 		}
 		manifest, err := installrelease.BuildBootstrapManifest(payload, current.Channel, goos, epoch)
@@ -338,7 +417,11 @@ func run() error {
 		if _, err = rand.Read(pointerNonce[:]); err != nil {
 			return err
 		}
-		return trustinstall.CompileInstalledBootstrapManager(ctx, goexe, module, goos, filepath.Join(directory, "installed-bootstrap-manager"+suffix), current, transactionRoot, operation, ".staging-"+hex.EncodeToString(stageNonce[:]), verified.ManifestDigest, epoch, hex.EncodeToString(pointerNonce[:]), now)
+		manager := filepath.Join(directory, "installed-bootstrap-manager"+suffix)
+		if err := trustinstall.CompileInstalledBootstrapManager(ctx, goexe, module, goos, manager, current, transactionRoot, operation, ".staging-"+hex.EncodeToString(stageNonce[:]), verified.ManifestDigest, epoch, hex.EncodeToString(pointerNonce[:]), now); err != nil {
+			return err
+		}
+		return signTestExecutable(goos, manager, "com.personalremotedesktop.test.installed-bootstrap-manager."+version)
 	}
 	if err = makeBootstrap("v1", "install", spec1, 1); err != nil {
 		return err
@@ -346,16 +429,32 @@ func run() error {
 	if err = makeBootstrap("v2", "upgrade", spec, 2); err != nil {
 		return err
 	}
-	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, filepath.Join(dest, "bootstrap-launcher-v1"+suffix), spec1, transactionRoot, now); err != nil {
+	bootstrapLauncher1 := filepath.Join(dest, "bootstrap-launcher-v1"+suffix)
+	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, bootstrapLauncher1, spec1, transactionRoot, now); err != nil {
 		return err
 	}
-	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, filepath.Join(dest, "bootstrap-launcher-v2"+suffix), spec, transactionRoot, now); err != nil {
+	if err = signTestExecutable(goos, bootstrapLauncher1, "com.personalremotedesktop.test.bootstrap-launcher.v1"); err != nil {
 		return err
 	}
-	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(dest, "release-launcher-v1"+suffix), spec1, now); err != nil {
+	bootstrapLauncher2 := filepath.Join(dest, "bootstrap-launcher-v2"+suffix)
+	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, bootstrapLauncher2, spec, transactionRoot, now); err != nil {
 		return err
 	}
-	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, filepath.Join(dest, "release-launcher-v2"+suffix), spec, now); err != nil {
+	if err = signTestExecutable(goos, bootstrapLauncher2, "com.personalremotedesktop.test.bootstrap-launcher.v2"); err != nil {
+		return err
+	}
+	releaseLauncher1 := filepath.Join(dest, "release-launcher-v1"+suffix)
+	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, releaseLauncher1, spec1, now); err != nil {
+		return err
+	}
+	if err = signTestExecutable(goos, releaseLauncher1, "com.personalremotedesktop.test.release-launcher.v1"); err != nil {
+		return err
+	}
+	releaseLauncher2 := filepath.Join(dest, "release-launcher-v2"+suffix)
+	if err = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, goos, releaseLauncher2, spec, now); err != nil {
+		return err
+	}
+	if err = signTestExecutable(goos, releaseLauncher2, "com.personalremotedesktop.test.release-launcher.v2"); err != nil {
 		return err
 	}
 	layout, err := json.Marshal(releaseLayout{V1Stage: stage1, V1Directory: name1, V2Stage: stage2, V2Directory: name2, TransactionRoot: transactionRoot})
@@ -371,6 +470,9 @@ func run() error {
 	validator.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED="+cgo, "GOOS="+goos, "GOARCH="+arch)
 	if validator.Run() != nil {
 		return os.ErrInvalid
+	}
+	if err = signTestExecutable(goos, filepath.Join(dest, "autonomous-upgrade-validation"+suffix), "com.personalremotedesktop.test.autonomous-upgrade-validation"); err != nil {
+		return err
 	}
 	hashes := map[string]string{}
 	err = filepath.WalkDir(dest, func(path string, entry os.DirEntry, walkErr error) error {

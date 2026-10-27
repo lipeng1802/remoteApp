@@ -86,6 +86,23 @@ func expectedCandidate(releases string, release trustinstall.Release, public []b
 	return verified, nil
 }
 
+// Activation commit and helper shutdown are separate durability boundaries.
+// If either acknowledgement is uncertain, do not write again in this process:
+// release the old owner, reopen read-only, and accept only this exact signed
+// candidate. A previous epoch or any invalid state remains a hard failure.
+func reopenExactActivation(records trustinstall.RecordFactory, scope string, test bool, releases, root string, public []byte, release trustinstall.Release, platform string, candidate installrelease.Verified) (uint64, error) {
+	journal, err := records(scope, false, test)
+	if err != nil {
+		return 0, err
+	}
+	active, openErr := installrelease.OpenActive(journal, releases, public, release.Specification().Channel, platform, release.Specification().MinimumEpoch)
+	closeErr := journal.Close()
+	if openErr != nil || closeErr != nil || active.ManifestDigest != candidate.ManifestDigest || active.Manifest.Epoch != candidate.Manifest.Epoch || active.Directory != candidate.Directory || installrelease.ValidateProtectedRelease(active.Directory, root, test) != nil {
+		return 0, installrelease.ErrRelease
+	}
+	return active.Manifest.Epoch, nil
+}
+
 func run() (reply, error) {
 	if len(os.Args) != 2 || (os.Args[1] != "install" && os.Args[1] != "upgrade" && os.Args[1] != "status" && os.Args[1] != "cleanup-test" && os.Args[1] != "cleanup-release-test") {
 		return reply{}, installrelease.ErrRelease
@@ -213,7 +230,11 @@ func run() (reply, error) {
 		activated, activateErr := installrelease.ActivateUpgrade(journal, candidate)
 		closeErr := journal.Close()
 		if activateErr != nil || closeErr != nil {
-			return reply{}, installrelease.ErrRelease
+			epoch, reopenErr := reopenExactActivation(records, scope, release.Specification().Test, releases, root, public, release, platform, candidate)
+			if reopenErr != nil {
+				return reply{}, installrelease.ErrRelease
+			}
+			return reply{Status: "active", Epoch: epoch}, nil
 		}
 		return reply{Status: "active", Epoch: activated.Epoch}, nil
 	}
@@ -227,7 +248,11 @@ func run() (reply, error) {
 	active, activateErr := installrelease.ActivateFirst(journal, candidate)
 	closeErr := journal.Close()
 	if activateErr != nil || closeErr != nil {
-		return reply{}, installrelease.ErrRelease
+		epoch, reopenErr := reopenExactActivation(records, scope, release.Specification().Test, releases, root, public, release, platform, candidate)
+		if reopenErr != nil {
+			return reply{}, installrelease.ErrRelease
+		}
+		return reply{Status: "active", Epoch: epoch}, nil
 	}
 	return reply{Status: "active", Epoch: active.Epoch}, nil
 }

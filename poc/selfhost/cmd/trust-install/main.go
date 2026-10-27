@@ -65,7 +65,13 @@ func run() (trustprofile.Profile, error) {
 	}
 	switch {
 	case os.Args[1] == "initialize" && len(os.Args) == 2:
-		return owner.Initialize()
+		profile, err := reconcileExact(owner, r.Specification().Bundled, func() (trustprofile.Profile, error) {
+			return owner.Initialize()
+		})
+		if err != nil {
+			return trustprofile.Profile{}, err
+		}
+		return profile, nil
 	case os.Args[1] == "inspect" && len(os.Args) == 2:
 		return owner.Inspect()
 	case os.Args[1] == "upgrade":
@@ -85,7 +91,13 @@ func run() (trustprofile.Profile, error) {
 				return trustprofile.Profile{}, e
 			}
 		}
-		return owner.Upgrade(context.Background(), p)
+		profile, err := reconcileExact(owner, p, func() (trustprofile.Profile, error) {
+			return owner.Upgrade(context.Background(), p)
+		})
+		if err != nil {
+			return trustprofile.Profile{}, err
+		}
+		return profile, nil
 	case os.Args[1] == "cleanup-test" && len(os.Args) == 2 && r.Specification().Test:
 		return trustprofile.Profile{}, trustprofile.DeleteTestDesktopJournal(helper, r.Scope())
 	case os.Args[1] == "fault-test" && len(os.Args) == 3 && r.Specification().Test:
@@ -106,4 +118,24 @@ func run() (trustprofile.Profile, error) {
 	default:
 		return trustprofile.Profile{}, trustprofile.ErrTrust
 	}
+}
+
+// A native commit may be durable even when its final close acknowledgement is
+// lost. Never retry the write in that case. Reopen read-only and accept only
+// the exact signed profile requested by this invocation. A pre-commit failure,
+// different profile, corrupt state or unavailable lease remains a failure.
+type profileInspector interface {
+	Inspect() (trustprofile.Profile, error)
+}
+
+func reconcileExact(owner profileInspector, expected trustprofile.Profile, operation func() (trustprofile.Profile, error)) (trustprofile.Profile, error) {
+	profile, err := operation()
+	if err == nil {
+		return profile, nil
+	}
+	current, inspectErr := owner.Inspect()
+	if inspectErr == nil && current == expected {
+		return current, nil
+	}
+	return trustprofile.Profile{}, err
 }

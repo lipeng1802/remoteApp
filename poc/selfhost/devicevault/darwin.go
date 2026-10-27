@@ -4,9 +4,7 @@ package devicevault
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Security -framework CoreFoundation -framework Foundation -framework LocalAuthentication
-#import <Foundation/Foundation.h>
-#import <LocalAuthentication/LocalAuthentication.h>
+#cgo LDFLAGS: -framework Security -framework CoreFoundation
 #include <Security/Security.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,8 +17,10 @@ static CFMutableDictionaryRef vaultQuery(const char *account) {
  CFDictionarySetValue(q,kSecAttrService,service);CFRelease(service);
  CFDictionarySetValue(q,kSecAttrAccount,name);CFRelease(name);
  CFDictionarySetValue(q,kSecAttrSynchronizable,kCFBooleanFalse);
- LAContext *auth=[[LAContext alloc] init];auth.interactionNotAllowed=YES;
- CFDictionarySetValue(q,kSecUseAuthenticationContext,(CFTypeRef)auth);[auth release];
+ // The standalone helper has no restricted app-group entitlement in the PoC.
+ // Stay on the login Keychain and fail instead of displaying authentication UI.
+ CFDictionarySetValue(q,kSecUseAuthenticationUI,kSecUseAuthenticationUIFail);
+ CFDictionarySetValue(q,kSecUseDataProtectionKeychain,kCFBooleanFalse);
  return q;
 }
 static OSStatus vaultRead(const char *account,void **data,long *size) {

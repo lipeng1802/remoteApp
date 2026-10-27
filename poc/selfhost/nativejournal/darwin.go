@@ -4,9 +4,7 @@ package nativejournal
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Security -framework CoreFoundation -framework Foundation -framework LocalAuthentication
-#import <Foundation/Foundation.h>
-#import <LocalAuthentication/LocalAuthentication.h>
+#cgo LDFLAGS: -framework Security -framework CoreFoundation
 #include <Security/Security.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <stdlib.h>
@@ -17,8 +15,12 @@ static CFMutableDictionaryRef journalQuery(const char *service, const char *acco
  CFStringRef s=CFStringCreateWithCString(NULL,service,kCFStringEncodingUTF8);
  CFDictionarySetValue(q,kSecClass,kSecClassGenericPassword);
  CFDictionarySetValue(q,kSecAttrService,s); CFRelease(s);
- LAContext *auth=[[LAContext alloc] init];auth.interactionNotAllowed=YES;
- CFDictionarySetValue(q,kSecUseAuthenticationContext,(CFTypeRef)auth);[auth release];
+ // Keep command-line helpers on the classic login Keychain. Supplying an
+ // LAContext selects the Data Protection Keychain on current macOS, which
+ // requires restricted application/keychain-group entitlements unavailable to
+ // ad-hoc PoC binaries. Explicitly fail instead of displaying authentication UI.
+ CFDictionarySetValue(q,kSecUseAuthenticationUI,kSecUseAuthenticationUIFail);
+ CFDictionarySetValue(q,kSecUseDataProtectionKeychain,kCFBooleanFalse);
  CFDictionarySetValue(q,kSecAttrSynchronizable,kCFBooleanFalse);
  if(account) { CFStringRef a=CFStringCreateWithCString(NULL,account,kCFStringEncodingUTF8);CFDictionarySetValue(q,kSecAttrAccount,a);CFRelease(a); }
  return q;

@@ -1,12 +1,20 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-27 macOS 非交互 Keychain 与首次运行收口
+
+用户要求先解决合并后原生组合首次运行失败。系统日志确认原 `LAContext` 查询把独立 helper 导向 Data Protection Keychain，`securityd` 返回 `-34018`（缺少受限 application/keychain-group entitlement）；ad-hoc 签名不能合法携带该 entitlement，AMFI 会终止进程，而当前机器也没有有效 Developer ID identity。现将 macOS `nativejournal` 与 `devicevault` 显式固定到 login Keychain（`kSecUseDataProtectionKeychain=false`），并使用 `kSecUseAuthenticationUIFail` 禁止密码/认证弹窗。该 API 已被 Apple 标记 deprecated，因此只是当前 PoC 的非交互兼容路径；正式发布仍应使用 Developer ID、正式 entitlement 与公证包。
+
+验证包 builder 现在对 macOS TEST 链中所有可执行文件在计算 helper pin、release manifest、manager digest 和最终 SHA256 清单之前按固定 identifier 做 ad-hoc 签名，避免签名后摘要失效。`trust-install` 对不确定写回执只做只读 exact-profile 重开，不重试写；release manager 对不确定 activation 也只接受同一签名候选的精确重开。另补充负向失败名称，便于定位而不输出凭据。
+
+必须在无符号链接的真实工作区路径生成/运行；`/tmp` 在 macOS 会解析为 `/private/tmp`，会被现有 canonical executable path 门禁拒绝，不能用作该原生验收的结论。最终 fresh 包位于 `artifacts/connection-poc/login-keychain-pass.S5JBd9/bundle`，第一次运行即完整 PASS：两代 trust/identity、release transaction、bootstrap set、旧/新稳定 launcher、幂等重开和精确 TEST 清理全部通过；没有出现密码弹窗。定向单测与 vet 通过。该结果仍不是 Developer ID/公证、正式 entitlement、提升权限安装根、GUI 或完整产品会话验收。
+
 ## 2026-10-27 合并 Windows 已验收进度
 
 用户说明一部分功能已在 Windows 测试，本轮从远端合并提交 `1dc1189` 与 `dd6fae0` 到当前 r49 代码线。`1dc1189` 的 Windows 本机预检结果有效：enrollmentstore 9 组、原生存储、OS 签名本地 HTTPS 以及真实 SDK 取消/join 均通过；它不代表真实 Headscale 注册、公开服务、GUI 或安装器验收。`dd6fae0` 的 Windows TEST 结果有效：离线安装/升级协调、终态保持、租约冲突、未知提交与精确 release 防回退均通过；该测试基于较早的 r39 产品入口，不直接代替 r40-r49 的安装布局和 bootstrap set 验收。
 
 合并时保留 `clientowner.OpenExactRelease`，自主产品只允许与当前已提交 profile 完全一致的编译 release；普通动态轮转入口仍使用 `Open`。较早的 `autonomous-install` 继续作为 Windows 原生回归入口保留，但不再由 `installed-session-build` 装入产品 bundle；当前 bundle 只分发由签名 release 派生固定 binding、运行时不能选择 vault scope/public key 的 `autonomous-enrollment-install`。这样吸收 Windows 已验证的协调和防回退能力，同时不让旧接口覆盖 r40 之后更严格的身份绑定边界。
 
-当前仍需按合并后源码重新做 r49 Windows bundle 验收；此前 `remoteapp-bootstrap-r49-r2` 是合并前构建，只能证明当时的 bootstrap set。合并后定向单测与 race、Windows amd64 vet 均通过。Mac 新隔离包的原生重跑暴露既有 native TEST helper 的首次命令会返回拒绝、随后同一命令可成功且持久状态已产生的环境/回执问题，因此本轮不把它记录为新的原生组合 PASS，也不据此否定此前 r49 结果；在生成新的 Windows 包前应先收口该“首调失败但状态可能已提交”诊断。
+当前仍需按合并后源码重新做 r49 Windows bundle 验收；此前 `remoteapp-bootstrap-r49-r2` 是合并前构建，只能证明当时的 bootstrap set。合并后定向单测与 race、Windows amd64 vet 均通过。Mac 首次运行问题已由上节收口并完成 fresh 原生组合 PASS。
 
 ## 2026-10-16 r49 签名bootstrap set与稳定启动入口
 
