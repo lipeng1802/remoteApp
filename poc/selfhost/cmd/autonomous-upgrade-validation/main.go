@@ -32,11 +32,15 @@ type reply struct {
 }
 
 type releaseLayout struct {
-	V1Stage         string `json:"v1_stage"`
-	V1Directory     string `json:"v1_directory"`
-	V2Stage         string `json:"v2_stage"`
-	V2Directory     string `json:"v2_directory"`
-	TransactionRoot string `json:"transaction_root"`
+	V1Stage                string `json:"v1_stage"`
+	V1Directory            string `json:"v1_directory"`
+	V2Stage                string `json:"v2_stage"`
+	V2Directory            string `json:"v2_directory"`
+	TransactionV1Stage     string `json:"transaction_v1_stage"`
+	TransactionV1Directory string `json:"transaction_v1_directory"`
+	TransactionV2Stage     string `json:"transaction_v2_stage"`
+	TransactionV2Directory string `json:"transaction_v2_directory"`
+	TransactionRoot        string `json:"transaction_root"`
 }
 
 func command(path string, input []byte, args ...string) (reply, error) {
@@ -203,7 +207,11 @@ func run() (result error) {
 		raw, err := hex.DecodeString(value[:16] + value[17:])
 		return err == nil && len(raw) == 16 && hex.EncodeToString(raw) == value[:16]+value[17:]
 	}
-	if !validStage(layout.V1Stage) || !validStage(layout.V2Stage) || layout.V1Stage == layout.V2Stage || !validDirectory(layout.V1Directory) || !validDirectory(layout.V2Directory) || layout.V1Directory == layout.V2Directory || !filepath.IsAbs(layout.TransactionRoot) || filepath.Clean(layout.TransactionRoot) != layout.TransactionRoot || filepath.Dir(layout.TransactionRoot) == layout.TransactionRoot {
+	if !validStage(layout.V1Stage) || !validStage(layout.V2Stage) || layout.V1Stage == layout.V2Stage ||
+		!validStage(layout.TransactionV1Stage) || !validStage(layout.TransactionV2Stage) || layout.TransactionV1Stage == layout.TransactionV2Stage ||
+		!validDirectory(layout.V1Directory) || !validDirectory(layout.V2Directory) || layout.V1Directory == layout.V2Directory ||
+		!validDirectory(layout.TransactionV1Directory) || !validDirectory(layout.TransactionV2Directory) || layout.TransactionV1Directory == layout.TransactionV2Directory ||
+		!filepath.IsAbs(layout.TransactionRoot) || filepath.Clean(layout.TransactionRoot) != layout.TransactionRoot || filepath.Dir(layout.TransactionRoot) == layout.TransactionRoot {
 		return fmt.Errorf("invalid release layout values")
 	}
 	expected := []string{
@@ -500,8 +508,8 @@ func run() (result error) {
 			value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
 			if transactionErr != nil || value.Status != "active" || value.Epoch != fixture.epoch || value.Phase != "committed" {
 				releases := filepath.Join(transactionRoot, "releases")
-				stage := filepath.Join(releases, map[string]string{"v1": layout.V1Stage, "v2": layout.V2Stage}[fixture.version])
-				promoted := filepath.Join(releases, map[string]string{"v1": layout.V1Directory, "v2": layout.V2Directory}[fixture.version])
+				stage := filepath.Join(releases, map[string]string{"v1": layout.TransactionV1Stage, "v2": layout.TransactionV2Stage}[fixture.version])
+				promoted := filepath.Join(releases, map[string]string{"v1": layout.TransactionV1Directory, "v2": layout.TransactionV2Directory}[fixture.version])
 				diagnostic := transactionDiagnostic(stage, promoted, transactionTool(fixture.version, "installed-release-manager"), "trust-install"+suffix, value, transactionErr)
 				return fmt.Errorf("transaction %s epoch %d attempt %d: %s", fixture.version, fixture.epoch, attempt+1, diagnostic)
 			}

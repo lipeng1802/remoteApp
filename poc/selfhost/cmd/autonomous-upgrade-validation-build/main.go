@@ -82,11 +82,15 @@ func validWindowsRoot(root string) bool {
 }
 
 type releaseLayout struct {
-	V1Stage         string `json:"v1_stage"`
-	V1Directory     string `json:"v1_directory"`
-	V2Stage         string `json:"v2_stage"`
-	V2Directory     string `json:"v2_directory"`
-	TransactionRoot string `json:"transaction_root"`
+	V1Stage                string `json:"v1_stage"`
+	V1Directory            string `json:"v1_directory"`
+	V2Stage                string `json:"v2_stage"`
+	V2Directory            string `json:"v2_directory"`
+	TransactionV1Stage     string `json:"transaction_v1_stage"`
+	TransactionV1Directory string `json:"transaction_v1_directory"`
+	TransactionV2Stage     string `json:"transaction_v2_stage"`
+	TransactionV2Directory string `json:"transaction_v2_directory"`
+	TransactionRoot        string `json:"transaction_root"`
 }
 
 func copyFile(source, destination string) error {
@@ -224,8 +228,14 @@ func run() error {
 	if _, err = rand.Read(nonce[:]); err != nil {
 		return err
 	}
+	var transactionNonce [16]byte
+	if _, err = rand.Read(transactionNonce[:]); err != nil {
+		return err
+	}
 	journalHash, vaultHash, productHash := sha256.Sum256(journal), sha256.Sum256(vault), sha256.Sum256(product)
 	spec := trustinstall.Specification{Version: 1, Channel: "autonomous-upgrade-test-" + hex.EncodeToString(nonce[:]), Root: hex.EncodeToString(root), Service: claims.Service, MinimumEpoch: 1, HelperDigest: hex.EncodeToString(journalHash[:]), Bundled: p1, Test: true}
+	transactionSpec := spec
+	transactionSpec.Channel = "autonomous-transaction-" + hex.EncodeToString(transactionNonce[:])
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	compile := func(version string, current trustinstall.Specification) error {
@@ -253,7 +263,9 @@ func run() error {
 		return err
 	}
 	spec1 := spec
+	transactionSpec1 := transactionSpec
 	spec.MinimumEpoch, spec.Bundled = 2, p2
+	transactionSpec.MinimumEpoch, transactionSpec.Bundled = 2, p2
 	if err = compile("v2", spec); err != nil {
 		return err
 	}
@@ -298,20 +310,6 @@ func run() error {
 		if err != nil || write(filepath.Join(source, installrelease.ManifestName), raw, 0600) != nil {
 			return "", installrelease.Verified{}, os.ErrInvalid
 		}
-		transactionDir := filepath.Join(dest, "transaction-"+version)
-		payload := filepath.Join(transactionDir, "release-payload")
-		if err = os.Mkdir(transactionDir, 0700); err != nil || os.Mkdir(payload, 0700) != nil {
-			return "", installrelease.Verified{}, os.ErrInvalid
-		}
-		payloadFiles, filesErr := installrelease.ExpectedFiles(goos)
-		if filesErr != nil {
-			return "", installrelease.Verified{}, filesErr
-		}
-		for _, name := range append([]string{installrelease.ManifestName}, payloadFiles...) {
-			if err = copyFile(filepath.Join(source, name), filepath.Join(payload, name)); err != nil {
-				return "", installrelease.Verified{}, err
-			}
-		}
 		verified, err := installrelease.ImportStaged(source, dest, stageName, root, current.Channel, goos, current.MinimumEpoch, current.Test)
 		return stageName, verified, err
 	}
@@ -345,6 +343,72 @@ func run() error {
 	if err = signTestExecutable(goos, releaseManager2, "com.personalremotedesktop.test.release-manager.v2"); err != nil {
 		return err
 	}
+	makeTransactionPayload := func(version string, current trustinstall.Specification, epoch uint64) (string, installrelease.Verified, error) {
+		directory := filepath.Join(dest, "transaction-"+version)
+		payload := filepath.Join(directory, "release-payload")
+		if err := os.Mkdir(directory, 0700); err != nil || os.Mkdir(payload, 0700) != nil {
+			return "", installrelease.Verified{}, os.ErrInvalid
+		}
+		for _, name := range []string{"identity-vault" + suffix, "tls-product" + suffix, "trust-journal" + suffix} {
+			if err := copyFile(filepath.Join(dest, name), filepath.Join(payload, name)); err != nil {
+				return "", installrelease.Verified{}, err
+			}
+		}
+		trust := filepath.Join(payload, "trust-install"+suffix)
+		if err := trustinstall.Compile(ctx, goexe, module, goos, trust, current, now); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		if err := signTestExecutable(goos, trust, "com.personalremotedesktop.test.transaction.trust-install."+version); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		enrollment := filepath.Join(payload, "autonomous-enrollment-install"+suffix)
+		if err := trustinstall.CompileAutonomousEnrollmentInstall(ctx, goexe, module, goos, enrollment, current, hex.EncodeToString(vaultHash[:]), now); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		if err := signTestExecutable(goos, enrollment, "com.personalremotedesktop.test.transaction.autonomous-enrollment-install."+version); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		installed := filepath.Join(payload, "installed-autonomous-product"+suffix)
+		if err := trustinstall.CompileAutonomousProductClient(ctx, goexe, module, goos, installed, current, hex.EncodeToString(vaultHash[:]), hex.EncodeToString(productHash[:]), now); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		if err := signTestExecutable(goos, installed, "com.personalremotedesktop.test.transaction.installed-autonomous-product."+version); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		manifest, err := installrelease.BuildManifest(payload, current.Channel, goos, epoch)
+		if err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		raw, err := installrelease.SignForBuild(releaseKey, manifest)
+		if err != nil || write(filepath.Join(payload, installrelease.ManifestName), raw, 0600) != nil {
+			return "", installrelease.Verified{}, os.ErrInvalid
+		}
+		verified, err := installrelease.VerifyDirectory(payload, root, current.Channel, goos, current.MinimumEpoch)
+		if err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		var stageNonce [16]byte
+		if _, err = rand.Read(stageNonce[:]); err != nil {
+			return "", installrelease.Verified{}, err
+		}
+		return ".staging-" + hex.EncodeToString(stageNonce[:]), verified, nil
+	}
+	transactionStage1, transactionVerified1, err := makeTransactionPayload("v1", transactionSpec1, 1)
+	if err != nil {
+		return err
+	}
+	transactionStage2, transactionVerified2, err := makeTransactionPayload("v2", transactionSpec, 2)
+	if err != nil {
+		return err
+	}
+	transactionName1, err := installrelease.ReleaseDirectoryName(transactionVerified1)
+	if err != nil {
+		return err
+	}
+	transactionName2, err := installrelease.ReleaseDirectoryName(transactionVerified2)
+	if err != nil {
+		return err
+	}
 	makeTransaction := func(version, operation, stage string, current trustinstall.Specification, verified installrelease.Verified, epoch uint64) error {
 		directory := filepath.Join(dest, "transaction-"+version)
 		if err := copyFile(filepath.Join(dest, "trust-journal"+suffix), filepath.Join(directory, "trust-journal"+suffix)); err != nil {
@@ -376,10 +440,10 @@ func run() error {
 		}
 		return signTestExecutable(goos, transaction, "com.personalremotedesktop.test.install-transaction."+version)
 	}
-	if err = makeTransaction("v1", "install", stage1, spec1, verified1, 1); err != nil {
+	if err = makeTransaction("v1", "install", transactionStage1, transactionSpec1, transactionVerified1, 1); err != nil {
 		return err
 	}
-	if err = makeTransaction("v2", "upgrade", stage2, spec, verified2, 2); err != nil {
+	if err = makeTransaction("v2", "upgrade", transactionStage2, transactionSpec, transactionVerified2, 2); err != nil {
 		return err
 	}
 	makeBootstrap := func(version, operation string, current trustinstall.Specification, epoch uint64) error {
@@ -423,21 +487,21 @@ func run() error {
 		}
 		return signTestExecutable(goos, manager, "com.personalremotedesktop.test.installed-bootstrap-manager."+version)
 	}
-	if err = makeBootstrap("v1", "install", spec1, 1); err != nil {
+	if err = makeBootstrap("v1", "install", transactionSpec1, 1); err != nil {
 		return err
 	}
-	if err = makeBootstrap("v2", "upgrade", spec, 2); err != nil {
+	if err = makeBootstrap("v2", "upgrade", transactionSpec, 2); err != nil {
 		return err
 	}
 	bootstrapLauncher1 := filepath.Join(dest, "bootstrap-launcher-v1"+suffix)
-	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, bootstrapLauncher1, spec1, transactionRoot, now); err != nil {
+	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, bootstrapLauncher1, transactionSpec1, transactionRoot, now); err != nil {
 		return err
 	}
 	if err = signTestExecutable(goos, bootstrapLauncher1, "com.personalremotedesktop.test.bootstrap-launcher.v1"); err != nil {
 		return err
 	}
 	bootstrapLauncher2 := filepath.Join(dest, "bootstrap-launcher-v2"+suffix)
-	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, bootstrapLauncher2, spec, transactionRoot, now); err != nil {
+	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, bootstrapLauncher2, transactionSpec, transactionRoot, now); err != nil {
 		return err
 	}
 	if err = signTestExecutable(goos, bootstrapLauncher2, "com.personalremotedesktop.test.bootstrap-launcher.v2"); err != nil {
@@ -457,7 +521,12 @@ func run() error {
 	if err = signTestExecutable(goos, releaseLauncher2, "com.personalremotedesktop.test.release-launcher.v2"); err != nil {
 		return err
 	}
-	layout, err := json.Marshal(releaseLayout{V1Stage: stage1, V1Directory: name1, V2Stage: stage2, V2Directory: name2, TransactionRoot: transactionRoot})
+	layout, err := json.Marshal(releaseLayout{
+		V1Stage: stage1, V1Directory: name1, V2Stage: stage2, V2Directory: name2,
+		TransactionV1Stage: transactionStage1, TransactionV1Directory: transactionName1,
+		TransactionV2Stage: transactionStage2, TransactionV2Directory: transactionName2,
+		TransactionRoot: transactionRoot,
+	})
 	if err != nil || write(filepath.Join(dest, "release-layout.json"), layout, 0600) != nil {
 		return os.ErrInvalid
 	}
