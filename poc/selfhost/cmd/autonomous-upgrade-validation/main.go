@@ -484,7 +484,15 @@ func run() (result error) {
 		output, receiptErr := exec.CommandContext(ctx, provisioner).Output()
 		cancel()
 		receipt, decodeErr := installrelease.DecodeLayoutReceipt(output)
-		if receiptErr != nil || decodeErr != nil || installrelease.ValidateLayoutReceipt(receipt, transactionRoot, true) != nil || installrelease.CleanupProtectedTestLayout(receipt, transactionRoot) != nil {
+		layoutErr := installrelease.ValidateLayoutReceipt(receipt, transactionRoot, true)
+		if receiptErr == nil && decodeErr == nil && layoutErr == nil {
+			_ = installrelease.CleanupProtectedTestLayout(receipt, transactionRoot)
+		}
+		// Windows can remove the final empty TEST root before reporting an
+		// uncertain parent-directory durability receipt. The exact root absence
+		// is the only acceptable reopen result; any surviving object still fails.
+		_, rootErr := os.Lstat(transactionRoot)
+		if receiptErr != nil || decodeErr != nil || layoutErr != nil || !os.IsNotExist(rootErr) {
 			failed = true
 		}
 		if strict && failed {
