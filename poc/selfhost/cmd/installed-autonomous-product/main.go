@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -39,7 +40,9 @@ func enrollmentRecords(records trustinstall.RecordFactory) enrollmentstore.Journ
 }
 
 func main() {
-	output := json.NewEncoder(os.Stdout).Encode
+	encoder := json.NewEncoder(os.Stdout)
+	var outputMu sync.Mutex
+	output := func(value any) error { outputMu.Lock(); defer outputMu.Unlock(); return encoder.Encode(value) }
 	if run(output) != nil {
 		_ = output(map[string]string{"status": "failed"})
 		os.Exit(1)
@@ -136,7 +139,11 @@ func run(output func(any) error) (result error) {
 	}()
 	installed := binding.Record()
 	open := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, installed.VaultScope, installed.PublicKey)
-	product := clientruntime.Product{Spec: processowner.Spec{
+	var observation *clientruntime.ProductObservation
+	if release.Specification().Test {
+		observation = &clientruntime.ProductObservation{}
+	}
+	product := clientruntime.Product{Observation: observation, Spec: processowner.Spec{
 		Executable: filepath.Join(dir, "tls-product"+suffix),
 		SHA256:     embeddedProductDigest,
 	}}
@@ -163,5 +170,5 @@ func run(output func(any) error) (result error) {
 	}()
 	// Revocation, watch failure, product failure and local stop all converge on
 	// the same joined owner path. No force-kill or automatic re-enrollment here.
-	return installeddevice.ControlProductWithState(ctx, release, owner, handle, requests, commands, output)
+	return installeddevice.ControlProductObserved(ctx, release, owner, handle, requests, commands, output, observation)
 }

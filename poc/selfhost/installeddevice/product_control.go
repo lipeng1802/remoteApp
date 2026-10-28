@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/clientowner"
+	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
@@ -31,16 +32,33 @@ func ControlProduct(ctx context.Context, owner ProductMaintenanceOwner, handle J
 // ControlProductWithState enables a selector-free prepare on the inherited
 // trusted parent pipe for TEST releases only. Existing begin/finish is unchanged.
 func ControlProductWithState(ctx context.Context, r trustinstall.Release, owner *clientowner.Owner, handle JoinedProduct, requests <-chan Request, commands chan<- Request, output func(any) error) error {
+	return ControlProductObserved(ctx, r, owner, handle, requests, commands, output, nil)
+}
+
+// ControlProductObserved exposes only aggregate payload telemetry on the
+// existing TEST parent pipe. No product keys/certificate/path leave the owner.
+func ControlProductObserved(ctx context.Context, r trustinstall.Release, owner *clientowner.Owner, handle JoinedProduct, requests <-chan Request, commands chan<- Request, output func(any) error, observation *clientruntime.ProductObservation) error {
+	if owner == nil {
+		return trustprofile.ErrTrust
+	}
 	var prepare func(context.Context, func(context.Context, trustprofile.MaintenanceState) error) error
 	if r.Specification().Test && owner != nil {
 		prepare = func(life context.Context, action func(context.Context, trustprofile.MaintenanceState) error) error {
 			return owner.MaintainDurableState(life, r, action)
 		}
 	}
-	return controlProduct(ctx, owner, handle, requests, commands, output, prepare)
+	var count func(context.Context) (clientruntime.ProductCount, error)
+	if r.Specification().Test && observation != nil {
+		count = observation.Count
+	}
+	return controlProductObserved(ctx, owner, handle, requests, commands, output, prepare, count)
 }
 
 func controlProduct(ctx context.Context, owner ProductMaintenanceOwner, handle JoinedProduct, requests <-chan Request, commands chan<- Request, output func(any) error, prepare func(context.Context, func(context.Context, trustprofile.MaintenanceState) error) error) error {
+	return controlProductObserved(ctx, owner, handle, requests, commands, output, prepare, nil)
+}
+
+func controlProductObserved(ctx context.Context, owner ProductMaintenanceOwner, handle JoinedProduct, requests <-chan Request, commands chan<- Request, output func(any) error, prepare func(context.Context, func(context.Context, trustprofile.MaintenanceState) error) error, count func(context.Context) (clientruntime.ProductCount, error)) error {
 	if ctx == nil || owner == nil || handle == nil || requests == nil || commands == nil || output == nil {
 		return trustprofile.ErrTrust
 	}
@@ -53,6 +71,20 @@ func controlProduct(ctx context.Context, owner ProductMaintenanceOwner, handle J
 		case request, ok := <-requests:
 			if !ok {
 				return trustprofile.ErrTrust
+			}
+			if request.Op == "product_count" {
+				if count == nil || request != (Request{Op: "product_count"}) {
+					return trustprofile.ErrTrust
+				}
+				value, e := count(ctx)
+				if e != nil {
+					if output(map[string]string{"status": "product_unavailable"}) != nil {
+						return trustprofile.ErrTrust
+					}
+				} else if output(value) != nil {
+					return trustprofile.ErrTrust
+				}
+				continue
 			}
 			if request.Op == "maintenance_finish" {
 				return trustprofile.ErrTrust
@@ -105,6 +137,16 @@ func controlProduct(ctx context.Context, owner ProductMaintenanceOwner, handle J
 				return handle.Wait(context.Background())
 			case <-ctx.Done():
 				return ctx.Err()
+			}
+			if request == (Request{Op: "stop"}) {
+				// Parent closes stdin immediately after stop. That EOF must not
+				// race the runner's joined completion into a spurious fault.
+				select {
+				case <-handle.Done():
+					return handle.Wait(context.Background())
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 			}
 		}
 	}

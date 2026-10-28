@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/clientowner"
+	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
@@ -15,6 +16,47 @@ import (
 type controlHandle struct {
 	done chan struct{}
 	err  error
+}
+
+func TestProductCountIsTestOnlySelectorFreeAndNonterminal(t *testing.T) {
+	for _, mode := range []string{"available", "not_started", "disabled", "override"} {
+		t.Run(mode, func(t *testing.T) {
+			o := &controlOwner{}
+			h := &controlHandle{done: make(chan struct{})}
+			requests := make(chan Request, 2)
+			commands := make(chan Request)
+			count := Request{Op: "product_count"}
+			if mode == "override" {
+				count.ExpectedPublic = "override"
+			}
+			requests <- count
+			var observe func(context.Context) (clientruntime.ProductCount, error)
+			if mode != "disabled" {
+				observe = func(context.Context) (clientruntime.ProductCount, error) {
+					if mode == "not_started" {
+						return clientruntime.ProductCount{}, errors.New("not bound")
+					}
+					return clientruntime.ProductCount{Status: "product_count", Pongs: 5}, nil
+				}
+			}
+			if mode == "available" || mode == "not_started" {
+				requests <- Request{Op: "stop"}
+				go func() { <-commands; close(h.done) }()
+			}
+			outputs := 0
+			e := controlProductObserved(context.Background(), o, h, requests, commands, func(v any) error { outputs++; return nil }, nil, observe)
+			if mode == "available" || mode == "not_started" {
+				if e != nil || outputs != 1 {
+					t.Fatal(e)
+				}
+			} else if e == nil || outputs != 0 {
+				t.Fatal("unsafe count reached producer")
+			}
+			if o.calls.Load() != 0 {
+				t.Fatal("telemetry entered maintenance")
+			}
+		})
+	}
 }
 
 func TestProductPrepareRequiresExactFrameAndExplicitStateAdapter(t *testing.T) {
@@ -184,6 +226,12 @@ func TestProductControlPreservesNormalCommandsAndExit(t *testing.T) {
 	}()
 	if req := <-commands; req != (Request{Op: "stop"}) {
 		t.Fatal("normal command changed")
+	}
+	close(requests) // parent EOF can precede the runner's actual completion
+	select {
+	case err := <-done:
+		t.Fatal("returned before runner joined", err)
+	case <-time.After(20 * time.Millisecond):
 	}
 	close(h.done)
 	if err := <-done; err != nil || o.calls.Load() != 0 {

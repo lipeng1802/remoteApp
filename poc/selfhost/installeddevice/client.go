@@ -62,6 +62,13 @@ func validProvision(r Request) bool {
 	return r.Op == "provision" && r.VaultScope == "" && r.ExpectedPublic == "" && r.Device == (invite.Body{}) && r.Network.Grant != (invite.Grant{}) && r.Network == (invite.NetworkRequestBody{Grant: r.Network.Grant})
 }
 
+// ValidSupervisedCommand reuses the product's strict ordinary request policy.
+// Lifecycle/open/identity-selection commands belong to the trusted supervisor,
+// never its business forwarding path. The product still validates every frame.
+func ValidSupervisedCommand(r Request) bool {
+	return r.Op != "stop" && (validCommand(r) || validProvision(r))
+}
+
 // Runner is started only by clientowner.Open/Start, which supplies the durable
 // current profile and monotonic lifetime. The output is a trusted private pipe,
 // not a log or public peer interface; device results can contain invite/grant.

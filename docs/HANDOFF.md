@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r59 监督业务路由、编译启动入口与服务端兼容前置检查
+
+完成`productmaintenance.Controller.Forward/Count`：复用产品严格普通命令验证，拒绝open／stop／maintenance／身份覆盖进入业务转发；业务请求、计数、维护与Release共用串行所有权。device register/invite/claim/incoming/approve/status/revoke及既有network查询由可信本地父管道转发；reply可能含邀请或grant，只在专用管道返回，禁止日志记录。provision只尝试一次，严格核验实际network_watch/passed/active，随后封闭普通命令，避免干扰自主owner；失败、超时或异常回执锁闭且保留所有权直到实际join。有效失败device_result仍是普通业务结果，不自动销毁owner。
+
+TEST产品增加`ControlProductObserved`和严格无附加字段product_count，返回实际ProductObservation聚合计数；尚未启动payload返回product_unavailable，不中断owner，不能把此状态或network_watch当作实际PONG。Test=false不启用遥测。产品stdout JSON输出用mutex串行，避免runner结果与计数交错。另修正普通stop后EOF抢先于runner完成的竞态：合法stop一旦投递，必须等待handle实际完成，不再读取下一帧；单测明确先关闭requests再延迟完成runner，保证不提前退出。
+
+新增`cmd/supervised-autonomous-product-test`和`CompileProductSupervisorTest`。固定编译Test release／产品绝对路径／产品与signer摘要，helpers位于固定兄弟路径；runtime只能匿名open并读取已有native binding，不接受argv身份、root、endpoint或产品覆盖。可信父管道接普通业务与只读计数，外部认证服务只监听数值loopback，沿r57/r58认证和真实产品退出交接。失败认证/finish只关闭维护endpoint，不自行结束仍持有的产品，明确父stop才进入join。成功/失败均先取消并join reader与endpoint，再Release实际产品和独立signer；成功closed在所有收尾后输出。当前是独立TEST启动入口，未接默认GUI或签名安装器，也没有publisher/OS peer认证。
+
+macOS实际编译该入口，ad-hoc签名后hash-pin启动；验证ready身份来自native binding、未启动产品计数不致终止、非法维护/身份覆盖拒绝后仍可正常stop、监督层和实际产品均零退出，重开trust和binding不变。复用最终实际产品fixture执行成功独立删除和abort-finish保留产品回归，均PASS；日志`artifacts/connection-poc/supervised-routing-r59/mac/native-final-result.txt`。完整native removal回归另见`mac/native-regression-result.txt`。产品fixture最终版本为`mac/fixture-joined`和`windows/fixture-joined`；早期fixture/fixture-final为诊断构建，不能混为最终来源。新入口尚未在Windows实际编译执行，Windows本轮验证监督library及实际产品维护链。
+
+Windows包`artifacts/connection-poc/supervised-routing-r59/windows-supervised-routing-r59.zip` SHA256 `8d6aa1d68186b167534f19d9bc4b9efe7cd593dc35ad8d65fece55d2aa479676`。通过已授权SSH上传校验，在Interactive Session 6运行33个顶层测试及全部子项，全部PASS、无SKIP、EXITCODE=0；包含新增3组Forward测试、实际产品成功／中断、r58退出门槛与原生身份/epoch回归。runner新增Forward过滤；本轮helper、file/protocol等未变组件复用。远端`C:\Users\jarvis\remoteapp-supervised-routing-r59\result.txt`，本地`windows-final-result.txt`已从混合PowerShell编码正规化，原始日志另存`windows-result-raw.txt`。临时任务名RemoteApp-R59-Routing，验收后检查残留进程并删除任务。6个相关package race、Windows vet及diff检查通过；不将无native环境的Go测试自动SKIP算作原生验收。
+
+服务端检查发现remoteapp-authority此前自10月22日起failed；使用原配置正常start后恢复READY，PID13776（仅当时值），remoteapp-authority／remoteapp-frontend／remoteapp-poc均active。正式Store前后SHA256保持`5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca`，Headscale数据库policy保持`{"acls":[]}`；未改业务Nginx/443、配置、证书、keys或控制平面数据。现运行authority二进制不含remoteapp-session-identity-v1，新自主产品不能直接拿旧服务进行活会话验收。
+
+已编译当前Linux候选并仅暂存`/run/remoteapp-r59-compat/authority-daemon`，SHA256 `636c80e97676ce99387919da7c5f33b01d22fc5e586bf6048a42bf06fc02ac54`，未替换部署。只读`--check-network-config`返回FAIL network_preparation；已确认运行中Store writer.lock存在，该检查要求idle且无writer/verifier锁，故本次不能算兼容检查通过，也不能删除锁或因此重置Store。/run临时目录可随重启消失。当前服务profile有效至1793962211，续期仍由用户安排，维护前重新检查有效性。
+
+下一任务组优先：在已授权预发布维护范围内核查现有配置/Store/verifier兼容性，计划并执行可回退的服务端升级（先实际停止join再idle预检，不删运行锁、不切回空控制平面）；随后接Windows桌面的可信业务控制入口，用新监督入口运行真实Headscale双机ACTIVE watch/session/payload，观察实际PONG增长，再做维护撤销／网络join／实际产品退出／独立删除整链。不能运行旧的要求empty nodes/users/keys的split-consent/cross-network清理脚本破坏长期verifier。当前普通业务成功转发是实际fixture子进程单测，未声称已通过真实公网API或跨机产品验收。TEST=false、正式卸载发现/同意/签名、Unix排他writer等原边界仍未闭合；切片4仍未完成。本轮本地提交，不自动推送。
+
 ## 2026-10-28 r58 实际产品进程退出、原生binding身份选择与删除交接
 
 新增`productmaintenance.Controller`，认证服务由产品外监督层持有。StartTest从既有原生autonomous binding读身份并Check，关闭检查租约后才由可信callback重开该OS signer，启动hash-pinned实际产品并验证匿名管道open/ready；不初始化凭据或允许peer选身份。部分启动失败也可能返回持有资源的Controller，必须明确Release、实际join。监督层保留独立认证signer到Serve返回后，产品内runner signer的关闭不会破坏最后的签名回执。

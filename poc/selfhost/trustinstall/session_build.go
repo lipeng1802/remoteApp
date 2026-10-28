@@ -187,6 +187,16 @@ func CompileAuthenticatedRemovalTest(ctx context.Context, goexe, module, target,
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/authenticated-removal-test", extra, now)
 }
 
+// CompileProductSupervisorTest fixes the product executable/digests at build
+// time. Runtime starts only an existing native binding; it cannot choose keys.
+func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time) error {
+	if !s.Test || !validInstallRoot(target, productPath) || !canonical(productDigest, 32) || !canonical(signerDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedProductPath=" + base64.RawURLEncoding.EncodeToString([]byte(productPath)) + " -X main.embeddedProductDigest=" + productDigest + " -X main.embeddedSignerDigest=" + signerDigest
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/supervised-autonomous-product-test", extra, now)
+}
+
 func compileReleaseTool(ctx context.Context, goexe, module, target, dest string, s Specification, entry, extra string, now time.Time) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust

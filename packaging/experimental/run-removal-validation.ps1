@@ -8,7 +8,7 @@ try {
     $env:REMOTEAPP_PRODUCT_MAINT_FIXTURE = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'fixture\fixture.json')).Path
     & (Join-Path $PSScriptRoot 'child-tests.exe') '-test.run=^TestMaintenanceFinish' '-test.v=true' '-test.timeout=2m'
     if ($LASTEXITCODE -ne 0) { throw 'Actual process-exit finish validation failed' }
-    & (Join-Path $PSScriptRoot 'supervisor-tests.exe') '-test.run=^TestProduct(Close|Release)' '-test.v=true' '-test.timeout=2m'
+    & (Join-Path $PSScriptRoot 'supervisor-tests.exe') '-test.run=^TestProduct(Close|Release|Forward)' '-test.v=true' '-test.timeout=2m'
     if ($LASTEXITCODE -ne 0) { throw 'Supervisor exit/retained-ownership validation failed' }
     & (Join-Path $PSScriptRoot 'protocol-tests.exe') '-test.run=^TestIndependentMaintenance' '-test.v=true' '-test.timeout=2m'
     if ($LASTEXITCODE -ne 0) { throw 'Independent maintenance authentication failed' }

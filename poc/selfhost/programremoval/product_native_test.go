@@ -195,6 +195,104 @@ func setupActualProduct(t *testing.T) (trustinstall.Release, trustinstall.Factor
 	return r, factory, bf, record, root, processowner.Spec{Executable: filepath.Join(v.Directory, "installed-autonomous-product"+suffix), SHA256: fixture.ProductSHA256}, vault, vaultDigest
 }
 
+func TestNativeCompiledSupervisorPrivateRoutingAndStop(t *testing.T) {
+	goexe, module := os.Getenv("REMOTEAPP_REMOVAL_BUILD_GO"), os.Getenv("REMOTEAPP_REMOVAL_BUILD_MODULE")
+	if goexe == "" || module == "" {
+		t.Skip("explicit local compiler/module required")
+	}
+	r, factory, records, identity, _, product, _, digest := setupActualProduct(t)
+	dir, e := filepath.EvalSymlinks(t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	for name, source := range map[string]string{"trust-journal": os.Getenv("REMOTEAPP_JOURNAL_TEST_EXECUTABLE"), "identity-vault": os.Getenv("REMOTEAPP_VAULT_TEST_EXECUTABLE")} {
+		raw, e := os.ReadFile(source)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = os.WriteFile(filepath.Join(dir, name+suffix), raw, 0500); e != nil {
+			t.Fatal(e)
+		}
+	}
+	exe := filepath.Join(dir, "supervisor"+suffix)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, runtime.GOOS, exe, r.Specification(), product.Executable, product.SHA256, digest, time.Now()); e != nil {
+		t.Fatal(e)
+	}
+	if runtime.GOOS == "darwin" {
+		if raw, e := exec.Command("/usr/bin/codesign", "--force", "--sign", "-", exe).CombinedOutput(); e != nil {
+			t.Fatalf("codesign: %s %v", raw, e)
+		}
+	}
+	raw, e := os.ReadFile(exe)
+	if e != nil {
+		t.Fatal(e)
+	}
+	sum := sha256.Sum256(raw)
+	child, e := processowner.Start(processowner.Spec{Executable: exe, SHA256: hex.EncodeToString(sum[:])})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer child.Stop(context.Background())
+	reply, e := child.Exchange(ctx, map[string]string{"op": "open"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	var ready struct {
+		Status  string `json:"status"`
+		Address string `json:"maintenance_address"`
+		Scope   string `json:"vault_scope"`
+		Public  string `json:"public_key"`
+	}
+	if json.Unmarshal(reply, &ready) != nil || ready.Status != "ready" || ready.Scope != identity.VaultScope || ready.Public != identity.PublicKey {
+		t.Fatal("supervisor identity not from native binding")
+	}
+	for _, request := range []map[string]string{{"op": "product_count"}, {"op": "maintenance_prepare"}, {"op": "device", "VaultScope": identity.VaultScope}} {
+		reply, e = child.Exchange(ctx, request)
+		if e != nil {
+			t.Fatal(e)
+		}
+		var status struct {
+			Status string `json:"status"`
+		}
+		if json.Unmarshal(reply, &status) != nil {
+			t.Fatal("invalid reply")
+		}
+		want := "request_rejected"
+		if request["op"] == "product_count" {
+			want = "product_unavailable"
+		}
+		if status.Status != want {
+			t.Fatalf("status %s, want %s", status.Status, want)
+		}
+	}
+	if e = child.Stop(ctx); e != nil {
+		t.Fatal("supervisor/product join", e)
+	}
+	owner, e := trustinstall.NewOfflineOwner(r, factory, time.Now)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = owner.Inspect(); e != nil {
+		t.Fatal("ordinary stop changed trust", e)
+	}
+	binding, e := autonomousbinding.OpenWithJournal(r.Scope(), true, records)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if binding.Record() != identity {
+		t.Error("ordinary stop changed binding")
+	}
+	if e = binding.Close(); e != nil {
+		t.Fatal(e)
+	}
+}
+
 func TestNativeRemovalActualProductExitHandoff(t *testing.T) {
 	for _, mode := range []string{"complete", "abort-finish"} {
 		t.Run(mode, func(t *testing.T) {

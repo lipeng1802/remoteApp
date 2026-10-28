@@ -99,4 +99,10 @@ macOS还实际编译并执行固定客户端，验证运行时覆盖拒绝、独
 
 原生验收用实际编译后的产品程序和原生binding/OS身份/enrollment idle状态，独立客户端完成双向认证，监督层等待完整退出后才删除包括实际产品exe在内的签名TEST文件集；然后binding租约可重新取得、记录及epoch2保留。中断finish分支验证实际产品仍存活、租约仍持有、exe不删，显式失败退出后pending保留。另有真实子进程夹具测试closed后迟迟不退出、非零退出、重复/额外字段closed、原生退出后复核失败和signer在deadline后的持有，均不能变成成功。
 
-`cmd/product-maintenance-validation-build`为两平台生成单代公开TEST fixture，离线签名key仅在内存，编译实际产品并保留已有helper/TLS payload字节。未使用的installer/launcher文件明确为fixture占位，不能运行或当作安装包；真实产品处于idle，不启动Headscale节点或实际远程TLS payload。Windows runner还要求`child-tests.exe`、`supervisor-tests.exe`及`fixture/fixture.json`，缺少入口必须报错而不是跳过。此轮证明实际产品生命周期/身份选择/退出交接，不替代跨机活跃产品会话、普通业务命令的监督层路由、正式发现/同意/publisher策略、未知逃逸后代进程隔离或签名安装器验收。实际launcher/GUI未自动接入该监督层。
+`cmd/product-maintenance-validation-build`为两平台生成单代公开TEST fixture，离线签名key仅在内存，编译实际产品并保留已有helper/TLS payload字节。未使用的installer/launcher文件明确为fixture占位，不能运行或当作安装包；真实产品处于idle，不启动Headscale节点或实际远程TLS payload。Windows runner还要求`child-tests.exe`、`supervisor-tests.exe`及`fixture/fixture.json`，缺少入口必须报错而不是跳过。此轮证明实际产品生命周期/身份选择/退出交接，不替代跨机活跃产品会话、正式发现/同意/publisher策略、未知逃逸后代进程隔离或签名安装器验收。默认launcher/GUI未自动接入该监督层。
+
+### r59 可信业务转发与独立TEST启动入口
+
+`Controller.Forward`仅转发产品原有普通device/network命令与一次provision，拒绝生命周期、维护和身份选择字段，与维护共用串行锁。provision不论成败均消费机会，成功必须严格network_watch/passed/active，随后普通业务封闭；超时/异常回执锁闭，仍需Release实际join。业务回执可能含邀请或grant，必须保留在可信继承管道，不能记录或转发到公开日志。`Count`为仅TEST的实际payload聚合计数，不暴露密钥；未启动返回product_unavailable且保持owner。配置ACTIVE不证明实际payload，跨机验收须观察PONG真实增长。
+
+`cmd/supervised-autonomous-product-test`将此路由与r58外部维护监督接在一起，编译固定release、实际产品路径及hash，身份只从原生binding选取。维护服务监听数值loopback，仍以同一安装用户设备密钥为principal；没有新增公网维护接口或publisher认证。关闭顺序为reader/endpoint实际join、产品实际退出、独立signer join；中断认证不自动停产品，由可信父管道明确stop。macOS已实际编译运行并验证普通stop后trust/binding保持；Windows验证了路由library与实际产品维护链，尚未执行新编译launcher。默认GUI、生产发现/同意与Test=false仍未接入。服务端旧部署缺少session-identity能力，须兼容升级后再验真实Headscale活会话。

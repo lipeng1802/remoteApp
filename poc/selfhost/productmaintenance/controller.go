@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/autonomousbinding"
+	"remoteapp.local/selfhost-poc/clientruntime"
+	"remoteapp.local/selfhost-poc/installeddevice"
 	"remoteapp.local/selfhost-poc/localmaintenance"
 	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/trustinstall"
@@ -36,6 +38,7 @@ type Controller struct {
 	child                                         *processowner.Child
 	serial                                        chan struct{}
 	requested, prepared, broken, closed, released bool
+	provisioned                                   bool
 	expected                                      trustprofile.MaintenanceState
 }
 
@@ -110,6 +113,72 @@ func (c *Controller) Exited() <-chan struct{} {
 		return nil
 	}
 	return c.child.Exited()
+}
+
+// Forward carries trusted LOCAL business commands/replies, which may contain
+// invitation/grant material: never log them. It serializes with maintenance.
+// Successful provision seals this path because the autonomous product owns all
+// subsequent watch/session work; ordinary requests cannot interrupt that owner.
+func (c *Controller) Forward(ctx context.Context, request installeddevice.Request) (json.RawMessage, error) {
+	if !installeddevice.ValidSupervisedCommand(request) {
+		return nil, ErrProduct
+	}
+	if e := c.lock(ctx); e != nil {
+		return nil, e
+	}
+	defer c.unlock()
+	if c.child == nil || c.requested || c.provisioned || c.broken || c.closed || c.released {
+		return nil, ErrProduct
+	}
+	raw, e := c.child.Exchange(ctx, request)
+	if e != nil {
+		c.broken = true
+		return nil, e
+	}
+	if request.Op == "provision" {
+		// Product enrollment is single-use even on failure. Do not resend or
+		// treat a late/malformed reply as an ordinary usable device result.
+		c.provisioned = true
+		var result struct {
+			Status string `json:"status"`
+			Passed bool   `json:"passed"`
+			Active bool   `json:"active"`
+		}
+		if decode(raw, &result) != nil || result.Status != "network_watch" || !result.Passed || !result.Active {
+			c.broken = true
+			return nil, ErrProduct
+		}
+	}
+	return raw, nil
+}
+
+// Count queries read-only TEST telemetry, including after provision. An absent
+// payload is not evidence of an active connection and does not retire the owner.
+func (c *Controller) Count(ctx context.Context) (clientruntime.ProductCount, error) {
+	if e := c.lock(ctx); e != nil {
+		return clientruntime.ProductCount{}, e
+	}
+	defer c.unlock()
+	if c.child == nil || c.requested || c.broken || c.closed || c.released {
+		return clientruntime.ProductCount{}, ErrProduct
+	}
+	raw, e := c.child.Exchange(ctx, map[string]string{"Op": "product_count"})
+	if e != nil {
+		c.broken = true
+		return clientruntime.ProductCount{}, e
+	}
+	var missing struct {
+		Status string `json:"status"`
+	}
+	if decode(raw, &missing) == nil && missing.Status == "product_unavailable" {
+		return clientruntime.ProductCount{}, ErrProduct
+	}
+	var count clientruntime.ProductCount
+	if decode(raw, &count) != nil || count.Status != "product_count" || count.Pongs < 0 || count.PreauthRejected < 0 || count.SessionsClosed < 0 {
+		c.broken = true
+		return clientruntime.ProductCount{}, ErrProduct
+	}
+	return count, nil
 }
 
 func (c *Controller) MaintainDurableState(ctx context.Context, r trustinstall.Release, action func(context.Context, trustprofile.MaintenanceState) error) error {
