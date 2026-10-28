@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r60 预发布服务端兼容升级已实机验收
+
+新增root本地`poc/selfhost/public-server/binary-upgrade.py`与8项Python测试。分步prepare/quiesce/check/install/start/verify及显式rollback；固定manifest的三个binary及旧版SHA，拒绝未知变更；原binary/元数据持久备份，Store只比较摘要绝不恢复。每阶段核对原配置、verifier journal/identity、零ACL和业务Nginx摘要，要求既有网络注册工单/TLS身份与有效grant为空。main-only TERM给原服务自行join nested workers；PID退出和当前boot/current ExecStart单调时间绑定STOPPED缺一不可，无force kill、删锁或自动回退。新工具不调用旧empty-control阶段。技术流程和恢复门禁见`public-server/BINARY_UPGRADE.md`。
+
+已在既有维护授权范围实际升级：stage `/run/remoteapp-binary-upgrade-db26f37aca14f01f`，持久工单/原binary `/var/lib/remoteapp-binary-upgrades/remoteapp-binary-upgrade-db26f37aca14f01f`。初次调用旧systemctl stop缺frontend STOPPED，工具正确拒绝、停在stopping，authority未停且binary未换；恢复旧frontend后直接TERM主进程取得STOPPED/actual exit。更新工具为main-only TERM、显式retry-quiesce，再完成双方真实join、锁释放、当前候选idle预检、三个binary原子替换、authority→frontend READY和跨UID broker issuer/TLS负向请求验收。首次失败不算通过；没有将inactive、旧PID日志或JSON状态替代join。
+
+现工单phase verified。新authority SHA256 `42cd8144095fcea9a0510147c46d8f8b1aafe63298d952437411bcad6e531c92`，frontend `619b3ae57d3a1535a8fd7061812a67a099558e596f9828b88b4294a5f5a65f90`，network-deployment-check `5223127e3f2bfa580b7643eeefd0870df58fc5fbd068d2dc6f7168c9496d4b7a`。已不再是r59缺session-identity的旧部署；实际domain存在与Go授权/签名测试通过，不能代替真实跨机会话验收。服务units、network/profile/config、业务Nginx/443没有改；8444仍127.0.0.1，仅预发布服务短暂停机。
+
+Store从头到尾保持`5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca`；verifier journal `91dccf4683e7b7a3ccb464b7f93e7ff2c9edf732b56a86f72662a8a6118f022b`保持，未Mint/重键/替换长期节点。Headscale 1 user/1 node/1 preauthkey、policy `{"acls":[]}`，三个服务active，原Nginx完整基线通过。8项Python门禁、4个Go包broker/deviceservice/invite/verifier race、Linux静态构建通过。新版真实部署探针由remoteapp-pre运行，kernel UID验证authority issuer、固定CA/TLS和负向HTTP请求通过。公开验收回执在`artifacts/connection-poc/binary-upgrade-r60/acceptance.json`，不含keys/注册凭据；原private材料留服务器。完整核对后的stage材料已持久保存在工单`recovery-stage/`，/run重启后可先校验再重建工具，不能据此自动接管未知owner；实际回退/整机重启未验收。
+
+最终恢复归档为本机`artifacts/connection-poc/binary-upgrade-r60/candidate-final.tar.gz`，服务器工单根目录也保存同名0600副本，SHA256 `eff9ba0926e25d3a9b08ec0ff19b8d1c9578b5726e81ac5c3e63445a96605fea`。最终operator SHA256 `6d7e2af60db29e21da52955086ec9f657f4420e5a62bbc635a3eb5f4f9bdd1f1`，已更新stage与recovery-stage，重新verify通过；早期candidate.tar.gz包含诊断期operator，不用于最终恢复。三个候选binary摘要始终相同。
+
+下一组明确接入点：为`cmd/supervised-autonomous-product-test`提供Windows桌面同用户受保护的可信业务控制通道及匹配编译构建/验证入口，不能直接复用仅接受旧clientruntime.Config的desktop-session backend冒充自主产品。随后编译新鲜匹配公开profile的两端产品，以已有原生binding选identity，实际device consent→provision→ACTIVE watch→session-identity→TLS payload；只有PONG持续增长才计活会话成功，再验维护撤销、网络/签名/产品全部join、actual process exit与独立删除。不得运行要求empty nodes/users/keys的旧split-consent/cross-network清理路径。尚未注册任何新测试设备/grant/overlay，Windows本轮没有启动新包。本组服务端兼容升级完成；整体切片4、双机活会话、正式GUI/同意/发行/卸载仍未完成。本轮按惯例本地提交，未自动推送。
+
 ## 2026-10-28 r59 监督业务路由、编译启动入口与服务端兼容前置检查
 
 完成`productmaintenance.Controller.Forward/Count`：复用产品严格普通命令验证，拒绝open／stop／maintenance／身份覆盖进入业务转发；业务请求、计数、维护与Release共用串行所有权。device register/invite/claim/incoming/approve/status/revoke及既有network查询由可信本地父管道转发；reply可能含邀请或grant，只在专用管道返回，禁止日志记录。provision只尝试一次，严格核验实际network_watch/passed/active，随后封闭普通命令，避免干扰自主owner；失败、超时或异常回执锁闭且保留所有权直到实际join。有效失败device_result仍是普通业务结果，不自动销毁owner。

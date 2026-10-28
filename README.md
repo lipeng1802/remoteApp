@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-r59 补齐 TEST 监督层的普通业务指令转发、单次网络配置和只读产品计数，并提供从已有原生 binding 启动实际产品的固定编译入口。macOS 实际启动／停止及原生维护回归通过，Windows 33 组测试通过。跨机活动会话仍待：当前预发布服务端缺少新 session-identity 能力，需先完成兼容升级；正式发现／同意流程及签名发行也尚未验收。见[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
+r60 已完成预发布服务端兼容升级，恢复 READY 并通过跨用户 HTTPS 探针；Store、长期 verifier 身份和零 ACL 保持不变，新版已包含 session-identity 能力。r59 的 TEST 监督路由与 macOS 启动入口已验证，下一组接 Windows 可信控制入口，再做双机活动产品与维护整链验收。正式 GUI／发现／同意流程及签名发行仍待。见[服务端升级记录](poc/selfhost/public-server/BINARY_UPGRADE.md)和[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
 r57 增加独立本地进程的 OS 设备密钥双向认证及固定编译客户端：绑定双方 nonce、服务实例、完整编译 release 和原生维护事务，认证失败不停止会话，确认中断保留租约与 pending。当前是 TEST 授权策略，尚未验证发行方签名、正式发现／同意流程或跨机产品卸载。见[独立维护认证边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
