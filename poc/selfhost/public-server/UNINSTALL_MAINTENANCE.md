@@ -70,3 +70,19 @@ Windows目录刷新可能在写入／unlink已完成后返回不确定回执。`
 文件系统回执不确定时不重新驱动已退休owner；由调用者明确使用`RunExpectedTest`核对原transaction/epoch（若已有plan digest也必须一致）后继续。该snapshot不是跨进程删除能力，不可替代独立卸载器身份认证。未新增可由任意本机进程连接的socket、网络维护接口或生产卸载前端。
 
 新增原生联动测试使用两个实际本地TLS HTTP流，维持请求直到取消。即使两路网络worker已经返回，只要runner最终join仍被测试闸门阻塞，另一native helper取不到lease、计划不存在、程序文件仍在；正常join与join中取消后显式继续都完成相同事务的删除。另验错编译release不会取消活动owner，错误transaction/epoch不写计划，runner fault不删文件，以及r55真实崩溃／身份／floor回归。这是原生owner与真实本地TLS资源的联动，不是实际`tls-product`/Headscale跨机远控会话或独立卸载器认证验收。
+
+## 独立进程的设备密钥认证（r57，TEST-only）
+
+`localmaintenance.NewTest/RequestTest`新增独立本地进程间的双向证明；仅允许编译Test=true和明确的数值loopback TCP地址。没有Tailscale／公网维护端口，也不把现有产品stdin重定向成网络接口。地址、公钥和OS signer均由可信本地安装／测试配置提供，不能从peer frame选择。当前授权principal是同一安装用户已有的OS保护设备密钥，获准使用该密钥的进程属于同一principal；**不等同于只准某发行方签名卸载器连接**，没有声称已验证调用进程的发行方、OS peer PID或用户同意UI。
+
+线序为hello → 已签名challenge → 已签名authenticate → owner durable维护／actual join → 已签名ready → 已签名finish → owner.Close成功 → 已签名closed。各签名使用独立phase domain和canonical frame的SHA-256；绑定完整编译release specification摘要、channel scope、服务实例随机ID、双方新鲜256-bit nonce，ready/finish/closed额外绑定真实native transaction和epoch。相同channel但不同编译release也拒绝。签名公钥始终来自既有可信OS身份配置，不从challenge取得；challenge、ready或closed被替换均无法通过client验证。
+
+未经认证的错误不会调用Maintain、取消runner或写pending，可在最多16次无效尝试的预算内继续。认证前读取预算3秒，认证及收尾整体40秒；所有读写有deadline和context关闭，Close会取消当前交换并解除阻塞，调用者仍须join Serve。一次authenticate验证成功后端点即消费，不因join、签名、输出、finish或Close错误重新武装。ready后断连不自动Close owner／释放native租约，也不进入文件删除；须明确收尾，pending保持。
+
+`identity-vault`新增五个严格签名domain：`remoteapp-local-maintenance-{challenge,authenticate,ready,finish,closed}-v1\n`，后面只能跟64字符小写SHA-256 hex；不能签任意JSON、reset或其他新动作。设备私钥仍仅在原生helper内使用，不向client／server发送私钥。认证signer由endpoint独立持有，不能借用会在runner取消时关闭的网络signer；必须等Serve返回后再CloseJoined。
+
+`cmd/authenticated-removal-test`与`CompileAuthenticatedRemovalTest`是固定编译的独立TEST客户端，pin root、endpoint、release、OS vault scope/public、两个同目录helper摘要，不接受运行时参数或环境选择。只重开既有OS身份，不创建密钥；确认signed closed后才调用`RunExpectedTest`重新取得原生lease、核对相同transaction并删除。目录刷新回执不确定仍停止本次尝试，不重复认证已消费的endpoint；显式恢复使用原native计划。本入口没有接入DMG/Inno或默认MVP产品。
+
+原生跨进程验收用真实Keychain／Windows Credential Manager签名helper：独立子进程重开同一身份，双向认证后取消真实本地TLS流；runner最终join前lease不释放、计划不存在。成功路径由子进程取得新native lease完成同一事务删除，原key可继续签名且epoch2保留；finish签名前中断时client失败、owner仍持lease、程序文件与pending保留，只有测试显式Close后才能重开诊断。协议测试另外覆盖重放、reflection、错误key／release／scope／epoch、路径覆盖、duplicate/oversize帧、伪造server transcript、stalled reader关闭和生产模式拒绝。
+
+macOS还实际编译并执行固定客户端，验证运行时覆盖拒绝、独立认证和删除。Windows便携runner须增加`protocol-tests.exe`、`vault-domain-tests.exe`，并使用含新domain的identity-vault；不能混用旧helper后声称通过。真实`installed-autonomous-product`目前仍用原可信继承管道，未自动开启该监听器。后续须做既有binding选择身份、受保护endpoint发现、发行方／OS peer身份与明确同意策略、实际产品binding／所有子进程／实际退出后再交接删除，以及Headscale跨机活会话验收；loopback+设备密钥PoC不替代这些生产边界。

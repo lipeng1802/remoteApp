@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"io"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -172,6 +173,18 @@ func CompileProgramRemovalTest(ctx context.Context, goexe, module, target, dest 
 	}
 	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot))
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/program-removal-test", extra, now)
+}
+
+// CompileAuthenticatedRemovalTest pins public TEST endpoint/installed identity
+// metadata; no runtime argument/environment selects the root, key or endpoint.
+// Production discovery, publisher authentication and consent are not enabled.
+func CompileAuthenticatedRemovalTest(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot, address, vaultScope, public, signerDigest string, now time.Time) error {
+	endpoint, e := netip.ParseAddrPort(address)
+	if !s.Test || !validInstallRoot(target, installRoot) || e != nil || !endpoint.Addr().IsLoopback() || endpoint.Port() == 0 || endpoint.String() != address || !canonical(vaultScope, 16) || !canonical(public, 32) || !canonical(signerDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot)) + " -X main.embeddedAddress=" + base64.RawURLEncoding.EncodeToString([]byte(address)) + " -X main.embeddedVaultScope=" + vaultScope + " -X main.embeddedPublic=" + public + " -X main.embeddedSignerDigest=" + signerDigest
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/authenticated-removal-test", extra, now)
 }
 
 func compileReleaseTool(ctx context.Context, goexe, module, target, dest string, s Specification, entry, extra string, now time.Time) error {

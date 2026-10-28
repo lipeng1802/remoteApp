@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r57 独立进程设备密钥认证、固定客户端与原生闭环
+
+本轮完成TEST独立认证协议、原生signer domain隔离、固定编译独立客户端和跨进程实际删除／中断保留两个闭环。新增`localmaintenance.NewTest/RequestTest`，仅接受编译Test=true及数值loopback TCP地址，不开启Tailscale／公网维护端口。可信本地配置提供既有OS身份public/signer和地址，frame不能选择身份、root或文件路径。双向challenge/authenticate及ready/finish/closed分别使用phase domain，签名绑定双方新鲜256-bit nonce、随机服务instance、完整编译release specification摘要和scope，后半段额外绑定native transaction/epoch；相同channel不同编译release仍拒绝。未经认证不调用Maintain、不取消TLS或写pending；3秒认证前读取、40秒整个交换、最多16次无效尝试；一次有效authenticate即消费endpoint，任何后续错误都不重新武装。Close取消交换／关闭listener及活跃conn，资源释放仍要求Serve实际返回。
+
+服务端使用r56 `MaintainDurableState`等待actual join，signed finish核验后才显式owner.Close并签closed；独立client验证closed后仍须新native lease与同一transaction，不能拿签名snapshot替代租约。ready后client中断时server失败、owner保留lease/pending且不写删除计划。身份signer必须由endpoint独立持有到Serve join，不可借用取消时即关闭的runner signer。`identity-vault`新增5个严格`remoteapp-local-maintenance-{phase}-v1\n`签名domain，仅允许后续64字符小写SHA-256 hex；reset／任意JSON／错误长度／大写及追加换行均拒绝，旧domain行为不变，没有私钥导出或新身份初始化入口。
+
+新增`cmd/authenticated-removal-test`、`CompileAuthenticatedRemovalTest`。固定编译release/root/endpoint/vault scope/public/signer digest，pin同目录两个native helpers，没有运行时参数／环境选择路径、公钥、endpoint或helper。只重开既有OS设备身份，认证closed后调用RunExpectedTest；回执不确定仍结束当前尝试，显式恢复使用既有native计划，不重新认证已消费端点。macOS实际编译并执行该独立二进制，runtime参数覆盖拒绝且owner仍运行，正常独立认证、owner join、同事务删除均PASS；Windows本轮运行独立测试子进程及完整native认证核心，未声称Windows固定编译入口或签名安装器已经验收。
+
+macOS最终ad-hoc native组合7组及两个编译入口全部PASS，保留r55/r56退出78、真实TLS join、签名文件集、OS身份重新签名／activation/profile/epoch2回归；新增子进程重开真实Keychain身份，非法peer不取消实际TLS、合法认证取消TLS但最终join前不删文件／不释放lease；成功后由独立子进程取得新lease删除同一事务，finish签名前中断保留lease与程序文件，测试明确Close之后pending诊断仍epoch2。日志`artifacts/connection-poc/authenticated-maintenance-r57/mac/native-final-result.txt`。独立编译入口首次冷构建约38秒；未缩短native join或放宽超时。Cgo已有kSecUseAuthenticationUIFail弃用编译警告不在本轮改动范围，helper仍禁止弹出认证UI，没有为此要求用户输入密码。
+
+Windows最终包`artifacts/connection-poc/authenticated-maintenance-r57/windows-authenticated-maintenance-r57.zip`，SHA256 `6088feaf90d111f4888f8d980ab0954c9518aa3e4f7895a1f937121352094aeb`，上传后核对，在Interactive Session 6执行23个顶层测试及全部子项，全部PASS、无SKIP、EXITCODE=0。含7组protocol、2组vault domain、2组trust transaction、5组文件／handle、7组native（新增独立进程成功／abort-finish两条分支）。native Credential Manager identity在子进程重开，非法／重放／反射／错key、scope、release、epoch、路径覆盖、重复／超大帧、伪造server阶段、stalled reader取消与生产模式拒绝均通过。远端`C:\Users\jarvis\remoteapp-authenticated-maintenance-r57\result.txt`，本地同归档目录`windows-final-result.txt`。trust-journal/trust-tests/file-tests复用r56未变化组件，identity-vault/protocol/vault-domain/removal测试已重编译；不能混用旧vault后宣称认证通过。临时Interactive任务已删除、无该包残留进程，随机OS凭据／临时根由teardown精确清理，未改用户MVP安装、Tailscale或共享状态。相关8个package race、Windows vet与diff检查通过；README／协议／runner已更新，本轮本地提交，不自动推送。
+
+授权边界必须准确表述：当前认证principal是“同一安装用户可使用的OS设备密钥”，不是特定publisher签名的卸载器，也没有核验peer PID/发行方或生产同意UI。获准使用该key的同用户进程属于同一principal；loopback协议不能冒充OS进程身份认证。地址及身份选择目前来自可信固定TEST配置，受保护发现／真实安装binding接入尚未实现。真实`installed-autonomous-product`本轮未自动开启新listener，原可信继承管道继续不变；新闭环为真实native owner + 实际本地TLS + 独立进程客户端，不是完整产品binding／子进程／实际进程退出或Headscale跨机验收。
+
+下一组集中处理实际产品的退出交接：从既有autonomous binding选身份、维护服务与ControlProduct两路收尾统一、binding/runner/认证signer全部join、观察actual product process退出后才允许独立client接手；再验证跨机活动产品会话。受保护endpoint发现、明确同意策略、publisher/OS peer验证与生产受保护写入根仍需落实，尤其Unix最后一级unlink原子性／排他writer边界。TEST=false删除及DMG/Inno卸载入口仍关闭，目录壳／恢复计划保留，OS identity/trust/activation/binding/floor默认不删；签名发行、恢复active、断电／整机重启未验收，切片4未标记完成。详见`poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md`。
+
 ## 2026-10-28 r56 平台句柄删除与活动TLS到同一维护事务的联动
 
 本轮合并完成两组相关工作，继续仅开放TEST删除。删除批次固定全部已签名目录并核验对象身份；目标文件在同一handle上核验类型、单硬链接、volume/object ID、size/hash到删除结束，不再用绝对路径os.Remove。Windows目录禁止DELETE共享防rename，文件handle同时禁止WRITE/DELETE共享，已有写入者也拒绝；用FileDispositionInfoEx删除核验后的同一只读文件handle，无路径chmod／DeleteFile回退。Mac逐级openat/O_NOFOLLOW固定父目录，unlinkat绑定父fd并在unlink前再核对basename inode。实测父目录改名／原路径重定向外部后外部同名文件不删；最后一级inode替换拒绝。Unix最后一级检查与unlink仍非原子，保护根／排他写入边界尚待落实，不宣称已解决同用户恶意并发全部风险。
