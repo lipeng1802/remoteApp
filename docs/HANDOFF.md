@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r56 平台句柄删除与活动TLS到同一维护事务的联动
+
+本轮合并完成两组相关工作，继续仅开放TEST删除。删除批次固定全部已签名目录并核验对象身份；目标文件在同一handle上核验类型、单硬链接、volume/object ID、size/hash到删除结束，不再用绝对路径os.Remove。Windows目录禁止DELETE共享防rename，文件handle同时禁止WRITE/DELETE共享，已有写入者也拒绝；用FileDispositionInfoEx删除核验后的同一只读文件handle，无路径chmod／DeleteFile回退。Mac逐级openat/O_NOFOLLOW固定父目录，unlinkat绑定父fd并在unlink前再核对basename inode。实测父目录改名／原路径重定向外部后外部同名文件不删；最后一级inode替换拒绝。Unix最后一级检查与unlink仍非原子，保护根／排他写入边界尚待落实，不宣称已解决同用户恶意并发全部风险。
+
+新增可信进程内`Owner.MaintainDurableState`：核对调用者编译release与owner完全一致，actual join后、仍持native lease时取得精确pending transaction/epoch。`programremoval.QuiesceAndRemoveTest`连起预检→durable intent→cancel/join→snapshot→Close成功→新lease重开核对同一transaction/epoch→删除；`RunExpectedTest`显式续接，不接受同epoch的别的事务，若已提供plan digest也须完全一致。join或Close失败不进入删除；中途取消仍持lease，只可显式完成原join。runner fault不写计划、不删文件，显式Close已join的fault仍报告错误且pending保留。文件系统回执不确定后仅新lease核验续接，不重复驱动已退休owner。snapshot不是独立删除许可，没有新增公开本机socket／网络接口。
+
+新增真实本地TLS联动测试：两个TLS HTTP流保持活动直至取消；即使两路网络worker已经退出，只要runner最终join仍阻塞，另一helper无法取native lease、计划不存在、程序文件仍在。正常join及join中取消后显式继续都沿同一事务完成；错编译release不会取消活动owner，错误transaction/epoch不会写计划，runner fault不删文件。旧真实exit78部分删除崩溃、身份重新签名、activation原字节、profile/epoch2保留与r55全部拒绝项回归继续通过。这些是真实本地TLS资源+native owner联动，不是实际tls-product/Headscale跨机远控或独立卸载器认证验收。
+
+macOS最终ad-hoc file测试5组、native测试6组及固定编译入口全部PASS；日志`artifacts/connection-poc/removal-handoff-r56/mac/file-final-result.txt`与`native-final-result.txt`。Windows最终归档`windows-removal-handoff-r56-final.zip` SHA256 `8c9cf8918720deaa2062e713d4063b07a0d26151929cd00d4e0d2c87887de882`，经SSH传输／远端核对后在Interactive Session 6执行13个顶层测试及全部子项，全部PASS、无SKIP、EXITCODE=0。远端`C:\Users\jarvis\remoteapp-removal-handoff-r56\result.txt`，本地归档目录内`windows-final-result.txt`。native helper/trust-tests复用r55未改变的组件，新file/removal测试已重编译。Windows特有的Go普通read-open不共享DELETE，故全树核验必须在取得目标DELETE handle之前执行，之后只在同一handle上复核与删除；本轮未放宽校验或增加路径删除回退。
+
+上传曾出现SFTP停滞和一次SSH banner超时，停止本轮停滞上传后命令恢复；最终归档已完整校验。旧未运行归档仅测试artifact，未用于验收。测试随机OS journal/identity/activation及临时根由teardown清理，临时Interactive任务已删除，无该包残留运行进程；不修改用户MVP安装／共享服务。相关8个package race回归、Windows amd64 vet和diff检查通过。README／维护协议／便携runner已更新，本轮本地提交，不自动推送。
+
+下一组优先任务：独立卸载器到既有live owner的认证／授权连接；落实生产受保护根及排他写入边界（尤其Unix最后一级原子性限制）；再接实际产品跨机活动会话和签名卸载前端。当前可信in-process coordinator不替代独立IPC身份认证，macOS固定编译入口通过不代表Windows独立编译卸载器或发行签名通过。TEST=false删除仍关闭，目录壳与恢复计划仍保留，OS身份/trust/activation/binding/floor默认不删，生产恢复active／断电持久性／整机重启仍未验收。切片4整体未标记完成。见`poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md`。
+
 ## 2026-10-28 r55 签名程序文件删除、原生阶段提交与崩溃续接
 
 按用户希望增加单轮任务量，本轮合并完成删除计划、持久删除阶段及中断恢复三个相关部分，仍只开放隔离TEST命名空间。`installrelease`新增固定`.program-removal.json`：保留两类原始签名manifest、bootstrap pointer、根／目录／文件volume/object身份与内容摘要；允许路径从经过编译公钥验证的固定文件清单重新推导，最多各8个版本。完整校验并O_EXCL保存计划后，`RemovalTransaction`原生CAS提交其SHA-256，将同一maintenance事务从pending推进deleting；只有该阶段才允许程序文件缺失。只逐个删除计划内程序文件及pointer，不用RemoveAll，不删除目录，计划／目录空壳保留；验证全部缺失后提交files_removed，重复完成幂等，文件重现拒绝。所有阶段保留profile/anchor/accepted_at/epoch/transaction且拒绝普通启动、初始化和升级；没有reset、恢复active或删除用户凭据入口。

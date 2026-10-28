@@ -3,6 +3,7 @@ package clientowner
 import (
 	"context"
 
+	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
 
@@ -31,6 +32,23 @@ func (o *Owner) Maintain(ctx context.Context, action MaintenanceAction) error {
 // Fresh owners and offline upgrades fail closed until explicit recovery exists.
 func (o *Owner) MaintainDurable(ctx context.Context, action MaintenanceAction) error {
 	return o.maintain(ctx, action, true)
+}
+
+// MaintainDurableState is a trusted in-process handoff. The immutable compiled
+// release must be the owner's own release. The callback runs only after actual
+// join, under the same lease/serial lock, with the exact committed transaction.
+// The snapshot is an expectation for lease reacquisition, not deletion authority.
+func (o *Owner) MaintainDurableState(ctx context.Context, r trustinstall.Release, action func(context.Context, trustprofile.MaintenanceState) error) error {
+	if o == nil || r != o.release || action == nil {
+		return trustprofile.ErrTrust
+	}
+	return o.MaintainDurable(ctx, func(life context.Context, epoch uint64) error {
+		state, err := trustprofile.ReadMaintenance(o.release.Anchor(), o.journal, o.clock)
+		if err != nil || state.State != "pending" || state.Epoch != epoch || state.Transaction != o.maintenanceTransaction {
+			return trustprofile.ErrTrust
+		}
+		return action(life, state)
+	})
 }
 
 func (o *Owner) maintain(ctx context.Context, action MaintenanceAction, durable bool) error {

@@ -52,8 +52,21 @@ marker保留原profile、accepted_at、anchor与epoch；不改OS设备身份、b
 
 固定`.program-removal.json`包含原始签名release/bootstrap manifests、bootstrap pointer及安装根／目录／文件volume/object IDs、内容大小和摘要。所有允许路径重新从经过公钥验证的固定文件清单推导，不能从计划的任意path字段获得删除权限。最多各8个release/bootstrap版本，拒绝staging、未知文件、未来epoch、目录替换、内容变化、硬链接、symlink／Windows reparse点及跨事务计划。计划先写O_EXCL、flush；原生journal提交其SHA-256成功之后才允许删除。删除期间清单文件本身即使已删除，计划仍保留其原签名供重验。
 
-删除前全树校验，每个unlink前再校验；只逐个移除签名清单内程序文件和bootstrap pointer，不用RemoveAll、不删除目录。根、版本目录空壳和计划保留，以便绑定原对象身份继续；任何清单外内容会阻止删除。OS设备私钥、trust、activation、binding及epoch floor不在文件计划中，默认全部保留。
+删除前全树校验，每个unlink前再校验；只逐个移除签名清单内程序文件和bootstrap pointer，不用RemoveAll、不删除目录。r56增加下面的句柄绑定，不再用绝对路径os.Remove删除。根、版本目录空壳和计划保留，以便绑定原对象身份继续；任何清单外内容会阻止删除。OS设备私钥、trust、activation、binding及epoch floor不在文件计划中，默认全部保留。
 
 Windows目录刷新可能在写入／unlink已完成后返回不确定回执。`program_removal_receipt_uncertain`立即结束当前尝试；下一次明确调用必须取得新原生lease、验证原计划、摘要、事务和实际剩余文件，不能自动重捕获计划。pending阶段缺文件仍拒绝，绑定后计划丢失／损坏也拒绝。本实现覆盖进程崩溃，不声明断电持久性、恶意管理员隔离或安全擦除。路径校验和unlink之间仍有同用户恶意并发的TOCTOU边界；正式卸载需要平台handle-relative删除／独占写入边界及签名独立卸载器认证，不能把TEST标志改成false即发行。
 
 原生验收创建两代真实签名文件集合，实际删除首文件后由子进程exit78跳过defer，helper观察EOF释放lease；新进程沿同一transaction／plan digest继续，重复完成幂等且仍拒绝产品启动。验证原生OS身份可重新签名、activation原字节保持、trust除maintenance外原字节字段不变且epoch2。另验完整pending计划续接、计划替换／丢失拒绝、原生丢回执封闭及目录／文件篡改。macOS额外实际编译固定入口并核验运行时覆盖拒绝、删除、重复重开。Windows包由`run-removal-validation.ps1`在登录桌面或Interactive任务运行，不需要Go／开发环境。native测试只用随机TEST状态，结束精确清理测试凭据；不是卸载用户凭据的实现。
+
+## 句柄绑定与活动资源到删除的联动（r56，仍TEST-only）
+
+删除批次先按根到叶顺序打开并固定全部已签名目录，逐一核验volume/object ID与平台保护策略；目标文件打开后在同一handle上核验ID、单硬链接、类型、大小和SHA-256，保持打开直到删除结束。不支持的平台操作直接拒绝，不退回绝对路径删除。
+
+- Windows目录handle不允许FILE_SHARE_DELETE，防止批次期间祖先被改名；目标handle同时不允许写入／删除共享，已有写handle也会阻止取得删除handle。通过核验后的同一handle调用FileDispositionInfoEx，支持只读签名文件，无DeleteFile／路径chmod回退。实测覆盖目录／文件rename阻止、已有写入者拒绝、实际只读文件删除及结束后handle释放。API依据：[Microsoft SetFileInformationByHandle](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle)。
+- macOS／Unix逐级openat + O_NOFOLLOW固定目录，目标仅相对已持有父目录打开；unlinkat以同一父目录fd执行，并在unlink前再次检查basename仍指向已核验inode。实测在打开目标后把原父目录改名、原路径替换成指向外部目录的链接，仍只删除原固定目录中的签名对象，外部同名文件保留；替换最后一级文件inode时拒绝。Unix的最后一级检查与unlink仍非原子，正式发行仍需保护根／排他写入权限边界，不能宣称同用户恶意并发问题全部解决。
+
+`Owner.MaintainDurableState`只向可信进程内callback提供实际join后、仍持原生lease的精确pending transaction，先核对调用者编译release与owner自身完全一致。`programremoval.QuiesceAndRemoveTest`将它与删除组合：预检固定根 → durable intent → cancel + 实际join → 取得transaction/epoch → 明确Close成功 → 新lease重开并核对同一transaction/epoch → 原签名计划删除。join／Close失败不进入删除；join中取消保留lease、不得写计划，可显式继续同一次join。runner fault保留pending并拒绝删除；已完成fault的显式Close仍报告错误。无法靠同epoch或另一事务的“已停止”状态混用owner。
+
+文件系统回执不确定时不重新驱动已退休owner；由调用者明确使用`RunExpectedTest`核对原transaction/epoch（若已有plan digest也必须一致）后继续。该snapshot不是跨进程删除能力，不可替代独立卸载器身份认证。未新增可由任意本机进程连接的socket、网络维护接口或生产卸载前端。
+
+新增原生联动测试使用两个实际本地TLS HTTP流，维持请求直到取消。即使两路网络worker已经返回，只要runner最终join仍被测试闸门阻塞，另一native helper取不到lease、计划不存在、程序文件仍在；正常join与join中取消后显式继续都完成相同事务的删除。另验错编译release不会取消活动owner，错误transaction/epoch不写计划，runner fault不删文件，以及r55真实崩溃／身份／floor回归。这是原生owner与真实本地TLS资源的联动，不是实际`tls-product`/Headscale跨机远控会话或独立卸载器认证验收。

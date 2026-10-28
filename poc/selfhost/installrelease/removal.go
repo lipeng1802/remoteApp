@@ -315,16 +315,31 @@ func RemoveProgramBatchTest(ctx context.Context, root string, p RemovalPlan, pub
 		return false, ErrRelease
 	}
 	removed := 0
+	handles, err := openRemovalHandles(root, p)
+	if err != nil {
+		return false, err
+	}
+	defer handles.close()
 	dirty := map[string]bool{}
 	for _, o := range p.Objects {
 		if o.Directory {
 			continue
 		}
-		path := filepath.Join(root, filepath.FromSlash(o.Path))
-		if _, e := os.Lstat(path); os.IsNotExist(e) {
+		// Verify the tree before opening a Windows DELETE handle: Go's
+		// ordinary read opens do not share DELETE access. Once acquired,
+		// validate/delete through that exact handle without reopening it.
+		if ctx.Err() != nil || ValidateRemovalTest(root, p, public, channel, platform, true, false, true) != nil {
+			return false, ErrRelease
+		}
+		file, e := handles.openFile(o)
+		if os.IsNotExist(e) {
 			continue
 		}
+		if e != nil {
+			return false, ErrRelease
+		}
 		if removed == limit {
+			file.Close()
 			for dir := range dirty {
 				if syncRemovalDirectory(dir) != nil {
 					return false, ErrRemovalReceipt
@@ -332,14 +347,12 @@ func RemoveProgramBatchTest(ctx context.Context, root string, p RemovalPlan, pub
 			}
 			return false, nil
 		}
-		if ctx.Err() != nil || ValidateRemovalTest(root, p, public, channel, platform, true, false, true) != nil {
-			return false, ErrRelease
-		}
-		if os.Remove(path) != nil {
+		removeErr, closeErr := handles.remove(file, o), file.Close()
+		if removeErr != nil || closeErr != nil {
 			return false, ErrRelease
 		}
 		removed++
-		dirty[filepath.Dir(path)] = true
+		dirty[filepath.Dir(filepath.Join(root, filepath.FromSlash(o.Path)))] = true
 	}
 	for dir := range dirty {
 		if syncRemovalDirectory(dir) != nil {

@@ -29,6 +29,10 @@ import (
 )
 
 func nativeFixture(t *testing.T) (trustinstall.Release, trustinstall.Factory, string, []byte, installrelease.Verified) {
+	return nativeFixtureMode(t, true)
+}
+
+func nativeFixtureMode(t *testing.T, seal bool) (trustinstall.Release, trustinstall.Factory, string, []byte, installrelease.Verified) {
 	t.Helper()
 	helper := os.Getenv("REMOTEAPP_JOURNAL_TEST_EXECUTABLE")
 	if helper == "" {
@@ -152,6 +156,9 @@ func nativeFixture(t *testing.T) (trustinstall.Release, trustinstall.Factory, st
 		if e != nil || opened.ManifestDigest != boot.ManifestDigest {
 			t.Fatal("bootstrap receipt", err)
 		}
+	}
+	if !seal {
+		return r, factory, root, public, latest
 	}
 	o, err := clientowner.Open(r, factory, time.Now)
 	if err != nil {

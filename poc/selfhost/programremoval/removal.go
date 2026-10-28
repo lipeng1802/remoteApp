@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/installrelease"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
@@ -21,23 +22,17 @@ import (
 // process must live outside root. This API is deliberately unavailable in a
 // production namespace. Failure leaves maintenance latched for explicit retry.
 func RunTest(ctx context.Context, r trustinstall.Release, factory trustinstall.Factory, root string) (state trustprofile.MaintenanceState, err error) {
-	if ctx == nil || ctx.Err() != nil || !r.Specification().Test || factory == nil || !filepath.IsAbs(root) || filepath.Clean(root) != root {
-		return state, trustprofile.ErrTrust
-	}
-	exe, e := os.Executable()
-	if e != nil {
-		return state, trustprofile.ErrTrust
-	}
-	exe, e = filepath.EvalSymlinks(exe)
-	if e != nil {
-		return state, trustprofile.ErrTrust
-	}
-	realRoot, e := filepath.EvalSymlinks(root)
-	if e != nil {
-		return state, trustprofile.ErrTrust
-	}
-	rel, e := filepath.Rel(realRoot, exe)
-	if e == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	return runTest(ctx, r, factory, root, nil)
+}
+
+// RunExpectedTest explicitly continues the exact transaction observed after
+// live-owner join. It never accepts a merely matching epoch from another owner.
+func RunExpectedTest(ctx context.Context, r trustinstall.Release, factory trustinstall.Factory, root string, expected trustprofile.MaintenanceState) (trustprofile.MaintenanceState, error) {
+	return runTest(ctx, r, factory, root, &expected)
+}
+
+func runTest(ctx context.Context, r trustinstall.Release, factory trustinstall.Factory, root string, expected *trustprofile.MaintenanceState) (state trustprofile.MaintenanceState, err error) {
+	if ctx == nil || ctx.Err() != nil || !r.Specification().Test || factory == nil || validateRemovalRoot(root) != nil {
 		return state, trustprofile.ErrTrust
 	}
 	j, e := factory(false)
@@ -53,7 +48,60 @@ func RunTest(ctx context.Context, r trustinstall.Release, factory trustinstall.F
 	if e != nil {
 		return state, e
 	}
+	if expected != nil {
+		actual, e := tx.State()
+		id, e2 := hex.DecodeString(expected.Transaction)
+		if e != nil || e2 != nil || len(id) != 16 || hex.EncodeToString(id) != expected.Transaction || actual.Transaction != expected.Transaction || actual.Epoch != expected.Epoch || (expected.PlanSHA256 != "" && actual.PlanSHA256 != expected.PlanSHA256) {
+			return state, trustprofile.ErrTrust
+		}
+	}
 	return continueTest(ctx, r, root, tx)
+}
+
+func validateRemovalRoot(root string) error {
+	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
+		return trustprofile.ErrTrust
+	}
+	exe, e := os.Executable()
+	if e != nil {
+		return trustprofile.ErrTrust
+	}
+	exe, e = filepath.EvalSymlinks(exe)
+	if e != nil {
+		return trustprofile.ErrTrust
+	}
+	realRoot, e := filepath.EvalSymlinks(root)
+	if e != nil {
+		return trustprofile.ErrTrust
+	}
+	rel, e := filepath.Rel(realRoot, exe)
+	if e == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return trustprofile.ErrTrust
+	}
+	return nil
+}
+
+// QuiesceAndRemoveTest joins an existing trusted in-process owner, observes its
+// durable transaction while leased, closes only after join, then reacquires a
+// new lease with that exact expectation. On join/close error no removal occurs.
+// ErrRemovalReceipt requires explicit RunExpectedTest, never a second live join.
+// An independent uninstaller still needs authenticated IPC to this live owner.
+func QuiesceAndRemoveTest(ctx context.Context, r trustinstall.Release, factory trustinstall.Factory, root string, owner *clientowner.Owner) (expected, result trustprofile.MaintenanceState, err error) {
+	if ctx == nil || ctx.Err() != nil || !r.Specification().Test || factory == nil || owner == nil || validateRemovalRoot(root) != nil {
+		return expected, result, trustprofile.ErrTrust
+	}
+	if _, err = installrelease.ValidateProtectedBootstrapLayout(root, true); err != nil {
+		return expected, result, err
+	}
+	err = owner.MaintainDurableState(ctx, r, func(_ context.Context, state trustprofile.MaintenanceState) error { expected = state; return nil })
+	if err != nil {
+		return expected, result, err
+	}
+	if err = owner.Close(ctx); err != nil {
+		return expected, result, err
+	}
+	result, err = RunExpectedTest(ctx, r, factory, root, expected)
+	return expected, result, err
 }
 
 func continueTest(ctx context.Context, r trustinstall.Release, root string, tx *trustprofile.RemovalTransaction) (trustprofile.MaintenanceState, error) {
