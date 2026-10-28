@@ -26,16 +26,52 @@ type reply struct {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "maintenance-state" {
+		state, err := maintenanceState()
+		if err != nil {
+			_ = json.NewEncoder(os.Stdout).Encode(reply{Status: "failed", Reason: "trust_rejected"})
+			os.Exit(1)
+		}
+		_ = json.NewEncoder(os.Stdout).Encode(reply{Status: "maintenance_required", Epoch: state.Epoch})
+		return
+	}
 	p, e := run()
 	if e != nil {
 		reason := "trust_rejected"
 		if errors.Is(e, trustprofile.ErrDesktopLogon) {
 			reason = "interactive_logon_required"
 		}
+		if errors.Is(e, trustprofile.ErrMaintenance) {
+			reason = "maintenance_required"
+		}
 		json.NewEncoder(os.Stdout).Encode(reply{Status: "failed", Reason: reason})
 		os.Exit(1)
 	}
 	json.NewEncoder(os.Stdout).Encode(reply{Status: "usable", Epoch: p.Claims.Epoch})
+}
+
+func maintenanceState() (trustprofile.MaintenanceState, error) {
+	r, err := trustinstall.DecodeCompiled(embeddedRelease)
+	if err != nil {
+		return trustprofile.MaintenanceState{}, err
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return trustprofile.MaintenanceState{}, err
+	}
+	name := "trust-journal"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	factory, err := r.NativeFactory(filepath.Join(filepath.Dir(exe), name))
+	if err != nil {
+		return trustprofile.MaintenanceState{}, err
+	}
+	owner, err := trustinstall.NewOfflineOwner(r, factory, time.Now)
+	if err != nil {
+		return trustprofile.MaintenanceState{}, err
+	}
+	return owner.MaintenanceState()
 }
 
 func run() (trustprofile.Profile, error) {

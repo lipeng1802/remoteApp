@@ -245,6 +245,20 @@ func (o *OfflineOwner) Inspect() (trustprofile.Profile, error) {
 
 type noOfflineSessions struct{}
 
+// MaintenanceState is a read-only diagnostic. It neither resumes installation
+// nor returns any usable profile, identity selector or deletion authority.
+func (o *OfflineOwner) MaintenanceState() (trustprofile.MaintenanceState, error) {
+	j, err := o.factory(false)
+	if err != nil {
+		return trustprofile.MaintenanceState{}, err
+	}
+	state, err := trustprofile.ReadMaintenance(o.release.anchor, j, o.clock)
+	if closed := j.Close(); err == nil {
+		err = closed
+	}
+	return state, err
+}
+
 func (noOfflineSessions) Quiesce(context.Context) error { return nil }
 
 // Upgrade owns the exclusive native journal in a process that never opens

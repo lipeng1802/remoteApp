@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r54 产品维护现先向原生journal提交持久pending，再cancel/join；结束握手不会清除意图，进程崩溃后新owner、重装和升级继续被拒绝。macOS/Windows维护10项组合通过，含真实未join时进程exit77与模拟丢回执；最终双端idle产品/身份/安装升级组合均PASS。信任、设备身份与epoch保留，生产恢复和真实文件删除事务仍待实现。见[持久维护协议](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
+
 r53 实际自主产品已接专用继承管道的维护握手：join后才报告ready，finish前保持原生租约，所有错误路径先join再释放安装binding。macOS和Windows桌面完整原生组合PASS，覆盖身份参数覆盖拒绝、真实产品退出及身份/epoch保持。当前是可信父进程的idle产品控制验收；独立卸载器认证、持久事务、活会话维护和真实文件删除仍待。见[维护协议](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
 r52 新增卸载前owner维护屏障：封闭新会话、实际join后才执行维护action，操作期间保留原生独占租约，默认保留信任和防回退记录。macOS/Windows桌面原生四项测试均PASS，相关race回归通过。当前只验证TEST程序marker删除，产品卸载IPC、持久事务及真实文件删除仍待接入。见[维护屏障](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。

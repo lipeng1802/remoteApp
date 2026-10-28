@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r54 持久维护意图、崩溃重开拒绝与原生验证
+
+新增trust installation record的可选`maintenance`字段，保存version=1、state=pending和本机随机128-bit transaction ID；原profile、anchor、epoch、accepted_at保持不变。absence兼容原active记录，显式null、损坏/未知marker/version/阶段/字段均拒绝。`OpenInstallation`在验证历史签名与anchor后对pending返回ErrMaintenance；Current/Accept及新owner/offline inspect/init/upgrade不可越过，旧严格schema也拒绝附加字段。新增只读`ReadMaintenance`/`OfflineOwner.MaintenanceState`和`trust-install maintenance-state`，只报告维护所需状态/epoch，不发放profile或删除许可。
+
+实际产品ControlProduct改调用`MaintainDurable`：先持原生租约提交意图并读回，之后才cancel/join，最后才执行握手action并回复ready。提交必须早于join，避免等待join时崩溃留下重新启动窗口。join超时可在同一owner继续同一事务，不改ID且禁止切换回非持久Maintain；提交回执不确定不放行action、也不重试提交。finish仅结束当前产品/管道，不清除pending。原`Maintain`保留为进程内非持久屏障，产品管道不用它。
+
+macOS与Windows Interactive Session 6维护组合10项全部PASS/EXITCODE=0、无原生SKIP，含3项新真实原生测试：正常close后pending阻止新owner/init/upgrade；真实native commit后模拟丢回执拒绝action；TEST子进程在已cancel但未join的runner中实际exit77跳过defer，helper收到EOF释放租约，新进程仍读到相同transaction与epoch2并拒绝启动。随机TEST native记录由teardown回收。Windows最终独立包`artifacts/connection-poc/durable-maintenance-r54-final.f6fKG4/windows-durable-maintenance-r54-final.zip`，SHA256 `e114da638358ba8f92d6dd457075560ff3081c5156481061e8d9cdf287929f19`，远端`C:\Users\jarvis\remoteapp-durable-maintenance-r54-native-final\result.txt`。两轮native临时计划任务已删除。回执夹具不代表真实磁盘故障或整机重启验收。
+
+最终macOS全产品idle/native组合`artifacts/connection-poc/durable-product-r54-sealed-mac.SVEtYu/bundle`完整PASS并清理：非法begin不写pending；正常持久握手后product重开、两代trust init/upgrade均拒绝；重复只读维护诊断仍为epoch2；原生公钥/idle状态保持，原release/bootstrap升级回归仍通过。组合在pending-binding回归后显式建立第二个随机TEST身份验证durable握手。`inspect-maintenance-test`及既有TEST-only teardown只在Test=true且已验证pending、取得native租约后才允许读取/回收其精确scope；没有给生产增加reset/resume或cleanup能力。
+
+Windows最终全产品包`artifacts/connection-poc/durable-product-r54-sealed-win.zip`，SHA256 `08c3389d7f4c7ea519c16999ed107c439073fe6b1afccd9b9519eca0f64ea30f`，64项摘要核对通过，在`C:\Users\jarvis\remoteapp-durable-product-r54-sealed`的桌面Session 6完整组合PASS/EXITCODE=0；测试根确认不存在，`RemoteApp-R54-Sealed-Product-Maintenance`临时任务已删除。相关trustprofile/trustinstall/clientowner/installeddevice/installrelease/autonomousinstall/clientruntime/desktopcontrol race、Windows vet及diff检查通过。
+
+本切片建立pending启动闸门，尚无生产恢复、files_removed终态或真实产品卸载。下一步定义签名文件清单及对象身份绑定的删除事务、部分删除重开/显式恢复；完成后才开放卸载前端。不能从read-only维护诊断或maintenance_ready推导文件删除许可。idle产品组合不代替活跃跨机TLS维护、OS重启、签名安装包/生产根验收。契约见`poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md`。
+
 ## 2026-10-28 r53 实际自主产品的继承管道维护握手
 
 新增`installeddevice.ControlProduct`并接入真实`installed-autonomous-product`。沿原可信本地父进程建立的专用匿名管道路由普通请求，严格无覆盖字段的`maintenance_begin`调用当前owner.Maintain；runner实际join后，仍持native租约才发`maintenance_ready/epoch/joined`。同管道`maintenance_finish`完成后关闭stdin，产品结束binding/journal/读取线程，最后closed/EOF/actual exit。40秒整体维护期限；提前finish、身份/设备/network覆盖、断管、取消、输出失败与runner故障均锁闭。没有新增网络或可供任意本机进程连接的socket，父进程可信建立管道仍是前提。

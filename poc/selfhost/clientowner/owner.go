@@ -58,17 +58,20 @@ func (h *Handle) Wait(ctx context.Context) error {
 }
 
 type Owner struct {
-	serial               chan struct{}
-	journal              trustinstall.Journal
-	installed            *trustprofile.Installation
-	running              *Handle
-	broken, closed       bool
-	retiredFault         bool
-	maintenanceRequested bool
-	maintenanceAttempted bool
-	release              trustinstall.Release
-	factory              trustinstall.Factory
-	clock                func() time.Time
+	serial                 chan struct{}
+	journal                trustinstall.Journal
+	installed              *trustprofile.Installation
+	running                *Handle
+	broken, closed         bool
+	retiredFault           bool
+	maintenanceRequested   bool
+	maintenanceAttempted   bool
+	maintenanceDurable     bool
+	maintenanceEpoch       uint64
+	maintenanceTransaction string
+	release                trustinstall.Release
+	factory                trustinstall.Factory
+	clock                  func() time.Time
 }
 
 // Open never initializes or repairs missing/corrupt native state. The journal

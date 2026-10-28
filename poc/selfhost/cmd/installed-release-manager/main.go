@@ -173,7 +173,20 @@ func run() (reply, error) {
 		return reply{Status: "cleaned"}, nil
 	}
 	if err = installed(release, helper); err != nil {
-		return reply{}, err
+		if os.Args[1] != "cleanup-test" || !release.Specification().Test {
+			return reply{}, err
+		}
+		factory, e := release.NativeFactory(helper)
+		if e != nil {
+			return reply{}, e
+		}
+		offline, e := trustinstall.NewOfflineOwner(release, factory, time.Now)
+		if e != nil {
+			return reply{}, e
+		}
+		if _, e = offline.MaintenanceState(); e != nil {
+			return reply{}, e
+		}
 	}
 	if os.Args[1] == "cleanup-test" {
 		if !release.Specification().Test {

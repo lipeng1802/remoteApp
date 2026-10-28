@@ -23,6 +23,17 @@ type MaintenanceAction func(context.Context, uint64) error
 // by a standalone epoch/status reply; future uninstall IPC must bind to this
 // live owner and use this barrier, not copy a receipt across processes.
 func (o *Owner) Maintain(ctx context.Context, action MaintenanceAction) error {
+	return o.maintain(ctx, action, false)
+}
+
+// MaintainDurable commits a native pending intent BEFORE cancel/join, fencing
+// a crash during join as well as a crash during subsequent maintenance action.
+// Fresh owners and offline upgrades fail closed until explicit recovery exists.
+func (o *Owner) MaintainDurable(ctx context.Context, action MaintenanceAction) error {
+	return o.maintain(ctx, action, true)
+}
+
+func (o *Owner) maintain(ctx context.Context, action MaintenanceAction, durable bool) error {
 	if err := o.lock(ctx); err != nil {
 		return err
 	}
@@ -30,25 +41,63 @@ func (o *Owner) Maintain(ctx context.Context, action MaintenanceAction) error {
 	if action == nil || o.closed || o.maintenanceAttempted || (!o.maintenanceRequested && !o.healthy()) {
 		return trustprofile.ErrTrust
 	}
-	o.maintenanceRequested = true
+	if o.maintenanceRequested && o.maintenanceDurable != durable {
+		return trustprofile.ErrTrust
+	}
+	if !o.maintenanceRequested {
+		o.maintenanceRequested = true
+		o.maintenanceDurable = durable
+		if durable {
+			// An uncertain intent commit cannot be retried on this owner. No
+			// cancellation or external action is acknowledged in that case.
+			o.maintenanceAttempted = true
+			profile, _, err := o.installed.Current()
+			if err != nil {
+				o.broken = true
+				return err
+			}
+			if err = o.installed.BeginMaintenance(); err != nil {
+				o.broken = true
+				return err
+			}
+			state, err := trustprofile.ReadMaintenance(o.release.Anchor(), o.journal, o.clock)
+			if err != nil || state.Epoch != profile.Claims.Epoch {
+				o.broken = true
+				return trustprofile.ErrTrust
+			}
+			o.maintenanceEpoch = state.Epoch
+			o.maintenanceTransaction = state.Transaction
+			o.maintenanceAttempted = false // intent confirmed; only join may resume
+		}
+	}
 	if err := o.join(ctx); err != nil {
 		o.broken = true
 		return err
 	}
-	profile, _, err := o.installed.Current()
-	if err != nil {
-		o.broken = true
-		return err
+	epoch := o.maintenanceEpoch
+	if durable {
+		state, err := trustprofile.ReadMaintenance(o.release.Anchor(), o.journal, o.clock)
+		if err != nil || state.Epoch != epoch || state.Transaction != o.maintenanceTransaction {
+			o.broken = true
+			return trustprofile.ErrTrust
+		}
+	} else {
+		profile, _, err := o.installed.Current()
+		if err != nil {
+			o.broken = true
+			return err
+		}
+		epoch = profile.Claims.Epoch
 	}
-	if err = ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	o.maintenanceAttempted = true
-	if err = action(ctx, profile.Claims.Epoch); err != nil {
+	if err := action(ctx, epoch); err != nil {
 		o.broken = true
 		return err
 	}
-	if err = ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		o.broken = true
 		return err
 	}

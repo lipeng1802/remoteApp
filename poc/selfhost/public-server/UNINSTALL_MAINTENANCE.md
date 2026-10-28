@@ -25,3 +25,15 @@ Windows便携验收包需要同目录的`maintenance-tests-win.exe`、`trust-jou
 控制层错误可以早于runner完成，因此实际产品在所有控制返回路径先Stop/join，再关闭安装binding，最后由原收尾释放trust journal。不能因参数拒绝或管道断开而提前释放runner借用的资源。
 
 原生组合验收在两代trust/identity升级之后启动真实compiled product，先验证带身份覆盖的begin失败且非零退出，再验证正常begin/finish、握手前后另一helper争租约失败、closed/EOF/actual exit0、退出后trust仍epoch2且设备公钥/idle状态不变。该场景使用已安装的真实OS身份和idle runner，不建立Headscale节点或活跃远程TLS会话。
+
+## 持久维护意图（r54，取代r53结束后可直接重开的行为）
+
+产品控制管道现在调用`Owner.MaintainDurable`。它先在原生trust journal的同一条installation record中提交`maintenance={version:1,state:"pending",id:<random 128-bit>}`，再取消并join runner；只有意图提交、原记录读回核对及join都成功才报告ready。这样进程在等待join时崩溃也不会留下允许新会话启动的窗口。同一owner因join超时而重试，只继续原事务的join，不能改为非持久模式或生成第二个事务。原有`Maintain`仍是可信进程内的非持久屏障，产品管道不再使用它。
+
+marker保留原profile、accepted_at、anchor与epoch；不改OS设备身份、binding或activation。普通`OpenInstallation`、新owner、offline inspect/init/upgrade都会拒绝pending。旧严格schema解析器也不能忽略附加maintenance字段。显式null、未知阶段/version、错误ID及未知字段一律拒绝，不能降级为旧active格式。提交回执不确定时原owner封闭且不执行action；即使写入实际完成，仍需要明确诊断而非猜测成功。
+
+`trust-install maintenance-state`只读验证历史签名记录并输出`maintenance_required`与epoch，不返回可用profile、密钥或独立删除许可。它不创建、不修复、不清除marker。`maintenance_finish`只结束当前握手/进程，不代表卸载完成，不清除持久pending。本切片没有生产resume/reset入口；后续必须根据签名程序文件集及真实事务状态设计显式恢复。
+
+原生测试覆盖正常关闭、真实子进程exit77跳过defer（发生于已取消但尚未join的runner）、helper观察EOF后释放租约、新进程拒绝启动/重装/升级，以及真实native commit后模拟丢失回执。后者是回执故障夹具，不宣称真实磁盘写失败。原生epoch2及同一事务ID在重开后保留。
+
+组合validator在原身份升级/拒绝非法请求与pending-binding回归结束后，显式建立第二个随机TEST身份验证durable产品握手。退出后普通product重开与两代trust init/upgrade都拒绝；只读maintenance诊断仍为epoch2。`inspect-maintenance-test`仅在编译Test=true且已验证pending后核对原公钥与idle状态；TEST-only teardown在取得native租约后才能清理这些随机scope。生产入口不会获得任何重置或删除能力，pending保留到未来明确恢复流程。

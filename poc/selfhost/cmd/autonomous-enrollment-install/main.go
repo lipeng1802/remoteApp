@@ -288,7 +288,7 @@ func cleanupReservationTest(release trustinstall.Release, states trustinstall.Re
 }
 
 func run() (reply, error) {
-	if len(os.Args) != 2 || (os.Args[1] != "initialize" && os.Args[1] != "inspect" && os.Args[1] != "status" && os.Args[1] != "cleanup-test" && os.Args[1] != "reserve-test" && os.Args[1] != "cleanup-reservation-test") {
+	if len(os.Args) != 2 || (os.Args[1] != "initialize" && os.Args[1] != "inspect" && os.Args[1] != "status" && os.Args[1] != "cleanup-test" && os.Args[1] != "reserve-test" && os.Args[1] != "cleanup-reservation-test" && os.Args[1] != "inspect-maintenance-test") {
 		return reply{}, trustprofile.ErrTrust
 	}
 	release, err := trustinstall.DecodeCompiled(embeddedRelease)
@@ -308,7 +308,35 @@ func run() (reply, error) {
 	vaultPath := filepath.Join(dir, "identity-vault"+suffix)
 	installed, err := installedRelease(release, dir, suffix)
 	if err != nil {
+		// Exact TEST inspection/teardown remains available for a validated
+		// pending marker. Acquiring its journal still rejects a live owner.
+		if release.Specification().Test && (os.Args[1] == "cleanup-test" || os.Args[1] == "inspect-maintenance-test") {
+			factory, e := release.NativeFactory(journalPath)
+			if e != nil {
+				return reply{}, e
+			}
+			offline, e := trustinstall.NewOfflineOwner(release, factory, time.Now)
+			if e != nil {
+				return reply{}, e
+			}
+			if _, e = offline.MaintenanceState(); e != nil {
+				return reply{}, e
+			}
+			records, e := release.NativeRecordFactory(journalPath)
+			if e != nil {
+				return reply{}, e
+			}
+			if os.Args[1] == "cleanup-test" {
+				return cleanupTest(release, records, journalPath, vaultPath)
+			}
+			value, e := inspect(release, records)
+			value.Status = "maintenance_required"
+			return value, e
+		}
 		return reply{}, err
+	}
+	if os.Args[1] == "inspect-maintenance-test" {
+		return reply{}, trustprofile.ErrTrust
 	}
 	records, err := release.NativeRecordFactory(journalPath)
 	if err != nil {

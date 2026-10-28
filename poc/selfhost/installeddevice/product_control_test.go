@@ -26,7 +26,7 @@ type controlOwner struct {
 	holding atomic.Bool
 }
 
-func (o *controlOwner) Maintain(ctx context.Context, action clientowner.MaintenanceAction) error {
+func (o *controlOwner) MaintainDurable(ctx context.Context, action clientowner.MaintenanceAction) error {
 	o.calls.Add(1)
 	if o.fail {
 		return errors.New("unjoined fault")

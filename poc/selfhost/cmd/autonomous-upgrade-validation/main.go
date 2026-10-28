@@ -204,8 +204,20 @@ func productMaintenance(path, trust string, epoch uint64, rejectOverride bool) e
 		return fmt.Errorf("maintenance product actual exit")
 	}
 	value, err = command(trust, nil, "inspect")
-	if err != nil || value.Status != "usable" || value.Epoch != epoch {
-		return fmt.Errorf("maintenance changed native trust")
+	if rejectOverride {
+		if err != nil || value.Status != "usable" || value.Epoch != epoch {
+			return fmt.Errorf("rejected maintenance changed trust")
+		}
+	} else {
+		if err == nil || value.Status != "failed" || value.Reason != "maintenance_required" {
+			return fmt.Errorf("durable maintenance did not fence reopening")
+		}
+		for i := 0; i < 2; i++ {
+			state, stateErr := command(trust, nil, "maintenance-state")
+			if stateErr != nil || state.Status != "maintenance_required" || state.Epoch != epoch {
+				return fmt.Errorf("durable maintenance state lost")
+			}
+		}
 	}
 	return nil
 }
@@ -509,10 +521,8 @@ func run() (result error) {
 	if _, err = positive("trust-install-v2", 2, "inspect"); err != nil {
 		return err
 	}
-	for _, rejectOverride := range []bool{true, false} {
-		if err = productMaintenance(tool("installed-autonomous-product-v2"), tool("trust-install-v2"), 2, rejectOverride); err != nil {
-			return err
-		}
+	if err = productMaintenance(tool("installed-autonomous-product-v2"), tool("trust-install-v2"), 2, true); err != nil {
+		return err
 	}
 	if value, inspectErr := positive("autonomous-enrollment-install-v2", 0, "inspect"); inspectErr != nil || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
 		return fmt.Errorf("maintenance changed native identity")
@@ -544,6 +554,36 @@ func run() (result error) {
 	if _, statusErr := status("autonomous-enrollment-install-v2", "not_installed", "", 2); statusErr != nil {
 		return fmt.Errorf("clean status")
 	}
+	// The pending maintenance transaction deliberately cannot be resumed. Use a
+	// second explicit TEST identity after reservation regression, then teardown
+	// its exact scopes without erasing the production recovery boundary.
+	maintenanceIdentity, initializeErr := positive("autonomous-enrollment-install-v2", 0, "initialize")
+	if initializeErr != nil || len(maintenanceIdentity.PublicKey) != 64 || maintenanceIdentity.EnrollmentState != "idle" {
+		return fmt.Errorf("maintenance identity installation")
+	}
+	autonomousCreated = true
+	if err = productMaintenance(tool("installed-autonomous-product-v2"), tool("trust-install-v2"), 2, false); err != nil {
+		return err
+	}
+	if err = productReject(tool("installed-autonomous-product-v2")); err != nil {
+		return fmt.Errorf("pending maintenance product reopen: %w", err)
+	}
+	for _, name := range []string{"trust-install-v1", "trust-install-v2"} {
+		if err = negative(name, "upgrade"); err != nil {
+			return err
+		}
+		if err = negative(name, "initialize"); err != nil {
+			return err
+		}
+	}
+	observed, observeErr := command(tool("autonomous-enrollment-install-v2"), nil, "inspect-maintenance-test")
+	if observeErr != nil || observed.Status != "maintenance_required" || observed.PublicKey != maintenanceIdentity.PublicKey || observed.EnrollmentState != "idle" {
+		return fmt.Errorf("pending maintenance changed identity")
+	}
+	if value, cleanupErr := command(tool("autonomous-enrollment-install-v2"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "cleaned" {
+		return fmt.Errorf("maintenance identity TEST cleanup")
+	}
+	autonomousCreated = false
 	if value, cleanupErr := command(tool("release-manager-v2"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "cleaned" {
 		return fmt.Errorf("pre-transaction activation cleanup")
 	}

@@ -11,7 +11,7 @@ try {
     $env:REMOTEAPP_JOURNAL_TEST_EXECUTABLE = (Resolve-Path -LiteralPath $taskHelper).Path
     & $taskTests '-test.run=Test.*Maintenance' '-test.v=true' '-test.timeout=2m'
     if ($LASTEXITCODE -ne 0) { throw 'Native maintenance validation failed.' }
-    Write-Output 'VALIDATION PASSED: native maintenance join + exclusive lease + unchanged journal and epoch floor. NOT product uninstallation, IPC or signed installer acceptance.'
+    Write-Output 'VALIDATION PASSED: native maintenance lease + durable pending/crash fence + retained epoch floor. NOT product uninstallation, full product IPC or signed installer acceptance.'
 } finally {
     if ($null -eq $taskPreviousJournal) {
         Remove-Item Env:REMOTEAPP_JOURNAL_TEST_EXECUTABLE -ErrorAction SilentlyContinue

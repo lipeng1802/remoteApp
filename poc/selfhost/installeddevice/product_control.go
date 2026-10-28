@@ -9,7 +9,7 @@ import (
 )
 
 type ProductMaintenanceOwner interface {
-	Maintain(context.Context, clientowner.MaintenanceAction) error
+	MaintainDurable(context.Context, clientowner.MaintenanceAction) error
 }
 
 type JoinedProduct interface {
@@ -46,7 +46,7 @@ func ControlProduct(ctx context.Context, owner ProductMaintenanceOwner, handle J
 				}
 				limit, cancel := context.WithTimeout(ctx, 40*time.Second)
 				defer cancel()
-				return owner.Maintain(limit, func(life context.Context, epoch uint64) error {
+				return owner.MaintainDurable(limit, func(life context.Context, epoch uint64) error {
 					if err := output(map[string]any{"status": "maintenance_ready", "epoch": epoch, "joined": true}); err != nil {
 						return err
 					}

@@ -3,6 +3,7 @@ package trustprofile
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,21 @@ import (
 // ErrNotInstalled may be returned ONLY for an explicitly new installation,
 // not as a recovery fallback for deleted, corrupt or inaccessible state.
 var ErrNotInstalled = errors.New("trust_not_installed")
+
+var ErrMaintenance = errors.New("trust_maintenance_required")
+
+type maintenanceRecord struct {
+	Version int    `json:"version"`
+	State   string `json:"state"`
+	ID      string `json:"id"`
+}
+
+// MaintenanceState is diagnostic only, never a usable profile or deletion permit.
+type MaintenanceState struct {
+	State       string
+	Epoch       uint64
+	Transaction string
+}
 
 // InstallationAnchor comes from the trusted installer/binary, never a network
 // manifest, journal, peer or endpoint. Root rotation needs a separate ceremony.
@@ -43,11 +59,12 @@ type TrustJournal interface {
 type SessionQuiescer interface{ Quiesce(context.Context) error }
 
 type installationRecord struct {
-	Version    int     `json:"version"`
-	Anchor     string  `json:"anchor"`
-	Epoch      uint64  `json:"epoch"`
-	AcceptedAt int64   `json:"accepted_at"`
-	Profile    Profile `json:"profile"`
+	Version     int                `json:"version"`
+	Anchor      string             `json:"anchor"`
+	Epoch       uint64             `json:"epoch"`
+	AcceptedAt  int64              `json:"accepted_at"`
+	Profile     Profile            `json:"profile"`
+	Maintenance *maintenanceRecord `json:"maintenance,omitempty"`
 }
 
 type Installation struct {
@@ -83,6 +100,25 @@ func decodeInstallation(raw []byte) (installationRecord, error) {
 	var extra struct{}
 	if r.Read(&extra) != io.EOF {
 		return record, ErrTrust
+	}
+	if record.Maintenance == nil {
+		// Absence is the legacy active format. Explicit null is a malformed
+		// maintenance record, not permission to fall back to active state.
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil {
+			return record, ErrTrust
+		}
+		for name := range fields {
+			if strings.EqualFold(name, "maintenance") {
+				return record, ErrTrust
+			}
+		}
+	}
+	if m := record.Maintenance; m != nil {
+		id, e := hex.DecodeString(m.ID)
+		if e != nil || len(id) != 16 || hex.EncodeToString(id) != m.ID || m.Version != 1 || m.State != "pending" {
+			return record, ErrTrust
+		}
 	}
 	return record, nil
 }
@@ -122,22 +158,78 @@ func InitializeInstallation(a InstallationAnchor, p Profile, j TrustJournal, clo
 // Current still rejects expired profiles; only an explicit valid newer Accept
 // can recover. No missing/corrupt-state initialization fallback is permitted.
 func OpenInstallation(a InstallationAnchor, j TrustJournal, clock func() time.Time) (*Installation, error) {
+	r, raw, e := readInstallation(a, j, clock)
+	if e != nil {
+		return nil, e
+	}
+	if r.Maintenance != nil {
+		return nil, ErrMaintenance
+	}
+	return &Installation{anchor: a, journal: j, clock: clock, record: r, raw: append([]byte(nil), raw...)}, nil
+}
+
+func readInstallation(a InstallationAnchor, j TrustJournal, clock func() time.Time) (installationRecord, []byte, error) {
 	id, e := anchorID(a)
 	if e != nil || j == nil || clock == nil {
-		return nil, ErrTrust
+		return installationRecord{}, nil, ErrTrust
 	}
 	raw, e := j.Load()
 	if e != nil {
-		return nil, ErrTrust
+		return installationRecord{}, nil, ErrTrust
 	}
 	r, e := decodeInstallation(raw)
 	if e != nil || r.Version != 1 || r.Anchor != id || r.Epoch != r.Profile.Claims.Epoch || r.AcceptedAt < r.Profile.Claims.IssuedAt || r.AcceptedAt >= r.Profile.Claims.ExpiresAt || clock().Unix() < r.AcceptedAt {
-		return nil, ErrTrust
+		return installationRecord{}, nil, ErrTrust
 	}
 	if _, e = Verify(r.Profile, a.Root[:], a.Service, r.Epoch, time.Unix(r.AcceptedAt, 0)); e != nil {
-		return nil, ErrTrust
+		return installationRecord{}, nil, ErrTrust
 	}
-	return &Installation{anchor: a, journal: j, clock: clock, record: r, raw: append([]byte(nil), raw...)}, nil
+	return r, raw, nil
+}
+
+// ReadMaintenance validates historical signed authority but never opens a
+// session or returns the profile. Missing/corrupt records are not repairable here.
+func ReadMaintenance(a InstallationAnchor, j TrustJournal, clock func() time.Time) (MaintenanceState, error) {
+	r, _, err := readInstallation(a, j, clock)
+	if err != nil {
+		return MaintenanceState{}, err
+	}
+	if r.Maintenance == nil {
+		return MaintenanceState{}, ErrTrust
+	}
+	return MaintenanceState{State: r.Maintenance.State, Epoch: r.Epoch, Transaction: r.Maintenance.ID}, nil
+}
+
+// BeginMaintenance records intent under the live owner's exclusive lease
+// before cancellation/join. External maintenance must still wait for join.
+// It preserves the exact accepted profile/floor.
+// An uncertain receipt latches this Installation closed even if the marker won.
+func (s *Installation) BeginMaintenance() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.broken || s.record.Maintenance != nil || !s.unchanged() || s.clock().Unix() < s.record.AcceptedAt {
+		return ErrTrust
+	}
+	if _, e := Verify(s.record.Profile, s.anchor.Root[:], s.anchor.Service, s.floor(), s.clock()); e != nil {
+		return ErrTrust
+	}
+	var nonce [16]byte
+	if _, e := rand.Read(nonce[:]); e != nil {
+		return ErrTrust
+	}
+	r := s.record
+	r.Maintenance = &maintenanceRecord{Version: 1, State: "pending", ID: hex.EncodeToString(nonce[:])}
+	raw, e := encodeInstallation(r)
+	if e != nil || s.journal.Commit(s.raw, raw) != nil {
+		s.broken = true
+		return ErrTrust
+	}
+	s.record = r
+	s.raw = raw
+	if !s.unchanged() {
+		return ErrTrust
+	}
+	return nil
 }
 
 func (s *Installation) unchanged() bool {
@@ -162,7 +254,7 @@ func (s *Installation) Current() (Profile, []byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.clock()
-	if s.broken || !s.unchanged() || now.Unix() < s.record.AcceptedAt {
+	if s.broken || s.record.Maintenance != nil || !s.unchanged() || now.Unix() < s.record.AcceptedAt {
 		return Profile{}, nil, ErrTrust
 	}
 	cert, e := Verify(s.record.Profile, s.anchor.Root[:], s.anchor.Service, s.floor(), now)
@@ -178,7 +270,7 @@ func (s *Installation) Current() (Profile, []byte, error) {
 func (s *Installation) Accept(ctx context.Context, p Profile, sessions SessionQuiescer) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if ctx == nil || ctx.Err() != nil || s.broken || !s.unchanged() || s.clock().Unix() < s.record.AcceptedAt {
+	if ctx == nil || ctx.Err() != nil || s.broken || s.record.Maintenance != nil || !s.unchanged() || s.clock().Unix() < s.record.AcceptedAt {
 		return ErrTrust
 	}
 	if _, e := Advance(s.record.Profile, p, s.anchor.Root[:], s.anchor.Service, s.floor(), s.clock()); e != nil {
