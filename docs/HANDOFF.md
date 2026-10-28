@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r51 实验 DMG / Inno 安装前端双端实测
+
+新增独立`packaging/experimental`，不覆盖现有MVP安装包。Windows `NativeInstaller.iss`为per-user、不提权的一次性Setup，在`PrepareToInstall`解包到Inno临时目录，实际等待固定adapter退出，非零则返回准备失败；成功仅在本次Setup进程缓存。没有应用注册、自动启动或uninstaller。macOS `build-native-dmg.zsh`将原签名transaction原字节打入UDZO镜像，`Install.command`从同目录调用固定adapter并传递非零结果。TEST builder增加macOS构建时显式固定外部安装根，避免DMG执行时把目标定位到只读镜像；运行时仍不能传入目标路径。
+
+Windows沿用r50已核对归档的完整未消费解包副本（原TEST目标/凭据已清理），在`C:\Users\jarvis\remoteapp-platform-installers-r51`用现有Inno Setup 6.7.3实际生成两代Setup。Interactive Session 6实测epoch1安装、epoch2升级exit0；旧Setup降级返回7，重新查看active仍为epoch2。实际Setup回收临时解包目录，测试仅经签名TEST owners清理原生trust/set/activation/releases后删除空根，确认ROOT_ABSENT；临时`RemoteApp-R51-Platform-Installer`任务已删除。测试输出PASS/EXITCODE=0。编译器横幅为`Non-commercial use only`，正式商业打包前还需明确相应工具授权，当前不宣称具备商业发行授权。
+
+macOS fresh包`artifacts/connection-poc/platform-installers-mac.rtvtCs`中两代DMG均通过`hdiutil verify`。实际只读挂载后运行`Install.command`，epoch1/2安装升级通过，镜像外的固定TEST根正确激活；再次挂载旧DMG返回1且当前active仍为2。全部镜像已弹出，原生trust、bootstrap两set、activation、两release及空根精确清理通过。DMG SHA256：v1 `1e75e1ffdc416fe6bcadcfc944949b4335ecc6df112b64707519338ac85b4c2f`，v2 `33811c275e26f9e7ad4b98ada694a44fbf12750d145c80e21d76818e26ae3a56`。相关Go测试、shell语法和diff检查通过。
+
+本切片证明真实Setup/只读DMG到native adapter的安装、升级、失败传播与拒降级。没有验收正式发布签名、公证、提权生产根或GUI产品安装。卸载暂不提供：默认保留设备身份、epoch floor与恢复记录的策略已写入实验README；下一步需要实现活动owner停止/join、维护租约及程序文件删除边界，之后才能开放产品卸载。正式安装器还需将管理员文件安装与登录用户原生身份操作分离。详见`packaging/experimental/README.md`。
+
 ## 2026-10-28 r50 安装器统一入口与双端原生验收
 
 新增 `installeradapter.Run`、编译固定无参数 `installer-adapter` 和 `CompileInstallerAdapter`。绑定一个 install/upgrade 操作、目标epoch、release specification及三个同目录子程序摘要；先验证完整子链，每次执行前复核。按准备→release activation→promoted确认→bootstrap切换→两路status顺序执行，只有正常退出且精确目标epoch才成功。运行时参数、reset/uninstall、错epoch、坏阶段及超过有限重开预算均拒绝。子程序继续绑定各自root/payload/helper/manifest。

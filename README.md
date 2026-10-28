@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r51 独立实验安装前端已实际验证：Windows Inno Setup与macOS只读DMG都能调用固定adapter完成epoch1安装、epoch2升级；旧包降级被拒绝且active保持2，测试资源清理完成。源码见[实验打包入口](packaging/experimental/README.md)。正式签名、提权根、GUI安装及带会话join屏障的卸载仍待完成。
+
 r50 新增供平台安装器共用的编译固定安装/升级入口，预检三个子程序摘要，串联release准备/激活、bootstrap切换与重开确认。Windows桌面Session 6完整原生组合exit0，macOS最终fresh组合PASS，参数覆盖拒绝和TEST清理通过。当前仍未接DMG/Inno前端或正式发布签名；下一步接平台安装与卸载保留策略。见[安装器契约](poc/selfhost/public-server/INSTALLER_ADAPTER.md)。
 
 r49 Windows完整validator已在普通登录桌面Session 4完成fresh r16验收，返回`VALIDATION PASSED`且exit 0。实测收口了Windows目录持久化回执不确定、bootstrap指针只读属性阻止`MoveFileEx(REPLACE_EXISTING)`、分阶段fresh-owner重开及TEST清理最终状态证明；没有延时或把任意失败当成成功。macOS x86_64最终fresh原生组合同样PASS。覆盖两代签名release、原生trust/identity、可中断重开、bootstrap set原子升级、新旧稳定入口跟随active release及TEST状态清理。尚未接DMG/Inno、提权、Developer ID/Authenticode或完整产品会话。

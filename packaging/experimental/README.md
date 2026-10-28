@@ -1,0 +1,13 @@
+# Native installer preview
+
+These separate TEST transports invoke the fixed `installer-adapter` from a fresh transaction bundle. They do not modify the existing MVP DMG or RemoteAgent Setup. Build-time paths choose packaging inputs only; the adapter's target, epoch, operation, and child hashes remain compiled and cannot be overridden by installer command-line arguments.
+
+Windows: compile `NativeInstaller.iss` with Inno Setup 6 and `/DPayloadDir=<transaction-v1 or transaction-v2>`, `/DEpoch=1|2`, `/DOutputDir=<output>`. `PrepareToInstall` extracts the temporary payload, waits for the adapter's actual exit, and returns an error unless it exits 0. Success is cached only in the current Setup process. Setup is per-user, creates no frontend app directory, and registers no uninstaller. Temporary extraction is removed by Inno after exit. No `[UninstallDelete]` or recursive deletion of native state exists.
+
+macOS: `zsh build-native-dmg.zsh <absolute transaction directory> <absolute new dmg>`. This copies already signed executables without re-signing or changing hashes. Run `Install.command` from the mounted read-only image. It invokes the fixed sibling adapter and propagates a nonzero exit. The signed payload imports into the target compiled at build time; it does not install into the DMG. The TEST builder optionally accepts a final absolute macOS install root so the image need not target the build directory itself.
+
+Both transports retain native trust, stable identity, activation, epoch floor and version directories after installer exit. Ejecting/removing the installer image is not product uninstallation. A future uninstaller must stop/join the active owner and verify a maintenance lease before removing product files. Its default must retain device identity and anti-rollback records; deleting/resetting credentials requires a separate explicit workflow. For now no product uninstaller is exposed, so active-session removal cannot be triggered by these transports.
+
+The previews are unsigned/ad-hoc TEST artifacts for isolated current-user roots. Production delivery still requires authenticated protected extraction, publisher signature validation, privilege separation and the user-scoped identity handoff. An elevated installer must not create a replacement user identity in an administrator's vault.
+
+Inno behavior follows [PrepareToInstall](https://jrsoftware.org/ishelp/topic_scriptevents.htm) and [temporary extraction](https://jrsoftware.org/ishelp/topic_isxfunc_extracttemporaryfile.htm). Final validation must run in an interactive Windows session for native Credential Manager access.

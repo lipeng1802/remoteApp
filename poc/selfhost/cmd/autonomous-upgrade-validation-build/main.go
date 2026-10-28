@@ -146,8 +146,11 @@ func run() error {
 			return os.ErrInvalid
 		}
 		transactionRoot = os.Args[8]
-	} else if len(os.Args) != 8 {
-		return os.ErrInvalid
+	} else if len(os.Args) == 9 {
+		if !filepath.IsAbs(os.Args[8]) || filepath.Clean(os.Args[8]) != os.Args[8] || filepath.Dir(os.Args[8]) == os.Args[8] {
+			return os.ErrInvalid
+		}
+		transactionRoot = os.Args[8]
 	}
 	journal, err := read(journalPath)
 	if err != nil {
