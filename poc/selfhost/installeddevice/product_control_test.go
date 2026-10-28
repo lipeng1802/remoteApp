@@ -9,11 +9,59 @@ import (
 
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/trustprofile"
 )
 
 type controlHandle struct {
 	done chan struct{}
 	err  error
+}
+
+func TestProductPrepareRequiresExactFrameAndExplicitStateAdapter(t *testing.T) {
+	for _, mode := range []string{"unavailable", "override", "valid", "bad_finish"} {
+		t.Run(mode, func(t *testing.T) {
+			o := &controlOwner{}
+			h := &controlHandle{done: make(chan struct{})}
+			requests := make(chan Request, 2)
+			begin := Request{Op: "maintenance_prepare"}
+			if mode == "override" {
+				begin.ExpectedPublic = "override"
+			}
+			requests <- begin
+			finish := Request{Op: "maintenance_finish"}
+			if mode == "bad_finish" {
+				finish.Op = "stop"
+			}
+			requests <- finish
+			calls := 0
+			var prepare func(context.Context, func(context.Context, trustprofile.MaintenanceState) error) error
+			if mode != "unavailable" {
+				prepare = func(ctx context.Context, action func(context.Context, trustprofile.MaintenanceState) error) error {
+					calls++
+					return action(ctx, trustprofile.MaintenanceState{State: "pending", Epoch: 2, Transaction: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+				}
+			}
+			outputs := 0
+			e := controlProduct(context.Background(), o, h, requests, make(chan Request), func(v any) error {
+				outputs++
+				r := v.(map[string]any)
+				if r["transaction"] != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" || r["joined"] != true || len(r) != 4 {
+					t.Fatal(r)
+				}
+				return nil
+			}, prepare)
+			if mode == "valid" {
+				if e != nil || calls != 1 || outputs != 1 {
+					t.Fatal(e)
+				}
+			} else if e == nil {
+				t.Fatal("invalid prepare accepted")
+			}
+			if (mode == "unavailable" || mode == "override") && calls != 0 {
+				t.Fatal("override reached durable owner")
+			}
+		})
+	}
 }
 
 func (h *controlHandle) Done() <-chan struct{}      { return h.done }

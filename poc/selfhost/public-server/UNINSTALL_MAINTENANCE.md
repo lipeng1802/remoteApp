@@ -86,3 +86,17 @@ Windows目录刷新可能在写入／unlink已完成后返回不确定回执。`
 原生跨进程验收用真实Keychain／Windows Credential Manager签名helper：独立子进程重开同一身份，双向认证后取消真实本地TLS流；runner最终join前lease不释放、计划不存在。成功路径由子进程取得新native lease完成同一事务删除，原key可继续签名且epoch2保留；finish签名前中断时client失败、owner仍持lease、程序文件与pending保留，只有测试显式Close后才能重开诊断。协议测试另外覆盖重放、reflection、错误key／release／scope／epoch、路径覆盖、duplicate/oversize帧、伪造server transcript、stalled reader关闭和生产模式拒绝。
 
 macOS还实际编译并执行固定客户端，验证运行时覆盖拒绝、独立认证和删除。Windows便携runner须增加`protocol-tests.exe`、`vault-domain-tests.exe`，并使用含新domain的identity-vault；不能混用旧helper后声称通过。真实`installed-autonomous-product`目前仍用原可信继承管道，未自动开启该监听器。后续须做既有binding选择身份、受保护endpoint发现、发行方／OS peer身份与明确同意策略、实际产品binding／所有子进程／实际退出后再交接删除，以及Headscale跨机活会话验收；loopback+设备密钥PoC不替代这些生产边界。
+
+## 实际产品进程退出交接（r58，TEST-only）
+
+认证服务由产品外的`productmaintenance.Controller`监督层持有，不能随产品一起退出。`StartTest`先从既有原生autonomous binding读取并校验身份，关闭这次检查租约，再由可信callback重开对应OS signer；不创建身份，也不接受网络frame选择vault/public。随后启动hash-pinned实际产品，并在专用匿名管道发送无身份覆盖的open，验证ready。部分启动失败仍返回所持Controller，必须明确Release并join，不可因超时丢弃子进程或signer。
+
+实际`installed-autonomous-product`改用`ControlProductWithState`。原maintenance_begin/finish保持兼容；仅编译Test=true额外接受严格无附加字段的`maintenance_prepare`，由真实owner的MaintainDurableState在actual join后、仍持原生lease时返回transaction/epoch/joined。该命令只在原可信继承管道，产品本身不新增TCP listener，生产Test=false不能开启prepare。
+
+监督层将认证服务的MaintainDurableState映射到这个prepare，并把同一事务交给signed ready/finish回调。finish验证成功后，Controller.Close调用`Child.FinishMaintenance`：发送一次终态maintenance_finish，必须收到唯一、无附加字段的closed，等待stdout EOF、读取线程结束及真实进程零退出。不能用Exchange读到closed即放行，也不能把之前的普通Stop升级成maintenance finish。完成后还要取得新原生trust lease核对原pending transaction/epoch，以及重开binding租约核对记录完全不变；任一失败不签closed、不授权删除。认证signer位于产品根外，保持到Serve实际返回，再由明确Release关闭。
+
+确认中断不发送finish：实际产品继续持有trust/binding租约、等待可信管道，程序文件保留。监督层显式失败清理可发送普通stop使该未完成握手失败退出；即使后来join，也只代表清理结束，不变成卸载授权。Close期间超时或非零退出会锁闭该Controller，不会因晚到的零退出重新放行。Release遇到join deadline保留child/signer，必须对同一对象继续等待，不能强杀当作成功。
+
+原生验收用实际编译后的产品程序和原生binding/OS身份/enrollment idle状态，独立客户端完成双向认证，监督层等待完整退出后才删除包括实际产品exe在内的签名TEST文件集；然后binding租约可重新取得、记录及epoch2保留。中断finish分支验证实际产品仍存活、租约仍持有、exe不删，显式失败退出后pending保留。另有真实子进程夹具测试closed后迟迟不退出、非零退出、重复/额外字段closed、原生退出后复核失败和signer在deadline后的持有，均不能变成成功。
+
+`cmd/product-maintenance-validation-build`为两平台生成单代公开TEST fixture，离线签名key仅在内存，编译实际产品并保留已有helper/TLS payload字节。未使用的installer/launcher文件明确为fixture占位，不能运行或当作安装包；真实产品处于idle，不启动Headscale节点或实际远程TLS payload。Windows runner还要求`child-tests.exe`、`supervisor-tests.exe`及`fixture/fixture.json`，缺少入口必须报错而不是跳过。此轮证明实际产品生命周期/身份选择/退出交接，不替代跨机活跃产品会话、普通业务命令的监督层路由、正式发现/同意/publisher策略、未知逃逸后代进程隔离或签名安装器验收。实际launcher/GUI未自动接入该监督层。

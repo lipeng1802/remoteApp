@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r58 实际产品进程退出、原生binding身份选择与删除交接
+
+新增`productmaintenance.Controller`，认证服务由产品外监督层持有。StartTest从既有原生autonomous binding读身份并Check，关闭检查租约后才由可信callback重开该OS signer，启动hash-pinned实际产品并验证匿名管道open/ready；不初始化凭据或允许peer选身份。部分启动失败也可能返回持有资源的Controller，必须明确Release、实际join。监督层保留独立认证signer到Serve返回后，产品内runner signer的关闭不会破坏最后的签名回执。
+
+真实`installed-autonomous-product`改用`ControlProductWithState`；原begin/finish兼容，仅编译Test=true增加严格无selector/附加字段的maintenance_prepare，在真实owner actual join且仍持lease时返回native transaction/epoch/joined。监督层的MaintainDurableState映射到该可信继承管道，再给r57认证ready/finish回调。新的`Child.FinishMaintenance`以一次终态操作发送finish，要求唯一严格closed、stdout EOF、reader join、实际进程零退出；旧Stop不能被事后升级为维护成功。Controller.Close在实际join后，还须新trust lease核对原pending事务、重开binding lease确认原记录未变，才可签closed并让独立client调用RunExpectedTest删除。Close超时／fault／postcheck失败锁闭，不因晚到exit复活；Release join超时保留child和signer，只对同一操作等待，不force-kill当成功。
+
+完成成功与abort-finish真实产品两分支：依据原生binding选择随机OS设备身份，启动实际编译的installed-autonomous-product，产品确实独占trust/binding；独立客户端认证、prepare/finish后，等待实际产品/网络signer/binding/trust/reader收尾与零退出，再删除包括实际产品二进制在内的签名TEST文件集。删除后binding重新取得且记录不变，native事务仍epoch2。确认中断不发送finish，实际产品仍存活并持lease，exe保留；测试明确Release后以失败握手非零退出join，不能获得删除授权，pending/epoch2保留。此轮产品idle，不启动Headscale或tls-product payload；原有实际本地TLS流、OS身份重新签名／activation/profile/floor、崩溃恢复等r55–r57回归继续通过。
+
+新增实际子进程故障测试：closed后延迟exit、非零退出、重复closed、额外closed字段、先普通Stop后再finish、退出后的native复核失败和Release deadline后的signer保留，均拒绝成功交接。ControlProduct新prepare还覆盖不可用adapter、身份覆盖、错误finish及正确事务输出。所有生产Test=false及DMG/Inno卸载入口仍关闭；产品本身无新增TCP listener，认证仍是同一安装用户设备密钥principal，不是publisher或OS peer认证。
+
+`cmd/product-maintenance-validation-build`生成单代公开fixture：临时release signing key只在内存，实际编译产品并在Mac ad-hoc签名后再计算清单；native helpers/TLS payload保留原字节。未用到的installer/launcher名字明确为TEST占位，绝不能当安装器运行。runtime测试才创建随机OS身份/binding/enrollment idle状态，先Prepare保护根再签名候选导入／promote；fixture原件保持完整。Mac实际完整native组合8组及两个编译入口全部PASS，新增实际产品分支约16秒；日志`artifacts/connection-poc/product-exit-r58/mac/native-final-result.txt`。本机测试根已由teardown清理，native随机trust/binding/enrollment/vault scope按顺序精确回收。
+
+Windows最终包`artifacts/connection-poc/product-exit-r58/windows-product-exit-r58.zip` SHA256 `a5e90185adf208239ab002053d6d2cf80b939602bb0243dac8869063d3ead566`，上传校验后在Interactive Session 6实际执行30个顶层测试及全部子项，全部PASS、无SKIP、EXITCODE=0。含2组child finish、4组supervisor、7组protocol、2组vault domain、2组trust、5组file/handle、8组native；真实产品成功/中断约11秒。远端`C:\Users\jarvis\remoteapp-product-exit-r58\result.txt`，本地归档目录`windows-final-result.txt`。Windows使用新编译实际产品/removal/child/supervisor测试，未改变的r57 helper和protocol/file测试复用；runner新增要求`child-tests.exe`、`supervisor-tests.exe`及`fixture/fixture.json`，缺少必须失败，禁止静默SKIP。首个本地打包复制路径错误已在上传前纠正并重建完整归档，最终以该SHA为准。
+
+临时Interactive任务已删除，无该包残留进程；真实产品由测试监督层退出/失败join后才清理TEST状态，未改用户MVP安装、共享、Tailscale。相关9个Go package race、Windows vet、diff检查通过，核对Swift/C# TLS payload的closed输出仍为单status字段，与严格终态解析兼容。README／协议／runner已更新，本轮本地提交，不自动推送。
+
+下一任务组：补齐监督层的普通可信业务命令路由和既有launcher接入，使用真实Headscale跨机活动watch/session/payload验证维护撤销、网络资源全部join、实际产品退出到删除的整链；保持现有SSH管理通道独立。当前只监督由本层启动并持有管道的产品，不attach任意PID，不声称默认GUI已接入；完整产品idle退出通过不替代活会话。受保护endpoint发现、明确同意、publisher/OS peer身份、Unix最后级unlink/排他写入、未知逃逸后代隔离、签名发行/断电/整机重启仍待；目录壳和恢复计划保留，OS identity/trust/activation/binding/floor默认不删，切片4未标记完成。详见`poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md`。
+
 ## 2026-10-28 r57 独立进程设备密钥认证、固定客户端与原生闭环
 
 本轮完成TEST独立认证协议、原生signer domain隔离、固定编译独立客户端和跨进程实际删除／中断保留两个闭环。新增`localmaintenance.NewTest/RequestTest`，仅接受编译Test=true及数值loopback TCP地址，不开启Tailscale／公网维护端口。可信本地配置提供既有OS身份public/signer和地址，frame不能选择身份、root或文件路径。双向challenge/authenticate及ready/finish/closed分别使用phase domain，签名绑定双方新鲜256-bit nonce、随机服务instance、完整编译release specification摘要和scope，后半段额外绑定native transaction/epoch；相同channel不同编译release仍拒绝。未经认证不调用Maintain、不取消TLS或写pending；3秒认证前读取、40秒整个交换、最多16次无效尝试；一次有效authenticate即消费endpoint，任何后续错误都不重新武装。Close取消交换／关闭listener及活跃conn，资源释放仍要求Serve实际返回。

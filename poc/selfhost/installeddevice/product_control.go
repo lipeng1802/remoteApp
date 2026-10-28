@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/clientowner"
+	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
 
@@ -24,6 +25,22 @@ type JoinedProduct interface {
 // The caller must Stop/join the runner before releasing borrowed resources on
 // every return path; a rejected control frame can precede runner completion.
 func ControlProduct(ctx context.Context, owner ProductMaintenanceOwner, handle JoinedProduct, requests <-chan Request, commands chan<- Request, output func(any) error) error {
+	return controlProduct(ctx, owner, handle, requests, commands, output, nil)
+}
+
+// ControlProductWithState enables a selector-free prepare on the inherited
+// trusted parent pipe for TEST releases only. Existing begin/finish is unchanged.
+func ControlProductWithState(ctx context.Context, r trustinstall.Release, owner *clientowner.Owner, handle JoinedProduct, requests <-chan Request, commands chan<- Request, output func(any) error) error {
+	var prepare func(context.Context, func(context.Context, trustprofile.MaintenanceState) error) error
+	if r.Specification().Test && owner != nil {
+		prepare = func(life context.Context, action func(context.Context, trustprofile.MaintenanceState) error) error {
+			return owner.MaintainDurableState(life, r, action)
+		}
+	}
+	return controlProduct(ctx, owner, handle, requests, commands, output, prepare)
+}
+
+func controlProduct(ctx context.Context, owner ProductMaintenanceOwner, handle JoinedProduct, requests <-chan Request, commands chan<- Request, output func(any) error, prepare func(context.Context, func(context.Context, trustprofile.MaintenanceState) error) error) error {
 	if ctx == nil || owner == nil || handle == nil || requests == nil || commands == nil || output == nil {
 		return trustprofile.ErrTrust
 	}
@@ -39,6 +56,27 @@ func ControlProduct(ctx context.Context, owner ProductMaintenanceOwner, handle J
 			}
 			if request.Op == "maintenance_finish" {
 				return trustprofile.ErrTrust
+			}
+			if request.Op == "maintenance_prepare" {
+				if prepare == nil || request != (Request{Op: "maintenance_prepare"}) {
+					return trustprofile.ErrTrust
+				}
+				life, cancel := context.WithTimeout(ctx, 40*time.Second)
+				defer cancel()
+				return prepare(life, func(joined context.Context, state trustprofile.MaintenanceState) error {
+					if output(map[string]any{"status": "maintenance_ready", "epoch": state.Epoch, "joined": true, "transaction": state.Transaction}) != nil {
+						return trustprofile.ErrTrust
+					}
+					select {
+					case <-joined.Done():
+						return joined.Err()
+					case finish, ok := <-requests:
+						if !ok || finish != (Request{Op: "maintenance_finish"}) {
+							return trustprofile.ErrTrust
+						}
+						return nil
+					}
+				})
 			}
 			if request.Op == "maintenance_begin" {
 				if request != (Request{Op: "maintenance_begin"}) {

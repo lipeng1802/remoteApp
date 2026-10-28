@@ -1,6 +1,8 @@
 # Personal Remote Desktop MVP
 
-r57 增加独立本地进程的 OS 设备密钥双向认证及固定编译客户端：绑定双方 nonce、服务实例、完整编译 release 和原生维护事务，认证失败不停止会话，确认中断保留租约与 pending。当前是 TEST 授权策略，尚未验证发行方签名、产品进程实际退出、正式发现／同意流程或跨机产品卸载。见[独立维护认证边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
+r58 增加实际产品的 TEST 外部监督层：身份从既有原生 binding 读取，维护完成后必须观察产品零退出、输出 EOF、读取线程结束并重新核验原生租约，才向独立客户端交接删除。确认中断保留产品和程序文件。当前验收为实际 idle 产品；活跃 Headscale 跨机会话、正式发现／同意流程及签名发行仍待。见[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
+
+r57 增加独立本地进程的 OS 设备密钥双向认证及固定编译客户端：绑定双方 nonce、服务实例、完整编译 release 和原生维护事务，认证失败不停止会话，确认中断保留租约与 pending。当前是 TEST 授权策略，尚未验证发行方签名、正式发现／同意流程或跨机产品卸载。见[独立维护认证边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
 r56 增加删除句柄绑定与可信进程内的活动 owner 收尾联动：真实本地 TLS 流全部停止、runner 实际 join、原生租约重新取得且核对同一事务之后，才进入 TEST 删除。Windows 使用核验后的文件句柄删除，macOS 使用固定父目录 fd；实际跨机产品会话及正式发行仍待完成。见[维护与删除边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 

@@ -38,13 +38,16 @@ func TestProcessFixture(t *testing.T) {
 		if r.Read(&v) != nil {
 			os.Exit(0)
 		}
-		if v.Op == "stop" {
+		if v.Op == "stop" || v.Op == "maintenance_finish" {
 			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
-			if mode == "slow" {
+			if mode == "slow" || mode == "finish-slow" {
 				time.Sleep(600 * time.Millisecond)
 			}
 			if mode == "falseclosed" {
 				os.Exit(7)
+			}
+			if mode == "finish-duplicate" {
+				json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
 			}
 			os.Exit(0)
 		}
@@ -62,6 +65,55 @@ func TestProcessFixture(t *testing.T) {
 				json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "ready", "port": port})
 			}
 		}
+	}
+}
+
+func TestMaintenanceFinishWaitsForActualExitAndRetainsJoin(t *testing.T) {
+	c := start(t, "finish-slow")
+	ready(t, c)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	if e := c.FinishMaintenance(ctx); !errors.Is(e, context.DeadlineExceeded) {
+		t.Fatal("finish did not wait", e)
+	}
+	select {
+	case <-c.Exited():
+		t.Fatal("fixture exited too early")
+	default:
+	}
+	select {
+	case <-c.Done():
+		t.Fatal("closed frame treated as join")
+	default:
+	}
+	life, stop := limit()
+	defer stop()
+	if e := c.Stop(life); e != nil {
+		t.Fatal("explicit retry did not join original finish", e)
+	}
+}
+
+func TestMaintenanceFinishRejectsFailedDuplicateAndPriorStop(t *testing.T) {
+	for _, mode := range []string{"falseclosed", "finish-duplicate", "normal"} {
+		t.Run(mode, func(t *testing.T) {
+			c := start(t, mode)
+			ready(t, c)
+			ctx, cancel := limit()
+			defer cancel()
+			if mode == "normal" {
+				if e := c.Stop(ctx); e != nil {
+					t.Fatal(e)
+				}
+			}
+			if e := c.FinishMaintenance(ctx); e == nil {
+				t.Fatal("invalid finish accepted")
+			}
+			select {
+			case <-c.Done():
+			case <-ctx.Done():
+				t.Fatal("failed finish not joined")
+			}
+		})
 	}
 }
 func spec(t *testing.T, mode string) Spec {

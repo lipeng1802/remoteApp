@@ -3,6 +3,7 @@
 package processowner
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -41,6 +42,7 @@ type Child struct {
 	readDone, exited, done     chan struct{}
 	waitErr, readErr, closeErr error
 	stopOnce                   sync.Once
+	finishMode                 atomic.Uint32
 }
 
 func Start(s Spec) (*Child, error) {
@@ -179,10 +181,24 @@ func (c *Child) Exchange(ctx context.Context, command any) (json.RawMessage, err
 // It never kills a child or releases ownership on a deadline. Even a "closed"
 // reply is insufficient: zero exit + stdout EOF + reader join are required.
 func (c *Child) Stop(ctx context.Context) error {
+	return c.finish(ctx, []byte("{\"Op\":\"stop\"}\n"), 1)
+}
+
+// FinishMaintenance is a terminal trusted-pipe command, not an Exchange of a
+// reusable closed reply. It requires exactly one closed frame, EOF, reader join
+// and actual zero exit. A timeout retains this same finish operation; no kill.
+func (c *Child) FinishMaintenance(ctx context.Context) error {
+	return c.finish(ctx, []byte("{\"Op\":\"maintenance_finish\"}\n"), 2)
+}
+
+func (c *Child) finish(ctx context.Context, command []byte, mode uint32) error {
 	if ctx == nil {
 		return ErrProcess
 	}
-	c.stopOnce.Do(func() { close(c.stopping); go c.stop() })
+	c.stopOnce.Do(func() { c.finishMode.Store(mode); close(c.stopping); go c.stop(command) })
+	if mode == 2 && c.finishMode.Load() != 2 {
+		return ErrProcess
+	}
 	select {
 	case <-c.done:
 		return c.closeErr
@@ -190,10 +206,10 @@ func (c *Child) Stop(ctx context.Context) error {
 		return ctx.Err()
 	}
 }
-func (c *Child) stop() {
+func (c *Child) stop(command []byte) {
 	c.mu.Lock()
 	if !c.fault.Load() {
-		if _, e := c.in.Write([]byte("{\"Op\":\"stop\"}\n")); e != nil {
+		if _, e := c.in.Write(command); e != nil {
 			c.fault.Store(true)
 		}
 	}
@@ -203,7 +219,9 @@ func (c *Child) stop() {
 		var v struct {
 			Status string `json:"status"`
 		}
-		if json.Unmarshal(r.value, &v) != nil || v.Status != "closed" || closed {
+		d := json.NewDecoder(bytes.NewReader(r.value))
+		d.DisallowUnknownFields()
+		if d.Decode(&v) != nil || d.Decode(new(any)) != io.EOF || v.Status != "closed" || closed {
 			c.fault.Store(true)
 		} else {
 			closed = true

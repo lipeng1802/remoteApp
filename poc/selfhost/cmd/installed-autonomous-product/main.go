@@ -163,5 +163,5 @@ func run(output func(any) error) (result error) {
 	}()
 	// Revocation, watch failure, product failure and local stop all converge on
 	// the same joined owner path. No force-kill or automatic re-enrollment here.
-	return installeddevice.ControlProduct(ctx, owner, handle, requests, commands, output)
+	return installeddevice.ControlProductWithState(ctx, release, owner, handle, requests, commands, output)
 }

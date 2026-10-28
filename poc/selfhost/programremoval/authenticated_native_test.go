@@ -63,7 +63,11 @@ func TestAuthenticatedRemovalClientFixture(t *testing.T) {
 	}
 	h := sha256.Sum256(raw)
 	pub := os.Getenv("REMOTEAPP_AUTH_MAINT_PUBLIC")
-	signer, err := clientruntime.NativeSigner(vault, hex.EncodeToString(h[:]), r.Scope(), pub)()
+	vaultScope := os.Getenv("REMOTEAPP_AUTH_MAINT_VAULT_SCOPE")
+	if vaultScope == "" {
+		vaultScope = r.Scope()
+	}
+	signer, err := clientruntime.NativeSigner(vault, hex.EncodeToString(h[:]), vaultScope, pub)()
 	if err != nil {
 		t.Fatal(err)
 	}
