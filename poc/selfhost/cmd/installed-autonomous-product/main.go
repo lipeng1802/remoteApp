@@ -80,11 +80,11 @@ func run(output func(any) error) (result error) {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	commands := make(chan installeddevice.Request)
+	requests := make(chan installeddevice.Request)
 	readerDone := make(chan struct{})
 	go func() {
 		defer close(readerDone)
-		defer close(commands)
+		defer close(requests)
 		reader := privatepipe.NewReader(os.Stdin)
 		for {
 			var request installeddevice.Request
@@ -93,7 +93,7 @@ func run(output func(any) error) (result error) {
 				request = installeddevice.Request{Op: "invalid"}
 			}
 			select {
-			case commands <- request:
+			case requests <- request:
 			case <-ctx.Done():
 				return
 			}
@@ -106,7 +106,7 @@ func run(output func(any) error) (result error) {
 
 	var first installeddevice.Request
 	select {
-	case request, ok := <-commands:
+	case request, ok := <-requests:
 		if !ok {
 			return trustprofile.ErrTrust
 		}
@@ -140,6 +140,7 @@ func run(output func(any) error) (result error) {
 		Executable: filepath.Join(dir, "tls-product"+suffix),
 		SHA256:     embeddedProductDigest,
 	}}
+	commands := make(chan installeddevice.Request)
 	runner := installeddevice.WatchedEnrollmentRunnerWithSession(
 		release,
 		open,
@@ -152,7 +153,15 @@ func run(output func(any) error) (result error) {
 	if err != nil {
 		return err
 	}
+	// Routing failures can return before the runner has observed cancellation.
+	// This defer is registered after binding.Close, so the runner and signer
+	// must actually join before the installed binding lease is released.
+	defer func() {
+		if stopErr := owner.Stop(context.Background()); stopErr != nil {
+			result = stopErr
+		}
+	}()
 	// Revocation, watch failure, product failure and local stop all converge on
 	// the same joined owner path. No force-kill or automatic re-enrollment here.
-	return handle.Wait(context.Background())
+	return installeddevice.ControlProduct(ctx, owner, handle, requests, commands, output)
 }

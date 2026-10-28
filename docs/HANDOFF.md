@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r53 实际自主产品的继承管道维护握手
+
+新增`installeddevice.ControlProduct`并接入真实`installed-autonomous-product`。沿原可信本地父进程建立的专用匿名管道路由普通请求，严格无覆盖字段的`maintenance_begin`调用当前owner.Maintain；runner实际join后，仍持native租约才发`maintenance_ready/epoch/joined`。同管道`maintenance_finish`完成后关闭stdin，产品结束binding/journal/读取线程，最后closed/EOF/actual exit。40秒整体维护期限；提前finish、身份/设备/network覆盖、断管、取消、输出失败与runner故障均锁闭。没有新增网络或可供任意本机进程连接的socket，父进程可信建立管道仍是前提。
+
+补齐控制错误的收尾顺序：ControlProduct可早于runner退出，因此真实产品在所有返回路径先Stop/join，再释放其借用的安装binding，最后释放trust journal。维护状态只存在当前owner/连接，不是独立文件删除许可证；本切片没有接收删除路径或删除产品文件。
+
+协议回归覆盖join前无ready、finish前保持、错误字段/顺序、owner/output fault、断管、取消、正常stop转发；installeddevice/clientowner/clientruntime/desktopcontrol race及Windows amd64 vet通过。原生组合新增在epoch2已安装真实OS身份下启动实际compiled product，验证覆盖请求非零拒绝；正常维护前后其他helper均争租约失败；finish后closed/EOF/actual exit0；信任仍epoch2且设备公钥和idle状态不变。该场景仅启动idle控制runner，不建立Headscale或活跃远程TLS会话。
+
+初版macOS组合PASS后审查补上错误路径Stop/join次序，已用最终fresh `artifacts/connection-poc/product-maintenance-r53-final-mac.qWMC6y/bundle`重新完整PASS并清理。最终Windows包`artifacts/connection-poc/product-maintenance-r53-final-win.zip`，SHA256 `ab996ae7d8263589d08a92fd381f9190a0e1e1cb7b7d1ee93b9252f9afef87cb`；中途SSH/大包上传停滞，停止旧上传后压缩重传，最终64项摘要通过。在`C:\Users\jarvis\remoteapp-product-maintenance-r53-final`的Interactive Session 6完整验收PASS/EXITCODE=0，测试根确认不存在，`RemoteApp-R53-Product-Maintenance`临时任务已删除。早期未完成上传不是验收结果。
+
+下一步仍需持久维护/卸载事务阻止新进程和崩溃重开竞争、独立卸载器认证连接、签名文件集与对象身份固定的程序删除及中断重开；默认保留OS身份、trust、activation和epoch floor。实际卸载前端仍关闭。协议细节见`poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md`。
+
 ## 2026-10-28 r52 卸载前维护屏障与双端原生租约验证
 
 新增可信进程内`clientowner.Owner.Maintain(ctx, action)`。请求后永久封闭本owner的Start/Upgrade，先cancel并实际join现有Runner，再从仍持租约的journal读取committed epoch，在owner串行锁及原生独占租约下执行一次action。Close不能越过运行中的action。join超时可显式继续同一次join；runner故障不放行action；action执行前即记attempted，错误/取消/不确定回执不得在同一owner重做。方法不改写或删除trust/identity/activation/floor，不输出可跨进程复用的维护回执。

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r53 实际自主产品已接专用继承管道的维护握手：join后才报告ready，finish前保持原生租约，所有错误路径先join再释放安装binding。macOS和Windows桌面完整原生组合PASS，覆盖身份参数覆盖拒绝、真实产品退出及身份/epoch保持。当前是可信父进程的idle产品控制验收；独立卸载器认证、持久事务、活会话维护和真实文件删除仍待。见[维护协议](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
+
 r52 新增卸载前owner维护屏障：封闭新会话、实际join后才执行维护action，操作期间保留原生独占租约，默认保留信任和防回退记录。macOS/Windows桌面原生四项测试均PASS，相关race回归通过。当前只验证TEST程序marker删除，产品卸载IPC、持久事务及真实文件删除仍待接入。见[维护屏障](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
 r51 独立实验安装前端已实际验证：Windows Inno Setup与macOS只读DMG都能调用固定adapter完成epoch1安装、epoch2升级；旧包降级被拒绝且active保持2，测试资源清理完成。源码见[实验打包入口](packaging/experimental/README.md)。正式签名、提权根、GUI安装及带会话join屏障的卸载仍待完成。

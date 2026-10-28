@@ -29,6 +29,7 @@ type reply struct {
 	TrustEpoch      uint64 `json:"trust_epoch"`
 	Reason          string `json:"reason"`
 	Phase           string `json:"phase"`
+	Joined          bool   `json:"joined"`
 }
 
 type releaseLayout struct {
@@ -115,6 +116,96 @@ func productReject(path string) error {
 	var extra any
 	if reader.Read(&failed) != nil || failed.Status != "failed" || reader.Read(&extra) != io.EOF {
 		return fmt.Errorf("invalid product rejection")
+	}
+	return nil
+}
+
+// Exercises the actual compiled product and its native signer/binding without
+// provisioning a network node. Readiness is confined to the inherited pipe.
+func productMaintenance(path, trust string, epoch uint64, rejectOverride bool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path)
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		in.Close()
+		return err
+	}
+	cmd.Stderr = io.Discard
+	if err = cmd.Start(); err != nil {
+		in.Close()
+		out.Close()
+		return err
+	}
+	joined := false
+	defer func() {
+		in.Close()
+		cancel()
+		if !joined {
+			_ = cmd.Wait()
+		}
+	}()
+	w := json.NewEncoder(in)
+	r := privatepipe.NewReader(out)
+	if w.Encode(map[string]string{"Op": "open"}) != nil {
+		return fmt.Errorf("product open write")
+	}
+	var value reply
+	if r.Read(&value) != nil || value.Status != "ready" {
+		return fmt.Errorf("product open ready")
+	}
+	if value, err := command(trust, nil, "inspect"); err == nil || value.Status != "failed" {
+		return fmt.Errorf("product did not retain native lease")
+	}
+	begin := map[string]string{"Op": "maintenance_begin"}
+	if rejectOverride {
+		begin["ExpectedPublic"] = "override"
+	}
+	if w.Encode(begin) != nil {
+		return fmt.Errorf("maintenance begin write")
+	}
+	if rejectOverride {
+		in.Close()
+	}
+	if r.Read(&value) != nil {
+		return fmt.Errorf("maintenance reply")
+	}
+	if rejectOverride {
+		if value.Status != "failed" {
+			return fmt.Errorf("maintenance override accepted")
+		}
+	} else {
+		if value.Status != "maintenance_ready" || value.Epoch != epoch || !value.Joined {
+			return fmt.Errorf("maintenance unjoined reply")
+		}
+		if value, err := command(trust, nil, "inspect"); err == nil || value.Status != "failed" {
+			return fmt.Errorf("maintenance lease released before finish")
+		}
+		if w.Encode(map[string]string{"Op": "maintenance_finish"}) != nil {
+			return fmt.Errorf("maintenance finish write")
+		}
+		in.Close()
+		if r.Read(&value) != nil || value.Status != "closed" {
+			return fmt.Errorf("maintenance product close")
+		}
+	}
+	in.Close()
+	var extra any
+	if r.Read(&extra) != io.EOF {
+		return fmt.Errorf("maintenance output not joined")
+	}
+	exitErr := cmd.Wait()
+	joined = true
+	if ctx.Err() != nil || (rejectOverride && exitErr == nil) || (!rejectOverride && exitErr != nil) {
+		return fmt.Errorf("maintenance product actual exit")
+	}
+	value, err = command(trust, nil, "inspect")
+	if err != nil || value.Status != "usable" || value.Epoch != epoch {
+		return fmt.Errorf("maintenance changed native trust")
 	}
 	return nil
 }
@@ -417,6 +508,14 @@ func run() (result error) {
 	}
 	if _, err = positive("trust-install-v2", 2, "inspect"); err != nil {
 		return err
+	}
+	for _, rejectOverride := range []bool{true, false} {
+		if err = productMaintenance(tool("installed-autonomous-product-v2"), tool("trust-install-v2"), 2, rejectOverride); err != nil {
+			return err
+		}
+	}
+	if value, inspectErr := positive("autonomous-enrollment-install-v2", 0, "inspect"); inspectErr != nil || value.PublicKey != first.PublicKey || value.EnrollmentState != "idle" {
+		return fmt.Errorf("maintenance changed native identity")
 	}
 	if value, cleanupErr := command(tool("autonomous-enrollment-install-v2"), nil, "cleanup-test"); cleanupErr != nil || value.Status != "cleaned" {
 		return fmt.Errorf("autonomous cleanup status=%s reason=%s exit=%v", value.Status, value.Reason, cleanupErr)
