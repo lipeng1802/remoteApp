@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r55 签名程序文件删除、原生阶段提交与崩溃续接
+
+按用户希望增加单轮任务量，本轮合并完成删除计划、持久删除阶段及中断恢复三个相关部分，仍只开放隔离TEST命名空间。`installrelease`新增固定`.program-removal.json`：保留两类原始签名manifest、bootstrap pointer、根／目录／文件volume/object身份与内容摘要；允许路径从经过编译公钥验证的固定文件清单重新推导，最多各8个版本。完整校验并O_EXCL保存计划后，`RemovalTransaction`原生CAS提交其SHA-256，将同一maintenance事务从pending推进deleting；只有该阶段才允许程序文件缺失。只逐个删除计划内程序文件及pointer，不用RemoveAll，不删除目录，计划／目录空壳保留；验证全部缺失后提交files_removed，重复完成幂等，文件重现拒绝。所有阶段保留profile/anchor/accepted_at/epoch/transaction且拒绝普通启动、初始化和升级；没有reset、恢复active或删除用户凭据入口。
+
+`programremoval.RunTest`持有factory(false)取得的真实原生lease到结束，拒绝编译Test=false、自身位于目标根内和缺失／替换的已绑定计划。新增无运行时参数的`cmd/program-removal-test`及`CompileProgramRemovalTest`，固定root与release，pin根外同目录journal helper。macOS实际编译该入口、拒绝传入运行时root覆盖、实际删除和重复重开均PASS；这项独立编译入口只在Mac实测，Windows本轮验证原生核心与便携测试包，未宣称Windows正式卸载器已验收。
+
+macOS最终ad-hoc测试二进制原生3组及编译入口全部PASS：两代真实签名文件集合，首个真实unlink后子进程exit78跳过defer；helper经EOF释放真实lease，新进程沿同一plan digest／transaction继续，重复完成仍epoch2；OS设备身份重新签名成功，activation原字节不变，trust除maintenance外字段原字节不变。另验pending已有完整计划继续、异事务／损坏／绑定后丢失与替换计划拒绝。纯文件测试覆盖额外用户文件、内容变化、对象替换、硬链接、链接／reparse、目录替换、未来epoch和绑定前缺失；原生CAS丢回执测试要求新事务对象重开。
+
+Windows最终包SHA256 `101477fcbf538b2ca5b3eefc82466fc159efa1d1c7d42735157a09c8d4e4bebd`已通过SSH传输并在远端核对，在Interactive Session 6实际执行8个顶层测试及全部子项，全部PASS，无SKIP，EXITCODE=0。首次file symlink夹具因普通桌面无特权而跳过，最终改为无需该特权的真实Windows目录junction，reparse拒绝通过。Windows目录刷新存在操作已完成但回执不确定的情形：新增明确ErrRemovalReceipt并立即停止尝试；测试只对该错误显式重开新native owner核验原计划后继续，不对native错误／任意失败自动重试。pending捕获的计划损坏不覆盖、绑定前缺文件拒绝、绑定后计划缺失不重捕获。初轮bootstrap fixture刷新回执也按已有严格候选重开和pointer精确验证处理；未放宽生产目录校验。
+
+最终归档`artifacts/connection-poc/program-removal-r55/windows-program-removal-r55.zip`；远端`C:\Users\jarvis\remoteapp-program-removal-r55`，日志`result.txt`及本机`windows-final-result.txt`；Mac日志`mac/native-final-result.txt`。便携runner为`packaging/experimental/run-removal-validation.ps1`，不依赖目标安装Go。测试随机原生journal／activation／设备身份与临时根由teardown清理；临时Interactive任务已删除，未运行产品共享或修改用户安装根。相关8个Go package race回归、Windows amd64 vet及diff检查通过。本轮按持续授权完成本地提交，不自动推送远程。
+
+下一步集中完成生产删除边界、独立卸载器到live owner的认证与活会话cancel/join联动，再集成签名安装／卸载前端。TEST路径检查与unlink仍存在同用户恶意并发TOCTOU边界；尚未实现平台handle-relative删除、断电持久性、删除目录壳、恢复active或正式卸载验收，不能直接把Test改false发行。OS身份／trust／activation／binding／epoch floor默认保留。实验DMG/Inno仍不提供卸载入口，切片4整体仍未标记完成。协议细节见`poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md`。
+
 ## 2026-10-28 r54 持久维护意图、崩溃重开拒绝与原生验证
 
 新增trust installation record的可选`maintenance`字段，保存version=1、state=pending和本机随机128-bit transaction ID；原profile、anchor、epoch、accepted_at保持不变。absence兼容原active记录，显式null、损坏/未知marker/version/阶段/字段均拒绝。`OpenInstallation`在验证历史签名与anchor后对pending返回ErrMaintenance；Current/Accept及新owner/offline inspect/init/upgrade不可越过，旧严格schema也拒绝附加字段。新增只读`ReadMaintenance`/`OfflineOwner.MaintenanceState`和`trust-install maintenance-state`，只报告维护所需状态/epoch，不发放profile或删除许可。

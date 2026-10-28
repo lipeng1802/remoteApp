@@ -164,6 +164,16 @@ func CompileInstallerAdapter(ctx context.Context, goexe, module, target, dest st
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installer-adapter", extra, now)
 }
 
+// CompileProgramRemovalTest is deliberately unavailable for production scopes.
+// The independent executable/helper must be packaged outside the removal root.
+func CompileProgramRemovalTest(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot string, now time.Time) error {
+	if !s.Test || !validInstallRoot(target, installRoot) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot))
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/program-removal-test", extra, now)
+}
+
 func compileReleaseTool(ctx context.Context, goexe, module, target, dest string, s Specification, entry, extra string, now time.Time) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust

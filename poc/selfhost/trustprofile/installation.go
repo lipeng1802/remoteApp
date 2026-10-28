@@ -23,9 +23,10 @@ var ErrNotInstalled = errors.New("trust_not_installed")
 var ErrMaintenance = errors.New("trust_maintenance_required")
 
 type maintenanceRecord struct {
-	Version int    `json:"version"`
-	State   string `json:"state"`
-	ID      string `json:"id"`
+	Version    int    `json:"version"`
+	State      string `json:"state"`
+	ID         string `json:"id"`
+	PlanSHA256 string `json:"plan_sha256,omitempty"`
 }
 
 // MaintenanceState is diagnostic only, never a usable profile or deletion permit.
@@ -33,6 +34,7 @@ type MaintenanceState struct {
 	State       string
 	Epoch       uint64
 	Transaction string
+	PlanSHA256  string
 }
 
 // InstallationAnchor comes from the trusted installer/binary, never a network
@@ -116,7 +118,12 @@ func decodeInstallation(raw []byte) (installationRecord, error) {
 	}
 	if m := record.Maintenance; m != nil {
 		id, e := hex.DecodeString(m.ID)
-		if e != nil || len(id) != 16 || hex.EncodeToString(id) != m.ID || m.Version != 1 || m.State != "pending" {
+		validPlan := m.PlanSHA256 == "" && m.State == "pending"
+		if m.State == "deleting" || m.State == "files_removed" {
+			b, err := hex.DecodeString(m.PlanSHA256)
+			validPlan = err == nil && len(b) == 32 && hex.EncodeToString(b) == m.PlanSHA256
+		}
+		if e != nil || len(id) != 16 || hex.EncodeToString(id) != m.ID || m.Version != 1 || !validPlan {
 			return record, ErrTrust
 		}
 	}
@@ -197,7 +204,7 @@ func ReadMaintenance(a InstallationAnchor, j TrustJournal, clock func() time.Tim
 	if r.Maintenance == nil {
 		return MaintenanceState{}, ErrTrust
 	}
-	return MaintenanceState{State: r.Maintenance.State, Epoch: r.Epoch, Transaction: r.Maintenance.ID}, nil
+	return MaintenanceState{State: r.Maintenance.State, Epoch: r.Epoch, Transaction: r.Maintenance.ID, PlanSHA256: r.Maintenance.PlanSHA256}, nil
 }
 
 // BeginMaintenance records intent under the live owner's exclusive lease

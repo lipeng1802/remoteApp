@@ -12,7 +12,7 @@ action必须遵守context，结束前join其子任务，不得重入owner或删�
 
 Windows便携验收包需要同目录的`maintenance-tests-win.exe`、`trust-journal.exe`及`run-maintenance-validation.ps1`。runner显式提供helper，不允许因缺少环境变量跳过原生项，并在结束后恢复进程环境。测试只使用随机TEST命名空间，清理由test teardown完成。
 
-后续仍需：独立卸载器到live owner的认证连接；固定卸载器核验signed文件集合与对象身份；持久维护/卸载事务阻止新进程与崩溃重开竞争；删除中断后按精确剩余文件重开；默认保留原生身份及防回退记录。完成这些之前，实验DMG/Inno继续不提供产品卸载入口。此屏障以Runner“返回前全部join”的契约为前提，不能证明任意逃逸子进程或被强杀进程的后代已退出。
+r53–r55依次补上继承管道握手、持久维护阻断及TEST文件删除恢复，详见下面各节。独立卸载器到live owner的认证连接、生产文件删除边界与完整发行集成仍待完成，实验DMG/Inno继续不提供产品卸载入口。此屏障以Runner“返回前全部join”的契约为前提，不能证明任意逃逸子进程或被强杀进程的后代已退出。
 
 ## 实际自主产品的维护控制（r53）
 
@@ -37,3 +37,23 @@ marker保留原profile、accepted_at、anchor与epoch；不改OS设备身份、b
 原生测试覆盖正常关闭、真实子进程exit77跳过defer（发生于已取消但尚未join的runner）、helper观察EOF后释放租约、新进程拒绝启动/重装/升级，以及真实native commit后模拟丢失回执。后者是回执故障夹具，不宣称真实磁盘写失败。原生epoch2及同一事务ID在重开后保留。
 
 组合validator在原身份升级/拒绝非法请求与pending-binding回归结束后，显式建立第二个随机TEST身份验证durable产品握手。退出后普通product重开与两代trust init/upgrade都拒绝；只读maintenance诊断仍为epoch2。`inspect-maintenance-test`仅在编译Test=true且已验证pending后核对原公钥与idle状态；TEST-only teardown在取得native租约后才能清理这些随机scope。生产入口不会获得任何重置或删除能力，pending保留到未来明确恢复流程。
+
+## 签名程序文件删除与显式继续（r55，TEST-only）
+
+`programremoval.RunTest`只接受编译Test=true的release和可信固定安装根，使用factory(false)重开既有原生独占租约，绝不初始化或修复缺失journal。调用进程／helper必须在目标根外；固定编译`program-removal-test`没有运行时参数，不接受网络、环境或命令行提供的root、identity或profile。它不是生产卸载器，DMG/Inno不调用此入口。
+
+| 原生maintenance阶段 | 允许行为 |
+| --- | --- |
+| pending | 完整校验当前签名文件集合，持久保存计划；所有程序文件必须仍存在 |
+| deleting + plan_sha256 | 只加载该摘要绑定的原计划，校验剩余内容后显式继续删除 |
+| files_removed + plan_sha256 | 校验计划内程序文件全部缺失；重复执行幂等，文件重现拒绝 |
+
+阶段只向前推进，原随机transaction ID、profile、anchor、accepted_at、epoch不变。任一阶段都拒绝普通产品重开、初始化和升级。原生CAS回执不确定会封闭当前事务对象，必须取得新lease并重读实际阶段；没有清除marker、降低floor或恢复active的方法。
+
+固定`.program-removal.json`包含原始签名release/bootstrap manifests、bootstrap pointer及安装根／目录／文件volume/object IDs、内容大小和摘要。所有允许路径重新从经过公钥验证的固定文件清单推导，不能从计划的任意path字段获得删除权限。最多各8个release/bootstrap版本，拒绝staging、未知文件、未来epoch、目录替换、内容变化、硬链接、symlink／Windows reparse点及跨事务计划。计划先写O_EXCL、flush；原生journal提交其SHA-256成功之后才允许删除。删除期间清单文件本身即使已删除，计划仍保留其原签名供重验。
+
+删除前全树校验，每个unlink前再校验；只逐个移除签名清单内程序文件和bootstrap pointer，不用RemoveAll、不删除目录。根、版本目录空壳和计划保留，以便绑定原对象身份继续；任何清单外内容会阻止删除。OS设备私钥、trust、activation、binding及epoch floor不在文件计划中，默认全部保留。
+
+Windows目录刷新可能在写入／unlink已完成后返回不确定回执。`program_removal_receipt_uncertain`立即结束当前尝试；下一次明确调用必须取得新原生lease、验证原计划、摘要、事务和实际剩余文件，不能自动重捕获计划。pending阶段缺文件仍拒绝，绑定后计划丢失／损坏也拒绝。本实现覆盖进程崩溃，不声明断电持久性、恶意管理员隔离或安全擦除。路径校验和unlink之间仍有同用户恶意并发的TOCTOU边界；正式卸载需要平台handle-relative删除／独占写入边界及签名独立卸载器认证，不能把TEST标志改成false即发行。
+
+原生验收创建两代真实签名文件集合，实际删除首文件后由子进程exit78跳过defer，helper观察EOF释放lease；新进程沿同一transaction／plan digest继续，重复完成幂等且仍拒绝产品启动。验证原生OS身份可重新签名、activation原字节保持、trust除maintenance外原字节字段不变且epoch2。另验完整pending计划续接、计划替换／丢失拒绝、原生丢回执封闭及目录／文件篡改。macOS额外实际编译固定入口并核验运行时覆盖拒绝、删除、重复重开。Windows包由`run-removal-validation.ps1`在登录桌面或Interactive任务运行，不需要Go／开发环境。native测试只用随机TEST状态，结束精确清理测试凭据；不是卸载用户凭据的实现。
