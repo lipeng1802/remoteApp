@@ -44,6 +44,10 @@ type releaseLayout struct {
 }
 
 func command(path string, input []byte, args ...string) (reply, error) {
+	return commandWithin(20*time.Second, path, input, args...)
+}
+
+func commandWithin(budget time.Duration, path string, input []byte, args ...string) (reply, error) {
 	cmd := exec.Command(path, args...)
 	if input != nil {
 		cmd.Stdin = bytes.NewReader(input)
@@ -62,7 +66,7 @@ func command(path string, input []byte, args ...string) (reply, error) {
 			return reply{}, fmt.Errorf("invalid reply")
 		}
 		return value, err
-	case <-time.After(20 * time.Second):
+	case <-time.After(budget):
 		_ = cmd.Process.Kill()
 		<-done
 		return reply{}, fmt.Errorf("timeout")
@@ -230,7 +234,7 @@ func run() (result error) {
 			expected = append(expected, filepath.ToSlash(filepath.Join("releases", stage, name)))
 		}
 	}
-	transactionFiles := []string{"install-root-provisioner" + suffix, "install-transaction" + suffix, "installed-bootstrap-manager" + suffix, "installed-release-manager" + suffix, "trust-journal" + suffix}
+	transactionFiles := []string{"install-root-provisioner" + suffix, "install-transaction" + suffix, "installed-bootstrap-manager" + suffix, "installed-release-manager" + suffix, "trust-journal" + suffix, "installer-adapter" + suffix}
 	bootstrapFiles := []string{"bootstrap-manifest.json", "installed-release-launcher" + suffix, "trust-journal" + suffix}
 	for _, version := range []string{"v1", "v2"} {
 		for _, name := range transactionFiles {
@@ -515,6 +519,11 @@ func run() (result error) {
 		{"v1", 1}, {"v2", 2},
 	} {
 		for attempt := 0; attempt < 2; attempt++ {
+			// Exercise the same fixed entry that installer frontends will invoke.
+			// Ten bounded child invocations (30s each), plus process/hash overhead.
+			if value, adapterErr := commandWithin(330*time.Second, transactionTool(fixture.version, "installer-adapter"), nil); adapterErr != nil || value.Status != "active" || value.Epoch != fixture.epoch {
+				return fmt.Errorf("installer adapter %s epoch %d", fixture.version, fixture.epoch)
+			}
 			value, transactionErr := command(transactionTool(fixture.version, "install-transaction"), nil)
 			prepared := func(reply reply, commandErr error) bool {
 				return commandErr == nil && reply.Status == "prepared" && reply.Epoch == fixture.epoch && (reply.Phase == installrelease.CandidateStaged || reply.Phase == installrelease.CandidatePromoted)

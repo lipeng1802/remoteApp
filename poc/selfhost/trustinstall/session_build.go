@@ -155,6 +155,15 @@ func compileInstalledReleaseManager(ctx context.Context, goexe, module, target, 
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installed-release-manager", extra, now)
 }
 
+// CompileInstallerAdapter binds a complete child chain for one installer action.
+func CompileInstallerAdapter(ctx context.Context, goexe, module, target, dest string, s Specification, operation string, epoch uint64, transactionDigest, managerDigest, bootstrapDigest string, now time.Time) error {
+	if (operation != "install" && operation != "upgrade") || epoch == 0 || epoch < s.MinimumEpoch || epoch > 1<<53-1 || !canonical(transactionDigest, 32) || !canonical(managerDigest, 32) || !canonical(bootstrapDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedOperation=" + operation + " -X main.embeddedEpoch=" + strconv.FormatUint(epoch, 10) + " -X main.embeddedTransactionDigest=" + transactionDigest + " -X main.embeddedManagerDigest=" + managerDigest + " -X main.embeddedBootstrapDigest=" + bootstrapDigest
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/installer-adapter", extra, now)
+}
+
 func compileReleaseTool(ctx context.Context, goexe, module, target, dest string, s Specification, entry, extra string, now time.Time) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust

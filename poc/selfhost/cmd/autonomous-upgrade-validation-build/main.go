@@ -493,6 +493,31 @@ func run() error {
 	if err = makeBootstrap("v2", "upgrade", transactionSpec, 2); err != nil {
 		return err
 	}
+	for _, fixture := range []struct {
+		version, operation string
+		spec               trustinstall.Specification
+		epoch              uint64
+	}{
+		{"v1", "install", transactionSpec1, 1}, {"v2", "upgrade", transactionSpec, 2},
+	} {
+		directory := filepath.Join(dest, "transaction-"+fixture.version)
+		var pins []string
+		for _, name := range []string{"install-transaction", "installed-release-manager", "installed-bootstrap-manager"} {
+			raw, err := read(filepath.Join(directory, name+suffix))
+			if err != nil {
+				return err
+			}
+			h := sha256.Sum256(raw)
+			pins = append(pins, hex.EncodeToString(h[:]))
+		}
+		adapter := filepath.Join(directory, "installer-adapter"+suffix)
+		if err = trustinstall.CompileInstallerAdapter(ctx, goexe, module, goos, adapter, fixture.spec, fixture.operation, fixture.epoch, pins[0], pins[1], pins[2], now); err != nil {
+			return err
+		}
+		if err = signTestExecutable(goos, adapter, "com.personalremotedesktop.test.installer-adapter."+fixture.version); err != nil {
+			return err
+		}
+	}
 	bootstrapLauncher1 := filepath.Join(dest, "bootstrap-launcher-v1"+suffix)
 	if err = trustinstall.CompileInstalledBootstrapLauncher(ctx, goexe, module, goos, bootstrapLauncher1, transactionSpec1, transactionRoot, now); err != nil {
 		return err

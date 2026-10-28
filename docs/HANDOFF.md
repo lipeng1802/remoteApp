@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r50 安装器统一入口与双端原生验收
+
+新增 `installeradapter.Run`、编译固定无参数 `installer-adapter` 和 `CompileInstallerAdapter`。绑定一个 install/upgrade 操作、目标epoch、release specification及三个同目录子程序摘要；先验证完整子链，每次执行前复核。按准备→release activation→promoted确认→bootstrap切换→两路status顺序执行，只有正常退出且精确目标epoch才成功。运行时参数、reset/uninstall、错epoch、坏阶段及超过有限重开预算均拒绝。子程序继续绑定各自root/payload/helper/manifest。
+
+builder签名并装入两代adapter，清单由62增至64项。完整验收先经adapter完成每代操作，再沿原低层步骤重开检查幂等性。Windows SSH可用；通过临时Interactive任务在桌面Session 6执行，64项摘要通过、reset参数拒绝且根未创建、完整validator PASS/EXITCODE=0，测试根不存在，临时任务已删除。归档`artifacts/connection-poc/installer-adapter-r50-win.zip`，SHA256 `98b96c6c9e4a975ac9c0fb17c066e2c1eca188863fcbfb26d1430c1071e9ca81`。
+
+macOS首次并行构建触及原五分钟期限，未算验收。后续实测组合入口约25秒，原单helper的20秒监督预算不适用；现按最多十个30秒子调用推导330秒组合预算，单helper预算不变。最终fresh `artifacts/connection-poc/installer-adapter-mac-final.3adBhN/bundle`完整PASS；用于诊断预算的旧TEST trust/set/root也已精确清理。顺序、每个失败边界阻断后续操作、错epoch和无效配置零调用测试，相关race、Windows amd64 vet及diff检查通过。
+
+本切片完成统一安装/升级协调入口，尚未接DMG/PKG或Inno前端，仍使用隔离TEST根与测试签名。正式包需要受保护且验证发布者的解包目录，摘要检查不能消除可写目录中的检查/执行竞争。下一切片：平台安装前端、卸载保留身份/防回退记录策略和活动owner join屏障，再做提权根及Developer ID/Authenticode验收。契约见`poc/selfhost/public-server/INSTALLER_ADAPTER.md`。已消费测试包不可复跑。
+
 ## 2026-10-27 r49 Windows 原生安装/升级完整验收已闭环
 
 用户允许通过SSH直接操作Windows。SSH仅用于上传、核对和注册临时计划任务；真实Credential Manager链路由`LogonType Interactive`计划任务在当前已登录用户`DESKTOP-AECR9RH\jarvis`、Session 4内执行，不把SSH会话当原生桌面验收。一次用户操作导致早期进程`0xC000013A`被外部终止，已使用fresh解压目录重新执行，未计为产品失败。
