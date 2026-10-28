@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-28 r52 卸载前维护屏障与双端原生租约验证
+
+新增可信进程内`clientowner.Owner.Maintain(ctx, action)`。请求后永久封闭本owner的Start/Upgrade，先cancel并实际join现有Runner，再从仍持租约的journal读取committed epoch，在owner串行锁及原生独占租约下执行一次action。Close不能越过运行中的action。join超时可显式继续同一次join；runner故障不放行action；action执行前即记attempted，错误/取消/不确定回执不得在同一owner重做。方法不改写或删除trust/identity/activation/floor，不输出可跨进程复用的维护回执。
+
+本轮action只删除`testing.T.TempDir`下的固定程序marker，未开放真实产品卸载。macOS ad-hoc签名测试二进制与真实Keychain journal实测四项PASS；Windows原连接/上传曾超时，停止停滞的本地上传后连接恢复。独立新包在Interactive Session 6实际执行四项全部PASS/EXITCODE=0、无SKIP：join前marker不删，超时后另一个真实helper进程争租约失败，join后action只执行一次，journal原始字节不变，显式重开仍epoch2且拒绝回退；另覆盖Close不能超越action及fault拒绝。
+
+相关clientowner/autonomousinstall/installeradapter、clientruntime/desktopcontrol/installeddevice/streamgate race回归及Windows vet通过。新增可移交runner `packaging/experimental/run-maintenance-validation.ps1`。Windows独立zip位于本机`artifacts/connection-poc/maintenance-r52.INNiZd/windows-native-maintenance-r52.zip`，SHA256 `8b66691eb01399f7dc6d49eab5f9220ea8e707ca8d184c548ffd5f42c23ebefd`；远端校验一致并解压到`C:\Users\jarvis\remoteapp-maintenance-r52-native`，日志`result.txt`。测试随机原生命名空间由teardown精确清理，临时`RemoteApp-R52-Maintenance`任务已删除。首次未完成上传目录`remoteapp-maintenance-r52-innizd`仅为未执行测试artifact，不是安装或原生状态。
+
+下一步：把维护请求接入实际产品owner的认证本机IPC；将程序删除绑定签名文件集、对象身份和持久维护事务，阻止新进程/崩溃竞争；最后再启用卸载前端。当前action接口只在可信进程内有效，in-memory attempted不代表跨崩溃的持久卸载事务，Runner全部join契约不代替任意子孙进程隔离。详见`poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md`。DMG/Inno产品卸载入口继续关闭。
+
 ## 2026-10-28 r51 实验 DMG / Inno 安装前端双端实测
 
 新增独立`packaging/experimental`，不覆盖现有MVP安装包。Windows `NativeInstaller.iss`为per-user、不提权的一次性Setup，在`PrepareToInstall`解包到Inno临时目录，实际等待固定adapter退出，非零则返回准备失败；成功仅在本次Setup进程缓存。没有应用注册、自动启动或uninstaller。macOS `build-native-dmg.zsh`将原签名transaction原字节打入UDZO镜像，`Install.command`从同目录调用固定adapter并传递非零结果。TEST builder增加macOS构建时显式固定外部安装根，避免DMG执行时把目标定位到只读镜像；运行时仍不能传入目标路径。

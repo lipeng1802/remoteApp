@@ -10,4 +10,6 @@ Both transports retain native trust, stable identity, activation, epoch floor an
 
 The previews are unsigned/ad-hoc TEST artifacts for isolated current-user roots. Production delivery still requires authenticated protected extraction, publisher signature validation, privilege separation and the user-scoped identity handoff. An elevated installer must not create a replacement user identity in an administrator's vault.
 
+The in-process owner maintenance barrier and its native validation are now available; see [uninstall maintenance](../../poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md). It does not yet expose a product uninstaller or a deletion IPC. `run-maintenance-validation.ps1` runs the self-contained Windows TEST bundle in an interactive desktop session.
+
 Inno behavior follows [PrepareToInstall](https://jrsoftware.org/ishelp/topic_scriptevents.htm) and [temporary extraction](https://jrsoftware.org/ishelp/topic_isxfunc_extracttemporaryfile.htm). Final validation must run in an interactive Windows session for native Credential Manager access.
