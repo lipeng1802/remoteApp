@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 自动续办授权与执行顺序
+
+用户要求安排后续任务并自动执行，直到确需人工介入。已在当前对话创建ACTIVE heartbeat自动续办，automationId=remoteapp，每10分钟触发承接进度，不新建重复自动化。按较大的可验证任务组推进，不再要求用户逐切片输入“继续”。自动本地提交及README/HANDOFF更新沿用原授权，远端推送仍需用户明确要求；自动续办不扩大服务维护或破坏性操作范围。
+
+顺序与验收门槛：①fresh双机包/Windows Interactive驻留owner/bootstrap，实际两端OS签名consent-only注册、拒绝、自批准拒绝、批准、查询、撤销；②provision后独立撤销签名通路及未知结果收尾；③并行provision/ACTIVE/watch/session-identity和真实TLS payload，观察PONG持续增长；④撤销、所有worker/node/signer/product实际join、进程零退出、独立删除与精确TEST清理。r66只是协议组件，不能跳过实机证据。20分钟包应在启动前即时构建；r64已回收，不能覆盖未知根/复活旧身份。
+
+每次先读最新交接/Git状态，完成当前有证据的工作再继续下一组；不得拿构建/fixture/HTTPS探针代替真实双机/GUI验收。若需要用户登录桌面、加载SSH密钥、开机、处理外部条件，或需要超出现有授权/产品决策，先保存工作和明确证据、记录用户最小操作，再暂停自动续办并提出具体请求；同一阻塞不重复轮询。任务组全部实测通过后结束续办并列剩余事项。此次预检查预发布三服务active；未修改服务、Store或节点，未把排程建立记作新开发验收通过。
+
 ## 2026-10-29 r66 当前监督入口的授权协调与私有管理适配器
 
 新增public-server/supervised_consent.py、supervised_requests.py与9项专用测试。当前installeddevice.Request协议与旧split-consent不同，不导入旧控制面脚本。协调两端register、邀请claim仍pending、核对准确incoming、自批准拒绝、owner拒绝无grant、第二次明确批准两端grant一致及subjects/expiry，最后明确revoke/status终态无grant。返回公共布尔证据，不记录邀请/授权。Python结构一致性不是签名验证，真实产品provision仍须自己验证issuer签名。
