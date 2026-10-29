@@ -44,7 +44,8 @@ class WindowsRelay:
                 or ".." in executable.split("\\")
                 or not re.fullmatch(r"\\\\\.\\pipe\\remoteapp-session-[0-9a-f]{32}", pipe)):
             raise RuntimeError("supervised_management_bootstrap_invalid")
-        self.command = ["ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host,
+        self.command = ["ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "IPQoS=none",
+                        "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", host,
                         subprocess.list2cmdline([executable, pipe])]
 
     def __call__(self, frame):

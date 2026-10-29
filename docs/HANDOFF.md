@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r74：驻留活动阶段与未知回执的停止门禁
+
+先读r73和Git，保留未跟踪docs/archive内部归档。Windows jarvis@100.73.4.118使用IPQoS=none的SSH whoami成功，无需人工介入。将WindowsRelay统一增加IPQoS=none/ServerAliveInterval=5/ServerAliveCountMax=2，防止继续使用r72已证实容易阻塞的大传输/SSH参数；请求仍只经私有stdin，未改变35秒管理调用上界或重试策略。
+
+新增public-server/activity_control.py作为受信运维组合组件（不是公开网络API/用户身份认证）。trusted工作目录中的activity-state.json只存version/phase/公开checks/joined角色，无grant/邀请/请求ID/签名秘密。通过O_EXCL临时文件、flush/fsync/atomic replace及父目录fsync持久化；未知临时文件不删除。exercise只接受owners_ready，在任何注册/claim/provision之前先提交exercise_outcome_unknown；调用当前active_round并明确quiesce_before_revoke=True。异常不自动停止owner、不重发批准/业务、不关闭tunnel。只有精确字段、真实布尔、增长样本>=3及两端PONG/ACTIVE/正常quiesce/owner明确撤销全部成立，才写normal_revoked。
+
+stop_owners仅接受normal_revoked或此前明确停止回执未知工单，先写owner_stop_outcome_unknown，按controller后target分别等待受信callback的真实owner_closed/joined/zero_exit证据；整数1不能冒充布尔。每个角色实际确认后立即落盘，后续显式继续不再次停止已确认角色，失败角色仍必须由同一job的实际退出材料查证，不能仅用SSH结束/PID消失当zero exit。两者完成仅转owners_joined_retirement_pending；组件没有删除任务/节点/身份/root，也刻意不关HTTPS管理通路，因为后续独立registered退休还需要在线证明。公共phase文件是受信运维证据，不能作为issuer授权或生产publisher认证。
+
+新增4项故障回归：未知episode先落盘且不能重试或停止、双角色部分停止后的显式继续、额外/秘密字段及truthy证据拒绝、不以整数join当zero exit；与既有回归共76项Python PASS，无ResourceWarning。fixture验证阶段/所有权门禁，不是实际OS signer/PONG/Headscale验收。当前组件尚未连接prepare/start/stop的真实管理适配器；未创建fresh短包、原生身份/桌面任务、线上grant/node或改动服务Store。
+
+下一组直接补齐可执行run_supervised_activity.py：一键生成fresh两平台固定root短包并校验来源helper/hash/profile；启动独立Mac持久holder监控与Windows Interactive -RetainUntilStop，原子公开bootstrap/独立实际exit0回执。不要复用r67 always-stop finally，也不要在exercise_outcome_unknown时删身份/关闭tunnel。将本组件连接两端原生独立业务适配器，实际跑并行provision/首次await_binding/ACTIVE/session-identity/TLS PONG增长→quiesce→revoke；之后真实父进程zero exit→Windows Interactive/Mac独立retire-node-test→只删本轮任务/精确根与关闭管理tunnel。Windows fresh setup的文件sync未知恢复必须显式resume-files并由原工具检查Absent trust，不能覆盖未知根或自动重建身份。另留活撤销自主fault/非零退出验收；整体切片4仍未完成。本轮本地提交，不推送，自动续办保持ACTIVE。
+
 ## 2026-10-29 r73：用户恢复自动续办与正常 quiesce 收尾组件
 
 用户此前暂停自动续办并要求归档用户消息，已生成docs/archive/RemoteApp-用户对话归档-2026-10-29.md（4会话362条）；该文件仍保留为未跟踪内部资料，不纳入本轮开发提交。用户现明确继续任务并开启自动续办，既有remoteapp已从PAUSED恢复ACTIVE，未创建重复自动化，原授权/不自动推送等约束保持。
