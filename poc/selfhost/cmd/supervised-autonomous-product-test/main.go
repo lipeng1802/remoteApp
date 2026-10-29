@@ -122,8 +122,17 @@ func run(output func(any) error) (result error) {
 		}
 	}()
 	defer func() { cancel(); os.Stdin.Close(); <-readDone }()
+	controlPipe, closeControl, e := startDesktopControl(ctx, controller)
+	if e != nil {
+		return e
+	}
+	defer closeControl()
 	identity := controller.Identity()
-	if e = output(map[string]any{"status": "ready", "maintenance_address": l.Addr().String(), "vault_scope": identity.VaultScope, "public_key": identity.PublicKey}); e != nil {
+	metadata := map[string]any{"status": "ready", "maintenance_address": l.Addr().String(), "vault_scope": identity.VaultScope, "public_key": identity.PublicKey}
+	if controlPipe != "" {
+		metadata["control_pipe"] = controlPipe
+	}
+	if e = output(metadata); e != nil {
 		return e
 	}
 	var completed <-chan doneReply = done

@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r61 Windows同用户业务管道接入TEST监督入口
+
+新增`supervisedcontrol`，路由严格installeddevice.Request到r59 Controller.Forward/Count，使用现有Windows当前用户DACL/拒远端/首实例排他命名管道。每连接一条有界JSON、最多4连接、25秒IO/20秒业务期限；scope/root/identity覆盖、stop、maintenance和带附加字段的count均拒绝。业务失败不把stop注入产品；维护/产品终止仍由原可信父管道和独立认证协议处理。handler取消关闭连接，Serve等待全部handler/monitor join后才返回，启动器defer先停止业务服务再释放产品。Windows启动器ready增加公开control_pipe，随机名称只在本地生成；Mac保持原继承管道行为。本接口仅同用户principal，不是publisher认证或跨用户隔离验收。
+
+新增`cmd/supervised-control-relay`，只接受一个公开管道名参数，请求/回执走私有stdin/stdout，不输出诊断或把grant/invite放argv。沿用desktopcontrol.Dial的规范名称验证；只转普通业务与严格count，不能用旧desktop-relay的clientruntime.Config替代。本轮不接默认GUI/Test=false，不把IPC许可代替设备consent/签名授权。
+
+本机supervisedcontrol/productmaintenance/installeddevice race与Windows监督入口vet通过；Windows原生命名管道实际测试涵盖普通请求/计数、生命周期/身份覆盖拒绝、管道碰撞与stalled reader取消join。测试使用fixture backend，不读取Credential Manager，所以可在已授权SSH会话执行，不宣称是登录桌面实际产品/原生binding/Headscale验收。relay和测试二进制位于`artifacts/connection-poc/supervised-control-r61-{relay,tests}.exe`，远端jarvis用户目录同名，日志`artifacts/connection-poc/supervised-control-r61-windows-result.txt`。首轮管理端日志解码遇PowerShell GB编码，改为分开解码后完整复测；不能把日志解析失败当产品失败。
+
+Windows最终3个顶层测试全部PASS、无SKIP、EXITCODE=0，包括实际编译relay的计数往返与拒绝stop；通过REMOTEAPP_CONTROL_TEST_RELAY显式供应本轮TEST二进制。仅测试backend使用fixture，真实管道、relay和取消/join均实际执行；没有把此结果扩大为完整产品入口验收。
+
+下一组完成匹配真实公开profile的构建/可信bootstrap供应与Windows interactive启动监督产品：现有r59 fixture固定产品安装路径且用假HTTPS地址，仅用于idle原生测试，不能拿它进行线上注册。随后用新管道/relay执行真实consent→provision→ACTIVE watch/session-identity/TLS PONG→维护join/退出/删除闭环。r60长期服务、Store/verifier/policy本轮未改，整体切片4仍未完成。本轮本地提交，不自动推送。
+
 ## 2026-10-28 r60 预发布服务端兼容升级已实机验收
 
 新增root本地`poc/selfhost/public-server/binary-upgrade.py`与8项Python测试。分步prepare/quiesce/check/install/start/verify及显式rollback；固定manifest的三个binary及旧版SHA，拒绝未知变更；原binary/元数据持久备份，Store只比较摘要绝不恢复。每阶段核对原配置、verifier journal/identity、零ACL和业务Nginx摘要，要求既有网络注册工单/TLS身份与有效grant为空。main-only TERM给原服务自行join nested workers；PID退出和当前boot/current ExecStart单调时间绑定STOPPED缺一不可，无force kill、删锁或自动回退。新工具不调用旧empty-control阶段。技术流程和恢复门禁见`public-server/BINARY_UPGRADE.md`。
