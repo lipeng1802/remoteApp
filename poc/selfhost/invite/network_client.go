@@ -292,7 +292,7 @@ func (c *NetworkClient) Request(ctx context.Context, b NetworkRequestBody) (Netw
 		if result != (NetworkReply{}) {
 			return NetworkReply{}, ErrDenied
 		}
-	case "state":
+	case "state", "await_binding":
 		if result.TLS != nil || result.State == nil || result.State.Claims.Grant != b.Grant || result.Ticket != "" || result.Credential != nil || result.Proof != nil {
 			return NetworkReply{}, ErrDenied
 		}

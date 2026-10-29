@@ -1,7 +1,8 @@
 import subprocess
+import threading
 import unittest
 from unittest.mock import patch
-from supervised_requests import WindowsRelay, reply
+from supervised_requests import LocalSupervisor, WindowsRelay, reply
 
 
 class PrivateTransportBoundaries(unittest.TestCase):
@@ -32,6 +33,41 @@ class PrivateTransportBoundaries(unittest.TestCase):
                                 ("host", r"C:\a.exe & bad", "bad"),
                                 ("host", r"C:\a.exe", "\\\\remote\\pipe\\other")):
             with self.assertRaises(RuntimeError): WindowsRelay(host, exe, pipe)
+
+    def test_local_timeout_drains_old_reply_before_sending_new_operation(self):
+        class Pipe:
+            lock = threading.Lock()
+            def __init__(self):
+                self.sent = []
+                self.replies = [RuntimeError("private_pipe_timeout"),
+                                {"status":"PRIVATE-OLD-APPROVAL"}, {"status":"session_revoked","passed":True}]
+            def send(self, frame): self.sent.append(frame)
+            def read(self, **unused):
+                if len(self.sent) == 2: assert len(self.replies) == 1
+                value = self.replies.pop(0)
+                if isinstance(value,Exception): raise value
+                return value
+        pipe=Pipe()
+        endpoint=LocalSupervisor(pipe)
+        with self.assertRaisesRegex(RuntimeError,"supervised_local_outcome_unknown"):
+            endpoint({"Op":"provision"})
+        self.assertEqual(endpoint({"Op":"revoke_session"}), {"status":"session_revoked","passed":True})
+        self.assertEqual(pipe.sent,[{"Op":"provision"},{"Op":"revoke_session"}])
+        self.assertFalse(endpoint.pending)
+
+    def test_local_malformed_response_seals_without_releasing_or_resending(self):
+        class Pipe:
+            lock=threading.Lock()
+            def __init__(self): self.sent=0
+            def send(self, frame): self.sent+=1
+            def read(self, **unused): raise ValueError("PRIVATE malformed response")
+        pipe=Pipe()
+        endpoint=LocalSupervisor(pipe)
+        with self.assertRaisesRegex(RuntimeError,"supervised_local_outcome_unknown"):
+            endpoint({"Op":"provision"})
+        with self.assertRaisesRegex(RuntimeError,"pipe_sealed_preserve_owner"):
+            endpoint({"Op":"revoke_session"})
+        self.assertEqual(pipe.sent,1)
 
 
 if __name__ == "__main__": unittest.main()

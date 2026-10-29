@@ -73,12 +73,20 @@ func (e *enrollment) ownBinding(g *authorizationGate, b invite.NetworkBinding) b
 }
 
 func (e *enrollment) state(ctx context.Context, g *authorizationGate, client networkRequester, expected *invite.NetworkBinding) (invite.NetworkState, error) {
+	return e.stateRequest(ctx, g, client, expected, false)
+}
+
+func (e *enrollment) stateRequest(ctx context.Context, g *authorizationGate, client networkRequester, expected *invite.NetworkBinding, initial bool) (invite.NetworkState, error) {
 	deny := func() (invite.NetworkState, error) { return invite.NetworkState{}, invite.ErrDenied }
 	if ctx.Err() != nil || g == nil || g.clock == nil || g.signer == nil || client == nil || e.node == nil || e.node.PublicKey() != e.key || !bytes.Equal(g.public, g.signer.PublicKey()) || !g.validGrant(g.grant, g.clock()) {
 		return deny()
 	}
-	call, cancel := context.WithTimeout(ctx, 5*time.Second)
-	reply, err := client.Request(call, invite.NetworkRequestBody{Action: "state", Grant: g.grant})
+	action, budget := "state", 5*time.Second
+	if initial {
+		action, budget = "await_binding", 12*time.Second
+	}
+	call, cancel := context.WithTimeout(ctx, budget)
+	reply, err := client.Request(call, invite.NetworkRequestBody{Action: action, Grant: g.grant})
 	failed := call.Err() != nil
 	cancel()
 	if err != nil || failed || reply.State == nil || reply.Ticket != "" || reply.Credential != nil || reply.Proof != nil || reply.TLS != nil || reply.Session != nil || reply.Verifier != nil || reply.State.Claims.Grant != g.grant || !invite.VerifyNetworkState(g.issuer, *reply.State, g.clock()) || !e.ownBinding(g, reply.State.Claims.Binding) || !g.validGrant(g.grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
@@ -109,11 +117,13 @@ func (e *enrollment) startWatch(ctx context.Context, g *authorizationGate, clien
 	activation, stopActivation := context.WithTimeout(ctx, budget)
 	defer stopActivation()
 	var binding invite.NetworkBinding
+	initial := true
 	for {
-		state, err := e.state(activation, g, client, nil)
+		state, err := e.stateRequest(activation, g, client, nil, initial)
 		if err != nil {
 			return deny()
 		}
+		initial = false // never repeat the readiness wait after a verified pair
 		if state.Claims.Active {
 			binding = state.Claims.Binding
 			break

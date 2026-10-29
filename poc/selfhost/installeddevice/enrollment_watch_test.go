@@ -36,10 +36,13 @@ func TestEnrollmentWatchAllowsOnlyInitialActivationThenInactiveFaults(t *testing
 	g, grant, key, e, binding := watchedFixture(t)
 	var calls atomic.Int32
 	client := requestFunc(func(ctx context.Context, b invite.NetworkRequestBody) (invite.NetworkReply, error) {
-		if ctx.Err() != nil || b.Action != "state" || b.Grant != grant || b.Ticket != "" || b.Challenge != "" {
+		if ctx.Err() != nil || (b.Action != "state" && b.Action != "await_binding") || b.Grant != grant || b.Ticket != "" || b.Challenge != "" {
 			t.Fatal("unexpected state request")
 		}
 		n := calls.Add(1)
+		if (n == 1 && b.Action != "await_binding") || (n > 1 && b.Action != "state") {
+			t.Fatal("readiness must be initial-only; watch failures cannot wait again")
+		}
 		return watchState(key, grant, binding, n >= 2 && n < 4, g.clock()), nil
 	})
 	r, err := e.startWatch(context.Background(), g, client)
@@ -136,6 +139,9 @@ func TestEnrollmentWatchRejectsUntrustedStateBeforeWorker(t *testing.T) {
 			}
 			if scenario == "no_proof" && calls != 0 {
 				t.Fatal("missing proof queried authority")
+			}
+			if scenario != "no_proof" && calls != 1 {
+				t.Fatal("untrusted readiness response must not be retried")
 			}
 			if e.closeJoined() != nil {
 				t.Fatal("fixture close")

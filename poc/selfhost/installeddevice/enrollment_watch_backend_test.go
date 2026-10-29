@@ -116,7 +116,7 @@ func TestTwoEnrollmentWatchesJoinAfterRevocationAndZeroProjection(t *testing.T) 
 		t.Fatal("active policy projection")
 	}
 	request := requestFunc(func(ctx context.Context, body invite.NetworkRequestBody) (invite.NetworkReply, error) {
-		if body.Action != "state" || body.Grant != grant {
+		if (body.Action != "state" && body.Action != "await_binding") || body.Grant != grant {
 			return invite.NetworkReply{}, invite.ErrDenied
 		}
 		state, stateErr := backend.NetworkState(grant)

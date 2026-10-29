@@ -1,0 +1,156 @@
+"""Private macOS/Unix TEST management owner, independent of one SSH/runner call.
+
+An unavailable client/unknown business reply never releases the native signer.
+Only an explicit owner_stop attempts normal join. This is same-user management,
+not a publisher-authenticated product endpoint or a production login service.
+"""
+import json
+import os
+from pathlib import Path
+import socket
+import stat
+import sys
+
+from joined_pipe import JoinedPipe
+from supervised_requests import LocalSupervisor, reply
+
+
+def private_directory(path):
+    path = Path(path)
+    if not path.is_absolute() or str(path.resolve(strict=True)) != str(path):
+        raise RuntimeError("holder_directory_rejected")
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+        raise RuntimeError("holder_directory_rejected")
+    return path
+
+
+def frame(connection):
+    raw = bytearray()
+    while b"\n" not in raw:
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise RuntimeError("holder_request_incomplete")
+        raw.extend(chunk)
+        if len(raw) > 8192:
+            raise RuntimeError("holder_request_bounds")
+    line, rest = raw.split(b"\n", 1)
+    if rest:
+        raise RuntimeError("holder_request_extra_frame")
+    return reply(bytes(line))
+
+
+class Owner:
+    def __init__(self, child):
+        self.child = child
+        self.endpoint = LocalSupervisor(child)
+        self.joined = False
+
+    def call(self, request):
+        if request == {"Op": "owner_status"}:
+            return {"status": "owner_status", "joined": self.joined}
+        if request == {"Op": "owner_stop"}:
+            if not self.joined:
+                # An outstanding/malformed business frame cannot become a stop
+                # acknowledgement. Preserve ownership for explicit recovery.
+                if self.endpoint.poisoned:
+                    raise RuntimeError("holder_pipe_sealed_preserve_owner")
+                if self.endpoint.pending:
+                    with self.child.lock:
+                        self.endpoint.read()
+                self.child.stop()
+                self.child.proc.stdout.close()
+                self.joined = True
+            return {"status": "owner_closed", "joined": True, "zero_exit": True}
+        if self.joined or not isinstance(request, dict) or request.get("Op") not in {
+                "device", "network", "provision", "product_count", "revoke_session"}:
+            raise RuntimeError("holder_request_rejected")
+        return self.endpoint(request)
+
+
+def serve(directory, command, child_factory=JoinedPipe):
+    directory = private_directory(directory)
+    address, ready_file = directory/"owner.sock", directory/"owner.json"
+    # Preflight before starting any process/native ownership. Never replace an
+    # old socket/bootstrap or silently adopt another retained owner's directory.
+    if address.exists() or address.is_symlink() or ready_file.exists() or ready_file.is_symlink():
+        raise RuntimeError("holder_metadata_exists")
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(str(address))
+    os.chmod(address, 0o600)
+    listener.listen(4)
+    socket_identity = address.lstat()
+    child, owner = None, None
+    published = None
+    try:
+        child = child_factory(command, {"Op": "open"})
+        ready = child.read()
+        if (not isinstance(ready, dict) or ready.get("status") != "ready"
+                or not isinstance(ready.get("vault_scope"), str)
+                or not isinstance(ready.get("public_key"), str)):
+            raise RuntimeError("holder_owner_not_ready_preserve_state")
+        owner = Owner(child)
+        # Publish public discovery only; authority material and application
+        # keys never enter this file. Exclusive file remains after unjoined exit.
+        published = json.dumps({"version": 1, "process_id": os.getpid(),
+                                "vault_scope": ready["vault_scope"], "public_key": ready["public_key"]},
+                               separators=(",", ":")).encode()
+        with ready_file.open("xb") as output:
+            os.chmod(ready_file, 0o600)
+            output.write(published)
+            output.flush()
+            os.fsync(output.fileno())
+        while not owner.joined:
+            connection, unused = listener.accept()
+            with connection:
+                connection.settimeout(35)
+                try:
+                    result = owner.call(frame(connection))
+                except Exception:
+                    result = {"status": "holder_outcome_unknown_state_retained"}
+                try:
+                    connection.sendall(json.dumps(result, separators=(",", ":")).encode()+b"\n")
+                except OSError:
+                    # A lost receipt is not an instruction to stop the owner.
+                    pass
+        # stop() proved closed + EOF + actual zero exit before metadata removal.
+        if ready_file.read_bytes() != published:
+            raise RuntimeError("holder_metadata_changed")
+        ready_file.unlink()
+    finally:
+        listener.close()
+        # This function is intended to remain resident, not exit on a business
+        # failure. Unexpected parent failure is NOT a successful owner join.
+        # Do not issue stop/delete in a generic finally or unlink an unknown root.
+        if child is None or owner is not None and owner.joined:
+            info = address.lstat()
+            if (info.st_dev, info.st_ino) == (socket_identity.st_dev, socket_identity.st_ino):
+                address.unlink()
+
+
+class Endpoint:
+    def __init__(self, directory):
+        self.directory = private_directory(directory)
+
+    def __call__(self, request):
+        address = self.directory/"owner.sock"
+        info = address.lstat()
+        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600:
+            raise RuntimeError("holder_socket_rejected")
+        raw = json.dumps(request, separators=(",", ":"), allow_nan=False).encode()+b"\n"
+        if len(raw) > 8192:
+            raise RuntimeError("holder_request_bounds")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(40)
+            connection.connect(str(address))
+            connection.sendall(raw)
+            return frame(connection)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise SystemExit("trusted private directory and verified supervisor path required")
+    try:
+        serve(sys.argv[1], [sys.argv[2]])
+    except Exception:
+        raise SystemExit("holder_failed_join_unconfirmed_state_preserved") from None

@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r70：首次双边绑定等待与独立驻留 owner
+
+承接 r69 两个前置，新增内部 await_binding 网络请求。原生签名/nonce/持久重放/限流/grant参与者检查不变；服务端只有完整pair尚未齐备时有界等待10秒，释放锁后100ms再查，每轮重新检查 b.ready/provisionReady/健康与 Store.authorizedLocked。取消/撤销/过期/时钟倒退/foreign/损坏grant/driver或storage故障均失败，不把错误当pending。只有两条完整已bound且issuer可验签的3秒 NetworkState 才返回，不输出部分绑定或新放行能力。普通 NetworkState/state语义保持；native startWatch仅最初 await_binding 一次，随后全部state，任何请求/验签/身份错误仍立即终止。parent普通network白名单没有开放await_binding，只能内部可信编译路径调用。
+
+新增 persistent_supervisor.py 管理驻留组件：受信canonical 0700目录、0600 Unix socket；在业务调用/管理socket断开时保留继承pipe及native owner，公开metadata只写PID/scope/public，启动前拒绝旧socket/bootstrap，不覆盖未知目录。只有显式owner_stop尝试实际closed/EOF/零退出/join，确认后才精确移除自己的metadata/socket；无自动stop/delete的finally。该组件尚未由真实活动runner以独立进程启动，不能声称真实OS signer持久化验收。Windows validate-supervised-install.ps1增加显式-StayReady -RetainUntilStop，只有该模式不按10分钟自动停止，仍遵守原profile有效期；stop marker必须空普通文件且非reparse point。默认旧consent-only模式保留10分钟。
+
+同时发现并修复继承流超时回执错配：LocalSupervisor下一调用前必须先消费原迟到回执，不能当作新操作结果；写入未知/非timeout解析错误永久封闭此pipe并保留owner，不隐式重发。holder在pending未解或poison时不把旧业务回执当stop ACK。仍待独立本地业务端点或专用恢复以处理poisoned继承流；不要在这个分支强杀/自动销毁签名身份。Windows每请求独立业务pipe无该复用问题。
+
+验证：相关四包Go race、Windows五包vet通过；新增3项真实本地Store/TLS/readiness测试含完整pair晚到、等待中撤销与八种拒绝子项；nativewatch另断言只初次await、错误不重试。首次TLS测试因fixture固定时间与client真实时钟不一致失败，改测试client时钟同fixture后通过，未改产品校时。相关包完整race通过后新增两条强断言/中途撤销测试又定向race通过。Windows本轮上传C:\Users\jarvis\remoteapp-r70-validation，先核对二进制/脚本SHA，再AST解析RetainUntilStop入口及5项watch顶层测试全部PASS，无SKIP/EXITCODE=0；公开日志artifacts/connection-poc/readiness-r70/windows-result.txt。Windows执行的是watch协议fixture，不读取Credential Manager，编译早于最终新增的两个Mac侧断言，不能声称那些新增断言也已Windows执行。
+
+Python新增4项驻留+2项迟到回执/poison回归，联合60项PASS；实际本地子进程在管理客户端断开/请求拒绝后仍存活，显式stop才closed/EOF/exit0，目录与socket门禁测试通过。首次发现stdout文件句柄未close警告，改为实际零退出后关闭，ResourceWarning-as-error回归通过。没有把本机内存密钥/fixture/TLS回环当作OS双机或PONG验收。
+
+本轮没有启动新真实TEST安装/身份/grant/节点，没有修改服务器Store/服务/Nginx。**新await_binding服务协议尚未部署**，旧服务会拒绝它，不能忽略403继续启动。下一自动组：先部署/验证兼容的预发布authority（保护既有Store及长期verifier/零规则，不恢复旧快照），补齐Mac独立本地业务端点或继承pipe故障恢复并接驻留holder，准备fresh新根/短包，再实机并行provision/ACTIVE/session-identity/持续PONG与独立撤销。当前r67 always-stop finally不可直接用于活动模式；unknown revoke必须保留驻留owner与管理通路，显式查证。再区分撤销fault非零与正常维护零退出，验证join/独立删除/精确TEST清理。SSH可用，无需用户操作，自动续办继续；本地提交，不推送，整体切片4未完成。
+
 ## 2026-10-29 r69：并行 provision 与持续 PONG 协调组件
 
 在 r68 本地提交566f7f2后继续实现 supervised_session.active_round：当前协议的新注册/邀请/明确批准与双方同 grant 核对，先取双方原生 grant_clock，再并行 provision。ThreadPoolExecutor 必须 join 两条管理调用，单边失败也不可遗弃另一条可能已经 enroll 的调用。provision 尝试前置标记，之后 finally 仅调用一次 target 精确 revoke_session，不通过已封闭的普通 child IPC；未知回执固定报 session_revocation_unconfirmed_preserve_signer，不 stop/delete 或自动重发。尚无 provision 尝试时沿用原 request status/精确撤销。

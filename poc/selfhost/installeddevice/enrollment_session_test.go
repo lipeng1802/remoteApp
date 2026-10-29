@@ -61,7 +61,7 @@ func TestSessionPeersComeOnlyFromIssuerSignedActiveBinding(t *testing.T) {
 	g.grant = grant
 	client := requestFunc(func(_ context.Context, b invite.NetworkRequestBody) (invite.NetworkReply, error) {
 		switch b.Action {
-		case "state":
+		case "state", "await_binding":
 			return watchState(issuer, grant, binding, true, g.clock()), nil
 		case "session_identity":
 			now := g.clock()

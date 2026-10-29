@@ -62,10 +62,38 @@ class WindowsRelay:
 class LocalSupervisor:
     def __init__(self, joined_pipe):
         self.owner = joined_pipe
+        self.pending = False
+        self.poisoned = False
+
+    def read(self):
+        try:
+            result = self.owner.read(timeout=25)
+        except RuntimeError as error:
+            # A timeout leaves the original frame outstanding. A malformed or
+            # terminal response cannot safely be resynchronized as a new call.
+            if str(error) != "private_pipe_timeout":
+                self.poisoned = True
+            raise RuntimeError("supervised_local_outcome_unknown") from None
+        except Exception:
+            self.poisoned = True
+            raise RuntimeError("supervised_local_outcome_unknown") from None
+        self.pending = False
+        return result
 
     def __call__(self, frame):
         # Reuse the existing bounded private parser/serialization. Process
         # ownership and actual stop/EOF/exit remain with JoinedPipe's caller.
         with self.owner.lock:
-            self.owner.send(frame)
-            return self.owner.read(timeout=25)
+            if self.poisoned:
+                raise RuntimeError("supervised_local_pipe_sealed_preserve_owner")
+            if self.pending:
+                # Consume/discard the old reply BEFORE a new frame is sent.
+                # Its contents must never be returned as this call's receipt.
+                self.read()
+            self.pending = True
+            try:
+                self.owner.send(frame)
+            except Exception:
+                self.poisoned = True
+                raise RuntimeError("supervised_local_write_unknown_preserve_owner") from None
+            return self.read()

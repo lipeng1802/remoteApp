@@ -30,4 +30,14 @@ Controller成功provision后仍封闭普通业务转发，consent_round继续仅
 
 新增七项协调故障回归，与原测试联合 54 项 PASS；全部为协议/并发 fixture，不是实际双机 PONG。当前尚需补齐首次绑定的 readiness 竞争：早完成一端 bind 后立刻 state，服务端在另一端尚未 bound 时返回拒绝，现有 watch 会终止；不能通过忽略 HTTPS/验签失败或放宽 binding 门禁处理。还需要持久管理父进程在撤销未知时保留 signer，以及明确区分正常维护零退出与撤销触发的 fault 非零退出，再接真实 fresh 双机 runner。未在这些边界解决前用活动组件启动实机 enrollment。
 
+## r70：readiness 与独立驻留管理
+
+新增内部网络操作 await_binding，沿用原生设备签名、持久 nonce/限流与原 grant 授权检查；仅当完整双边 binding 尚缺失时在服务端等待，最长10秒，每轮重新检查授权/健康状态，且不持锁睡眠。取消、撤销、过期、倒退、非参与者、损坏/未知 grant、driver/storage 故障均拒绝。只返回原格式、原3秒有效期的完整 issuer 签名 NetworkState，没有部分 binding 或 unsigned pending 能力。普通 state 路径行为不变。native watch 仅首次调用 await_binding；拿到完整 pair 后继续普通 state，HTTPS/签名/身份等失败不重试。此服务协议尚未部署，必须先升级预发布服务再启动新的实际产品包，不能拿旧服务403当作可忽略的 pending。
+
+新增 Unix/macOS TEST 管理驻留组件 persistent_supervisor：只在受信0700目录监听0600 socket，公開 bootstrap 只含PID/原生scope/public，启动前拒绝旧socket/metadata。管理客户端断开或业务调用未知不会自动 stop；只有显式 owner_stop 尝试实际 closed/EOF/exit0/join，失败不宣称 joined、不删测试根。它必须作为独立管理进程启动，当前尚未接入 fresh 活动 runner；不是原生 OS 身份/发行认证的替代品。Windows holder 增加显式 -StayReady -RetainUntilStop，仅该 TEST 模式取消原10分钟管理超时，不延长 profile 或许可；只接受空、非目录/非重解析点 stop marker。
+
+修复 LocalSupervisor 超时后的迟到回执混淆：下一条业务请求发出前先消费旧回执，绝不能把旧批准当新撤销结果。写入未知/畸形回复永久封闭该继承管道，并保留 owner；驻留组件同样不把遗留业务回复当作 stop ACK。此故障分支仍需要独立本地控制端点或专用恢复协议，不能通过无限重试解除封闭。正常 Windows 业务管道每请求独立连接，不复用这类继承流。
+
+验证：真实本地 TLS/Store 的首端等待、后端实际 Bind 不被锁住、完整验签回复、等待中撤销、取消/权限/重放/时钟/健康拒绝通过（设备与 driver 为 fixture）；相关 Go race/vet通过。Python 60项回归含真实本地子进程跨客户端存活、断开管理连接后显式零退出、私有路径/旧metadata拒绝、未知回执不乱序和非零退出不冒充成功。Windows 新 holder AST 及5项 native watch协议测试无SKIP/exit0，未执行原生身份安装或新Headscale会话。真实预发布服务与控制面本轮未改。
+
 本轮新增9项Python测试（含多组故障子项），覆盖回执丢失只批准一次、精确撤销、未知撤销不假成功、不同对端/grant/过期结果、严格布尔、短有效期预拒绝、秘密只走stdin、超时无自动重试、重复/超大/多帧回复和shell注入拒绝。加既有JoinedPipe/compiled products回归共41项PASS。另Go当前HTTP/签名/注册授权重放及profile TLS回归通过。全部是本机协议/fixture回归，没有创建新的真实设备、grant、节点或桌面任务。

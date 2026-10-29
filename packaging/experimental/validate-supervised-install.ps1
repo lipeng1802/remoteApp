@@ -1,5 +1,6 @@
-param([switch]$ResumeFiles, [switch]$StayReady)
+param([switch]$ResumeFiles, [switch]$StayReady, [switch]$RetainUntilStop)
 $ErrorActionPreference = 'Stop'
+if ($RetainUntilStop -and -not $StayReady) { throw 'Retained owner requires StayReady' }
 # Run in the logged-in desktop (or an Interactive scheduled task). This only
 # initializes a fresh isolated TEST root; it does not register an online device.
 $publicReady = Join-Path $PSScriptRoot 'owner-ready.json'
@@ -50,10 +51,19 @@ try {
             $file.Flush($true)
         } finally { $file.Dispose() }
         [System.IO.File]::Move($pendingReady, $publicReady)
-        Write-Output 'OWNER_READY: public bootstrap published; waiting for explicit management stop, maximum 10 minutes.'
+        if ($RetainUntilStop) {
+            Write-Output 'OWNER_READY: public bootstrap published; retained until explicit management stop. Trust expiry is unchanged.'
+        } else {
+            Write-Output 'OWNER_READY: public bootstrap published; waiting for explicit management stop, maximum 10 minutes.'
+        }
         $deadline = [DateTime]::UtcNow.AddMinutes(10)
-        while (-not (Test-Path -LiteralPath $stopRequest) -and [DateTime]::UtcNow -lt $deadline) {
+        while ($true) {
             if ($process.HasExited) { throw 'Desktop supervisor exited before requested stop' }
+            if (Test-Path -LiteralPath $stopRequest) {
+                $item = Get-Item -LiteralPath $stopRequest
+                if (-not $item.PSIsContainer -and $item.Length -eq 0 -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { break }
+            }
+            if (-not $RetainUntilStop -and [DateTime]::UtcNow -ge $deadline) { break }
             Start-Sleep -Milliseconds 200
         }
     }

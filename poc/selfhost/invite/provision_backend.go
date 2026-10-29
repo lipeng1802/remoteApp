@@ -2,6 +2,7 @@ package invite
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -179,6 +180,42 @@ func (b *ProvisionBackend) Reconcile(ctx context.Context) error {
 // grant. Only the last successful policy projection can authorize a snapshot.
 // It is private plumbing for the transport bridge, not a public HTTP endpoint.
 func (b *ProvisionBackend) NetworkState(g Grant) (NetworkState, error) {
+	return b.networkState(g, false)
+}
+
+// AwaitNetworkState waits only for the other verified binding, never for an
+// authorization/driver/storage failure. No partial binding or unsigned pending
+// reply leaves the authority; the ordinary state/watch path remains fail-closed.
+func (b *ProvisionBackend) AwaitNetworkState(ctx context.Context, g Grant) (NetworkState, error) {
+	if ctx == nil || ctx.Err() != nil {
+		return NetworkState{}, ErrDenied
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	for {
+		if ctx.Err() != nil {
+			return NetworkState{}, ErrDenied
+		}
+		state, err := b.networkState(g, true)
+		if ctx.Err() != nil {
+			return NetworkState{}, ErrDenied
+		}
+		if err != errBindingPending {
+			return state, err
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return NetworkState{}, ErrDenied
+		case <-timer.C:
+		}
+	}
+}
+
+var errBindingPending = errors.New("verified_peer_binding_pending")
+
+func (b *ProvisionBackend) networkState(g Grant, waiting bool) (NetworkState, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.Store == nil || b.Driver == nil {
@@ -193,6 +230,9 @@ func (b *ProvisionBackend) NetworkState(g Grant) (NetworkState, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if waiting && (!b.ready || !s.provisionReady || !s.authorizedLocked(g, g.Claims.Target, g.Claims.Controller)) {
+		return NetworkState{}, ErrDenied
+	}
 	var binding NetworkBinding
 	targets, controllers := 0, 0
 	for _, r := range s.state.Provisions {
@@ -208,6 +248,9 @@ func (b *ProvisionBackend) NetworkState(g Grant) (NetworkState, error) {
 		}
 	}
 	if targets != 1 || controllers != 1 {
+		if waiting && targets <= 1 && controllers <= 1 {
+			return NetworkState{}, errBindingPending
+		}
 		return NetworkState{}, ErrDenied
 	}
 	applied := false
