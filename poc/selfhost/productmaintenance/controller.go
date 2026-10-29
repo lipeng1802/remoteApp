@@ -14,7 +14,9 @@ import (
 
 	"remoteapp.local/selfhost-poc/autonomousbinding"
 	"remoteapp.local/selfhost-poc/clientruntime"
+	"remoteapp.local/selfhost-poc/grantrevocation"
 	"remoteapp.local/selfhost-poc/installeddevice"
+	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/localmaintenance"
 	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/trustinstall"
@@ -28,6 +30,12 @@ type Signer interface {
 	CloseJoined() error
 }
 type OpenSigner func(autonomousbinding.Record) (Signer, error)
+type boundRevocation interface {
+	Observe(string, invite.Grant) error
+	Pin(invite.Grant) error
+	Revoke(context.Context) error
+	Close()
+}
 
 type Controller struct {
 	r                                             trustinstall.Release
@@ -40,6 +48,40 @@ type Controller struct {
 	requested, prepared, broken, closed, released bool
 	provisioned                                   bool
 	expected                                      trustprofile.MaintenanceState
+	revocation                                    boundRevocation
+}
+
+// ConfigureRevocation is trusted compiled wiring, never a pipe-supplied switch.
+func (c *Controller) ConfigureRevocation(ctx context.Context, tunnel bool) error {
+	if e := c.lock(ctx); e != nil {
+		return e
+	}
+	defer c.unlock()
+	if c.revocation != nil || c.child == nil || c.requested || c.broken || c.provisioned || c.released {
+		return ErrProduct
+	}
+	r, e := grantrevocation.New(c.r.Specification(), c.signer, tunnel)
+	if e != nil {
+		return e
+	}
+	c.revocation = r
+	return nil
+}
+
+func (c *Controller) revoke(ctx context.Context) (json.RawMessage, error) {
+	if e := c.lock(ctx); e != nil {
+		return nil, e
+	}
+	defer c.unlock()
+	// Product/watch failure may already have sealed business IPC; retain the
+	// independent signer for this exact decrease-of-authority operation.
+	if c.revocation == nil || !c.provisioned || c.released {
+		return nil, ErrProduct
+	}
+	if e := c.revocation.Revoke(ctx); e != nil {
+		return nil, e
+	}
+	return json.RawMessage(`{"status":"session_revoked","passed":true}`), nil
 }
 
 // StartTest reads identity ONLY from the existing native binding and closes
@@ -120,6 +162,9 @@ func (c *Controller) Exited() <-chan struct{} {
 // Successful provision seals this path because the autonomous product owns all
 // subsequent watch/session work; ordinary requests cannot interrupt that owner.
 func (c *Controller) Forward(ctx context.Context, request installeddevice.Request) (json.RawMessage, error) {
+	if installeddevice.ValidSupervisedRevocation(request) {
+		return c.revoke(ctx)
+	}
 	if !installeddevice.ValidSupervisedCommand(request) {
 		return nil, ErrProduct
 	}
@@ -129,6 +174,12 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 	defer c.unlock()
 	if c.child == nil || c.requested || c.provisioned || c.broken || c.closed || c.released {
 		return nil, ErrProduct
+	}
+	if request.Op == "provision" && c.revocation != nil {
+		if e := c.revocation.Pin(request.Network.Grant); e != nil {
+			return nil, e
+		}
+		c.provisioned = true // retain revoke ability if the product reply is lost
 	}
 	raw, e := c.child.Exchange(ctx, request)
 	if e != nil {
@@ -147,6 +198,19 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 		if decode(raw, &result) != nil || result.Status != "network_watch" || !result.Passed || !result.Active {
 			c.broken = true
 			return nil, ErrProduct
+		}
+	}
+	if c.revocation != nil && request.Op == "device" && (request.Device.Action == "approve" || request.Device.Action == "status") {
+		var result struct {
+			Status string        `json:"status"`
+			Passed bool          `json:"passed"`
+			Device invite.Result `json:"device"`
+		}
+		if decode(raw, &result) == nil && result.Status == "device_result" && result.Passed && result.Device.Status == "approved" && result.Device.Grant != nil {
+			if result.Device.RequestID != request.Device.RequestID || c.revocation.Observe(result.Device.RequestID, *result.Device.Grant) != nil {
+				c.broken = true
+				return nil, ErrProduct
+			}
 		}
 	}
 	return raw, nil
@@ -286,6 +350,9 @@ func (c *Controller) Release(ctx context.Context) error {
 		}
 	}
 	if c.signer != nil {
+		if c.revocation != nil {
+			c.revocation.Close()
+		}
 		if e := c.signer.CloseJoined(); result == nil {
 			result = e
 		}

@@ -14,6 +14,7 @@ class ManagementAdmission(unittest.TestCase):
         work=Path(directory)
         (work/"darwin").mkdir()
         (work/"windows").mkdir()
+        (work/"windows/supervised-control-relay.exe").write_bytes(b"TEST fixture; never executed")
         nonce="a"*12
         meta={"nonce":nonce,"win_dir":"C:\\Users\\jarvis\\remoteapp-r67-package-"+nonce,"mac_root":str(work/"installed")}
         (work/"management.json").write_text(json.dumps(meta))

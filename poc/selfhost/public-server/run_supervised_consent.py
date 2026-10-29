@@ -59,7 +59,8 @@ def main(work, resume_setup=False):
     repo = Path(__file__).resolve().parents[3]
     win = work / "windows"
     shutil.copy2(repo / "packaging/experimental/validate-supervised-install.ps1", win / "validate-supervised-install.ps1")
-    shutil.copy2(repo / "artifacts/connection-poc/supervised-control-r61-relay.exe", win / "supervised-control-relay.exe")
+    if not (win/"supervised-control-relay.exe").is_file():
+        raise RuntimeError("fresh_matching_relay_required")
     profile = json.loads(base64.b64decode(json.loads((work/"darwin/fixture.json").read_text())["release"]))
     expiry = profile["bundled_profile"]["claims"]["expires_at"]
     if expiry-time.time() < (180 if resume_setup else 600):

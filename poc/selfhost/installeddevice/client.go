@@ -69,6 +69,9 @@ func ValidSupervisedCommand(r Request) bool {
 	return r.Op != "stop" && (validCommand(r) || validProvision(r))
 }
 
+// Separate supervisor-side operation. The native product never receives it.
+func ValidSupervisedRevocation(r Request) bool { return r == (Request{Op: "revoke_session"}) }
+
 // Runner is started only by clientowner.Open/Start, which supplies the durable
 // current profile and monotonic lifetime. The output is a trusted private pipe,
 // not a log or public peer interface; device results can contain invite/grant.

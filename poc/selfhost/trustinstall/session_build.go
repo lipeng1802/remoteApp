@@ -206,11 +206,17 @@ func CompileIdleTestRetirement(ctx context.Context, goexe, module, target, dest 
 
 // CompileProductSupervisorTest fixes the product executable/digests at build
 // time. Runtime starts only an existing native binding; it cannot choose keys.
-func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time) error {
+func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, testTunnel ...bool) error {
 	if !s.Test || !validInstallRoot(target, productPath) || !canonical(productDigest, 32) || !canonical(signerDigest, 32) {
 		return trustprofile.ErrTrust
 	}
 	extra := " -X main.embeddedProductPath=" + base64.RawURLEncoding.EncodeToString([]byte(productPath)) + " -X main.embeddedProductDigest=" + productDigest + " -X main.embeddedSignerDigest=" + signerDigest
+	if len(testTunnel) > 0 {
+		if len(testTunnel) != 1 || !testTunnel[0] || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" {
+			return trustprofile.ErrTrust
+		}
+		extra += " -X main.embeddedTestTunnel=loopback18444"
+	}
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/supervised-autonomous-product-test", extra, now)
 }
 

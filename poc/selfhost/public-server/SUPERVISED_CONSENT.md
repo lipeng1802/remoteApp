@@ -10,6 +10,16 @@
 
 ## 刻意保留的边界
 
-当前Controller成功provision后封闭普通业务转发，因此本组件不提供work/provision回调，也不把网络操作夹在finally撤销之前。实际活动会话需要独立、明确设计的撤销签名通路，或先完成产品退出交接再在有效授权上下文中撤销；不能把旧use_grant/network_state接口套进当前产品。r67新增run_supervised_consent.py及Windows -StayReady入口，已实际完成双OS signer的consent-only episode与双方join/TEST清理；尚未完成双机provision协调或PONG。
+Controller成功provision后仍封闭普通业务转发，consent_round继续仅做consent-only，不提供work/provision回调；不能把旧use_grant/network_state接口套进当前产品。r67新增run_supervised_consent.py及Windows -StayReady入口，已实际完成双OS signer的consent-only episode与双方join/TEST清理；尚未完成双机provision协调或PONG。
+
+## r68：provision 后独立撤销
+
+当前 TEST supervisor 在发布 READY 前配置独立 HTTPS client，复用其持有的原生 signer；只有从产品成功 approve/status 回执观察到的 request_id 和 issuer 签名 grant 才能被绑定。第一次 provision 调用发给产品前即固定该 grant，包括启动回执超时的情况。此后仅接受无附加字段的 `{"Op":"revoke_session"}`，不接受调用者提供 grant、request、身份、root 或目的地址。controller 角色不能代替 target 撤销。普通业务路径保持封闭，产品/watch 故障不会抢先销毁独立撤销需要的 signer；实际 Release/join 后该通路关闭。
+
+首次撤销的回执未知时不自动重发。下一次显式调用必须先用原生签名查询同一 request：确认 revoked 且无 grant 才返回成功；只有仍为 approved 且 grant 完全相同，才允许本次显式重试。其他状态或查询失败均保留未知结果。操作与 Close 串行，Close 等待正在执行的请求，不能提前关闭 signer。profile 过期、时钟早于签发、取消、其他设备/授权及已关闭通路均拒绝；不放宽生产信任或短包有效期。成功回执只证明撤销，不证明 watch/payload/node 已 join 或当前有 PONG。
+
+构建器随新包编译当前 relay，显式 TEST tunnel 模式也同步编译到 supervisor；不能再复制 r61 relay（不认识新操作）或混用旧短包。现有 consent-only runner 要求 fresh 包自带 relay。实际批准回执在观察 grant 前丢失、后续 profile 到期仍无法确认撤销等情况没有通用自动恢复承诺，必须保留现场和身份，不能当作已清理。
+
+验证：Mac 相关 Go race 回归、Windows vet 和 47 项 Python 回归通过。真实本地 TLS/authority 测试在普通产品 HTTP client 已关闭后，故意丢弃已执行撤销的回执，独立 client 经签名 status 确认终态且实际 mutation 仅一次；该测试使用内存设备密钥，不是 OS signer 双机验收。Windows 本轮 4 项撤销状态/生命周期测试与 3 项真实 IPC/relay 测试全部通过，无 SKIP/exit0；后者 backend 为 fixture，不调用 Credential Manager。真实双机 provision、独立撤销和 PONG/维护收尾仍待后续协调。
 
 本轮新增9项Python测试（含多组故障子项），覆盖回执丢失只批准一次、精确撤销、未知撤销不假成功、不同对端/grant/过期结果、严格布尔、短有效期预拒绝、秘密只走stdin、超时无自动重试、重复/超大/多帧回复和shell注入拒绝。加既有JoinedPipe/compiled products回归共41项PASS。另Go当前HTTP/签名/注册授权重放及profile TLS回归通过。全部是本机协议/fixture回归，没有创建新的真实设备、grant、节点或桌面任务。

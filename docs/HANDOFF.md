@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r68：独立绑定撤销通路与未知回执收尾组件
+
+新增 TEST-only grantrevocation.Channel，由当前 supervisor 在 READY 前用真实 release/profile 和原生 signer 配置独立 HTTPS client；仅从成功 approve/status 的产品回执观察 request_id 与 issuer 已验签 grant，首次 provision 发给 child 前固定该授权。新私有操作只有精确 `{"Op":"revoke_session"}`，不能附带身份/root/目的地址/grant/request；target owner 才可撤销，controller 不可。普通 Forward 在 provision 后仍关闭，但产品/watch 故障或 provision 结果未知时保留独立撤销签名能力，直到实际 Release/join 才关闭该 client/signer，不经已被封闭的 child IPC。
+
+未知 mutation 回执不会自动重试：下一次显式请求先签名 status 查询原 request，确认 revoked/no grant 才成功；仍 approved 且同一 grant 才允许本次显式重新撤销，外来/未知/已到期状态均拒绝。操作与 Close 串行，不能 Close 抢跑在途签名。profile 有效期、早于签发的时钟、取消与角色检查保持，不延长短包/不开放生产。已确认撤销不等于 worker join 或活动 payload 证据；批准回执在观察 grant 前丢失的自动恢复仍未覆盖，身份必须保留。
+
+构建器随 fresh 包编译当前 supervised-control-relay，并把显式固定 TEST tunnel 同步编译进 supervisor；consent-only runner 不再复制不认识新操作的 r61 relay。r67 已退役根不复活，新包必须新鲜有效且新随机 TEST 根。
+
+Mac 相关六包 race、两个编译入口测试、Windows 八包 vet 与 47 项 Python 回归通过。真实本地 TLS/authority 测试使用内存设备密钥，原普通 client Close 后独立 client 仍可撤销；服务器执行 revoke 后主动断开回执，下一次显式请求通过真实签名 status 确认，mutation 仅一次。另测同授权固定、外来/过期/取消/非owner拒绝、Close 等待在途请求、产品 sealed/fault 与 provision 超时保留撤销 signer。超时子进程后实际非正常协议退出仍返回失败，未伪称正常 join。
+
+Windows 上传三个本轮测试二进制至 C:\Users\jarvis\remoteapp-r68-validation，逐个 SHA256 与本地一致后执行。4 项撤销状态/生命周期、3 项真实管道/当前编译 relay 顶层测试全部 PASS，无 SKIP/EXITCODE=0；原生日志 artifacts/connection-poc/revocation-r68/windows-result.txt。backend 为 fixture，不调用 Credential Manager，因此在 SSH 会话直接执行；不是 Windows OS signer 真实会话验证。本轮 SCP 一度等待，之后实际完成；第一次测试曾先于传输完成失败，后一次 cmd 引号导致管道字符被 shell 误解析。改 UTF16 EncodedCommand 且先核对文件哈希后完整通过，未把先前失败当 PASS。
+
+本轮无新 TEST 身份/安装根/桌面任务、真实服务 grant/node 或 Store 变更；远端仅保留公开测试可执行文件。SSH 已确认恢复可用，不需用户介入。下一组自动推进当前协议的并行 provision/ACTIVE/watch/session-identity/持续增长 PONG 协调和独立撤销实测；再验证所有实际 join、零退出、独立程序删除与精确资源回收。r68 协议测试不等于这些实机验收完成，整体切片4仍未完成。本轮本地提交，不推送。
+
 ## 2026-10-29 r67 自动续办：真实双机OS身份授权/拒绝/撤销已通过
 
 本次heartbeat在既有授权范围完成fresh两平台短包构建、Windows Interactive驻留owner、Mac真实监督产品、r66私有管理适配器到现有预发布服务的consent-only实测。工作目录artifacts/connection-poc/supervised-consent-r67-156f90fb5c70，management.json为公开固定根/目录配置，execution.json仅保存阶段/公共布尔证据。Windows测试根C:\Users\jarvis\remoteapp-r67-156f90fb5c70、包目录C:\Users\jarvis\remoteapp-r67-package-156f90fb5c70；Mac根/private/tmp/remoteapp-r67-156f90fb5c70/installed。两个根均为本轮随机全新根，不复活r64。构建工具随包有r65显式回收入口。

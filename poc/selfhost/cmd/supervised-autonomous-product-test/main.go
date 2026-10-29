@@ -26,6 +26,7 @@ import (
 )
 
 var embeddedRelease, embeddedProductPath, embeddedProductDigest, embeddedSignerDigest string
+var embeddedTestTunnel string
 
 func run(output func(any) error) (result error) {
 	if len(os.Args) != 1 {
@@ -82,6 +83,12 @@ func run(output func(any) error) (result error) {
 		}()
 	}
 	if e != nil {
+		return e
+	}
+	if embeddedTestTunnel != "" && embeddedTestTunnel != "loopback18444" {
+		return trustprofile.ErrTrust
+	}
+	if e = controller.ConfigureRevocation(ctx, embeddedTestTunnel == "loopback18444"); e != nil {
 		return e
 	}
 	l, e := net.Listen("tcp4", "127.0.0.1:0")

@@ -44,6 +44,9 @@ func TestProductProcessFixture(t *testing.T) {
 				}
 				json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "device_result", "passed": true, "device": map[string]string{"status": "fixture-result"}})
 			case "provision":
+				if mode == "forward-provision-slow" {
+					time.Sleep(500 * time.Millisecond)
+				}
 				provisioned = true
 				json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "network_watch", "passed": true, "active": true})
 			case "product_count":
@@ -144,6 +147,102 @@ func TestProductForwardTimeoutRetainsOwnershipAndLocksReuse(t *testing.T) {
 	}
 	if signer.closes.Load() != 1 {
 		t.Fatal("signer not joined")
+	}
+}
+
+type revokeFixture struct {
+	pins, revokes, closes int
+	unknown               bool
+}
+
+func (f *revokeFixture) Observe(string, invite.Grant) error { return nil }
+func (f *revokeFixture) Pin(invite.Grant) error             { f.pins++; return nil }
+func (f *revokeFixture) Revoke(context.Context) error {
+	f.revokes++
+	if f.unknown {
+		return ErrProduct
+	}
+	return nil
+}
+func (f *revokeFixture) Close() { f.closes++ }
+
+func TestIndependentRevokeSurvivesSealedOrFaultedProductAndUnknownReply(t *testing.T) {
+	c, signer, _ := controllerFixture(t, "forward")
+	c.prepared = false
+	revoke := &revokeFixture{}
+	c.revocation = revoke
+	g := invite.Grant{Signature: "fixture"}
+	if _, e := c.Forward(context.Background(), installeddevice.Request{Op: "provision", Network: invite.NetworkRequestBody{Grant: g}}); e != nil {
+		t.Fatal(e)
+	}
+	if revoke.pins != 1 {
+		t.Fatal("grant not pinned before provisioning")
+	}
+	c.broken = true // watch/product failure must not discard the revoke signer
+	if _, e := c.Forward(context.Background(), installeddevice.Request{Op: "device", Device: invite.Body{Action: "register"}}); e == nil {
+		t.Fatal("business seal bypassed")
+	}
+	if _, e := c.Forward(context.Background(), installeddevice.Request{Op: "revoke_session", Device: invite.Body{GrantID: "foreign"}}); e == nil {
+		t.Fatal("runtime grant selector accepted")
+	}
+	revoke.unknown = true
+	if _, e := c.Forward(context.Background(), installeddevice.Request{Op: "revoke_session"}); e == nil {
+		t.Fatal("unknown mutation acknowledged")
+	}
+	if signer.closes.Load() != 0 || revoke.closes != 0 {
+		t.Fatal("unknown revocation released ownership")
+	}
+	revoke.unknown = false
+	if _, e := c.Forward(context.Background(), installeddevice.Request{Op: "revoke_session"}); e != nil {
+		t.Fatal(e)
+	}
+	if revoke.revokes != 2 {
+		t.Fatal("explicit retry not routed independently")
+	}
+	if e := c.Release(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	if revoke.closes != 1 || signer.closes.Load() != 1 {
+		t.Fatal("revoke transport/signer not closed after join")
+	}
+	if _, e := c.Forward(context.Background(), installeddevice.Request{Op: "revoke_session"}); e == nil {
+		t.Fatal("revocation after release")
+	}
+}
+
+func TestProvisionTimeoutRetainsPinnedIndependentRevocation(t *testing.T) {
+	c, _, _ := controllerFixture(t, "forward-slow")
+	c.prepared = false
+	revoke := &revokeFixture{}
+	c.revocation = revoke
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, e := c.Forward(ctx, installeddevice.Request{Op: "provision", Network: invite.NetworkRequestBody{Grant: invite.Grant{Signature: "fixture"}}}); e == nil {
+		t.Fatal("cancelled exchange")
+	}
+	if revoke.pins != 0 {
+		t.Fatal("pre-cancelled request pinned")
+	}
+	late, signer, _ := controllerFixture(t, "forward-provision-slow")
+	late.prepared = false
+	pinned := &revokeFixture{}
+	late.revocation = pinned
+	deadline, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer stop()
+	if _, e := late.Forward(deadline, installeddevice.Request{Op: "provision", Network: invite.NetworkRequestBody{Grant: invite.Grant{Signature: "fixture"}}}); e == nil {
+		t.Fatal("late startup receipt accepted")
+	}
+	if pinned.pins != 1 || !late.provisioned || !late.broken || signer.closes.Load() != 0 {
+		t.Fatal("uncertain startup lost revoke authority/ownership")
+	}
+	if _, e := late.Forward(context.Background(), installeddevice.Request{Op: "revoke_session"}); e != nil {
+		t.Fatal("independent revoke blocked by child transport fault", e)
+	}
+	if e := late.Release(context.Background()); e == nil {
+		t.Fatal("late product reply treated as a clean stop")
+	}
+	if signer.closes.Load() != 1 || pinned.closes != 1 {
+		t.Fatal("failed product exit not joined before signer closure")
 	}
 }
 

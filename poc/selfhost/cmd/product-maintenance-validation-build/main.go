@@ -234,10 +234,20 @@ func run() error {
 		if e = trustinstall.CompileTestProductSetup(ctx, goexe, module, target, filepath.Join(dest, "test-setup"+suffix), spec, installRoot, now); e != nil {
 			return e
 		}
-		if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now); e != nil {
+		if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now, true); e != nil {
 			return e
 		}
 		if e = trustinstall.CompileIdleTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-idle-test"+suffix), spec, installRoot, digest(vaultRaw), now); e != nil {
+			return e
+		}
+		arch := runtime.GOARCH
+		if target == "windows" {
+			arch = "amd64"
+		}
+		relay := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-o", filepath.Join(dest, "supervised-control-relay"+suffix), "./cmd/supervised-control-relay")
+		relay.Dir = module
+		relay.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED=0", "GOOS="+target, "GOARCH="+arch)
+		if e = relay.Run(); e != nil {
 			return e
 		}
 	}

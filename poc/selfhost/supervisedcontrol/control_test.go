@@ -46,8 +46,10 @@ func exercise(t *testing.T, ln net.Listener, dial func() (net.Conn, error)) {
 		{`{"Op":"maintenance_prepare"}`, "request_rejected", 0},
 		{`{"Op":"product_count","VaultScope":"override"}`, "request_rejected", 0},
 		{`{"Op":"device","Device":{"action":"status"},"VaultScope":"override"}`, "request_rejected", 0},
+		{`{"Op":"revoke_session","Device":{"grant_id":"foreign"}}`, "request_rejected", 0},
 		{`{"Op":"device","Device":{"action":"status"}}`, "device_result", 1},
 		{`{"Op":"product_count"}`, "product_count", 2},
+		{`{"Op":"revoke_session"}`, "device_result", 3},
 	} {
 		c, e := dial()
 		if e != nil {
