@@ -19,6 +19,10 @@
 
 READY/STOPPED取当前boot的journal，并绑定PID与当前ExecMainStartTimestampMonotonic；拒绝旧实例或复用PID的历史日志。TERM只发主owner，不向其整个cgroup同时取消，避免抢先打断嵌套helper；45秒内未取得真实退出与回执就暂停，不SIGKILL、不把inactive当join。脚本不自动回退/重启；失败时保持原检查点，运行状态由失败所在步骤决定。若start只启动了authority，恢复前必须先明确停止并取得新实例真实收尾证据；不能删除锁继续rollback。
 
+r71 实际发现 CentOS journald 在进程退出后保留 stdout STOPPED，但丢失 `_SYSTEMD_UNIT`（cgroup变成`/`），因此原 `journalctl -u` 查询漏掉回执。现在查询当前boot的可信 `_PID`，通常仍要求正确unit；仅已知 STOPPED 标签允许unit缺失分支，必须与同一当前实例的实际 READY 记录在 `_STREAM_ID`、`_BOOT_ID`、`_UID`、`SYSLOG_IDENTIFIER` 完全匹配且均为stdout，并验证start/stop单调时间顺序。不接受不同unit、外来stream/uid、旧READY或无READY；实际PID消失门禁保持。不是用服务inactive/状态0替代回执，也没有停止或修改journald。
+
+新 readiness authority 已通过工单 `remoteapp-binary-upgrade-3e3d5c1a66528b66` 部署/verify，SHA256 `28fb8d40ab28a3f56d6419efb9e6dbeaca13d5de28c348ab0bc3a202bbdb4ea0`，frontend/探针沿用r60字节。两次漏查STOPPED后均只明确恢复原frontend，未换binary或认可失败；找到原始stream证据、增加回归并修复工具后，fresh实例retry-quiesce/check/install/start/verify通过。Store沿用r67合法摘要74a47e...，非下方r60旧摘要；完整值见HANDOFF。服务配置、verifier identity/journal、1 user/node/key、零规则及Nginx基线保持。工单含原binary、checkpoint与最终recovery-stage，不能据此恢复旧Store。
+
 备份位于root-only `/var/lib/remoteapp-binary-upgrades/<stage basename>`，包括原三个binary和原子checkpoint。本轮另将完整已核对stage保存到其`recovery-stage/`，原binary备份与候选分目录。/run重启会消失；恢复时先核验持久材料摘要，在相同规范stage路径重建工具，再检查实际服务/进程/锁/Store；复制材料本身不授权接管未知owner。不覆盖当前合法Store或verifier身份，也不能运行旧empty-control清理脚本。本轮未实际执行回退或整机重启验收。
 
 ## 实机结果与边界

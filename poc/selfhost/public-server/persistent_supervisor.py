@@ -6,13 +6,14 @@ not a publisher-authenticated product endpoint or a production login service.
 """
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import stat
 import sys
 
 from joined_pipe import JoinedPipe
-from supervised_requests import LocalSupervisor, reply
+from supervised_requests import LocalSupervisor, NativeUnix, reply
 
 
 def private_directory(path):
@@ -41,9 +42,9 @@ def frame(connection):
 
 
 class Owner:
-    def __init__(self, child):
+    def __init__(self, child, endpoint=None):
         self.child = child
-        self.endpoint = LocalSupervisor(child)
+        self.endpoint = endpoint if endpoint is not None else LocalSupervisor(child)
         self.joined = False
 
     def call(self, request):
@@ -53,9 +54,9 @@ class Owner:
             if not self.joined:
                 # An outstanding/malformed business frame cannot become a stop
                 # acknowledgement. Preserve ownership for explicit recovery.
-                if self.endpoint.poisoned:
+                if isinstance(self.endpoint, LocalSupervisor) and self.endpoint.poisoned:
                     raise RuntimeError("holder_pipe_sealed_preserve_owner")
-                if self.endpoint.pending:
+                if isinstance(self.endpoint, LocalSupervisor) and self.endpoint.pending:
                     with self.child.lock:
                         self.endpoint.read()
                 self.child.stop()
@@ -68,7 +69,7 @@ class Owner:
         return self.endpoint(request)
 
 
-def serve(directory, command, child_factory=JoinedPipe):
+def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
     directory = private_directory(directory)
     address, ready_file = directory/"owner.sock", directory/"owner.json"
     # Preflight before starting any process/native ownership. Never replace an
@@ -86,20 +87,27 @@ def serve(directory, command, child_factory=JoinedPipe):
         child = child_factory(command, {"Op": "open"})
         ready = child.read()
         if (not isinstance(ready, dict) or ready.get("status") != "ready"
-                or not isinstance(ready.get("vault_scope"), str)
-                or not isinstance(ready.get("public_key"), str)):
+                or not isinstance(ready.get("vault_scope"), str) or not re.fullmatch(r"[0-9a-f]{32}",ready["vault_scope"])
+                or not isinstance(ready.get("public_key"), str) or not re.fullmatch(r"[0-9a-f]{64}",ready["public_key"])):
             raise RuntimeError("holder_owner_not_ready_preserve_state")
-        owner = Owner(child)
+        native = NativeUnix(ready["control_socket"]) if require_native else None
+        owner = Owner(child, native)
         # Publish public discovery only; authority material and application
         # keys never enter this file. Exclusive file remains after unjoined exit.
-        published = json.dumps({"version": 1, "process_id": os.getpid(),
-                                "vault_scope": ready["vault_scope"], "public_key": ready["public_key"]},
-                               separators=(",", ":")).encode()
-        with ready_file.open("xb") as output:
-            os.chmod(ready_file, 0o600)
+        metadata = {"version": 1, "process_id": os.getpid(),
+                    "vault_scope": ready["vault_scope"], "public_key": ready["public_key"]}
+        if require_native:
+            metadata.update(control_socket=ready["control_socket"], supervisor_process_id=child.proc.pid)
+        published = json.dumps(metadata, separators=(",", ":")).encode()
+        pending_file=directory/("owner.json."+str(os.getpid())+".new")
+        with pending_file.open("xb") as output:
+            os.chmod(pending_file, 0o600)
             output.write(published)
             output.flush()
             os.fsync(output.fileno())
+        # Atomic, no-overwrite publication within our same private directory.
+        os.link(pending_file,ready_file)
+        pending_file.unlink()
         while not owner.joined:
             connection, unused = listener.accept()
             with connection:

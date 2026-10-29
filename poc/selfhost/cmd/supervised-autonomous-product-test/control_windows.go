@@ -9,7 +9,7 @@ import (
 	"remoteapp.local/selfhost-poc/supervisedcontrol"
 )
 
-func startDesktopControl(ctx context.Context, b *productmaintenance.Controller) (string, func(), error) {
+func startDesktopControl(ctx context.Context, b *productmaintenance.Controller) (string, func() error, error) {
 	var nonce [16]byte
 	if _, e := rand.Read(nonce[:]); e != nil {
 		return "", nil, e
@@ -22,5 +22,5 @@ func startDesktopControl(ctx context.Context, b *productmaintenance.Controller) 
 	life, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() { defer close(done); supervisedcontrol.Serve(life, ln, b) }()
-	return name, func() { cancel(); ln.Close(); <-done }, nil
+	return name, func() error { cancel(); ln.Close(); <-done; return nil }, nil
 }

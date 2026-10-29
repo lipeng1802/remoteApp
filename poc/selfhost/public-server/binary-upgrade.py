@@ -29,11 +29,33 @@ def service_identity(m, service):
 def receipt(m, service, pid, started, label):
     # Current boot + current ExecStart, never a prior process with a reused PID.
     m.require(pid > 1 and started > 0, "service_identity_missing")
-    raw = m.command(["journalctl", "--no-pager", "-b", "-o", "json", "-u", service, "_PID=" + str(pid)])
-    for line in raw.decode().splitlines():
-        row = json.loads(line)
-        if row.get("MESSAGE") == label and str(row.get("_PID")) == str(pid) and int(row.get("__MONOTONIC_TIMESTAMP", "0")) >= started:
+    # CentOS journald can lose _SYSTEMD_UNIT after /proc/<pid> disappears,
+    # while preserving its trusted stdout stream/PID/UID. A -u query omits that
+    # real terminal receipt. Correlate it to this instance's actual READY stream
+    # rather than accepting inactive/exit status or an unbound log message.
+    raw = m.command(["journalctl", "--no-pager", "-b", "-o", "json", "_PID=" + str(pid)])
+    rows = [json.loads(line) for line in raw.decode().splitlines()]
+    unit = service if service.endswith(".service") else service + ".service"
+    ready = {"remoteapp-frontend.service": FRONT_READY, "remoteapp-authority.service": AUTH_READY}.get(unit)
+    terminal = {"remoteapp-frontend.service": "STOPPED frontend", "remoteapp-authority.service": "STOPPED authority"}.get(unit)
+    def current(row):
+        return str(row.get("_PID")) == str(pid) and int(row.get("__MONOTONIC_TIMESTAMP", "0")) >= started
+    for row in rows:
+        if not current(row) or row.get("MESSAGE") != label:
+            continue
+        if row.get("_SYSTEMD_UNIT") == unit:
             return True
+        if label != terminal or row.get("_SYSTEMD_UNIT") is not None or row.get("_TRANSPORT") != "stdout":
+            continue
+        stream = row.get("_STREAM_ID", "")
+        if not re.match(r"^[0-9a-f]{32}\Z", stream) or not row.get("_BOOT_ID") or not row.get("_UID") or not row.get("SYSLOG_IDENTIFIER"):
+            continue
+        for start in rows:
+            if (current(start) and start.get("MESSAGE") == ready and start.get("_SYSTEMD_UNIT") == unit
+                    and start.get("_TRANSPORT") == "stdout"
+                    and int(start.get("__MONOTONIC_TIMESTAMP", "0")) <= int(row["__MONOTONIC_TIMESTAMP"])
+                    and all(start.get(k) == row.get(k) for k in ("_STREAM_ID", "_BOOT_ID", "_UID", "SYSLOG_IDENTIFIER"))):
+                return True
     return False
 
 def wait_ready(m, service, label):

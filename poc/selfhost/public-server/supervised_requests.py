@@ -5,7 +5,11 @@ desktop namespace. SSH transports private JSON; it does not authenticate a
 publisher or replace the product's device signatures/OS identity binding.
 """
 import json
+import os
+from pathlib import Path
 import re
+import socket
+import stat
 import subprocess
 
 
@@ -97,3 +101,46 @@ class LocalSupervisor:
                 self.poisoned = True
                 raise RuntimeError("supervised_local_write_unknown_preserve_owner") from None
             return self.read()
+
+
+class NativeUnix:
+    """One connection per request to an already trusted native READY socket.
+
+    Owner/permissions and exact inode pins are local admission, not publisher
+    authentication. A lost business receipt cannot poison lifecycle stdin.
+    """
+    def __init__(self, address):
+        self.address = Path(address)
+        self.directory = self.address.parent
+        self.identity = self.inspect()
+
+    def inspect(self):
+        if not self.address.is_absolute() or str(self.address.resolve(strict=True)) != str(self.address):
+            raise RuntimeError("supervised_unix_path_rejected")
+        parent, endpoint = self.directory.lstat(), self.address.lstat()
+        if (not stat.S_ISDIR(parent.st_mode) or stat.S_IMODE(parent.st_mode) != 0o700
+                or not stat.S_ISSOCK(endpoint.st_mode) or stat.S_IMODE(endpoint.st_mode) != 0o600
+                or parent.st_uid != os.getuid() or endpoint.st_uid != os.getuid()):
+            raise RuntimeError("supervised_unix_permissions_rejected")
+        return (parent.st_dev, parent.st_ino, endpoint.st_dev, endpoint.st_ino)
+
+    def __call__(self, request):
+        if self.inspect() != self.identity:
+            raise RuntimeError("supervised_unix_identity_changed")
+        raw = json.dumps(request, separators=(",", ":"), allow_nan=False).encode()+b"\n"
+        if len(raw) > 8192:
+            raise RuntimeError("supervised_request_bounds")
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(30)
+                connection.connect(str(self.address))
+                connection.sendall(raw)
+                data = bytearray()
+                while b"\n" not in data:
+                    chunk = connection.recv(4096)
+                    if not chunk or len(data)+len(chunk) > 8192:
+                        raise RuntimeError("supervised_unix_reply_incomplete")
+                    data.extend(chunk)
+                return reply(bytes(data))
+        except Exception:
+            raise RuntimeError("supervised_unix_outcome_unknown_preserve_owner") from None

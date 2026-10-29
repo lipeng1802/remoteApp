@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-r70 补齐首次双边绑定的有界 readiness 等待和独立驻留管理 owner，避免另一端尚未绑定时提前退出，或管理调用断开时自动释放 signer。Go race、60 项 Python 回归及 Windows 5 项 watch 测试通过；新 readiness 服务协议尚未部署，驻留入口尚未接入真实活动 runner。r67 双 OS 身份的授权/拒绝/撤销及退出清理已实测通过，r68/r69 独立撤销与并行 provision/PONG 协调已实现；真实双机 ACTIVE/PONG、活动维护、GUI与签名发行验收仍待完成。见[授权协调边界](poc/selfhost/public-server/SUPERVISED_CONSENT.md)和[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
+r71 已部署预发布 readiness 协议，Store、长期 verifier、零规则与业务 Nginx 基线保持。macOS 新原生独立业务 socket、驻留管理 owner、客户端断开后存活、实际零退出及精确 TEST 回收已实测通过，71 项 Python 回归通过。r67 双 OS 身份的授权/拒绝/撤销已通过，r68/r69 独立撤销与并行 provision/PONG 协调已实现；当前仍待接真实双机 ACTIVE/PONG、活动维护与删除整链，未完成 GUI 或签名发行验收。见[授权协调边界](poc/selfhost/public-server/SUPERVISED_CONSENT.md)和[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
 r57 增加独立本地进程的 OS 设备密钥双向认证及固定编译客户端：绑定双方 nonce、服务实例、完整编译 release 和原生维护事务，认证失败不停止会话，确认中断保留租约与 pending。当前是 TEST 授权策略，尚未验证发行方签名、正式发现／同意流程或跨机产品卸载。见[独立维护认证边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 

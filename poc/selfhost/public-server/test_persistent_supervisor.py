@@ -34,7 +34,7 @@ for line in sys.stdin:
                 children.append(child)
                 return child
             def work():
-                try: serve(directory, [], factory)
+                try: serve(directory, [], factory, require_native=False)
                 except Exception as exc: failures.append(type(exc).__name__)
             thread = threading.Thread(target=work, daemon=True)
             thread.start()

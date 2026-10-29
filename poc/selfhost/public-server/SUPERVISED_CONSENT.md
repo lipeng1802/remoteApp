@@ -40,4 +40,12 @@ Controller成功provision后仍封闭普通业务转发，consent_round继续仅
 
 验证：真实本地 TLS/Store 的首端等待、后端实际 Bind 不被锁住、完整验签回复、等待中撤销、取消/权限/重放/时钟/健康拒绝通过（设备与 driver 为 fixture）；相关 Go race/vet通过。Python 60项回归含真实本地子进程跨客户端存活、断开管理连接后显式零退出、私有路径/旧metadata拒绝、未知回执不乱序和非零退出不冒充成功。Windows 新 holder AST 及5项 native watch协议测试无SKIP/exit0，未执行原生身份安装或新Headscale会话。真实预发布服务与控制面本轮未改。
 
+## r71：macOS 原生独立业务 socket 与实际驻留验收
+
+最新 TEST supervisor 在 Unix/macOS 创建全新0700目录中的0600原生业务 socket，并经继承 READY 提供 control_socket。与 Windows 同样每连接一条有界请求，拒绝stop/maintenance/身份覆盖，不占用生命周期stdin。关闭先 cancel/等待全部连接handler退出，再按原inode精确移除自己的socket/空目录；替换对象拒绝，不递归删除。Windows管道行为保持。socket仅提供同用户隔离，不是publisher身份或生产发现认证。
+
+persistent_supervisor 的正常入口现在必须使用这个独立 NativeUnix adapter，不再把业务写入继承管道。每次请求用新连接，并核对原canonical目录/socket的owner、模式与inode；失去一个业务回复不会把另一个回复当stop或revoke结果。驻留bootstrap增加公开supervisor PID/control_socket，并通过先flush私有临时文件、再原子无覆盖发布，避免读到半帧。继承流只用于可信open/stop与实际join；旧 LocalSupervisor仍仅供明确的consent-only/fixture使用。
+
+本轮实际 fresh macOS TEST安装及原生Keychain signer、真实supervisor/product已验证：独立业务计数、非法stop/foreign grant选择拒绝、管理客户端断开后原owner仍存活，显式owner_stop后closed/EOF/实际exit0，业务handler/socket目录清理，随后独立idle retirement及空管理目录精确回收。没有注册在线设备或启动Headscale节点/TLS payload，不能将此结果当作双机PONG。预发布 await_binding authority已兼容升级；原Store、verifier及业务Nginx基线保持，细节见BINARY_UPGRADE.md。相关Go race/Windows vet与71项Python回归通过，真实活动runner接入/活动收尾仍待完成。
+
 本轮新增9项Python测试（含多组故障子项），覆盖回执丢失只批准一次、精确撤销、未知撤销不假成功、不同对端/grant/过期结果、严格布尔、短有效期预拒绝、秘密只走stdin、超时无自动重试、重复/超大/多帧回复和shell注入拒绝。加既有JoinedPipe/compiled products回归共41项PASS。另Go当前HTTP/签名/注册授权重放及profile TLS回归通过。全部是本机协议/fixture回归，没有创建新的真实设备、grant、节点或桌面任务。

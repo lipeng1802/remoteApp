@@ -1,8 +1,12 @@
 import subprocess
+import os
+from pathlib import Path
+import socket
+import tempfile
 import threading
 import unittest
 from unittest.mock import patch
-from supervised_requests import LocalSupervisor, WindowsRelay, reply
+from supervised_requests import LocalSupervisor, NativeUnix, WindowsRelay, reply
 
 
 class PrivateTransportBoundaries(unittest.TestCase):
@@ -68,6 +72,52 @@ class PrivateTransportBoundaries(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"pipe_sealed_preserve_owner"):
             endpoint({"Op":"revoke_session"})
         self.assertEqual(pipe.sent,1)
+
+    def test_native_unix_fresh_connection_after_lost_or_invalid_reply(self):
+        with tempfile.TemporaryDirectory(prefix="ra-uds-",dir="/tmp") as raw:
+            directory=Path(raw).resolve()
+            address=directory/"control.sock"
+            listener=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+            listener.bind(str(address)); os.chmod(address,0o600); listener.listen(4)
+            requests=[]
+            def serve():
+                try:
+                    for response in (b'{}\n{}\n',b'{"status":"session_revoked","passed":true}\n'):
+                        connection,unused=listener.accept()
+                        with connection:
+                            requests.append(connection.recv(8192))
+                            connection.sendall(response)
+                finally: listener.close()
+            thread=threading.Thread(target=serve,daemon=True)
+            thread.start()
+            endpoint=NativeUnix(str(address))
+            try:
+                with self.assertRaisesRegex(RuntimeError,"outcome_unknown_preserve_owner"):
+                    endpoint({"Op":"revoke_session"})
+                self.assertEqual(endpoint({"Op":"revoke_session"}),{"status":"session_revoked","passed":True})
+                self.assertEqual(requests,[b'{"Op":"revoke_session"}\n']*2)
+            finally:
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
+    def test_native_unix_permissions_and_replacement_identity_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="ra-uds-",dir="/tmp") as raw:
+            directory=Path(raw).resolve()
+            address=directory/"control.sock"
+            listener=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+            listener.bind(str(address)); os.chmod(address,0o600)
+            try:
+                endpoint=NativeUnix(str(address))
+                os.chmod(directory,0o755)
+                with self.assertRaisesRegex(RuntimeError,"permissions_rejected"):endpoint({"Op":"revoke_session"})
+                os.chmod(directory,0o700)
+                os.rename(address,directory/"original.sock")
+                replacement=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+                try:
+                    replacement.bind(str(address)); os.chmod(address,0o600)
+                    with self.assertRaisesRegex(RuntimeError,"identity_changed"):endpoint({"Op":"revoke_session"})
+                finally: replacement.close()
+            finally: listener.close()
 
 
 if __name__ == "__main__": unittest.main()

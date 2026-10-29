@@ -133,11 +133,19 @@ func run(output func(any) error) (result error) {
 	if e != nil {
 		return e
 	}
-	defer closeControl()
+	defer func() {
+		if e := closeControl(); e != nil {
+			result = e
+		}
+	}()
 	identity := controller.Identity()
 	metadata := map[string]any{"status": "ready", "maintenance_address": l.Addr().String(), "vault_scope": identity.VaultScope, "public_key": identity.PublicKey}
 	if controlPipe != "" {
-		metadata["control_pipe"] = controlPipe
+		if runtime.GOOS == "windows" {
+			metadata["control_pipe"] = controlPipe
+		} else {
+			metadata["control_socket"] = controlPipe
+		}
 	}
 	if e = output(metadata); e != nil {
 		return e

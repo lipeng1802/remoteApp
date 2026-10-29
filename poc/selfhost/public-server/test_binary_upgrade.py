@@ -123,13 +123,33 @@ class MainSignalBoundaries(unittest.TestCase):
         from unittest.mock import Mock
         m = Mock()
         m.require.side_effect = lambda ok, label: None if ok else (_ for _ in ()).throw(RuntimeError(label))
-        rows = [{"MESSAGE":"STOPPED", "_PID":"123", "__MONOTONIC_TIMESTAMP":"90"}]
+        rows = [{"MESSAGE":"STOPPED", "_PID":"123", "_SYSTEMD_UNIT":"frontend.service", "__MONOTONIC_TIMESTAMP":"90"}]
         m.command.return_value = json.dumps(rows[0]).encode()
         self.assertFalse(u.receipt(m,"frontend",123,100,"STOPPED"))
         rows[0]["__MONOTONIC_TIMESTAMP"] = "110"
         m.command.return_value = json.dumps(rows[0]).encode()
         self.assertTrue(u.receipt(m,"frontend",123,100,"STOPPED"))
         self.assertIn("-b", m.command.call_args.args[0])
+
+    def test_unitless_terminal_requires_same_current_ready_stdout_stream(self):
+        from unittest.mock import Mock
+        ready={"MESSAGE":u.FRONT_READY,"_PID":"123","_SYSTEMD_UNIT":"remoteapp-frontend.service",
+               "__MONOTONIC_TIMESTAMP":"101","_STREAM_ID":"a"*32,"_BOOT_ID":"boot",
+               "_UID":"995","SYSLOG_IDENTIFIER":"device-frontend","_TRANSPORT":"stdout"}
+        terminal=dict(ready,MESSAGE="STOPPED frontend",__MONOTONIC_TIMESTAMP="110")
+        del terminal["_SYSTEMD_UNIT"]
+        for mode in ("valid","stream","uid","boot","identifier","transport","foreign_unit","old_start","no_start"):
+            with self.subTest(mode=mode):
+                r,t=copy.deepcopy(ready),copy.deepcopy(terminal)
+                if mode in ("stream","uid","boot","identifier","transport"):
+                    key={"stream":"_STREAM_ID","uid":"_UID","boot":"_BOOT_ID","identifier":"SYSLOG_IDENTIFIER","transport":"_TRANSPORT"}[mode]
+                    t[key]="other"
+                if mode=="foreign_unit":t["_SYSTEMD_UNIT"]="other.service"
+                if mode=="old_start":r["__MONOTONIC_TIMESTAMP"]="90"
+                rows=[t] if mode=="no_start" else [r,t]
+                m=Mock();m.command.return_value=b"\n".join(json.dumps(row).encode() for row in rows)
+                self.assertEqual(u.receipt(m,"remoteapp-frontend",123,100,"STOPPED frontend"), mode=="valid")
+                self.assertNotIn("-u",m.command.call_args.args[0])
 
 
 if __name__ == "__main__": unittest.main()
