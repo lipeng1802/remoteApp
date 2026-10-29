@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r73：用户恢复自动续办与正常 quiesce 收尾组件
+
+用户此前暂停自动续办并要求归档用户消息，已生成docs/archive/RemoteApp-用户对话归档-2026-10-29.md（4会话362条）；该文件仍保留为未跟踪内部资料，不纳入本轮开发提交。用户现明确继续任务并开启自动续办，既有remoteapp已从PAUSED恢复ACTIVE，未创建重复自动化，原授权/不自动推送等约束保持。
+
+新增精确无选择字段的监督操作quiesce_session，仅在已provision且独立撤销通路已配置、未故障/维护/释放时接受。它向当前hash-pinned产品正常Stop，必须实际closed/EOF/进程零退出/reader Done后才返回session_quiesced/joined/zero_exit。成功后禁止Count/普通业务/维护重用，不删除文件、不改变原生记录；独立撤销signer继续存活，可在网络工作都停后明确revoke_session，再由最终Release关闭signer。相同对象重复正常quiesce只返回已证实的完成状态，不是活动网络证据。超时/非零/额外回复永久broken，不能把晚到退出再认可为正常join；明确Release仍只做实际收尾，不强杀。
+
+Windows业务pipe、当前relay、Mac驻留holder接入新op，附带身份/root等字段依然拒绝。旧r72 relay不会放行新op，后续实机必须fresh重建当前两平台包，不上传单个新supervisor覆盖旧签名安装。原生product本身不接收该新op，仍由监督层调用其既有stop；默认GUI和生产入口未打开新能力。
+
+supervised_session.active_round增加严格bool选项quiesce_before_revoke，默认false保留活撤销故障分支。true时仅在两端实际PONG持续增长通过后，并行等待两端正常quiesce的严格布尔回执，再通过target独立撤销一次；quiesce失败仍进入独立撤销收尾，不声称正常零退出。新增真实子进程fixture测试覆盖idle前置拒绝不毒化、正常实际退出且signer保留、后续撤销/最终signer join，以及timeout/nonzero/duplicate/extra拒绝和晚到不复活。业务路由fixture新增quiesce字段拒绝/精确转发，Python新增正常模式/整数伪装回执拒绝且两调用join后撤销。相关Go三包完整race、Windows四包vet和20项Python回归通过；最后新增idle与路由断言另行定向race核验。全部是本机组件/真实fixture子进程证据，不是Windows原生身份或跨机PONG/退出验收。
+
+下一自动组按原计划接fresh双机活动runner：保留Windows Interactive -RetainUntilStop与Mac独立驻留holder；unknown revoke保留owner/tunnel/公共工单。先正常PONG→quiesce两产品→明确撤销→最终父进程零退出→独立registered退休证明/精确回收，再单独验活撤销watch故障实际非零退出。不复用过期包/已退役根；服务仍是r72兼容部署，本轮没有修改服务、Store/节点、创建原生身份/桌面任务或执行真实provision。整体切片4未完成，本轮本地提交不推送。
+
 ## 2026-10-29 r72：registered TEST 在线退休证明与兼容部署（接续中断工作）
 
 新增invite.NodeRetirement及device动作node_retirement：沿用设备签名/持久nonce/限流，只查询调用设备自己的精确nodekey；必须唯一匹配已有provision、状态cleaned、地址有效且原grant在request中明确revoked。仅过期、仍bound/cleanup_pending、cleanup失败、外来节点/设备、附加选择字段均拒绝。Reconcile确认Driver.Cleanup后才有cleaned，因此不把撤销回执当作节点清理完成。证明绑定device/node/address/grant/challenge、issuer签名和3秒期限，没有放行网络或任意删除能力；历史cleaned记录不是当前网络许可，不依赖读取未加Store锁的provisionReady。两个新增请求字段omitempty，旧请求空字段序列化不变。

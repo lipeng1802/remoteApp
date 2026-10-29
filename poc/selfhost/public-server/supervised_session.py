@@ -75,13 +75,14 @@ def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,
 
 
 def active_round(target, controller, *, profile_expires_at, clock=time.time,
-                 monotonic=time.monotonic, sleep=time.sleep):
+                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False):
     """Fresh explicit approval -> clocks -> concurrent provision -> PONG -> revoke.
 
     A mutation/receipt error fails this episode. It does not stop/delete owners,
     retry an uncertain revoke, or claim all network resources have been joined.
     Caller must preserve signer access when revocation remains unconfirmed.
     """
+    require(type(quiesce_before_revoke) is bool,"session_quiesce_mode_invalid")
     require(type(profile_expires_at) is int and profile_expires_at - clock() >= 240,
             "session_profile_window_insufficient")
     owner = device(target, "register")
@@ -128,6 +129,12 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
         result = observe_growth((target, controller), expires_at=expiry, clock=clock,
                                 monotonic=monotonic, sleep=sleep)
         result["active_watch_both"] = True
+        if quiesce_before_revoke:
+            for receipt in parallel((target,controller), {"Op":"quiesce_session"}):
+                require(isinstance(receipt,dict) and set(receipt)=={"status","joined","zero_exit"}
+                        and receipt["status"]=="session_quiesced" and receipt["joined"] is True
+                        and receipt["zero_exit"] is True,"session_quiesce_join_unconfirmed")
+            result["products_quiesced_both"]=True
     finally:
         if attempted:
             # No grant selector and no child business IPC after provision.

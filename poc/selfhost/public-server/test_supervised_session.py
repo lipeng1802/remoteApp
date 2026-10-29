@@ -14,6 +14,7 @@ class ActivePair(Pair):
         self.provision_finished = set()
         self.revoke_calls = 0
         self.count_calls = 0
+        self.quiesced=set()
 
     def sleep(self, seconds):
         self.elapsed += seconds
@@ -22,6 +23,10 @@ class ActivePair(Pair):
         ordinary = super().endpoint(role)
 
         def call(frame):
+            if frame["Op"]=="quiesce_session":
+                assert self.elapsed>=6 and self.count_calls>0
+                self.quiesced.add(role)
+                return {"status":"session_quiesced","joined":True,"zero_exit":1 if self.session_fault=="quiesce" else True}
             if frame["Op"] == "device":
                 if self.provision_finished:
                     raise AssertionError("sealed child business must never be reused")
@@ -59,6 +64,18 @@ class ActivePair(Pair):
 
 
 class ActiveSessionBoundaries(unittest.TestCase):
+    def test_normal_quiesce_mode_joins_both_before_exact_revoke(self):
+        for fault in (None,"quiesce"):
+            p=ActivePair(fault)
+            def invoke():
+                return active_round(p.endpoint("target"),p.endpoint("controller"),profile_expires_at=1500,
+                    clock=lambda:1000+p.elapsed,monotonic=lambda:p.elapsed,sleep=p.sleep,quiesce_before_revoke=True)
+            if fault:
+                with self.assertRaisesRegex(RuntimeError,"session_quiesce_join_unconfirmed"):invoke()
+            else:self.assertTrue(invoke()["products_quiesced_both"])
+            self.assertEqual(p.quiesced,{"target","controller"})
+            self.assertEqual(p.revoke_calls,1)
+
     def run_pair(self, pair, expiry=1500):
         return active_round(pair.endpoint("target"), pair.endpoint("controller"),
                             profile_expires_at=expiry, clock=lambda: 1000 + pair.elapsed,

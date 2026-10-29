@@ -69,7 +69,7 @@ func Serve(ctx context.Context, ln net.Listener, b Backend) {
 				}
 				return
 			}
-			if !installeddevice.ValidSupervisedCommand(request) && !installeddevice.ValidSupervisedRevocation(request) {
+			if !installeddevice.ValidSupervisedCommand(request) && !installeddevice.ValidSupervisedRevocation(request) && !installeddevice.ValidSupervisedQuiesce(request) {
 				output.Encode(map[string]string{"status": "request_rejected"})
 				return
 			}

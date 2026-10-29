@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r73 增加 TEST `quiesce_session`：实际正常停止并 join 产品后，保留独立撤销 signer，供明确撤销和随后最终退出。并行 PONG 协调可显式选择此正常收尾模式；活撤销故障分支保持独立。组件测试通过不代表真实双机活动验收，当前仍待接入 fresh 驻留包进行实测。
+
 r72 增加 registered TEST 节点的在线退休门禁：只有原生绑定选定的节点，其授权已明确撤销且服务端确认清理完成，才能取得短期 issuer 签名证明并进入本地清理。预发布 authority/frontend 已兼容部署；协议回归通过，真实 registered 节点和双机活动验收仍待完成。工具不接入生产卸载器。
 
 r71 已部署预发布 readiness 协议，Store、长期 verifier、零规则与业务 Nginx 基线保持。macOS 新原生独立业务 socket、驻留管理 owner、客户端断开后存活、实际零退出及精确 TEST 回收已实测通过，71 项 Python 回归通过。r67 双 OS 身份的授权/拒绝/撤销已通过，r68/r69 独立撤销与并行 provision/PONG 协调已实现；当前仍待接真实双机 ACTIVE/PONG、活动维护与删除整链，未完成 GUI 或签名发行验收。见[授权协调边界](poc/selfhost/public-server/SUPERVISED_CONSENT.md)和[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。

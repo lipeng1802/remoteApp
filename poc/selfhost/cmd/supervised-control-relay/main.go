@@ -20,7 +20,7 @@ func run() error {
 	if privatepipe.NewReader(os.Stdin).Read(&request) != nil {
 		return privatepipe.ErrProtocol
 	}
-	if !installeddevice.ValidSupervisedCommand(request) && !installeddevice.ValidSupervisedRevocation(request) && request != (installeddevice.Request{Op: "product_count"}) {
+	if !installeddevice.ValidSupervisedCommand(request) && !installeddevice.ValidSupervisedRevocation(request) && !installeddevice.ValidSupervisedQuiesce(request) && request != (installeddevice.Request{Op: "product_count"}) {
 		return privatepipe.ErrProtocol
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)

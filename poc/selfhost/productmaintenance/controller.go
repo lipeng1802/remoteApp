@@ -47,6 +47,7 @@ type Controller struct {
 	serial                                        chan struct{}
 	requested, prepared, broken, closed, released bool
 	provisioned                                   bool
+	quiesced                                      bool
 	expected                                      trustprofile.MaintenanceState
 	revocation                                    boundRevocation
 }
@@ -162,6 +163,9 @@ func (c *Controller) Exited() <-chan struct{} {
 // Successful provision seals this path because the autonomous product owns all
 // subsequent watch/session work; ordinary requests cannot interrupt that owner.
 func (c *Controller) Forward(ctx context.Context, request installeddevice.Request) (json.RawMessage, error) {
+	if installeddevice.ValidSupervisedQuiesce(request) {
+		return c.quiesce(ctx)
+	}
 	if installeddevice.ValidSupervisedRevocation(request) {
 		return c.revoke(ctx)
 	}
@@ -223,7 +227,7 @@ func (c *Controller) Count(ctx context.Context) (clientruntime.ProductCount, err
 		return clientruntime.ProductCount{}, e
 	}
 	defer c.unlock()
-	if c.child == nil || c.requested || c.broken || c.closed || c.released {
+	if c.child == nil || c.requested || c.broken || c.closed || c.released || c.quiesced {
 		return clientruntime.ProductCount{}, ErrProduct
 	}
 	raw, e := c.child.Exchange(ctx, map[string]string{"Op": "product_count"})
@@ -250,7 +254,7 @@ func (c *Controller) MaintainDurableState(ctx context.Context, r trustinstall.Re
 		return e
 	}
 	defer c.unlock()
-	if c.child == nil || r != c.r || action == nil || c.requested || c.broken || c.closed || c.released {
+	if c.child == nil || r != c.r || action == nil || c.requested || c.broken || c.closed || c.released || c.quiesced {
 		return ErrProduct
 	}
 	c.requested = true
@@ -341,7 +345,7 @@ func (c *Controller) Release(ctx context.Context) error {
 		return nil
 	}
 	var result error
-	if c.child != nil && !c.closed {
+	if c.child != nil && !c.closed && !c.quiesced {
 		result = c.child.Stop(ctx)
 		select {
 		case <-c.child.Done():
