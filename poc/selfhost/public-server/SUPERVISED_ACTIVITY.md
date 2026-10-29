@@ -13,7 +13,9 @@ python3 run_supervised_activity.py WORK stop
 python3 run_supervised_activity.py WORK retire
 ```
 
-`start` 在外部效果前持久化未知状态，上传固实 tar.xz 包并核对整个归档哈希。可仅复用固定 r67 **包目录**中与新包完全同哈希的三类 helper/TLS exe；复制前后再次核对，不执行旧文件、不读取旧原生状态。缺失或不匹配则发送完整包。Windows bsdtar/liblzma 支持已实查；传输结束再次检查剩余有效期，不能通过增加传输超时延长 profile。Windows holder 为 `-StayReady -RetainUntilStop`，Mac holder 有独立实际 wait 监控；公开 bootstrap 不包含秘密。两条回环 SSH 通路只为本次 TEST HTTPS 协调服务。
+`prepare` 先只读核对 Windows 固定 r67 **包目录**中的不可变输入，再生成短包。它创建本轮独占的 TEST Go 包装器，仅在 `build` 时加入 `-s -w`；保留原来所有嵌入 anchor/root/digest 的 `-X` 参数，最终文件仍由原构建器签名和纳入哈希库存，原生 helper 字节不改动。生产构建器不使用此包装器。
+
+`start` 在外部效果前持久化未知状态，上传 preset3 固实 tar.xz 包并核对整个归档哈希。仅复用上述固定**包目录**中与新包完全同哈希的三类 helper/TLS exe；复制前后再次核对，不执行旧文件、不读取旧原生状态。输入核对失败立即保留工单，不再把未知读取结果静默降级成大包上传。Windows bsdtar/liblzma 支持已实查；传输结束再次检查剩余有效期，不能通过增加传输超时延长 profile。Windows holder 为 `-StayReady -RetainUntilStop`，Mac holder 有独立实际 wait 监控；公开 bootstrap 不包含秘密。两条回环 SSH 通路只为本次 TEST HTTPS 协调服务。
 
 `exercise` 采用 r74 阶段门禁及 r73 正常 quiesce 模式，要求真实双方 ACTIVE、PONG 连续增长至少三次且持续至少六秒，再实际正常 join 两个产品，保留独立 signer 明确撤销。未知回执不重发批准、不自动停止 owner、不关闭 tunnel。`stop` 只有在正常撤销已确认后才按 controller、target 顺序等待真实 owner closed/EOF/zero exit；Mac 独立监控实际进程退出，Windows 同时核对本轮 wrapper 退出材料与任务结果。SSH 成功、PID 消失或 marker 创建均不算 join。
 

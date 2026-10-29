@@ -45,7 +45,7 @@ def quote(value):return "'"+value.replace("'","''")+"'"
 def pack_windows(directory,archive,omit=()):
     # Solid compression shares repeated Go/runtime bytes across the bundle.
     # Windows' own bsdtar/liblzma extracts it; no extra installer/service.
-    with tarfile.open(archive,"x:xz",preset=9) as output:
+    with tarfile.open(archive,"x:xz",preset=3) as output:
         for path in sorted(Path(directory).rglob("*")):
             if path.is_symlink():raise RuntimeError("activity_archive_link_rejected")
             if path.is_dir():continue
@@ -70,8 +70,30 @@ def verified_windows_inputs(work):
         body+="if((Get-FileHash (Join-Path $s "+quote(item["name"])+")).Hash.ToLowerInvariant() -ne "+quote(item["sha256"])+"){throw 'Input mismatch'};"
     body+="'INPUTS_VERIFIED'"
     try:verified=ps(body)=="INPUTS_VERIFIED"
-    except RuntimeError:verified=False
-    return (old,files) if verified else (old,[])
+    except RuntimeError:raise RuntimeError("activity_input_verification_unavailable") from None
+    if not verified or not files:raise RuntimeError("activity_input_verification_unavailable")
+    return old,files
+
+
+def test_build_wrapper(work,go):
+    # Only this explicit TEST runner uses stripped compiler output. Preserve
+    # every original embedded -X anchor/path/digest; sign the final bytes as usual.
+    wrapper=work/'test-go-build'
+    source='''#!PYTHON
+import os,sys
+actual=ACTUAL
+args=sys.argv[1:]
+if args and args[0]=='build':
+    found=False
+    for i,arg in enumerate(args):
+        if arg.startswith('-ldflags='):
+            args[i]='-ldflags=-s -w '+arg[len('-ldflags='):];found=True
+    if not found:args.insert(1,'-ldflags=-s -w')
+os.execv(actual,[actual,*args])
+'''.replace('PYTHON',sys.executable,1).replace('ACTUAL',repr(str(go)),1)
+    with wrapper.open('x') as f:f.write(source)
+    wrapper.chmod(0o500)
+    return wrapper
 
 
 def metadata(work):
@@ -97,10 +119,14 @@ def prepare():
            win_root="C:\\Users\\jarvis\\remoteapp-r75-"+n,mac_root=str(parent/"installed"),holder_dir=str(parent/"holder"))
     (work/"management.json").write_text(json.dumps(m,sort_keys=True))
     a=Activity(work);a.save({"version":1,"phase":"build_outcome_unknown"})
+    prior=REPO/"artifacts/connection-poc/supervised-consent-r67-156f90fb5c70"
+    # Read-only availability check BEFORE minting any short-lived TEST profile.
+    _,inputs=verified_windows_inputs(prior)
+    (work/'immutable-input-preflight.json').write_text(json.dumps(inputs,sort_keys=True))
     profile=work/"service-profile.json"
     profile.write_bytes(command(["ssh",*OPTIONS,SERVER,"cat /var/lib/remoteapp-prerelease/client-public/service-profile.json"]))
     go=REPO/"artifacts/connection-poc/toolchain/go/bin/go"
-    prior=REPO/"artifacts/connection-poc/supervised-consent-r67-156f90fb5c70"
+    build_go=test_build_wrapper(work,go)
     for target in ("darwin","windows"):
         suffix=".exe" if target=="windows" else ""
         source=prior/target/"payload"
@@ -111,7 +137,7 @@ def prepare():
             expected=next(f["sha256"] for f in manifest["files"] if f["name"]==name+suffix)
             if hashlib.sha256(path.read_bytes()).hexdigest()!=expected:raise RuntimeError("activity_helper_source_changed")
             helpers.append(str(path))
-        args=[str(go),"run","./cmd/product-maintenance-validation-build",str(go),str(REPO/"poc/selfhost"),target,str(work/target),*helpers,
+        args=[str(go),"run","./cmd/product-maintenance-validation-build",str(build_go),str(REPO/"poc/selfhost"),target,str(work/target),*helpers,
               "--verified-live-profile",str(profile),"--test-tunnel","--test-install-root",m["win_root"] if target=="windows" else m["mac_root"]]
         # Go's cwd is fixed without changing this process's working directory.
         try:r=subprocess.run(args,cwd=REPO/"poc/selfhost",stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240)

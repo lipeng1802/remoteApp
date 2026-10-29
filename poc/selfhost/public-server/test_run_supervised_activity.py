@@ -2,6 +2,7 @@ import base64
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import tarfile
 import time
@@ -21,6 +22,9 @@ class ManagementActivityGates(unittest.TestCase):
             (source/'fixture.json').write_bytes(b'fresh profile')
             for result in ('INPUTS_VERIFIED','WRONG',RuntimeError('unavailable')):
                 with self.subTest(result=str(result)),patch.object(runner,'ps',side_effect=result if isinstance(result,Exception) else None,return_value=result) as call:
+                    if result!='INPUTS_VERIFIED':
+                        with self.assertRaisesRegex(RuntimeError,'input_verification_unavailable'):runner.verified_windows_inputs(work)
+                        continue
                     old,items=runner.verified_windows_inputs(work)
                     self.assertNotIn('installed',old)
                     self.assertEqual(len(items),1 if result=='INPUTS_VERIFIED' else 0)
@@ -30,6 +34,15 @@ class ManagementActivityGates(unittest.TestCase):
                         runner.pack_windows(source,work/'reused.tar.xz',omit={x['relative'] for x in items})
                         with tarfile.open(work/'reused.tar.xz') as archive:
                             self.assertEqual(set(archive.getnames()),{'fixture.json','payload/supervisor.exe'})
+
+    def test_test_compiler_wrapper_preserves_embedded_flags_and_other_commands(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);fake=root/'fake-go'
+            fake.write_text('#!'+sys.executable+'\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\n');fake.chmod(0o500)
+            wrapper=runner.test_build_wrapper(root,fake)
+            for args,expected in ((['version'],['version']),(['build','./cmd/tool'],['build','-ldflags=-s -w','./cmd/tool']),(['build','-ldflags=-X main.embeddedRelease=PUBLIC -X main.embeddedProductDigest=HASH','./cmd/tool'],['build','-ldflags=-s -w -X main.embeddedRelease=PUBLIC -X main.embeddedProductDigest=HASH','./cmd/tool'])):
+                self.assertEqual(json.loads(subprocess.check_output([str(wrapper),*args])),expected)
+            with self.assertRaises(FileExistsError):runner.test_build_wrapper(root,fake)
 
     def test_solid_archive_roundtrips_exact_regular_files_and_refuses_symlink(self):
         with tempfile.TemporaryDirectory() as d:

@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r76：TEST 包传输收口，Windows 离线暂停自动续办
+
+**当前需要用户介入：Windows 100.73.4.118 已离线。** 小SSH复核实际exit255/timeout；本机Tailscale BackendState=Running，目标peer存在但Online=false。不把离线等同已关机/已join，未继续重复轮询。已通过现有automation_update把remoteapp置为PAUSED，未新建自动化。用户最小操作：让Windows恢复网络和Tailscale在线，登录jarvis桌面并保持SSH可达，然后在本聊天回复“Windows已恢复，继续”。不需要手动执行旧验证脚本/删除root/重新加载已存在的公钥；不要复用本轮到期短包。具体原因可能是电源、睡眠或网络，现有证据不能区分。
+
+代码收口：prepare在生成新短包前先只读核验固定r67包目录的不可变helper/TLS输入，start再次核验；失败统一保留工单，取消r75将读取未知结果降级为昂贵完整上传的行为。新增本轮私有test-go-build包装器，仅对build增加-s -w，原嵌入anchor/root/digest的所有-X参数保持；原生产构建工具/OS helper字节不变，最终程序仍由原构建器codesign/签manifest及库存校验。固实tar.xz从preset9调整为preset3。新增包装器实际子进程参数保留/普通命令不改/不覆盖测试，并更新输入失败拒绝回归；public-server完整134项Python PASS，ResourceWarning-as-error通过。两平台当前实际短包编译也成功，不冒充原生身份或网络活动验收。
+
+本轮唯一fresh工单artifacts/connection-poc/supervised-activity-r75-7b74078f83e8（沿用r75固定根格式），Windows包C:\Users\jarvis\remoteapp-r75-package-7b74078f83e8，安装根C:\Users\jarvis\remoteapp-r75-7b74078f83e8；Mac根/private/tmp/remoteapp-r75-7b74078f83e8/installed，holder为同父目录/holder。实际supervisor.exe由28,996,608降为20,368,896字节，product由32,767,488降为23,019,008，retire-node-test由28,985,856降为20,360,192；输入helper保持原字节。最终传输43,210,540字节，固定输入六副本预检成功。SCP最终完成，整包哈希核验、fresh absent root/package检查、Windows原生tar解压、helper逐文件复制前后核验均完成，创建本轮Interactive任务RemoteApp-R75-7b74078f83e8；两条回环SSH tunnel也已建立。此前r75三个过期工单不复用。
+
+Windows首次真实test-setup返回stage=signed_import/status=setup_failed_state_preserved；wrapper明确OWNER_FAILED_STATE_PRESERVED/EXITCODE=1，没有owner-ready，Mac尚未安装。当时短包仍约600秒可用。按现有授权进行显式resume_windows，先通过原任务已结束/无本轮native进程/无READY/无Mac安装的检查，落盘windows-resume-attempted.json，生成resume-owner.ps1；随后上传该**公开恢复wrapper**的SCP失败并抛出activity_management_command_failed，因此后续归档旧日志/替换wrapper/Start-ScheduledTask并未由此次管理代码执行。不能把恢复工单marker当作已恢复/原生任务成功。此后只读任务查证也失败，独立whoami SSH超时，Tailscale确认目标离线，遂保存offline-blocker.json并暂停。
+
+当前activity-state仍startup_outcome_unknown。windows-bootstrap/mac-bootstrap/mac-manager均未生成；本轮Mac test-setup/exercise/stop/retire都未执行，没有本轮实际注册/provision/PONG或正常owner退出证据。Windows部分安装root、原桌面任务、公开包/可能部分恢复wrapper、管理tunnel和本地工单全部保留；未以离线/PID消失冒充join、未强杀产品、未删除身份/锁/未知root，也未调用在线退休或改服务Store/Nginx。需要Windows回来后**先只读审计这一个工单**的task/log/root/native trust/enrollment/进程和恢复wrapper哈希；不能直接重跑start或第二次resume-windows、不能在过期profile下重建身份。根据确切阶段使用原生受限恢复/过期idle退休或无原生状态的受限文件收尾，再生成新的随机短包。
+
+下一步在用户恢复Windows后继续：先处理上述精确未闭环TEST资源，再fresh串联当前驻留owner/并行provision/ACTIVE/session-identity/TLS持续增长PONG。只有PONG真正连续增长才算活动通过；之后正常quiesce、独立明确撤销、watch/node/signer/product真实join和zero exit、两端独立registered退休及精确资源回收。活撤销故障非零退出、GUI与签名发行仍独立待验收。整体切片4未完成。本组README/说明/HANDOFF与代码本地提交，不推送；用户对话归档仍未跟踪保留。
+
 ## 2026-10-29 r75：fresh 驻留双机活动入口及传输瓶颈实查
 
 先读r74和Git，分支保持codex/connection-architecture-poc；用户对话归档docs/archive仍未跟踪，未纳入开发提交。本组新增run_supervised_activity.py，把fresh两平台签名TEST构建、Windows Interactive retained owner、Mac独立wait监控、r74活动阶段门禁、正常PONG/quiesce/独立撤销、真实双方父进程退出、独立registered退休与精确任务/空目录回收连接为显式管理步骤。详细入口与失败恢复边界见public-server/SUPERVISED_ACTIVITY.md；没有隐式finally teardown。Windows resume-files只在本轮原任务明确失败、无native进程/READY、Mac尚未安装及包仍有效时显式单次尝试；仍委托原工具的Absent trust门禁。

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r76 在签发 TEST 短包前先核验 Windows 不可变输入，管理读取失败不再降级上传完整大包；仅该 TEST runner 去掉 Go 调试信息并降低压缩成本，原签名/库存/信任门禁保持。传输优化不代表双机 PONG 或产品验收通过。
+
 r75 补齐显式 fresh 双机包、驻留 owner、正常活动收尾及独立在线退休的管理入口：[活动 runner](poc/selfhost/public-server/SUPERVISED_ACTIVITY.md)。阶段未知时保留 signer 和 HTTPS 通路；Windows 大包改用固实压缩和逐文件哈希核验的不可变 helper 字节复用，不复用旧身份或安装根。此入口的构建/管理回归不能替代真实持续 PONG、双机正常退出或注册节点退休验收。
 
 r74 增加驻留双机活动协调的持久阶段门禁：业务开始前记录未知状态，只有严格的 PONG/正常 join/撤销证据齐备才允许停止父 owner；停止回执未知时保留已确认角色和后续显式收尾入口，HTTPS通路留给独立退休工具。76项Python回归通过；当前仍未接通fresh双机启动/退休管理适配器，不代表实机PONG验收。
