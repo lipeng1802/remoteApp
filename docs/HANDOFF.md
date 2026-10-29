@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r62 真实公开profile验证与两平台TEST构建
+
+新增`productprofile.Claims`，固定既有发行root `5b74a1a3b2b6c477b81016d71c38275d9fdd17d01e6c33ec7847dcd892a5198f`、service remoteapp-prerelease、floor1，先严格解码/验签/有效期/CA，再接受已知127.0.0.1或mk.fengmap.com:8444 HTTPS endpoint。不从输入提供替代root，不读服务端私钥。复制服务/epoch/endpoint/CA/issuer原值，仅将TEST issued_at设为构建时刻、expires_at取原截止与20分钟较早者，再用仅内存临时TEST release key签名。测试涵盖错误root/signature、过期、换服务/地址、不能延长原期限，以及固定生产入口拒绝单测root。
+
+`product-maintenance-validation-build`增加显式`--verified-live-profile <本地绝对公开profile路径>`，在创建输出目录前完成验证；旧idle fixture模式不变。live模式替换trust-install/autonomous-enrollment-install/bootstrap launcher三个占位为真实编译工具，清单epoch跟随profile，实际product/helper/TLS payload哈希按最终字节构建签名清单。保存已验证原始公开profile到verified-service-profile.json，供离线审计检查TEST连接参数与可信来源一致。所有产物仍Test=true，不是正式签名发行，不自动安装/创建OS身份或联网注册。fixture.json沿用原测试metadata；**live epoch1不能拿去跑r58/r59硬编码epoch2的native fixture测试**。
+
+公开profile通过既有SSH从`/var/lib/remoteapp-prerelease/client-public/service-profile.json`取得，只读取公开材料。实际endpoint是`https://mk.fengmap.com:8444`，与此前假定127.0.0.1不同；第一次构建正确因固定地址门禁拒绝，核对可信来源后将该既有域名列入允许集合，未改签名原始地址。服务器8444仍仅回环；下一组必须解决保持TLS ServerName/CA校验的受信连接通路，不得通过改profile到本地任意地址或关TLS验证绕过。未开放端口/修改服务器配置或Store/verifier/policy。
+
+两平台实际构建位于`artifacts/connection-poc/live-product-r62/{mac-final,windows-final}`，源公开profile同目录service-profile.json；早期mac/windows为诊断构建。新鲜20分钟TEST包只供本轮离线构建审计，后续启动需重建，不应安装过期副本。离线TestBuiltLiveBundle检查TEST信任、原始发行profile、连接参数不变、payload/bootstrap签名与epoch一致、真实offline tools存在/Windows PE目标；不运行二进制或打开原生OS状态。productprofile/trustinstall race通过，Windows编译和macOS实际编译完成；未上传Windows新包或进行桌面启动/跨机会话。
+
+下一组剩余前置：确定受信的profile endpoint通路；为固定测试安装根完成真实签名payload/bootstrap导入与离线原生初始化，按最终release manifest路径编译r61 supervisor并供应只含public metadata的启动bootstrap，再通过Interactive任务执行Windows真实产品。现有r62产物还不是一键桌面验证包，不能要求用户拿占位脚本或旧包验收。随后进行consent/provision/ACTIVE/session-identity/PONG增长/维护join和删除整链。整体切片4未完成。本轮本地提交，不自动推送。
+
 ## 2026-10-29 r61 Windows同用户业务管道接入TEST监督入口
 
 新增`supervisedcontrol`，路由严格installeddevice.Request到r59 Controller.Forward/Count，使用现有Windows当前用户DACL/拒远端/首实例排他命名管道。每连接一条有界JSON、最多4连接、25秒IO/20秒业务期限；scope/root/identity覆盖、stop、maintenance和带附加字段的count均拒绝。业务失败不把stop注入产品；维护/产品终止仍由原可信父管道和独立认证协议处理。handler取消关闭连接，Serve等待全部handler/monitor join后才返回，启动器defer先停止业务服务再释放产品。Windows启动器ready增加公开control_pipe，随机名称只在本地生成；Mac保持原继承管道行为。本接口仅同用户principal，不是publisher认证或跨用户隔离验收。

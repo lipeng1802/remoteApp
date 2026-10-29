@@ -1,6 +1,7 @@
 // Builds a single-release TEST fixture for actual product process-exit tests.
-// The throwaway signing key is never written. Unused installer/launcher files
-// are marked fixture placeholders; this is not a signed product installer.
+// The throwaway signing key is never written. Legacy idle mode uses marked
+// placeholders; verified-live-profile mode compiles actual offline tools.
+// Both modes remain TEST-only, not a signed product installer.
 package main
 
 import (
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/installrelease"
+	"remoteapp.local/selfhost-poc/productprofile"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
@@ -38,10 +40,27 @@ func write(path string, raw []byte, mode os.FileMode) error {
 }
 func digest(raw []byte) string { h := sha256.Sum256(raw); return hex.EncodeToString(h[:]) }
 func run() error {
-	if len(os.Args) != 8 {
+	if len(os.Args) != 8 && (len(os.Args) != 10 || os.Args[8] != "--verified-live-profile") {
 		return os.ErrInvalid
 	}
 	goexe, module, target, dest, journal, vault, tlsProduct := os.Args[1], os.Args[2], os.Args[3], os.Args[4], os.Args[5], os.Args[6], os.Args[7]
+	live := len(os.Args) == 10
+	var liveClaims trustprofile.Claims
+	var liveSource []byte
+	if live {
+		if !filepath.IsAbs(os.Args[9]) || filepath.Clean(os.Args[9]) != os.Args[9] {
+			return os.ErrInvalid
+		}
+		raw, e := os.ReadFile(os.Args[9])
+		if e != nil {
+			return e
+		}
+		liveClaims, e = productprofile.Claims(raw, time.Now())
+		if e != nil {
+			return e
+		}
+		liveSource = raw
+	}
 	for _, p := range []string{goexe, module, dest, journal, vault, tlsProduct} {
 		if !filepath.IsAbs(p) || filepath.Clean(p) != p {
 			return os.ErrInvalid
@@ -55,6 +74,11 @@ func run() error {
 	}
 	if e := os.Mkdir(dest, 0700); e != nil {
 		return e
+	}
+	if live {
+		if e := write(filepath.Join(dest, "verified-service-profile.json"), liveSource, 0400); e != nil {
+			return e
+		}
 	}
 	journalRaw, e := os.ReadFile(journal)
 	if e != nil {
@@ -86,6 +110,9 @@ func run() error {
 		return e
 	}
 	claims := trustprofile.Claims{Version: 1, Service: "product-exit-test", Epoch: 2, Endpoint: "https://product-exit.example:8444", Certificate: base64.StdEncoding.EncodeToString(der), Issuer: hex.EncodeToString(issuer), IssuedAt: now.Add(-time.Minute).Unix(), ExpiresAt: now.Add(12 * time.Hour).Unix()}
+	if live {
+		claims = liveClaims
+	}
 	profile, e := trustprofile.Sign(key, claims)
 	if e != nil {
 		return e
@@ -114,6 +141,20 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	product := filepath.Join(payload, "installed-autonomous-product"+suffix)
+	if live {
+		// Replace TEST placeholders with real offline native provisioning tools.
+		for _, name := range []string{"trust-install", "autonomous-enrollment-install"} {
+			if e = os.Remove(filepath.Join(payload, name+suffix)); e != nil {
+				return e
+			}
+		}
+		if e = trustinstall.Compile(ctx, goexe, module, target, filepath.Join(payload, "trust-install"+suffix), spec, now); e != nil {
+			return e
+		}
+		if e = trustinstall.CompileAutonomousEnrollmentInstall(ctx, goexe, module, target, filepath.Join(payload, "autonomous-enrollment-install"+suffix), spec, digest(vaultRaw), now); e != nil {
+			return e
+		}
+	}
 	if e = trustinstall.CompileAutonomousProductClient(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now); e != nil {
 		return e
 	}
@@ -122,7 +163,7 @@ func run() error {
 			return fmt.Errorf("TEST signing: %v %s", e, out)
 		}
 	}
-	m, e := installrelease.BuildManifest(payload, spec.Channel, target, 2)
+	m, e := installrelease.BuildManifest(payload, spec.Channel, target, claims.Epoch)
 	if e != nil {
 		return e
 	}
@@ -136,10 +177,15 @@ func run() error {
 	if e = write(filepath.Join(bootstrap, "trust-journal"+suffix), journalRaw, 0500); e != nil {
 		return e
 	}
-	if e = write(filepath.Join(bootstrap, "installed-release-launcher"+suffix), []byte("TEST unused launcher placeholder\n"), 0500); e != nil {
+	if live {
+		e = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, target, filepath.Join(bootstrap, "installed-release-launcher"+suffix), spec, now)
+	} else {
+		e = write(filepath.Join(bootstrap, "installed-release-launcher"+suffix), []byte("TEST unused launcher placeholder\n"), 0500)
+	}
+	if e != nil {
 		return e
 	}
-	bm, e := installrelease.BuildBootstrapManifest(bootstrap, spec.Channel, target, 2)
+	bm, e := installrelease.BuildBootstrapManifest(bootstrap, spec.Channel, target, claims.Epoch)
 	if e != nil {
 		return e
 	}
