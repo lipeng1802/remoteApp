@@ -1,0 +1,105 @@
+import base64
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+import tarfile
+import time
+import unittest
+from unittest.mock import patch
+
+from activity_control import Activity
+import run_supervised_activity as runner
+
+
+class ManagementActivityGates(unittest.TestCase):
+    def test_reuse_requires_verified_exact_immutable_inputs_and_omits_only_those(self):
+        with tempfile.TemporaryDirectory() as d:
+            work=Path(d);source=work/'windows';(source/'payload').mkdir(parents=True)
+            (source/'payload/identity-vault.exe').write_bytes(b'fixed helper')
+            (source/'payload/supervisor.exe').write_bytes(b'current supervisor')
+            (source/'fixture.json').write_bytes(b'fresh profile')
+            for result in ('INPUTS_VERIFIED','WRONG',RuntimeError('unavailable')):
+                with self.subTest(result=str(result)),patch.object(runner,'ps',side_effect=result if isinstance(result,Exception) else None,return_value=result) as call:
+                    old,items=runner.verified_windows_inputs(work)
+                    self.assertNotIn('installed',old)
+                    self.assertEqual(len(items),1 if result=='INPUTS_VERIFIED' else 0)
+                    self.assertIn('Get-FileHash',call.call_args.args[0])
+                    if items:
+                        self.assertEqual(items[0]['relative'],'payload/identity-vault.exe')
+                        runner.pack_windows(source,work/'reused.tar.xz',omit={x['relative'] for x in items})
+                        with tarfile.open(work/'reused.tar.xz') as archive:
+                            self.assertEqual(set(archive.getnames()),{'fixture.json','payload/supervisor.exe'})
+
+    def test_solid_archive_roundtrips_exact_regular_files_and_refuses_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);source=root/"source";source.mkdir();(source/"payload").mkdir()
+            (source/"payload/tool.exe").write_bytes(bytes(range(256))*1000)
+            (source/"fixture.json").write_text('{"test":true}')
+            runner.pack_windows(source,root/"bundle.tar.xz")
+            with tarfile.open(root/"bundle.tar.xz") as archive:
+                self.assertEqual(set(archive.getnames()),{"payload/tool.exe","fixture.json"})
+                for member in archive:
+                    self.assertTrue(member.isfile())
+                    self.assertEqual(archive.extractfile(member).read(),(source/member.name).read_bytes())
+            (source/"foreign").symlink_to(root/"outside")
+            with self.assertRaisesRegex(RuntimeError,"archive_link_rejected"):runner.pack_windows(source,root/"bad.tar.xz")
+
+    def fixture(self,directory,phase="built",expires=None):
+        w=Path(directory);n="a"*12
+        m=dict(nonce=n,win_dir="C:\\Users\\jarvis\\remoteapp-r75-package-"+n,
+               win_root="C:\\Users\\jarvis\\remoteapp-r75-"+n,
+               mac_root="/private/tmp/remoteapp-r75-"+n+"/installed",
+               holder_dir="/private/tmp/remoteapp-r75-"+n+"/holder")
+        (w/"management.json").write_text(json.dumps(m));Activity(w).save({"version":1,"phase":phase})
+        for target in ("darwin","windows"):
+            (w/target).mkdir()
+            spec={"test_namespace":True,"bundled_profile":{"claims":{"expires_at":expires or int(time.time())+1200}}}
+            (w/target/"fixture.json").write_text(json.dumps({"release":base64.b64encode(json.dumps(spec).encode()).decode()}))
+        return w,m
+
+    def test_fixed_roots_reject_overrides_before_remote_access(self):
+        for field in ("win_root","win_dir","mac_root","holder_dir"):
+            with self.subTest(field=field),tempfile.TemporaryDirectory() as d:
+                w,m=self.fixture(d);m[field]="unknown-existing-root";(w/"management.json").write_text(json.dumps(m))
+                with patch.object(runner,"command") as call:
+                    with self.assertRaisesRegex(RuntimeError,"fixed_roots_invalid"):runner.start(w)
+                    call.assert_not_called()
+
+    def test_short_build_and_startup_unknown_cannot_restart_owners(self):
+        for phase,expires in (("built",int(time.time())+30),("startup_outcome_unknown",int(time.time())+1200)):
+            with self.subTest(phase=phase),tempfile.TemporaryDirectory() as d:
+                w,_=self.fixture(d,phase,expires)
+                with patch.object(runner,"command") as call:
+                    with self.assertRaisesRegex(RuntimeError,"fresh_build_required"):runner.start(w)
+                    call.assert_not_called()
+
+    def test_unknown_exercise_cannot_stop_or_delete_anything(self):
+        with tempfile.TemporaryDirectory() as d:
+            w,_=self.fixture(d,"exercise_outcome_unknown")
+            with patch.object(runner,"ps") as ps,patch.object(runner,"command") as command:
+                with self.assertRaisesRegex(RuntimeError,"preserve_signers"):runner.stop(w)
+                with self.assertRaisesRegex(RuntimeError,"join_before_retirement"):runner.retire(w)
+                ps.assert_not_called();command.assert_not_called()
+
+    def test_uncertain_destructive_retirement_cannot_be_implicitly_repeated(self):
+        with tempfile.TemporaryDirectory() as d:
+            w,_=self.fixture(d,"retirement_outcome_unknown")
+            with patch.object(runner,"command") as command:
+                with self.assertRaisesRegex(RuntimeError,"join_before_retirement"):runner.retire(w)
+                command.assert_not_called()
+
+    def test_large_powershell_requires_file_upload(self):
+        with patch.object(runner,"command") as command:
+            with self.assertRaisesRegex(RuntimeError,"requires_file_upload"):runner.ps("x"*3000)
+            command.assert_not_called()
+
+    def test_transport_failures_hide_private_outputs(self):
+        for failure in (subprocess.TimeoutExpired([],90),OSError("PRIVATE")):
+            with patch.object(runner.subprocess,"run",side_effect=failure):
+                with self.assertRaisesRegex(RuntimeError,"^activity_management_outcome_unknown$"):runner.command(["trusted"])
+        with patch.object(runner.subprocess,"run",return_value=subprocess.CompletedProcess([],1,b"PRIVATE",b"PRIVATE")):
+            with self.assertRaisesRegex(RuntimeError,"^activity_management_command_failed$"):runner.command(["trusted"])
+
+
+if __name__=="__main__":unittest.main()

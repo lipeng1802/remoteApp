@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r75：fresh 驻留双机活动入口及传输瓶颈实查
+
+先读r74和Git，分支保持codex/connection-architecture-poc；用户对话归档docs/archive仍未跟踪，未纳入开发提交。本组新增run_supervised_activity.py，把fresh两平台签名TEST构建、Windows Interactive retained owner、Mac独立wait监控、r74活动阶段门禁、正常PONG/quiesce/独立撤销、真实双方父进程退出、独立registered退休与精确任务/空目录回收连接为显式管理步骤。详细入口与失败恢复边界见public-server/SUPERVISED_ACTIVITY.md；没有隐式finally teardown。Windows resume-files只在本轮原任务明确失败、无native进程/READY、Mac尚未安装及包仍有效时显式单次尝试；仍委托原工具的Absent trust门禁。
+
+新增8项管理回归：固定root拒绝覆盖、短包及未知启动不能重启、未知活动不能stop/delete、未知退休不能重复、PowerShell体积上界、传输错误隐去私有输出、tar精确普通文件/拒绝链接、helper复用必须逐文件哈希成功且只省略对应字节。public-server完整133项Python PASS，ResourceWarning-as-error通过，py_compile及diff检查通过。这里是管理/fixture证据，不是OS signer、Headscale或PONG验收。
+
+实际启动尝试暴露上传成本：原Windows ZIP 141,075,596字节。默认SCP失败后仅1,507,328字节，显式legacy SCP超时180秒只到27,836,416字节；小SSH/登录桌面均可用、Windows C盘约242GB空闲，不能认定用户掉线或存储不足。Windows原生tar实际为bsdtar3.8.9/liblzma5.8.3；改固实tar.xz，完整包87,427,584字节。核对固定r67**包目录**的三个不可变helper/TLS程序与当前新包哈希，六个副本共86,776,493字节可复用，省略后归档55,758,464字节。复制前后再次核对；不执行旧程序、不读取旧OS身份/安装根/node/journal/grant。缺失/不匹配则完整传输，传输后重新检查短包剩余有效期，未延长profile。
+
+工单artifacts/connection-poc/supervised-activity-r75-4d0771041aab在任何启动前已过期，正确预拒绝；只rmdir其空holder/父目录。74577fea863d上传失败，package/root/任务未创建，tunnels/bootstrap/manager不存在；只保留公开部分ZIP和工单，空Mac目录已精确移除。两者旧包不可再启动。
+
+第三个fresh工单supervised-activity-r75-0fdc07bfcb56完成两平台构建；这次helper预检查未取得确认而退回完整87,440,792字节归档。之后只读重查六文件均匹配，说明不能把一次管理读取失败当作缓存不存在而昂贵降级。preset9压缩本身耗时数分钟，SCP继续缓慢，到31,752,192字节仍未进入安装。为避免占尽短包窗口，仅对经完整argv/PID核实的本轮公开SCP上传发SIGTERM取消；父管理脚本真实收到非零并停止在start，后续exercise/stop/retire完全未执行。这不是产品进程退出/join证据。SSH再查本轮package/root/task均不存在，本地tunnels/manager/native root也不存在；uninstalled-transfer-evidence.json保存精确公开证据。仅rmdir本轮空holder/父目录，未删任何未知锁/原生身份或远端归档。
+
+目前没有本组新原生身份、桌面任务、注册/grant/node或实际PONG；服务Store未由本工具触碰，不能沿用r67授权成功声称活动通过。三个工单均不得复用短包；startup_outcome_unknown不改写为owners_ready或回写旧Store。未调用任何在线retire工具。当前没有需要用户加载key/开机/登录的证据，自动续办继续；本地提交不推送。
+
+下一组优先收口**短包前的传输准备**，避免把profile有效期花在压缩/大文件上传：对TEST编译工具显式去调试信息或优化固实压缩成本、提前验证固定不可变输入、管理读取失败不得静默降级大包，并以实际包大小/传输材料验证。不要修改信任、身份、授权或有效期门禁。然后一次串联fresh prepare/start/exercise/stop/retire，必须实际持续增长PONG才标活动成功；未知结果保留现场。仍留正常注册节点退休及活撤销故障/非零退出独立实机验收、后续GUI和签名发行；整体切片4尚未完成。
+
 ## 2026-10-29 r74：驻留活动阶段与未知回执的停止门禁
 
 先读r73和Git，保留未跟踪docs/archive内部归档。Windows jarvis@100.73.4.118使用IPQoS=none的SSH whoami成功，无需人工介入。将WindowsRelay统一增加IPQoS=none/ServerAliveInterval=5/ServerAliveCountMax=2，防止继续使用r72已证实容易阻塞的大传输/SSH参数；请求仍只经私有stdin，未改变35秒管理调用上界或重试策略。
