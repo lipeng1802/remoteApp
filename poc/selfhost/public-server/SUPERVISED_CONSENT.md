@@ -10,6 +10,6 @@
 
 ## 刻意保留的边界
 
-当前Controller成功provision后封闭普通业务转发，因此本组件不提供work/provision回调，也不把网络操作夹在finally撤销之前。实际活动会话需要独立、明确设计的撤销签名通路，或先完成产品退出交接再在有效授权上下文中撤销；不能把旧use_grant/network_state接口套进当前产品。尚未实现完整自动准备/桌面owner驻留/双机provision协调命令。不要直接拿本模块宣称已通过真实双机授权或PONG。
+当前Controller成功provision后封闭普通业务转发，因此本组件不提供work/provision回调，也不把网络操作夹在finally撤销之前。实际活动会话需要独立、明确设计的撤销签名通路，或先完成产品退出交接再在有效授权上下文中撤销；不能把旧use_grant/network_state接口套进当前产品。r67新增run_supervised_consent.py及Windows -StayReady入口，已实际完成双OS signer的consent-only episode与双方join/TEST清理；尚未完成双机provision协调或PONG。
 
 本轮新增9项Python测试（含多组故障子项），覆盖回执丢失只批准一次、精确撤销、未知撤销不假成功、不同对端/grant/过期结果、严格布尔、短有效期预拒绝、秘密只走stdin、超时无自动重试、重复/超大/多帧回复和shell注入拒绝。加既有JoinedPipe/compiled products回归共41项PASS。另Go当前HTTP/签名/注册授权重放及profile TLS回归通过。全部是本机协议/fixture回归，没有创建新的真实设备、grant、节点或桌面任务。

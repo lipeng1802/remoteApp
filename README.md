@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-r66 新增当前监督协议的授权协调和私有管理适配器，包含回执丢失后的状态查询与精确撤销；41 项 Python 回归通过。组件尚未串成真实双机验收命令，provision 后的独立撤销通路也仍待实现。r65 旧测试安装已回收。见[授权协调边界](poc/selfhost/public-server/SUPERVISED_CONSENT.md)和[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
+r67 已通过真实 Mac/Windows OS 身份到预发布服务的注册、拒绝、自批准拒绝、批准与撤销验收，两端产品实际退出且测试根已回收；47 项 Python 回归通过。自动续办下一步实现 provision 后独立撤销通路，再验证 ACTIVE/PONG 与活动维护整链。尚无 GUI/画面或签名发行整体验收。见[授权协调边界](poc/selfhost/public-server/SUPERVISED_CONSENT.md)和[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
 r57 增加独立本地进程的 OS 设备密钥双向认证及固定编译客户端：绑定双方 nonce、服务实例、完整编译 release 和原生维护事务，认证失败不停止会话，确认中断保留租约与 pending。当前是 TEST 授权策略，尚未验证发行方签名、正式发现／同意流程或跨机产品卸载。见[独立维护认证边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 

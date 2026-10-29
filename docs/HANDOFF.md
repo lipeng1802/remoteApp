@@ -1,5 +1,25 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r67 自动续办：真实双机OS身份授权/拒绝/撤销已通过
+
+本次heartbeat在既有授权范围完成fresh两平台短包构建、Windows Interactive驻留owner、Mac真实监督产品、r66私有管理适配器到现有预发布服务的consent-only实测。工作目录artifacts/connection-poc/supervised-consent-r67-156f90fb5c70，management.json为公开固定根/目录配置，execution.json仅保存阶段/公共布尔证据。Windows测试根C:\Users\jarvis\remoteapp-r67-156f90fb5c70、包目录C:\Users\jarvis\remoteapp-r67-package-156f90fb5c70；Mac根/private/tmp/remoteapp-r67-156f90fb5c70/installed。两个根均为本轮随机全新根，不复活r64。构建工具随包有r65显式回收入口。
+
+新增public-server/run_supervised_consent.py管理runner，可信输入为已生成短包与management.json，不调用legacy empty-control脚本；验证fresh有效期门槛、记录执行阶段、上传当前relay/holder及包、建两条回环SSH测试通路、启动Windows Interactive parent，读取只含公开pipe/scope/public/PID的bootstrap；Mac安装/启动后，以两端实际原生OS signer和签名服务profile执行r66授权episode。结束后必须真实两端owner.stop/closed/EOF/zero exit，关闭管理SSH，不把SSH调用结束等同产品join。该runner仍是测试运维工具，不是最终免SSH/Tailscale产品接入方式。
+
+真实证据：Windows与Mac注册主体不同；验证码claim仍pending；target准确看到controller；controller不能自行批准；owner拒绝后不给grant；再次邀请并由owner明确批准，双方收到同一授权且subjects/expiry匹配；owner明确撤销，controller在线status确认revoked且无grant。Python不承担签名校验，实际请求由原生helper签名、服务端验证，HTTPS保留原mk域名/CA/issuer信任。这里测试中的allowTrue为已授权自动验收，不是生产同意UI。Mac与Windows产品都真实join，execution.json最终phase为consent_revoked_products_joined_test_roots_retired，无新增Headscale enrollment或payload/PONG验收。
+
+首轮Windows文件导入按r64门禁失败，holder退出；管理父脚本遇PowerShell混合编码没有识别EXITCODE=1，超时并停止通路，未注册设备。修正wrapper统一Out-File UTF8，增加显式--resume-setup（只接受尚无consent、Mac根未初始化的工单，保留首次execution记录；Windows native setup自己仍检查trust Absent），归档首次失败日志并仅移除当前工单的空stop marker，随后真实episode成功。源代码最终对新包增加SSH传输后的SHA256校验；已发布bootstrap改为CreateNew临时文件/Flush/Move原子发布，防止读取半帧。最后两项强化在完整episode后加入，分别沿用已验证哈希门禁机制和Windows真实文件原子发布检查，不扩大为已重跑完整episode的证据。
+
+Windows持久入口为packaging/experimental/validate-supervised-install.ps1 -StayReady，最多驻留10分钟，由当前工单空stop-owner.request请求父进程正常stop，公开owner-ready.json实际退出后按自身内容精确删除；旧立即停止模式保持。启动前拒绝旧ready/stop metadata，防止先初始化OS状态才发现污染。大PowerShell脚本不可通过多层base64命令行下发：一次后检查因Windows命令行长度限制未执行，改SCP脚本文件后成功。runner.ps已增加6500字符门槛，要求大脚本走文件；管理超时只报outcome_unknown，不自动重试签名业务。
+
+实测结束后两端均显式idle TEST retirement：Mac成功；Windows按r65已知release删除后sync回执边界失败，显式finish-files证明binding/activation Absent、release空、bootstrap签名有效后收尾成功。Windows owner/retire临时任务RemoteApp-R67-156f90fb5c70及-Retire均已删除；核对无相关包/根残留进程、两端根不存在，管理SSH master均关闭。公开日志保存在该本地工作目录windows-owner-result.txt/windows-retire-result.txt/windows-initial-setup-failure.txt/windows-postcheck.txt/mac-retire-result.txt；仅保留构建包及公开审计材料，不声称任意系统凭据扫描。
+
+服务器合法状态已因两台新设备签名注册/拒绝/批准/撤销而变化，**不可恢复旧5c40...Store快照**。新Store SHA256为74a47ef72dedbcff76bb202a757f14a069e5c8ea1cb340795b39b78a3f63bc83；device_records=2、active_grants=0、provisions=0，Headscale仍1 user/1长期verifier node、policy零规则。设备持久注册记录没有delete API，故保留，旧维护脚本若固定旧Store摘要必须停下重新审计，不能自动改常量绕过。未改服务配置、Nginx/443、策略模式或删除长期verifier。
+
+本轮新增6项管理runner入场/错误隐私/超时/大命令测试，联合既有回归47项Python PASS；Windows最新holder AST解析、真实FileStream Flush/Move公开metadata发布、无root/无进程/任务删除后检查通过。不是完整GUI/签名发行验收。
+
+下一自动组优先provision后独立撤销签名通路设计与实现，真实测试root已回收。当前Controller成功provision后封闭普通Forward，不能沿同pipe发device revoke；需绑定本次已验证grant、仅允许精确撤销且保有可用native signer/有效trust，未知结果必须查证且不得提前回收身份。再处理并行provision/ACTIVE/watch/session-identity/PONG及活动维护整链。自动续办继续，无需用户介入；本轮本地提交，不推送。
+
 ## 2026-10-29 自动续办授权与执行顺序
 
 用户要求安排后续任务并自动执行，直到确需人工介入。已在当前对话创建ACTIVE heartbeat自动续办，automationId=remoteapp，每10分钟触发承接进度，不新建重复自动化。按较大的可验证任务组推进，不再要求用户逐切片输入“继续”。自动本地提交及README/HANDOFF更新沿用原授权，远端推送仍需用户明确要求；自动续办不扩大服务维护或破坏性操作范围。

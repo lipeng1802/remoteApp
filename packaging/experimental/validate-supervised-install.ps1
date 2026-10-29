@@ -1,7 +1,10 @@
-param([switch]$ResumeFiles)
+param([switch]$ResumeFiles, [switch]$StayReady)
 $ErrorActionPreference = 'Stop'
 # Run in the logged-in desktop (or an Interactive scheduled task). This only
 # initializes a fresh isolated TEST root; it does not register an online device.
+$publicReady = Join-Path $PSScriptRoot 'owner-ready.json'
+$stopRequest = Join-Path $PSScriptRoot 'stop-owner.request'
+if ($StayReady -and ((Test-Path -LiteralPath $publicReady) -or (Test-Path -LiteralPath $stopRequest))) { throw 'Fresh owner metadata required' }
 $setup = Join-Path $PSScriptRoot 'test-setup.exe'
 $lines = if ($ResumeFiles) { @(& $setup resume-files) } else { @(& $setup) }
 if ($LASTEXITCODE -ne 0 -or ($lines -join "`n" | ConvertFrom-Json).status -ne 'test_installed') { Write-Output ($lines -join "`n"); throw 'TEST setup failed; preserve root and native state' }
@@ -12,6 +15,7 @@ $info.RedirectStandardInput = $true
 $info.RedirectStandardOutput = $true
 $process = New-Object System.Diagnostics.Process
 $process.StartInfo = $info
+$published = $null
 if (-not $process.Start()) { throw 'Supervisor unavailable' }
 function Read-Reply {
     $read = $process.StandardOutput.ReadLineAsync()
@@ -35,6 +39,24 @@ try {
         if (-not $replyTask.Wait(10000)) { throw 'Business pipe query timeout' }
         if (($replyTask.Result | ConvertFrom-Json).status -ne 'product_unavailable') { throw 'Idle product count did not match' }
     } finally { $pipe.Dispose() }
+    if ($StayReady) {
+        # Public discovery only. Invitations/grants never enter this file.
+        $published = (@{version=1; process_id=$process.Id; control_pipe=$ready.control_pipe; vault_scope=$ready.vault_scope; public_key=$ready.public_key} | ConvertTo-Json -Compress)
+        $pendingReady = $publicReady + '.' + $process.Id + '.new'
+        $file = [System.IO.File]::Open($pendingReady, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        try {
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($published)
+            $file.Write($bytes,0,$bytes.Length)
+            $file.Flush($true)
+        } finally { $file.Dispose() }
+        [System.IO.File]::Move($pendingReady, $publicReady)
+        Write-Output 'OWNER_READY: public bootstrap published; waiting for explicit management stop, maximum 10 minutes.'
+        $deadline = [DateTime]::UtcNow.AddMinutes(10)
+        while (-not (Test-Path -LiteralPath $stopRequest) -and [DateTime]::UtcNow -lt $deadline) {
+            if ($process.HasExited) { throw 'Desktop supervisor exited before requested stop' }
+            Start-Sleep -Milliseconds 200
+        }
+    }
     $process.StandardInput.WriteLine('{"Op":"stop"}')
     $process.StandardInput.Close()
     if ((Read-Reply).status -ne 'closed') { throw 'Supervisor did not close cleanly' }
@@ -45,5 +67,9 @@ try {
     if (-not $process.HasExited) {
         try { $process.StandardInput.WriteLine('{"Op":"stop"}'); $process.StandardInput.Close() } catch {}
         if (-not $process.WaitForExit(45000)) { Write-Output 'JOIN PENDING: no force kill; retain test root and native state.' }
+    }
+    if ($process.HasExited -and $null -ne $published -and (Test-Path -LiteralPath $publicReady)) {
+        # Remove only this process's exact public metadata after actual exit.
+        if ([System.IO.File]::ReadAllText($publicReady) -ceq $published) { Remove-Item -LiteralPath $publicReady }
     }
 }
