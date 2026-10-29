@@ -187,6 +187,14 @@ func CompileAuthenticatedRemovalTest(ctx context.Context, goexe, module, target,
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/authenticated-removal-test", extra, now)
 }
 
+// CompileTestProductSetup pins a fresh isolated TEST installation root.
+func CompileTestProductSetup(ctx context.Context, goexe, module, target, dest string, s Specification, root string, now time.Time) error {
+	if !s.Test || !validInstallRoot(target, root) {
+		return trustprofile.ErrTrust
+	}
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/supervised-test-setup", " -X main.embeddedInstallRoot="+base64.RawURLEncoding.EncodeToString([]byte(root)), now)
+}
+
 // CompileProductSupervisorTest fixes the product executable/digests at build
 // time. Runtime starts only an existing native binding; it cannot choose keys.
 func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time) error {

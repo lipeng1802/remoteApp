@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"remoteapp.local/selfhost-poc/installrelease"
@@ -40,13 +41,16 @@ func write(path string, raw []byte, mode os.FileMode) error {
 }
 func digest(raw []byte) string { h := sha256.Sum256(raw); return hex.EncodeToString(h[:]) }
 func run() error {
-	if len(os.Args) != 8 && ((len(os.Args) != 10 && len(os.Args) != 11) || os.Args[8] != "--verified-live-profile") {
+	if len(os.Args) != 8 && ((len(os.Args) != 10 && len(os.Args) != 11 && len(os.Args) != 13) || os.Args[8] != "--verified-live-profile") {
 		return os.ErrInvalid
 	}
 	goexe, module, target, dest, journal, vault, tlsProduct := os.Args[1], os.Args[2], os.Args[3], os.Args[4], os.Args[5], os.Args[6], os.Args[7]
 	live := len(os.Args) >= 10
-	tunnel := len(os.Args) == 11
+	tunnel := len(os.Args) == 11 || len(os.Args) == 13
 	if tunnel && os.Args[10] != "--test-tunnel" {
+		return os.ErrInvalid
+	}
+	if len(os.Args) == 13 && os.Args[11] != "--test-install-root" {
 		return os.ErrInvalid
 	}
 	var liveClaims trustprofile.Claims
@@ -207,6 +211,32 @@ func run() error {
 	productRaw, e := os.ReadFile(product)
 	if e != nil {
 		return e
+	}
+	if len(os.Args) == 13 {
+		installRoot := os.Args[12]
+		verified, e := installrelease.VerifyDirectory(payload, public, spec.Channel, target, 1)
+		if e != nil {
+			return e
+		}
+		name, e := installrelease.ReleaseDirectoryName(verified)
+		if e != nil {
+			return e
+		}
+		productPath := filepath.Join(installRoot, "releases", name, "installed-autonomous-product"+suffix)
+		if target == "windows" {
+			productPath = strings.TrimRight(installRoot, `\`) + `\releases\` + name + `\installed-autonomous-product.exe`
+		}
+		for name, raw := range map[string][]byte{"trust-journal": journalRaw, "identity-vault": vaultRaw} {
+			if e = write(filepath.Join(dest, name+suffix), raw, 0500); e != nil {
+				return e
+			}
+		}
+		if e = trustinstall.CompileTestProductSetup(ctx, goexe, module, target, filepath.Join(dest, "test-setup"+suffix), spec, installRoot, now); e != nil {
+			return e
+		}
+		if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now); e != nil {
+			return e
+		}
 	}
 	meta := struct {
 		Version       int    `json:"version"`

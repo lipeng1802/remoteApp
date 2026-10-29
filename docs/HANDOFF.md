@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r64 隔离TEST根安装与实际Windows桌面监督产品通过
+
+新增cmd/supervised-test-setup、trustinstall.CompileTestProductSetup及固定根构建选项：r62 builder在--verified-live-profile、--test-tunnel后可追加--test-install-root <受信目标平台绝对路径>。编译setup/root与supervisor/最终签名release目录/product hash，兄弟helper哈希仍固定，运行时没有路径/密钥/身份参数。setup先验证源payload/bootstrap签名，再创建保护layout、导入/promote两集合、激活bootstrap、原生trust/activation初始化和实际autonomous-enrollment-install initialize；创建随机OS设备身份与idle enrollment/binding。正常重复安装拒绝，失败固定状态/阶段输出，保留现场，不删用户MVP、系统Tailscale或其他凭据。
+
+新增packaging/experimental/validate-supervised-install.ps1，必须放在构建包根并在登录桌面/Interactive task执行。安装成功后启动实际supervisor进程，经可信stdin open，验证公开control_pipe，实际同用户命名管道查询idle product_unavailable；随后父stop，要求closed、stdout EOF与实际零退出，超时不force kill。脚本不注册远端设备、不申请grant或启动overlay/payload。
+
+Mac首次直接/private/tmp下的测试根被protected_layout门禁拒绝、根未创建；改为0700私有父/private/tmp/remoteapp-r64-parent后，根/private/tmp/remoteapp-r64-parent/installed完成实际签名安装/Keychain随机身份初始化，产品ready/product_unavailable/closed、exit0。重复setup实际拒绝。构建及日志artifacts/connection-poc/desktop-install-r64/darwin-final、mac-result.json；早期darwin为诊断构建，勿混用。Mac实测为fresh安装分支，Windows另测explicit恢复分支。
+
+Windows原生Interactive Session7首次安装在文件导入阶段失败，暂存文件已写出；显式恢复后发现release/bootstrap已promote，但bootstrap activation回执未确认，未进入native trust。新增setup resume-files，必须首先以pinned helper确认该release原生trust记录Absent并验证保护layout，才允许同一已签名候选Reconcile/Promote或重开已promoted集合。bootstrap异常回执只在explicit恢复下按同一digest OpenBootstrap复核，不恢复旧native数据/换根；已有trust初始化的安装不能进入该恢复。此前阶段标记过粗显示signed_import，补充分段诊断后核对真实文件布局；未将初次失败或inactive当成功，没有删除文件重装。
+
+最终Windows真实安装恢复与原生初始化、supervisor/实际installed-autonomous-product、同用户业务pipe、stop/EOF/exit0全部通过，VALIDATION PASSED/EXITCODE=0。远端包C:\Users\jarvis\remoteapp-r64-validation，测试根C:\Users\jarvis\remoteapp-r64-test-root；本地artifacts/connection-poc/desktop-install-r64/windows为实际payload/bootstrap与最新修复setup，windows-final-result.txt为最终原始PowerShell混合编码日志。早期windows.zip为诊断包，上传后setup/脚本有明确修复，不可拿原zip当最终包。临时任务RemoteApp-R64-Install已结束，检查无该包/根进程后删除。两端随机TEST identity/trust/binding/enrollment/activation及隔离根刻意保留供后续显式维护，不声称测试凭据已清理；profile仍20分钟，到期禁止启动旧包，不得重新生成不同TEST root覆盖现有根。若跨轮需新profile，应先按精确TEST清理流程处理旧材料或使用全新隔离根，不能自动reset。
+
+trustinstall/installrelease/autonomousbinding/enrollmentstore四包race、Windows vet及相关构建测试通过。服务器本轮无新授权、节点或配置修改；没有网络PONG，未宣称跨机Headscale/画面或完整维护删除通过。下一组优先设计并实施本轮保留TEST材料的精确维护/清理及fresh匹配包准备，随后恢复r63临时管理tunnel，在有效期内双机真实consent→provision→ACTIVE/session-identity/TLS PONG→维护join/退出/独立删除。当前20分钟短包不宜让用户手动慢速验收，仍由已授权SSH/Interactive协调。整体切片4未完成；本轮本地提交，不自动推送。
+
 ## 2026-10-29 r63 固定TEST SSH路由与双平台真实HTTPS验证
 
 新增invite.NewTestTunnelNetworkClient，先完整验证profile/root/CA/有效期，且只允许https://mk.fengmap.com:8444；TCP Dial仅接受该精确原地址，连接固定127.0.0.1:18444。HTTPS URL/Host/ServerName校验保持原域名，Proxy=nil，不使用环境代理、不关证书校验、不读取运行时目的地址。installeddevice.WatchedSessionViaTestTunnel仅接受编译Test=true；普通runner/生产入口不变。产品使用编译常量embeddedTestTunnel=loopback18444显式启用，其他值/生产模式拒绝。trustinstall.CompileAutonomousProductTestTunnel对Test/endpoint/product digest再把关；r62构建器仅在--verified-live-profile模式追加显式--test-tunnel才编译该入口。

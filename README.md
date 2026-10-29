@@ -1,6 +1,6 @@
 # Personal Remote Desktop MVP
 
-r63 已加入显式编译的 TEST 固定 SSH 路由，Mac/Windows 均通过保留原域名与 CA 校验的真实 HTTPS 探针；临时转发已关闭。这是管理验证通路，尚非最终产品连接体验。下一步完成测试根安装和真实桌面启动，再验收双机活动产品及维护整链。正式 GUI／发现／同意流程及签名发行仍待。见[服务端升级记录](poc/selfhost/public-server/BINARY_UPGRADE.md)和[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
+r64 两平台隔离 TEST 根安装、原生身份初始化与实际监督产品启动/停止已验证；Windows 桌面同用户业务管道查询通过，安装中断的显式文件恢复已验证。测试根与凭据仍保留，下一步精确维护清理并准备新鲜双机包，再验收授权、活动 payload 与维护整链。正式 GUI／发现／同意流程及签名发行仍待。见[服务端升级记录](poc/selfhost/public-server/BINARY_UPGRADE.md)和[产品退出交接边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
 r57 增加独立本地进程的 OS 设备密钥双向认证及固定编译客户端：绑定双方 nonce、服务实例、完整编译 release 和原生维护事务，认证失败不停止会话，确认中断保留租约与 pending。当前是 TEST 授权策略，尚未验证发行方签名、正式发现／同意流程或跨机产品卸载。见[独立维护认证边界](poc/selfhost/public-server/UNINSTALL_MAINTENANCE.md)。
 
