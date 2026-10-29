@@ -39,6 +39,8 @@ type Body struct {
 	RequestID  string `json:"request_id"`
 	GrantID    string `json:"grant_id"`
 	Allow      bool   `json:"allow"`
+	NodeKey    string `json:"node_key,omitempty"`
+	Challenge  string `json:"retirement_challenge,omitempty"`
 }
 type Envelope struct {
 	PublicKey string `json:"public_key"`
@@ -59,14 +61,15 @@ type Grant struct {
 	Signature string `json:"signature"`
 }
 type Result struct {
-	DeviceID     string `json:"device_id,omitempty"`
-	DeviceCode   string `json:"device_code,omitempty"`
-	InviteID     string `json:"invite_id,omitempty"`
-	Code         string `json:"code,omitempty"` // returned only once to the owning device
-	RequestID    string `json:"request_id,omitempty"`
-	Status       string `json:"status"`
-	Grant        *Grant `json:"grant,omitempty"`
-	ControllerID string `json:"controller_id,omitempty"`
+	DeviceID     string          `json:"device_id,omitempty"`
+	DeviceCode   string          `json:"device_code,omitempty"`
+	InviteID     string          `json:"invite_id,omitempty"`
+	Code         string          `json:"code,omitempty"` // returned only once to the owning device
+	RequestID    string          `json:"request_id,omitempty"`
+	Status       string          `json:"status"`
+	Grant        *Grant          `json:"grant,omitempty"`
+	ControllerID string          `json:"controller_id,omitempty"`
+	Retirement   *NodeRetirement `json:"node_retirement,omitempty"`
 }
 type device struct {
 	Code, ActiveInvite string
@@ -324,7 +327,7 @@ func (s *Store) Execute(e Envelope) (Result, error) {
 		return Result{}, ErrStorage
 	}
 	// Bound all caller-controlled strings before serialization or hex decoding.
-	if len(e.PublicKey) != 64 || len(e.Signature) != 128 || len(e.Body.Nonce) != 32 || len(e.Body.Action) > 32 || len(e.Body.TargetCode) > 12 || len(e.Body.InviteID) > 32 || len(e.Body.RequestID) > 32 || len(e.Body.GrantID) > 32 || len(e.Body.Code) > 8 {
+	if len(e.PublicKey) != 64 || len(e.Signature) != 128 || len(e.Body.Nonce) != 32 || len(e.Body.Action) > 32 || len(e.Body.TargetCode) > 12 || len(e.Body.InviteID) > 32 || len(e.Body.RequestID) > 32 || len(e.Body.GrantID) > 32 || len(e.Body.Code) > 8 || len(e.Body.NodeKey) > 72 || len(e.Body.Challenge) > 64 {
 		return Result{}, ErrDenied
 	}
 	raw, _ := json.Marshal(e)
@@ -407,6 +410,9 @@ func (s *Store) Execute(e Envelope) (Result, error) {
 }
 func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error) {
 	denied := func() (Result, error) { return Result{}, ErrDenied }
+	if b.Action != "node_retirement" && (b.NodeKey != "" || b.Challenge != "") {
+		return denied()
+	}
 	if b.Action == "register" {
 		d, exists := st.Devices[id]
 		if !exists {
@@ -437,6 +443,8 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 		return denied()
 	}
 	switch b.Action {
+	case "node_retirement":
+		return s.nodeRetirementLocked(st, id, b)
 	case "incoming":
 		// Only the owning device can discover its current request. No public
 		// directory, peer alias, verification code or arbitrary target lookup.

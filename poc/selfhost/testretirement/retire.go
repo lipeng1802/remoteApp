@@ -3,6 +3,7 @@
 package testretirement
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -22,6 +23,22 @@ import (
 // startup. All native records must exist; unknown/partial outcomes stay closed.
 // The caller and pinned helpers must live outside the isolated root.
 func Idle(r trustinstall.Release, root, helper, vault, vaultDigest string) (result error) {
+	return retire(r, root, helper, vault, vaultDigest, nil)
+}
+
+// Registered requires live issuer proof that this exact native node's grant
+// was explicitly revoked and its remote provision already cleaned. It never
+// accepts an operator-supplied grant/node/identity or treats expiry as cleanup.
+func Registered(ctx context.Context, r trustinstall.Release, root, helper, vault, vaultDigest string, tunnel bool) error {
+	if ctx == nil || ctx.Err() != nil {
+		return errOnlineRetirement
+	}
+	return retire(r, root, helper, vault, vaultDigest, func(profile trustprofile.Profile, identity autonomousbinding.Record, node enrollmentstore.Record) error {
+		return confirmNodeRetirement(ctx, r, profile, identity, node, vault, vaultDigest, tunnel)
+	})
+}
+
+func retire(r trustinstall.Release, root, helper, vault, vaultDigest string, confirm func(trustprofile.Profile, autonomousbinding.Record, enrollmentstore.Record) error) (result error) {
 	stage := "preflight"
 	defer func() {
 		if result != nil {
@@ -51,11 +68,15 @@ func Idle(r trustinstall.Release, root, helper, vault, vaultDigest string) (resu
 		return e
 	}
 	defer trust.Close()
-	if _, e = trustprofile.OpenInstallation(r.Anchor(), trust, time.Now); e != nil {
+	installation, e := trustprofile.OpenInstallation(r.Anchor(), trust, time.Now)
+	if e != nil {
 		return e
 	}
 	records, e := r.NativeRecordFactory(helper)
 	stage = "binding_idle"
+	if confirm != nil {
+		stage = "binding_registered"
+	}
 	if e != nil {
 		return e
 	}
@@ -73,7 +94,11 @@ func Idle(r trustinstall.Release, root, helper, vault, vaultDigest string) (resu
 		return e
 	}
 	defer node.Close()
-	if e = node.Check(); e != nil || node.State().Phase != "idle" {
+	wantPhase := "idle"
+	if confirm != nil {
+		wantPhase = "registered"
+	}
+	if e = node.Check(); e != nil || node.State().Phase != wantPhase {
 		return trustprofile.ErrTrust
 	}
 	pub, _ := hex.DecodeString(r.Specification().Root)
@@ -100,6 +125,16 @@ func Idle(r trustinstall.Release, root, helper, vault, vaultDigest string) (resu
 		entries, e := os.ReadDir(path)
 		if e != nil || len(entries) != count {
 			return trustprofile.ErrTrust
+		}
+	}
+	if confirm != nil {
+		stage = "online_node_retirement"
+		profile, _, e := installation.Current()
+		if e != nil {
+			return e
+		}
+		if e = confirm(profile, identity, node.State()); e != nil {
+			return e
 		}
 	}
 	cleanup := func(scope string) error { return trustprofile.DeleteTestDesktopJournal(helper, scope) }

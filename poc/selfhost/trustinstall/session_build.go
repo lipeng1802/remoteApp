@@ -204,6 +204,19 @@ func CompileIdleTestRetirement(ctx context.Context, goexe, module, target, dest 
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/retire-idle-test", " -X main.embeddedInstallRoot="+base64.RawURLEncoding.EncodeToString([]byte(root))+" -X main.embeddedSignerDigest="+signerDigest, now)
 }
 
+// CompileNodeTestRetirement adds online, short-lived issuer proof to the fixed
+// TEST teardown. Runtime still cannot choose an identity, node or destination.
+func CompileNodeTestRetirement(ctx context.Context, goexe, module, target, dest string, s Specification, root, signerDigest string, now time.Time, tunnel bool) error {
+	if !s.Test || !validInstallRoot(target, root) || !canonical(signerDigest, 32) || (tunnel && s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444") {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(root)) + " -X main.embeddedSignerDigest=" + signerDigest + " -X main.embeddedMode=registered"
+	if tunnel {
+		extra += " -X main.embeddedTestTunnel=loopback18444"
+	}
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/retire-idle-test", extra, now)
+}
+
 // CompileProductSupervisorTest fixes the product executable/digests at build
 // time. Runtime starts only an existing native binding; it cannot choose keys.
 func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, testTunnel ...bool) error {

@@ -240,6 +240,9 @@ func run() error {
 		if e = trustinstall.CompileIdleTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-idle-test"+suffix), spec, installRoot, digest(vaultRaw), now); e != nil {
 			return e
 		}
+		if e = trustinstall.CompileNodeTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-node-test"+suffix), spec, installRoot, digest(vaultRaw), now, true); e != nil {
+			return e
+		}
 		arch := runtime.GOARCH
 		if target == "windows" {
 			arch = "amd64"

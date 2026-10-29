@@ -1,6 +1,7 @@
 package testretirement
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,9 @@ import (
 )
 
 func TestProductionRetirementRefused(t *testing.T) {
+	if Registered(context.Background(), trustinstall.Release{}, "/no-test-root", "/no-helper", "/no-vault", "", false) == nil {
+		t.Fatal("production registered teardown allowed")
+	}
 	if Idle(trustinstall.Release{}, "/no-test-root", "/no-helper", "/no-vault", "") == nil {
 		t.Fatal("production/default release allowed teardown")
 	}

@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r72：registered TEST 在线退休证明与兼容部署（接续中断工作）
+
+新增invite.NodeRetirement及device动作node_retirement：沿用设备签名/持久nonce/限流，只查询调用设备自己的精确nodekey；必须唯一匹配已有provision、状态cleaned、地址有效且原grant在request中明确revoked。仅过期、仍bound/cleanup_pending、cleanup失败、外来节点/设备、附加选择字段均拒绝。Reconcile确认Driver.Cleanup后才有cleaned，因此不把撤销回执当作节点清理完成。证明绑定device/node/address/grant/challenge、issuer签名和3秒期限，没有放行网络或任意删除能力；历史cleaned记录不是当前网络许可，不依赖读取未加Store锁的provisionReady。两个新增请求字段omitempty，旧请求空字段序列化不变。
+
+新增testretirement.Registered及固定编译retire-node-test（复用retire-idle-test源码的编译模式，无新增运行时身份/root/目的地址参数）。与idle工具分离：必须TEST、独占trust/binding/enrollment租约、原生phase registered、完整已签名程序/布局库存；取得Current有效profile后，用原绑定OS signer向同一可信HTTPS服务查询新鲜节点退休证明，再实际join该临时signer、重验profile及证明，才进入原精确SDK/身份/记录/签名文件清理。profile独立单调deadline保持；证明把整个请求往返和signer join耗时计入3秒，用新鲜challenge绑定的issuer时间加完整单调耗时校验，兼容小幅双机墙钟差但不延长期限。取消、proof未知/混合/错签名/身份/节点/地址/challenge、join失败或期间过期均失败且不开始删除，不自动重试。idle历史过期回收与finish-files受限收尾保持。builder现在随fresh固定根包编译两种退休工具。
+
+新增3项invite测试含真实本地TLS/Store/driver fixture链、撤销但尚未cleanup拒绝、实际cleanup后验签，以及8类权限/故障和proof重放/绑定/时限子项；新增在线校验器测试含join/取消/混合回复/TTL/墙钟差/倒退等13子项。相关invite/testretirement/trustinstall/installeddevice/productmaintenance/grantrevocation/autonomousvalidation/devicevalidation race及Windows vet通过。Windows先前内存协议二进制2顶层/11个在线子项PASS/exit0（artifacts/connection-poc/retirement-r72/windows-result.txt）；随后增加单调耗时校准及两个子项，最新Windows二进制online-retirement-monotonic-tests.exe尚待成功上传与执行，不能沿用旧日志声称最终版本已通过。未使用SSH token读Credential Manager，未创建Windows原生身份或桌面任务。
+
+预发布兼容部署已完成，工单/run/remoteapp-binary-upgrade-d3961d4b62c0b612，持久备份/var/lib/remoteapp-binary-upgrades/remoteapp-binary-upgrade-d3961d4b62c0b612含最终recovery-stage。authority SHA256 e97c069638b3a32d75b96f7b744e80724aa10100eb5139c373656eab9525ce3f；frontend 184ece5d8f09e50cc960f1d397c5648918ee3b7ffcba29a44dcdd3d214bca573；probe仍5223127...。采用r71 stream绑定停止回执，prepare/quiesce/check/install/start/verify全PASS，无强杀/删锁/回写Store；frontend也必须升级，因为新增Body字段需要其严格解码支持。server-acceptance.json记录Store仍74a47ef72dedbcff76bb202a757f14a069e5c8ea1cb340795b39b78a3f63bc83、2 devices/0 provisions、1 user/node/key、零规则、原config/verifier/Nginx基线保持。恢复本轮中断后再次核对三服务active及新binary/Store摘要一致。这里是部署/负向探针证据，尚无真实节点退休证明或双机PONG。
+
+下一组必须接实际活动runner，并区分两条收尾：正常先quiesce产品（需要新增只降权、无选择字段的监督操作，实际stop/EOF/exit0后保留独立撤销signer）再明确撤销，以证明全部正常零退出；另一次活会话撤销应如实验watch自主fault/非零退出，不包装成零退出。随后独立retire-node-test在在线cleanup证明与原生租约后精确清理；attempted/未知注册阶段仍拒绝本工具，不得擅自按registered回收。当前r69 active_round finally只会活撤销，不保证正常零退出；r67 always-stop runner不可直接套用。未来服务维护prepare仍拒绝非空Provisions/TLSIdentities，包括已cleaned历史，需明确审计终态历史兼容，不能清空Store或改常量绕过。
+
+本轮连接诊断发现Mac系统Tailscale为Stopped，导致Windows SSH超时；已仅执行既有配置tailscale up，成功恢复Running，未重登录/改路由参数/输出凭据。随后SSH whoami成功；未显式IPQoS的SCP仍失败/超时，改IPQoS=none后传输成功至本轮已知Windows目录online-retirement-final.exe。核对SHA后最新测试两顶层/13子项全部PASS（15个PASS行），无SKIP/EXITCODE=0，日志windows-monotonic-result.txt；覆盖最终单调校准与墙钟差/倒退，替代前文的最终版本待测状态。未把失败传输记为测试通过，后续Windows管理命令及SCP应统一IPQoS=none。无需人工介入，自动续办继续。真实TEST安装/身份/节点本轮均未新建，不复用已退役r71根；所有旧短包现均不可直接启动。工作尚未标整体完成，不推送远端。协议说明见public-server/NODE_RETIREMENT.md。
+
 ## 2026-10-29 r71：readiness 已部署、Mac 原生独立业务与驻留/回收实测
 
 本轮先承接r70部署await_binding兼容authority。服务器工单/run/remoteapp-binary-upgrade-3e3d5c1a66528b66，持久备份/var/lib/remoteapp-binary-upgrades/remoteapp-binary-upgrade-3e3d5c1a66528b66。新authority SHA256 28fb8d40ab28a3f56d6419efb9e6dbeaca13d5de28c348ab0bc3a202bbdb4ea0；frontend保持619b3ae57d3a1535a8fd7061812a67a099558e596f9828b88b4294a5f5a65f90，network-deployment-check保持5223127e3f2bfa580b7643eeefd0870df58fc5fbd068d2dc6f7168c9496d4b7a。最终retry-quiesce/check/install/start/verify均PASS，现phase verified；原binary/checkpoint/最终recovery-stage完整保留在root私有工单。新await_binding代码已部署，尚未在真实双机节点上验该操作，不把部署负向HTTPS探针当PONG。
