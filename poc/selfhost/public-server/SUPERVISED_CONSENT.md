@@ -22,4 +22,12 @@ Controller成功provision后仍封闭普通业务转发，consent_round继续仅
 
 验证：Mac 相关 Go race 回归、Windows vet 和 47 项 Python 回归通过。真实本地 TLS/authority 测试在普通产品 HTTP client 已关闭后，故意丢弃已执行撤销的回执，独立 client 经签名 status 确认终态且实际 mutation 仅一次；该测试使用内存设备密钥，不是 OS signer 双机验收。Windows 本轮 4 项撤销状态/生命周期测试与 3 项真实 IPC/relay 测试全部通过，无 SKIP/exit0；后者 backend 为 fixture，不调用 Credential Manager。真实双机 provision、独立撤销和 PONG/维护收尾仍待后续协调。
 
+## r69：活动协调与接受标准
+
+`supervised_session.active_round` 是独立的 TEST 管理组件，consent-only runner 没有自动切换到它。它用当前私有协议完成新邀请/明确批准、双方 grant_clock，然后并行发起两端 provision 并等待两个管理调用都完成。即使一端失败也不能丢弃另一条仍可能注册了节点的调用。普通 child 业务在 provision 后保持封闭，finally 只通过 target 的 selector-free revoke_session 撤销一次；未知回执报 preserve_signer，不重试 mutation、不 stop 或删除 owner。尚未尝试 provision 的失败仍用原 request 精确查询/撤销。
+
+两端 network_watch/ACTIVE 不算通过。必须读取实际 product_count，先观察双方 PONG > 0，再至少三次双方都增加，且持续至少六秒（超过三秒 state 租约）；计数倒退、布尔冒充数字、ended、pin_rejected、未知字段/秘密字段、恒定的单个 PONG 都拒绝。开始时允许有限期 product_unavailable，开始增长后失去 payload 立即失败。返回仅公开布尔/样本数，不含 grant/邀请码，且不声称 owner/node 已 join。
+
+新增七项协调故障回归，与原测试联合 54 项 PASS；全部为协议/并发 fixture，不是实际双机 PONG。当前尚需补齐首次绑定的 readiness 竞争：早完成一端 bind 后立刻 state，服务端在另一端尚未 bound 时返回拒绝，现有 watch 会终止；不能通过忽略 HTTPS/验签失败或放宽 binding 门禁处理。还需要持久管理父进程在撤销未知时保留 signer，以及明确区分正常维护零退出与撤销触发的 fault 非零退出，再接真实 fresh 双机 runner。未在这些边界解决前用活动组件启动实机 enrollment。
+
 本轮新增9项Python测试（含多组故障子项），覆盖回执丢失只批准一次、精确撤销、未知撤销不假成功、不同对端/grant/过期结果、严格布尔、短有效期预拒绝、秘密只走stdin、超时无自动重试、重复/超大/多帧回复和shell注入拒绝。加既有JoinedPipe/compiled products回归共41项PASS。另Go当前HTTP/签名/注册授权重放及profile TLS回归通过。全部是本机协议/fixture回归，没有创建新的真实设备、grant、节点或桌面任务。

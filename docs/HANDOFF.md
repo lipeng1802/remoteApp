@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r69：并行 provision 与持续 PONG 协调组件
+
+在 r68 本地提交566f7f2后继续实现 supervised_session.active_round：当前协议的新注册/邀请/明确批准与双方同 grant 核对，先取双方原生 grant_clock，再并行 provision。ThreadPoolExecutor 必须 join 两条管理调用，单边失败也不可遗弃另一条可能已经 enroll 的调用。provision 尝试前置标记，之后 finally 仅调用一次 target 精确 revoke_session，不通过已封闭的普通 child IPC；未知回执固定报 session_revocation_unconfirmed_preserve_signer，不 stop/delete 或自动重发。尚无 provision 尝试时沿用原 request status/精确撤销。
+
+接受标准不是 ACTIVE 或一个 PONG：两端实际 product_count 首先 >0，之后至少三次双方计数都增加，并持续至少6秒跨越3秒 state租约。计数必须真整数，ended/pin_rejected拒绝，计数倒退或增长后 payload 消失拒绝；启动前的 unavailable 仅允许在25秒总界内等待。响应禁止额外/秘密字段，结果仅保存公共布尔/样本数。七项新测试验证并行屏障、单边失败实际等待、单 PONG/恒定计数/倒退/整数布尔/结束拒绝、未知撤销不重发、provision前精确收尾与短有效期预拒绝；联合原回归54项PASS。
+
+此组件尚未接入 run_supervised_consent，也未创建新 OS身份/grant/节点或修改服务器。本轮不是实机 PONG/整体验收。下一组必须先解决代码审阅发现的两个前置：①首端 bind 比另一端快时，ProvisionBackend.NetworkState 因完整双边 binding 尚不存在而拒绝，startWatch 遇该拒绝立即退出。需要显式、严格授权且有界的 readiness 等待，不得在客户端无差别重试 transport/验签错误，或接受部分 binding。②当前 r67 runner 的 finally 总 stop 不适用于独立撤销未知，需要持久管理父进程在未知结果时保留 signer/工单并允许显式查证，不能让 Python 退出隐式关闭所有权。撤销触发 watch fault 后产品可能合法非零退出，亦须与正常维护零退出分开证明，不能包装成零退出。
+
+上述前置解决后再 fresh 双机实际 provision/ACTIVE/session-identity/PONG、明确撤销与所有 join/独立删除/精确资源回收。不能拿本轮 barrier/fixture PASS 当作真实网络通过。Windows SSH 当前可用，自动续办继续，不需要用户操作。本轮本地提交，不推送。
+
 ## 2026-10-29 r68：独立绑定撤销通路与未知回执收尾组件
 
 新增 TEST-only grantrevocation.Channel，由当前 supervisor 在 READY 前用真实 release/profile 和原生 signer 配置独立 HTTPS client；仅从成功 approve/status 的产品回执观察 request_id 与 issuer 已验签 grant，首次 provision 发给 child 前固定该授权。新私有操作只有精确 `{"Op":"revoke_session"}`，不能附带身份/root/目的地址/grant/request；target owner 才可撤销，controller 不可。普通 Forward 在 provision 后仍关闭，但产品/watch 故障或 provision 结果未知时保留独立撤销签名能力，直到实际 Release/join 才关闭该 client/signer，不经已被封闭的 child IPC。
