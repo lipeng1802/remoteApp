@@ -195,6 +195,15 @@ func CompileTestProductSetup(ctx context.Context, goexe, module, target, dest st
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/supervised-test-setup", " -X main.embeddedInstallRoot="+base64.RawURLEncoding.EncodeToString([]byte(root)), now)
 }
 
+// CompileIdleTestRetirement is an explicit destructive TEST teardown tool;
+// it is separate from program-only removal and cannot enter production scopes.
+func CompileIdleTestRetirement(ctx context.Context, goexe, module, target, dest string, s Specification, root, signerDigest string, now time.Time) error {
+	if !s.Test || !validInstallRoot(target, root) || !canonical(signerDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/retire-idle-test", " -X main.embeddedInstallRoot="+base64.RawURLEncoding.EncodeToString([]byte(root))+" -X main.embeddedSignerDigest="+signerDigest, now)
+}
+
 // CompileProductSupervisorTest fixes the product executable/digests at build
 // time. Runtime starts only an existing native binding; it cannot choose keys.
 func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time) error {

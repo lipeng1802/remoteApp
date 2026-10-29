@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r65 过期idle TEST安装的显式回收与Windows文件收尾
+
+新增testretirement.Idle及cmd/retire-idle-test，严格仅Test=true、固定编译release/root/原生helpers及signer摘要，无运行时root/身份覆盖。此入口会删除本测试身份与floor，明确区别于programremoval默认只删程序文件。持有独占native trust，使用OpenInstallation历史签名校验，不调用Current、不延长profile或伪造当前时间；同时持binding、idle enrollment与activation lease，验证实际签名active release/bootstrap、保护布局及精确目录数量后才删除。活owner lease、非idle enrollment、未知额外文件、损坏签名或生产namespace均拒绝。
+
+按既有TEST API精确清理enrollment、OS identity、binding、activation、签名release/bootstrap；最后关闭并删除TEST trust，仅os.Remove已知空目录壳，绝不RemoveAll或扫描/删除其他用户凭据。helpers与工具位于测试根外；失败输出固定阶段、不自动回滚/重复身份删除。scope来自固定release与其原生binding，不从用户输入猜测。正常签名安装/生产维护的过期拒绝语义保持原样。
+
+Mac已实际先验证持有原生trust lease时Idle失败、原根/lease保持；生产default release拒绝测试通过。随后Mac真实回收返回idle_test_retired，/private/tmp/remoteapp-r64-parent/installed已移除（私有空父目录保留）。Windows在Interactive Session7实际回收，首轮release目录已删除但该清理API的目录sync/收尾回执失败，bootstrap保留；源码操作顺序和现场确认此前身份/binding/activation清理已执行。没有强制重置/再次删除凭据。
+
+新增显式retire-idle-test finish-files与testretirement.FinishFiles：必须取得原trust独占lease并历史验签，证明binding和activation原生记录Absent、releases目录为空、剩余bootstrap仍符合该release签名，然后仅清理剩余bootstrap/TEST trust/空目录。拒绝有正常安装记录、活owner或部分/未知release文件的状态，不尝试通用故障恢复。本次Windows该显式恢复成功idle_test_retired/EXITCODE=0，脚本另证C:\Users\jarvis\remoteapp-r64-test-root不存在。日志artifacts/connection-poc/desktop-install-r64/windows-retire-final-result.txt；远端remoteapp-r64-validation保留构建工具与日志作公开工单材料，不含设备私钥。临时任务RemoteApp-R65-Retire结束，核对无包/根残留进程后删除。本轮已处理r64保留的测试身份/原生记录/程序根，不再沿用r64的“仍保留”状态；不是任意OS凭据全面扫描证明。
+
+trustinstall.CompileIdleTestRetirement与r64固定根builder已接入回收工具，后续--test-install-root包随带retire-idle-test，避免短期profile到期后没有显式回收入口。签名工具/运行入口仍与production隔离。相关package race、Windows vet通过；初次测试期间修改import导致并行编译一次失败，源码稳定后重新验证，不将初次失败记为PASS。原生lease冲突实测在回收前显式执行，回收后默认可选native测试SKIP不作为实机证据。
+
+下一组直接使用全新随机TEST根、匹配当前公开profile与本轮回收工具准备短期两端包；不要恢复已回收r64身份，也不要覆盖旧签名metadata。批量自动协调r63临时管理tunnel、Windows Interactive setup/supervisor与Mac产品，在20分钟期限内实际device consent→provision→ACTIVE/session-identity/PONG增长；之后先join两端产品再回收各自idle/维护材料。若enrollment已在线注册，不能用本轮idle清理跳过线上撤销/节点回收，应走授权撤销与完整维护链。本轮服务器没有新增设备/grant/Headscale节点或policy变更，整体切片4仍未完成。本轮本地提交，不自动推送。
+
 ## 2026-10-29 r64 隔离TEST根安装与实际Windows桌面监督产品通过
 
 新增cmd/supervised-test-setup、trustinstall.CompileTestProductSetup及固定根构建选项：r62 builder在--verified-live-profile、--test-tunnel后可追加--test-install-root <受信目标平台绝对路径>。编译setup/root与supervisor/最终签名release目录/product hash，兄弟helper哈希仍固定，运行时没有路径/密钥/身份参数。setup先验证源payload/bootstrap签名，再创建保护layout、导入/promote两集合、激活bootstrap、原生trust/activation初始化和实际autonomous-enrollment-install initialize；创建随机OS设备身份与idle enrollment/binding。正常重复安装拒绝，失败固定状态/阶段输出，保留现场，不删用户MVP、系统Tailscale或其他凭据。

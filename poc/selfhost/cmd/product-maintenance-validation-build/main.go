@@ -237,6 +237,9 @@ func run() error {
 		if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now); e != nil {
 			return e
 		}
+		if e = trustinstall.CompileIdleTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-idle-test"+suffix), spec, installRoot, digest(vaultRaw), now); e != nil {
+			return e
+		}
 	}
 	meta := struct {
 		Version       int    `json:"version"`
