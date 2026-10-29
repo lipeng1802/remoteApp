@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r63 固定TEST SSH路由与双平台真实HTTPS验证
+
+新增invite.NewTestTunnelNetworkClient，先完整验证profile/root/CA/有效期，且只允许https://mk.fengmap.com:8444；TCP Dial仅接受该精确原地址，连接固定127.0.0.1:18444。HTTPS URL/Host/ServerName校验保持原域名，Proxy=nil，不使用环境代理、不关证书校验、不读取运行时目的地址。installeddevice.WatchedSessionViaTestTunnel仅接受编译Test=true；普通runner/生产入口不变。产品使用编译常量embeddedTestTunnel=loopback18444显式启用，其他值/生产模式拒绝。trustinstall.CompileAutonomousProductTestTunnel对Test/endpoint/product digest再把关；r62构建器仅在--verified-live-profile模式追加显式--test-tunnel才编译该入口。
+
+本轮实际临时管理通路：Mac SSH-L127.0.0.1:18444→服务器127.0.0.1:8444，Windows通过Mac到Windows管理SSH的-R127.0.0.1:18444→Mac127.0.0.1:18444。只开放两端本机回环listener，服务器无配置/端口/服务修改。测试路径依赖既有SSH管理环境（Windows管理SSH仍可能走系统Tailscale）；**不是最终免账号产品的网络架构，也未证明纯公网免Tailscale端到端**。不得为正式产品常驻开启管理forward或把此路由当公开发布配置。
+
+Mac与Windows均实际使用原发行root签名公开profile、原mk域名和CA完成TLS，GET /v1/network收到预期405；请求在设备/重放/持久计数处理前拒绝，无设备注册/grant。Windows执行test-tunnel-r63-win.exe，单项PASS无SKIP/EXITCODE=0，日志artifacts/connection-poc/test-tunnel-r63-win-result.txt；Mac实际Go测试同项PASS。不可用ErrDenied同时代表TLS/transport错误来推定通过，测试必须拿到真实HTTPS响应并核对405。另测试外国目的地址拒绝、错误root/其他endpoint拒绝、TLS验证未关闭、Proxy保持nil。invite/installeddevice/trustinstall race、产品/构建入口测试及Windows vet通过。
+
+两条管理SSH控制socket为/tmp/remoteapp-r63-{tunnel,win}.sock，本轮验收后已显式-O exit关闭；不需用户停止窗口。服务器Store仍5c40c3230bd331b5ff47c9aefb18dd16c7f4e3d4d19f1ae18caed4caf1db33ca、零ACL、三个服务active。新鲜两平台TEST tunnel构建输出artifacts/connection-poc/test-tunnel-r63/{darwin,windows}，20分钟有效期与r62一样，后续实际启动必须重建；无Windows OS identity/journal初始化或产品安装，不把TLS probe当真实product/PONG/Headscale验收。
+
+下一组不再重复解决TCP通路：准备固定TEST根的真实签名payload/bootstrap导入和原生初始化，按最终manifest路径编译supervisor、提供只含public metadata的桌面启动bootstrap；以Interactive任务运行Windows真实产品，再从r61同用户pipe/relay推进device consent/provision/ACTIVE/session-identity/PONG与维护join/退出/删除。当前尚无一键桌面安装验证入口，勿让用户跑旧r59 fixture/过期包。正式公网接入/签名发行/GUI与整体切片4仍未完成。本轮本地提交，不自动推送。
+
 ## 2026-10-29 r62 真实公开profile验证与两平台TEST构建
 
 新增`productprofile.Claims`，固定既有发行root `5b74a1a3b2b6c477b81016d71c38275d9fdd17d01e6c33ec7847dcd892a5198f`、service remoteapp-prerelease、floor1，先严格解码/验签/有效期/CA，再接受已知127.0.0.1或mk.fengmap.com:8444 HTTPS endpoint。不从输入提供替代root，不读服务端私钥。复制服务/epoch/endpoint/CA/issuer原值，仅将TEST issued_at设为构建时刻、expires_at取原截止与20分钟较早者，再用仅内存临时TEST release key签名。测试涵盖错误root/signature、过期、换服务/地址、不能延长原期限，以及固定生产入口拒绝单测root。

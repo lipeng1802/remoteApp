@@ -105,7 +105,16 @@ func WatchedEnrollmentRunnerWithSession(release trustinstall.Release, open clien
 	return runner(release, open, commands, output, factory, true, true, work)
 }
 
-func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork) clientowner.Runner {
+// WatchedSessionViaTestTunnel requires explicit compiled TEST opt-in. Requests
+// cannot choose a tunnel, root or endpoint. Production wiring stays unchanged.
+func WatchedSessionViaTestTunnel(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, work SessionWork) clientowner.Runner {
+	if !release.Specification().Test {
+		return func(context.Context, trustprofile.Profile) error { return trustprofile.ErrTrust }
+	}
+	return runner(release, open, commands, output, factory, true, true, work, true)
+}
+
+func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork, testTunnel ...bool) clientowner.Runner {
 	return func(ctx context.Context, profile trustprofile.Profile) (result error) {
 		if ctx.Err() != nil || open == nil || output == nil || commands == nil {
 			return trustprofile.ErrTrust
@@ -125,7 +134,14 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 			}
 		}()
 		anchor := release.Anchor()
-		client, err := invite.NewProfileNetworkClient(profile, anchor.Root[:], anchor.Service, anchor.MinimumEpoch, signer)
+		createClient := invite.NewProfileNetworkClient
+		if len(testTunnel) == 1 && testTunnel[0] {
+			if !release.Specification().Test {
+				return trustprofile.ErrTrust
+			}
+			createClient = invite.NewTestTunnelNetworkClient
+		}
+		client, err := createClient(profile, anchor.Root[:], anchor.Service, anchor.MinimumEpoch, signer)
 		if err != nil {
 			return trustprofile.ErrTrust
 		}

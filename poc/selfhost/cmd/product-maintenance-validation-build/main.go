@@ -40,11 +40,15 @@ func write(path string, raw []byte, mode os.FileMode) error {
 }
 func digest(raw []byte) string { h := sha256.Sum256(raw); return hex.EncodeToString(h[:]) }
 func run() error {
-	if len(os.Args) != 8 && (len(os.Args) != 10 || os.Args[8] != "--verified-live-profile") {
+	if len(os.Args) != 8 && ((len(os.Args) != 10 && len(os.Args) != 11) || os.Args[8] != "--verified-live-profile") {
 		return os.ErrInvalid
 	}
 	goexe, module, target, dest, journal, vault, tlsProduct := os.Args[1], os.Args[2], os.Args[3], os.Args[4], os.Args[5], os.Args[6], os.Args[7]
-	live := len(os.Args) == 10
+	live := len(os.Args) >= 10
+	tunnel := len(os.Args) == 11
+	if tunnel && os.Args[10] != "--test-tunnel" {
+		return os.ErrInvalid
+	}
 	var liveClaims trustprofile.Claims
 	var liveSource []byte
 	if live {
@@ -155,7 +159,11 @@ func run() error {
 			return e
 		}
 	}
-	if e = trustinstall.CompileAutonomousProductClient(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now); e != nil {
+	compileProduct := trustinstall.CompileAutonomousProductClient
+	if tunnel {
+		compileProduct = trustinstall.CompileAutonomousProductTestTunnel
+	}
+	if e = compileProduct(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now); e != nil {
 		return e
 	}
 	if target == "darwin" {

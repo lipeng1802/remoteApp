@@ -26,6 +26,7 @@ import (
 )
 
 var embeddedRelease, embeddedSignerDigest, embeddedProductDigest string
+var embeddedTestTunnel string
 
 func bindingRecords(records trustinstall.RecordFactory) autonomousbinding.JournalFactory {
 	return func(scope string, create, test bool) (autonomousbinding.Journal, error) {
@@ -148,7 +149,14 @@ func run(output func(any) error) (result error) {
 		SHA256:     embeddedProductDigest,
 	}}
 	commands := make(chan installeddevice.Request)
-	runner := installeddevice.WatchedEnrollmentRunnerWithSession(
+	makeRunner := installeddevice.WatchedEnrollmentRunnerWithSession
+	if embeddedTestTunnel != "" {
+		if embeddedTestTunnel != "loopback18444" || !release.Specification().Test {
+			return trustprofile.ErrTrust
+		}
+		makeRunner = installeddevice.WatchedSessionViaTestTunnel
+	}
+	runner := makeRunner(
 		release,
 		open,
 		commands,

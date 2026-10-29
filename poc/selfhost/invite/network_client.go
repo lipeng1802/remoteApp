@@ -106,6 +106,27 @@ func NewProfileNetworkClient(p trustprofile.Profile, root ed25519.PublicKey, ser
 	return c, nil
 }
 
+// NewTestTunnelNetworkClient is trusted TEST wiring for the fixed prerelease
+// SSH forward. URL/Host/TLS verification are unchanged; only TCP routing differs.
+// No proxy environment, runtime destination or TLS verification bypass.
+func NewTestTunnelNetworkClient(p trustprofile.Profile, root ed25519.PublicKey, service string, floor uint64, signer DeviceSigner) (*NetworkClient, error) {
+	if p.Claims.Endpoint != "https://mk.fengmap.com:8444" {
+		return nil, ErrDenied
+	}
+	c, e := NewProfileNetworkClient(p, root, service, floor, signer)
+	if e != nil {
+		return nil, e
+	}
+	t := c.client.Transport.(*http.Transport)
+	t.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if network != "tcp" || address != "mk.fengmap.com:8444" {
+			return nil, ErrDenied
+		}
+		return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "tcp", "127.0.0.1:18444")
+	}
+	return c, nil
+}
+
 // BoundLifetime gives managed gates an independent monotonic expiry. A slow
 // HTTPS response or wall-clock rollback must not extend a loaded profile.
 func (c *NetworkClient) BoundLifetime(ctx context.Context) (context.Context, context.CancelFunc) {

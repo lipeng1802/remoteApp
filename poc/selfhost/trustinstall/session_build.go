@@ -282,7 +282,13 @@ func CompileDesktopTestSession(ctx context.Context, goexe, module, dest string, 
 	}
 	return compileEntry(ctx, goexe, module, "windows", dest, s, signerDigest, productDigest, "./cmd/desktop-session", false, now)
 }
-func compileEntry(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, native bool, now time.Time) error {
+func CompileAutonomousProductTestTunnel(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, now time.Time) error {
+	if !s.Test || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" || !canonical(productDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-autonomous-product", true, now, true)
+}
+func compileEntry(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, native bool, now time.Time, testTunnel ...bool) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust
 	}
@@ -297,7 +303,14 @@ func compileEntry(ctx context.Context, goexe, module, target, dest string, s Spe
 	if e != nil {
 		return e
 	}
-	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags=-X main.embeddedRelease="+encoded+" -X main.embeddedSignerDigest="+signerDigest+" -X main.embeddedProductDigest="+productDigest, "-o", dest, entry)
+	extra := ""
+	if len(testTunnel) > 0 {
+		if len(testTunnel) != 1 || !testTunnel[0] || !s.Test || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" {
+			return trustprofile.ErrTrust
+		}
+		extra = " -X main.embeddedTestTunnel=loopback18444"
+	}
+	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags=-X main.embeddedRelease="+encoded+" -X main.embeddedSignerDigest="+signerDigest+" -X main.embeddedProductDigest="+productDigest+extra, "-o", dest, entry)
 	cmd.Dir = module
 	arch := runtime.GOARCH
 	if target == "windows" {
