@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-29 r66 当前监督入口的授权协调与私有管理适配器
+
+新增public-server/supervised_consent.py、supervised_requests.py与9项专用测试。当前installeddevice.Request协议与旧split-consent不同，不导入旧控制面脚本。协调两端register、邀请claim仍pending、核对准确incoming、自批准拒绝、owner拒绝无grant、第二次明确批准两端grant一致及subjects/expiry，最后明确revoke/status终态无grant。返回公共布尔证据，不记录邀请/授权。Python结构一致性不是签名验证，真实产品provision仍须自己验证issuer签名。
+
+核心故障处理：一旦request_id已知，finally先查询owner status，批准回执丢失时不重复approveTrue；approved用真实owner记录的grant ID撤销，pending明确否决，再由controller status确认。未知revoke/status失败向上传递，不能判已撤销或自动删除仍可能需要撤销签名的身份。请求ID未知的claim回执丢失仍是未确认结果，组件不声称该类未知结果已清理；注册设备持久记录也没有delete API，不能为清理恢复旧Store快照。
+
+WindowsRelay只把私有JSON经SSH stdin送给已校验r61 relay，argv只含受信公共路径/pipe；严格拒绝shell特殊字符/SSH选项注入/不规范pipe，回复限单JSON/8192/UTF8/重复字段，stderr不外泄。管理调用超时是outcome_unknown，只结束该SSH调用、不force kill桌面owner、不声称join；LocalSupervisor使用JoinedPipe串行send/read。构造器bootstrap是受信管理输入，不是publisher认证或产品设备授权替代品。
+
+核对发现成功provision后Controller.Forward封闭普通device路径，当前不能在产品运行时直接沿同pipe撤销。本轮因此实现独立consent_round，不提供provision/work回调，不复用旧use_grant/network_state冒充当前API。测试自动allowTrue仅为明确授权的TEST验收，正式GUI仍需真实用户同意。完整说明与调用边界见public-server/SUPERVISED_CONSENT.md。
+
+新增9项Python测试及故障子项通过，联合既有JoinedPipe/compiled_products回归41项PASS；Go invite当前NetworkAPI所有权/重放/重启及ProfileHTTPS信任/有效期定向回归通过。这里使用fixture/private子进程协议，不是Mac/Windows两个OS signer到真实服务的本轮授权通过。本轮没有重建/安装新短包、注册设备/签发grant/启动Headscale节点、改服务或创建Windows任务；r65回收状态保持。未声称用户验收、PONG或切片4完成。
+
+下一任务组应补齐可运行的fresh双机准备与Windows持久桌面owner/公共bootstrap驻留，再实际运行本轮consent-only episode；需在有效期内注册/拒绝/批准/撤销并保存只含公共证据的回执。随后单独设计provision后独立撤销通路、并行provision/watch/实际PONG与维护join/删除整链，不能把本轮纯协调组件当成已经完成的跨机验收命令。本轮本地提交，不自动推送。
+
 ## 2026-10-29 r65 过期idle TEST安装的显式回收与Windows文件收尾
 
 新增testretirement.Idle及cmd/retire-idle-test，严格仅Test=true、固定编译release/root/原生helpers及signer摘要，无运行时root/身份覆盖。此入口会删除本测试身份与floor，明确区别于programremoval默认只删程序文件。持有独占native trust，使用OpenInstallation历史签名校验，不调用Current、不延长profile或伪造当前时间；同时持binding、idle enrollment与activation lease，验证实际签名active release/bootstrap、保护布局及精确目录数量后才删除。活owner lease、非idle enrollment、未知额外文件、损坏签名或生产namespace均拒绝。

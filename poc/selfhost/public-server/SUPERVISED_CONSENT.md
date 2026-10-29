@@ -1,0 +1,15 @@
+# r66：当前自主产品的私有授权协调组件
+
+`supervised_consent.consent_round(target, controller, profile_expires_at=...)`仅用于明确授权的TEST双机验证。两端都是接收installeddevice.Request的受信私有callable。它不导入旧split-consent控制面脚本，不重置Store/用户/节点，不管理服务，也不打开公网端口。自动发送allow=True是本地测试步骤，不能作为生产用户同意UI。
+
+流程为两端注册、邀请/claim、核对准确incoming对端、自行批准必须拒绝、owner拒绝必须不给grant；随后重新邀请并由owner批准，两端返回同一grant，检查subjects/expiry，最后owner明确撤销并由controller status确认终态无grant。返回值仅包含三个公共布尔证据，邀请/code/grant不输出日志或进入命令行。Python只比较结构与一致性，不负责验证issuer签名，真实产品在provision前仍须独立验签。
+
+已知request_id后，每条请求均在finally中收尾。批准响应丢失时先向owner查询原请求status：approved则按该确切grant ID撤销；pending则显式否决；denied/revoked则检查controller终态。不会重发allow=True。状态或撤销结果未知必须报错，不能在finally中打印“成功”，也不能自动销毁仍可能需要签名撤销的OS身份。注册成功的设备记录没有删除API，本轮若实际执行会保留在Store；不能回写旧Store快照来清理。
+
+`supervised_requests.WindowsRelay`把一个私有JSON请求经SSH stdin交给r61同用户relay，pipe与工具路径来自受信公共桌面bootstrap。命令行只含公共路径/pipe；拒绝shell字符、非规范pipe和SSH选项伪装。35秒管理调用期限，stdout按8192字节单JSON/重复字段/UTF8限制解析，异常只报固定标签，不输出stderr或回执。SSH调用超时只影响管理调用，**不等于桌面进程退出或授权失败已确认**，必须通过后续状态查询处理。`LocalSupervisor`复用JoinedPipe的串行、有界私有协议，进程join仍由调用者承担。这些适配器不提供publisher认证，也不能信任任意网络来历的工具路径。
+
+## 刻意保留的边界
+
+当前Controller成功provision后封闭普通业务转发，因此本组件不提供work/provision回调，也不把网络操作夹在finally撤销之前。实际活动会话需要独立、明确设计的撤销签名通路，或先完成产品退出交接再在有效授权上下文中撤销；不能把旧use_grant/network_state接口套进当前产品。尚未实现完整自动准备/桌面owner驻留/双机provision协调命令。不要直接拿本模块宣称已通过真实双机授权或PONG。
+
+本轮新增9项Python测试（含多组故障子项），覆盖回执丢失只批准一次、精确撤销、未知撤销不假成功、不同对端/grant/过期结果、严格布尔、短有效期预拒绝、秘密只走stdin、超时无自动重试、重复/超大/多帧回复和shell注入拒绝。加既有JoinedPipe/compiled products回归共41项PASS。另Go当前HTTP/签名/注册授权重放及profile TLS回归通过。全部是本机协议/fixture回归，没有创建新的真实设备、grant、节点或桌面任务。
