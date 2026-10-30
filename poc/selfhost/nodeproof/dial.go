@@ -92,7 +92,7 @@ func classifyUpgradeFailure(status int, body string) startuptrace.Stage {
 			return startuptrace.OverlayResolveFailed
 		}
 		if strings.HasPrefix(body, "dial failure: ") {
-			if strings.Contains(body, "connection refused") {
+			if strings.Contains(body, "connection refused") || strings.Contains(body, "connection was refused") {
 				return startuptrace.OverlayConnectRefused
 			}
 			if strings.Contains(body, "i/o timeout") || strings.Contains(body, "context deadline exceeded") {

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r90 当前 helper 的新鲜双机安装、真实 OS signer 授权及故障收尾/精确退休已实测；PONG 仍未通过，失败已缩小为 LocalAPI 502 的 dial failure。新增覆盖 pinned gVisor 的拒绝措辞，尚不能据此反推本轮具体错误。
+
 r89 fresh 验证包已改为从当前源构建两平台原生日志和身份 helper，并在签发短包前审计摘要；新 helper 随包上传，旧缓存只复用未改变的 TLS 产品。四个实际构建及153项Python回归通过，尚未启动新安装或双机会话。
 
 r88 补充原生日志认证失败的固定分类。新构建 helper 的本机原生意图写入、最终 CAS、重开及两份精确 TEST 日志清理已通过；旧失败根因和遗留现场尚未解决，不能据此标记设备身份或双机 PONG 通过。

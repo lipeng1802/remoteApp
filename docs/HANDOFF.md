@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r90：当前helper真实双机安装通过，连接为502 dial failure
+
+先读r89/Git，分支保持，docs/archive未跟踪，不推送。唯一fresh工单artifacts/connection-poc/supervised-activity-r75-96eefc091725，新Mac根/private/tmp/remoteapp-r75-96eefc091725/installed，Windows根C:\Users\jarvis\remoteapp-r75-96eefc091725，包remoteapp-r75-package-96eefc091725。r89当前源四helper构建/摘要、Mac TEST ad-hoc签名、原TLS库存验证、当前新签名文件库存、Windows完整上传新helper均实际执行。未覆盖r67旧缓存/旧安装/历史库存。
+
+Windows首次signed_import失败，task1/READY无后原门禁一次resume_windows（无native残留/Absent trust），两端均READY；Mac mac-setup-result.json为test_installed/completed/exit0。**r85阶段回执、r86创建前原生intent、最终CAS与真实OS身份安装现首次在当前两平台helper的完整fresh安装通过**，不是仅r88的journal fixture。之后两端OS signer真实注册、新邀请/明确批准、并行provision返回network_watch；但Mac product_count不可用，未取得双方持续PONG，原activity-state仍exercise_outcome_unknown，不标正常zero或TLS payload通过。
+
+新增直接网络证据startup-diagnostic.json：controller=overlay_connect_failed、target=target_listening。按本轮编译分类逻辑，控制端已经收到LocalAPI HTTP502且正文有固定dial failure前缀，未进入WhoIs/密钥交付/TLS child；目标实际创建监听并通过当时ACTIVE检查。可排除本轮permission/坏upgrade/resolve失败/Dial-Self等分支，但不能确认具体UserDial底层错误，也没有证明Mac发起时目标已listen。raw body按设计没保留，不能事后补写内容。
+
+检查pinned gVisor源码发现现有分类遗漏实际SDK措辞：gvisor.dev/gvisor@v0.0.0-20260224225140-573d5e7127a8/pkg/tcpip/errors.go的ErrConnectionRefused.String返回connection was refused，原分类仅含connection refused。补两个措辞映射同一固定overlay_connect_refused；无返回错误、授权、拨号预算、重试行为变化，仍不存原正文。新增回归和原HTTP拒绝测试Go race通过、Windows nodeproof vet通过。此代码补丁在本轮结束后才改，**不能认定r90原body就是该措辞或已修复TCP问题**。
+
+实际故障回收：active_round finally撤销后，fault-revoke再次严格确认原bound撤销；两端专用fault_joined/两阶段EOF、原product/watch/node/内部signer和独立signer收尾、父holder/wrapper/task实际exit1及PID绑定receipt均通过。原生registered在线退休重新验证原授权已撤销/remote provision已cleaned证明；Mac registered_test_retired0且根消失，Windows再次test_retirement_release_delete1，保持unknown不自动重发删除。逐SHA核验原tool/旧日志/双方join后，Interactive Limited新任务RemoteApp-R90-FinishFiles-96eefc091725显式原retire-node-test.exe finish-files，registered_test_retired0/root不存在。精确归档proof/同inode Mac receipt，删本轮3个非Running任务、关闭原2条SSH master、rmdir当前holder/父空壳。fault-state最终fault_joined_and_test_roots_retired，两端joined/retired true，windows_finish_files_explicit true。日志及两份operator脚本留工单审计；原activity仍unknown，不伪写normal成功。
+
+本轮两个安装根均已退休，不再运行它们或其过期短包。无业务Nginx/443变动，不清Store，新增真实device/provision/revoked/cleaned历史必须保留。r84 afb6无scope pending与r87未落盘scope的未知TEST journal仍隔离未收口，不能用本轮新对象的成功替代旧归属。源代码/README/HANDOFF本地提交，自动续办继续，无用户操作。
+
+下一组应做针对性连接修复，而非只换诊断反复发包：用 pinned SDK/gVisor 的真实socket延迟监听回归验证目标先TLS发布再监听、控制端立即Dial的竞态。可考虑同一个原3秒截止内、只针对明确TCP拒绝、每次检查当前ACTIVE并只连原signed target的一小段有界等待；Dial-Self/其它502/未知/身份错误必须终止，绝不自动重发注册/批准/provision或延长3秒授权/拨号预算。也可用受信监听就绪屏障；任何变更先有回归、再fresh双机要求双方至少3次跨6秒PONG→正常quiesce→独立撤销→全部zero join→registered退休。若新确切分类仍非拒绝，要按实际分支继续排查，不把此候选当已证实根因。整体切片4、正常活动/GUI/可信发行、Windows文件回执一次性自动成功与两个旧未知现场仍未闭环。
+
 ## 2026-10-30 r89：fresh准备接当前helper，旧缓存不再掩盖代码更新
 
 先读r88/Git，分支保持，docs/archive未跟踪不纳入，不推送。此组只构建可执行文件/验证管理逻辑，没有创建OS凭据、安装根、节点、授权、会话，不触碰业务Nginx/443/Store。旧afb6无scope pending、r87未知TEST journal仍保持隔离与未闭环事实，不以新构建掩盖。

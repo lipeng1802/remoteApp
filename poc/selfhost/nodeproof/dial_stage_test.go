@@ -121,6 +121,7 @@ func TestUpgradeFailureClassificationHasNoRawText(t *testing.T) {
 		want startuptrace.Stage
 	}{
 		{502, "dial failure: dial tcp PRIVATE:47476: connect: connection refused\n", startuptrace.OverlayConnectRefused},
+		{502, "dial failure: connect: connection was refused\n", startuptrace.OverlayConnectRefused},
 		{502, "dial failure: PRIVATE: i/o timeout\n", startuptrace.OverlayConnectTimeout},
 		{502, "dial failure: PRIVATE context deadline exceeded\n", startuptrace.OverlayConnectTimeout},
 		{502, "dial failure: PRIVATE\n", startuptrace.OverlayConnectFailed},
