@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r91 增加原三秒预算内、仅对明确 TCP 拒绝的监听就绪等待，真实延迟 socket 回归通过。双机验证因 Mac 首次信任初始化失败未进入网络；只读确认 absent 后一次受限恢复成功，本轮两端已按 idle 路径回收，PONG 仍待验证。
+
 r90 当前 helper 的新鲜双机安装、真实 OS signer 授权及故障收尾/精确退休已实测；PONG 仍未通过，失败已缩小为 LocalAPI 502 的 dial failure。新增覆盖 pinned gVisor 的拒绝措辞，尚不能据此反推本轮具体错误。
 
 r89 fresh 验证包已改为从当前源构建两平台原生日志和身份 helper，并在签发短包前审计摘要；新 helper 随包上传，旧缓存只复用未改变的 TLS 产品。四个实际构建及153项Python回归通过，尚未启动新安装或双机会话。

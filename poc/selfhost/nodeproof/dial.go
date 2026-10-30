@@ -19,6 +19,7 @@ import (
 
 var ErrNoOverlayRoute = errors.New("overlay route withdrawn")
 var ErrOverlayDial = errors.New("overlay dial rejected")
+var ErrOverlayNotListening = errors.New("overlay connection refused")
 
 // DialOnlyOverlay uses the pinned LocalAPI upgrade but deliberately NEVER
 // follows Dial-Self, unlike Client.DialTCP/tsnet.Dial. Thus a withdrawn ACL/peer
@@ -49,9 +50,9 @@ func DialOnlyOverlay(ctx context.Context, lc *local.Client, host string, port ui
 			return nil, ErrNoOverlayRoute
 		}
 		stage := startuptrace.OverlayUpgradeRejected
-		// TEST-only diagnostics: this never authorizes retry or changes the error.
+		// A bounded 502 classification distinguishes refusal; other diagnostics are TEST-only.
 		// Do not retain/log any raw response body or address.
-		if startuptrace.Enabled(ctx) {
+		if res.StatusCode == http.StatusBadGateway || startuptrace.Enabled(ctx) {
 			body, readErr := io.ReadAll(io.LimitReader(res.Body, 513))
 			if readErr == nil && len(body) <= 512 {
 				stage = classifyUpgradeFailure(res.StatusCode, string(body))
@@ -59,6 +60,9 @@ func DialOnlyOverlay(ctx context.Context, lc *local.Client, host string, port ui
 		}
 		res.Body.Close()
 		startuptrace.Emit(ctx, stage)
+		if stage == startuptrace.OverlayConnectRefused {
+			return nil, ErrOverlayNotListening
+		}
 		return nil, ErrOverlayDial
 	}
 	var conn net.Conn

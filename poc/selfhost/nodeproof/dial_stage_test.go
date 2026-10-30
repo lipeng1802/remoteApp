@@ -142,14 +142,17 @@ type noDiagnosticBody struct{ reads int }
 func (b *noDiagnosticBody) Read(p []byte) (int, error) { b.reads++; return 0, io.EOF }
 func (b *noDiagnosticBody) Close() error               { return nil }
 
-type diagnosticResponse struct{ body io.ReadCloser }
+type diagnosticResponse struct {
+	body   io.ReadCloser
+	status int
+}
 
 func (r diagnosticResponse) RoundTrip(*http.Request) (*http.Response, error) {
-	return &http.Response{StatusCode: 502, Header: make(http.Header), Body: r.body}, nil
+	return &http.Response{StatusCode: r.code(), Header: make(http.Header), Body: r.body}, nil
 }
 func TestProductionDoesNotReadDiagnosticErrorBody(t *testing.T) {
 	b := &noDiagnosticBody{}
-	lc := &local.Client{Transport: diagnosticResponse{body: b}, OmitAuth: true}
+	lc := &local.Client{Transport: diagnosticResponse{body: b, status: 403}, OmitAuth: true}
 	conn, e := DialOnlyOverlay(context.Background(), lc, "100.120.0.2", 47476)
 	if e != ErrOverlayDial || conn != nil || b.reads != 0 {
 		t.Fatal("TEST diagnostic enabled in production")
@@ -184,5 +187,30 @@ func TestTESTDiagnosticBodyIsBoundedAndOversizeUnclassified(t *testing.T) {
 	raw, readErr := io.ReadAll(r)
 	if e != ErrOverlayDial || conn != nil || b.bytes != 513 || readErr != nil || string(raw) != "PRODUCT_STAGE overlay_upgrade_rejected\n" {
 		t.Fatal("unbounded or unsafe diagnostic")
+	}
+}
+
+func (r diagnosticResponse) code() int {
+	if r.status != 0 {
+		return r.status
+	}
+	return 502
+}
+
+func TestProductionClassifiesOnlyExplicitBoundedTCPRefusal(t *testing.T) {
+	for _, item := range []struct {
+		body string
+		want error
+	}{
+		{"dial failure: connect: connection was refused\n", ErrOverlayNotListening},
+		{"dial failure: connect: connection refused\n", ErrOverlayNotListening},
+		{"dial failure: PRIVATE unknown\n", ErrOverlayDial},
+		{"PRIVATE connection refused", ErrOverlayDial},
+	} {
+		lc := &local.Client{Transport: diagnosticResponse{body: io.NopCloser(strings.NewReader(item.body))}, OmitAuth: true}
+		conn, e := DialOnlyOverlay(context.Background(), lc, "100.120.0.2", 47476)
+		if conn != nil || e != item.want {
+			t.Fatal("unsafe refusal classification")
+		}
 	}
 }

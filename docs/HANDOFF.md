@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r91：TCP明确拒绝的三秒有界等待；新轮次止于安装恢复
+
+先读r90/Git，分支保持，docs/archive未跟踪不纳入，不推送。为候选目标监听竞态实现有界处理，未扩大授权/身份/截止、不改服务Store/Nginx/443。
+
+nodeproof.DialOnlyOverlay对HTTP502始终最多读取513字节，只有512以内、无读错、固定dial failure前缀及明确connection refused或pinned gVisor connection was refused才返回ErrOverlayNotListening；其它502/超长/未知仍原拒绝，不把resolve/权限/Dial-Self当可重试。其它诊断body依旧TEST-only，不记录原文/地址。生产502读body现在是有界传输分类，r84旧“生产一律不读body”描述不再覆盖此版本。streamgate.dialUntilListening只对该专用拒绝等待50ms，沿用DialOverlay原同一个3秒ctx和同一signed target，不刷新deadline，不重发注册/批准/provision。每次前后检查ACTIVE；未知/route退出、撤销/取消/到期终止，关闭任何未验证socket。成功后仍完整原g.peer/WhoIs/本机节点/IP/后续密钥握手，未绕过身份。
+
+回归：真实本地TCP先拒绝、收到首次拒绝信号后才创建监听，原ctx内重拨成功；不是只mock连接成功。未知/route错误只调用一次、撤销后不重拨、取消截止、每次ctx deadline完全相同、未验证socket在撤销后实际关闭等通过。nodeproof/streamgate/installeddevice完整Go race通过，追加dial回归定向race通过，Windows三包vet通过。以上只证明传输等待行为，不证明历史r90底层错误，也不是双机TLS/PONG。
+
+新鲜当前helper签名工单artifacts/connection-poc/supervised-activity-r75-9618bcfb4a77，Windows根C:\Users\jarvis\remoteapp-r75-9618bcfb4a77、包remoteapp-r75-package-9618bcfb4a77，Mac/private/tmp/remoteapp-r75-9618bcfb4a77/installed。Windows首次signed_import失败，按原门禁一次resume_windows后实际READY/task Running；恢复CLI失败实际是后续Mac安装，不能误断言Windows没启动。Mac mac-setup-result.json明确setup_failed_state_preserved/native_trust/exit1，没有mac-manager或业务trace；**没有执行exercise，所以没有新TCP/持续PONG实机结果**。
+
+Mac安全调查：ioreg仅IOConsoleLocked=false，未输出CGSSessionScreenIsLocked，不据此认定锁屏/解锁；比较Spec、当前source/payload/实际安装helper SHA均一致，真实路径无symlink。当时两平台profile剩余约470/528秒，不可直接把失败归因到期。基于fixture内public channel按原公式计算精确trust scope，在执行前落盘mac-trust-status-attempt.json；使用当前helper一次read-only status，实际exit0/state absent（mac-trust-status-result.json）。这不等于解释第一次错误，但提供了原生明确Absent而非猜没有写入。
+
+Windows未开始业务，先空stop-owner.request严格实际closed/EOF/native+wrapper/task exit0、READY消失，按idle记录。不因失败丢弃现有owner。随后对Mac执行**一次显式预信任文件恢复**：先独占记录mac-explicit-resume-attempt.json含setup SHA/刚确认trust absent/无业务，再调用原编译test-setup resume-files。它自己再次要求NativeRecordState=Absent、ProtectedLayout、完整签名文件及原scope门禁，实际test_installed/exit0，结果已存证。不放宽门禁、不覆盖未知root、不重试已提交身份；旧afb6无scope pending未碰。本轮第一次native_trust失败的具体错误仍未知，恢复成功不能当首次自动安装通过，更不能把原可能legacy abort改称正常join。
+
+未重启Windows owner，也未启动Mac owner/网络来强行续活动。先独立Mac retire-idle-test在原生租约/完整签名库存/绑定和enrollment idle门禁下actual idle_test_retired0/root不存在；Windows原独立idle工具逐SHA/Interactive Limited新任务RemoteApp-R91-IdleRetire-9618bcfb4a77，仍文件阶段test_retirement_release_delete1，未自动重复删除。另新任务RemoteApp-R91-IdleFinishFiles-9618bcfb4a77原工具finish-files actual idle_test_retired0/root不存在。最后重验双方根/原退出、精确移除当前3个已结束任务、关闭原2条SSH master、rmdir当前holder/父空壳。startup-recovery.json最终idle_pair_retired，双方root_retired true/tunnels_closed/windows_tasks_removed；原activity-state仍startup_outcome_unknown。两端均已退休，不能再启动此包/根，操作脚本/日志留工单。
+
+下一组要收口间歇性Mac native_trust首次失败再fresh网络：可增加固定native helper RPC timeout/认证/配置校验原因，并贯通setup回执（不日志原错误/密钥，不把通用ErrTrust当锁屏）。5秒IPC超时与首次冷启动/Keychain响应是待查候选，不是已证实根因；不要盲目扩大签名TTL/网络3秒预算，也不能靠重复初始化解决。源流程当前native失败回执还只固定stage，原r91错误无法追溯。可设计安装前同一编译scope的只读预检以阻止不具备条件时写入，但不能拿预检当创建/修复授权。之后使用fresh双机实测本组等待方案，只有两端PONG至少3次跨6秒、quiesce/独立撤销、全部实际zero/join/registered退休才算活动通过。r84/r87两处旧未知现场继续隔离单列，整体切片4/GUI/可信发行未完成。自动续办ACTIVE，无需用户操作；本组代码、README/HANDOFF本地提交，不推送。
+
 ## 2026-10-30 r90：当前helper真实双机安装通过，连接为502 dial failure
 
 先读r89/Git，分支保持，docs/archive未跟踪，不推送。唯一fresh工单artifacts/connection-poc/supervised-activity-r75-96eefc091725，新Mac根/private/tmp/remoteapp-r75-96eefc091725/installed，Windows根C:\Users\jarvis\remoteapp-r75-96eefc091725，包remoteapp-r75-package-96eefc091725。r89当前源四helper构建/摘要、Mac TEST ad-hoc签名、原TLS库存验证、当前新签名文件库存、Windows完整上传新helper均实际执行。未覆盖r67旧缓存/旧安装/历史库存。

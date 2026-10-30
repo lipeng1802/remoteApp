@@ -44,3 +44,6 @@ Mac setup 启动前独占并同步 mac-setup-attempt.json，实际退出后只�
 
 
 r89 fresh prepare 在短期 profile 签发前构建当前源的 darwin/windows trust-journal 与 identity-vault；Darwin 仅作 TEST ad-hoc 签名，所有最终字节先记摘要。旧 r67 库存仍独立验证且保持不可变，只有未改变的 TLS 产品字节允许旧缓存复用；当前两种 helper 随新包完整上传，摘要变动直接拒绝。严格 audit 不允许增加 TLS 或任意文件名来规避缓存校验。构建/库存审计不等于原生安装、发行签名或双机验收。
+
+
+r91 TCP listener 就绪等待：所有尝试共享原 DialOverlay 三秒截止及同一个 signed destination。LocalAPI 502 正文最多513字节，只有固定 dial failure 前缀且明确 connection refused/connection was refused 才返回专用拒绝错误；其它502/过长/未知保持终止，Dial-Self绝不回退。仅该拒绝可等待50ms，每次尝试前后仍检查ACTIVE，取消、撤销或截止立即停止并关闭未验证socket；随后原WhoIs/节点身份/密钥握手仍必需。这不重发注册/批准/provision，不扩大授权TTL。生产的502读取是有界操作性分类，不能再泛称所有生产失败都不读body；非502诊断仍仅TEST。必须新双机持续PONG验证，真实socket迟到监听fixture不是验收替代。

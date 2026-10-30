@@ -235,7 +235,9 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	startuptrace.Emit(ctx, startuptrace.ControllerUpgrade)
-	conn, err := nodeproof.DialOnlyOverlay(dialCtx, lc, g.binding.TargetIP, 47476)
+	conn, err := dialUntilListening(dialCtx, func(attempt context.Context) (net.Conn, error) {
+		return nodeproof.DialOnlyOverlay(attempt, lc, g.binding.TargetIP, 47476)
+	}, g.active)
 	if err != nil {
 		cancel()
 		return nil, session.ErrDenied
