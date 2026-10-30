@@ -50,3 +50,6 @@ r91 TCP listener 就绪等待：所有尝试共享原 DialOverlay 三秒截止�
 
 
 r92 安装失败回执支持可选固定 reason：native_helper_timeout、native_authentication_required、interactive_logon_required；未知 reason、混合或非严格 schema 不保存原文。Native journal RPC 保持五秒原截止，超时仍失败/未知，类型与 ErrTrust 兼容，不许可重放/放弃租约；setup进一步区分 native_trust_factory/owner/initialize。此回执只能解释新执行，不可回填旧失败，认证类别也不等于已证明锁屏。
+
+
+r93 在签发短包前先离线编译两平台空配置产品，使用与签名构建一致的 trimpath/strip/CGO 依赖选项；只编译不执行，不创建身份或安装根。构建失败现在仅以固定 timeout/interrupted/process_failed/rejected 原因保存独占平台回执，未知编译输出不落盘。预热不扩大原构建/授权期限，不代表修复了任何历史失败或完成双机验收。

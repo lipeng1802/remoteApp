@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r93：新包未建完、未安装；构建诊断与签发前离线预热
+
+先读r92/Git，分支保持，docs/archive未跟踪，不推送。唯一新工单artifacts/connection-poc/supervised-activity-r75-b000b4578dd7：current helper构建/审计、原缓存只读核对、service-profile读取完成，Darwin bundle完整；Windows只有payload中的helper/trust-install/autonomous-enrollment-install，installed-autonomous-product缺失、bootstrap空、无fixture。prepare失败且activity-state保持build_outcome_unknown，没有运行start、上传archive、创建安装根/OS身份/owner/节点/授权。本轮不是Mac原生初始化失败或双机PONG失败，尚未到那些阶段。
+
+两端SSH一次只读复测可用，无人工外部阻塞；服务器仅locale警告，未修改。df显示约15GiB可用，不能直接断言磁盘不足。旧包装未保存编译stdout/stderr，原错误已丢失；不能事后把它写成3分钟deadline、编译语法问题或原生权限。源码定位显示此路径共用builder内3分钟ctx、外240秒管理上界，可能受冷缓存/主机I/O影响，但未证实。Windows默认空配置产品独立Go build实际exit0，只证明源可编译，不是同一嵌入flags复现：尝试go version -m -json取历史ldflags时metadata无该键，明确停止，没有扫二进制/伪造同配置结论。编译输出exe未执行。
+
+没有原生资源需要退休。确认Mac installed根不存在、无manager/windows.tar.xz后，仅rmdir本轮已知空holder/父目录，build-attempt-audit.json存证；Windows端只读缓存未变，无任务或安装。保留部分构建与公开日志作审计，不覆盖修补/启动该不完整包，原内存签名私钥已经随builder结束消失。该短包已不可用于后续网络验证，必须fresh新工单。r84/r87未知现场不动。
+
+新增trustinstall构建失败类别：session_build内编译进程非零返回仍errors.Is ErrTrust，同时区分ctx DeadlineExceeded=trusted_build_timeout、cancel=trusted_build_interrupted、其它进程失败=trusted_build_process_failed；预验证/未知为trusted_build_rejected。没有改变3分钟、240秒、签名TTL、native IPC五秒或网络三秒任何预算。builder CLI不再打印原error，改固定JSON；manager用record_build_failure严格单帧/无duplicate/extra/4096字节/固定status与白名单reason校验，独占保存build-failure-<固定平台>.json。未知body/error不存盘，非法平台不写文件、旧证据不覆盖。此新功能不回填r93原失败；部分其它build.go方法仍旧通用拒绝，未假称所有构建错误都已精确分类。管理层timeout异常仍是unknown，不据此宣称子进程完整退出或构建结果可用。
+
+新增prewarm_product_build，在当前helper构建之后、live profile读取/短期签名之前，离线GOENV=off/GOTOOLCHAIN=local/GOPROXY=off、固定两平台/CGO选项，trimpath及-s -w先编译空配置installed-autonomous-product。只编译不执行；不会创建Root/Keychain/ControlPlane，输出不会加入签名产品库存。意图把重依赖编译前移，降低短包签发后冷编译成本，而非扩大有效期/假定已修复根因。实际两平台预编译均成功，artifacts/connection-poc/r93-compile-preflight/result.json记录；空配置/无嵌入版本不能当产品安装或TLS验证。
+
+验证：trustinstall及builder入口完整Go race通过，timeout/cancel/process/未知原因不泄漏与ErrTrust兼容定向回归通过，Windows两包vet通过。Python全155项PASS/ResourceWarning-as-error（r93-python-tests.txt），随后新增预热策略用例后管理17项PASS：固定离线双平台选项、不run/不mint profile、拒绝重复目录；失败回执覆盖private/duplicate/extra、非法平台、旧证据保护。py_compile/diff检查通过。全无新真实原生/网络/PONG证据，不重复已变为过期或不完整的旧包。
+
+下一组直接fresh prepare→start，若构建再次失败保存新的固定原因，按deadline/离线缺依赖/进程编译问题区分，不盲目加时或重复旧目录。r92 native阶段/原因捕获已经接入新源码但本轮没走到，第一次安装失败仍须按精确结果/状态门禁处理，不重放未知初始化。若两端READY才验证r91原三秒TCP拒绝等待，要求双方持续PONG至少3次跨6秒、正常quiesce/独立撤销/全部zero join/registered退休。旧两处未知现场继续单列；整体切片4/GUI/可信发行/Windows一次性自动文件回执未完成。自动续办ACTIVE，无需用户操作，本组代码与README/HANDOFF本地提交，未推送。
+
 ## 2026-10-30 r92：原生信任首次失败的固定原因贯通，不扩大预算
 
 先读r91/Git，分支保持，docs/archive未跟踪，不推送。本组不创建新包/安装根/OS凭据/节点/会话，不重启已退休根，不修改服务/Store/Nginx。旧afb6/r87未知现场不动。自动续办ACTIVE，无需用户操作。

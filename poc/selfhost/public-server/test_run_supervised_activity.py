@@ -204,5 +204,31 @@ class ManagementActivityGates(unittest.TestCase):
                 if reason=='PRIVATE':self.assertEqual(value['status'],'unavailable')
                 else:self.assertEqual(value['reason'],reason)
 
+    def test_build_receipt_does_not_log_private_or_override_prior_evidence(self):
+        for raw,want in ((b'{"status":"test_bundle_build_failed","reason":"trusted_build_timeout"}','trusted_build_timeout'),
+                         (b'{"status":"test_bundle_build_failed","reason":"PRIVATE"}','unavailable'),
+                         (b'{"status":"test_bundle_build_failed","reason":"trusted_build_timeout","PRIVATE":true}','unavailable'),
+                         (b'{"status":"test_bundle_build_failed","reason":"trusted_build_timeout","reason":"PRIVATE"}','unavailable')):
+            with tempfile.TemporaryDirectory() as d:
+                w=Path(d);runner.record_build_failure(w,'windows',raw)
+                text=(w/'build-failure-windows.json').read_text()
+                self.assertNotIn('PRIVATE',text);self.assertEqual(json.loads(text)['reason'],want)
+                with self.assertRaises(FileExistsError):runner.record_build_failure(w,'windows',raw)
+                with self.assertRaisesRegex(RuntimeError,'platform_rejected'):runner.record_build_failure(w,'../PRIVATE',raw)
+
+    def test_product_prewarm_is_compile_only_offline_before_profile(self):
+        with tempfile.TemporaryDirectory() as d:
+            w=Path(d)
+            with patch.object(runner,'command',return_value=b'') as call:
+                runner.prewarm_product_build(w,Path('/trusted/go'))
+            self.assertEqual(call.call_count,2)
+            for c in call.call_args_list:
+                args=c.args[0]
+                self.assertIn('GOPROXY=off',args);self.assertIn('-trimpath',args)
+                self.assertIn('-ldflags=-s -w',args);self.assertEqual(args[-1],'./cmd/installed-autonomous-product')
+                self.assertNotIn('run',args)
+            self.assertFalse((w/'service-profile.json').exists())
+            with self.assertRaises(FileExistsError):runner.prewarm_product_build(w,Path('/trusted/go'))
+
 
 if __name__=="__main__":unittest.main()

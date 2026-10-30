@@ -268,7 +268,7 @@ func run() error {
 }
 func main() {
 	if e := run(); e != nil {
-		fmt.Fprintln(os.Stderr, e)
+		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "test_bundle_build_failed", "reason": trustinstall.BuildFailureReason(e)})
 		os.Exit(1)
 	}
 }

@@ -70,8 +70,8 @@ func compileInstallRootTool(ctx context.Context, goexe, module, target, dest, in
 	cmd.Dir = module
 	cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED=0", "GOOS="+target, "GOARCH="+arch)
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
-	if cmd.Run() != nil {
-		return trustprofile.ErrTrust
+	if err := cmd.Run(); err != nil {
+		return buildProcessFailure(ctx)
 	}
 	return nil
 }
@@ -252,8 +252,8 @@ func compileReleaseTool(ctx context.Context, goexe, module, target, dest string,
 	cmd.Dir = module
 	cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED="+cgo, "GOOS="+target, "GOARCH="+arch)
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
-	if cmd.Run() != nil {
-		return trustprofile.ErrTrust
+	if err := cmd.Run(); err != nil {
+		return buildProcessFailure(ctx)
 	}
 	return nil
 }
@@ -360,8 +360,8 @@ func compileEntry(ctx context.Context, goexe, module, target, dest string, s Spe
 		cgo = "1"
 	}
 	cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED="+cgo, "GOOS="+target, "GOARCH="+arch)
-	if cmd.Run() != nil {
-		return trustprofile.ErrTrust
+	if err := cmd.Run(); err != nil {
+		return buildProcessFailure(ctx)
 	}
 	return nil
 }

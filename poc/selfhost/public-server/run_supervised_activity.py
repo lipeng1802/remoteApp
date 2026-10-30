@@ -102,6 +102,18 @@ def verified_windows_inputs(work):
     return old,files
 
 
+def prewarm_product_build(work,go):
+    # Compile-only with the same dependency flags as the signed builder. No
+    # profile/key is minted and the empty-config executables are never run.
+    folder=work/'compile-preflight';folder.mkdir(mode=0o700)
+    for target in ('darwin','windows'):
+        output=folder/('product-'+target+('.exe' if target=='windows' else ''))
+        command(['env','GOENV=off','GOTOOLCHAIN=local','GOPROXY=off',
+                 'GOOS='+target,'GOARCH=amd64','CGO_ENABLED='+('1' if target=='darwin' else '0'),
+                 str(go),'-C',str(REPO/'poc/selfhost'),'build','-trimpath','-ldflags=-s -w',
+                 '-o',str(output),'./cmd/installed-autonomous-product'],240)
+
+
 def build_current_helpers(work,go):
     directory=work/'current-helpers';directory.mkdir(mode=0o700)
     result={'version':1,'helpers':{}}
@@ -156,6 +168,18 @@ def metadata(work):
     return work,m
 
 
+def record_build_failure(work,target,raw):
+    if target not in ('darwin','windows'):raise RuntimeError('activity_build_platform_rejected')
+    record={'version':1,'platform':target,'reason':'unavailable'}
+    try:
+        value=strict_reply(raw) if len(raw)<=4096 else None
+        if type(value) is dict and set(value)=={'status','reason'} and value['status']=='test_bundle_build_failed' and type(value['reason']) is str and value['reason'] in ('trusted_build_timeout','trusted_build_interrupted','trusted_build_process_failed','trusted_build_rejected'):
+            record['reason']=value['reason']
+    except Exception:pass
+    with (work/('build-failure-'+target+'.json')).open('x') as out:
+        json.dump(record,out,sort_keys=True);out.flush();os.fsync(out.fileno())
+
+
 def prepare():
     n=secrets.token_hex(6)
     work=REPO/"artifacts/connection-poc"/("supervised-activity-r75-"+n)
@@ -172,6 +196,7 @@ def prepare():
     (work/'immutable-input-preflight.json').write_text(json.dumps(inputs,sort_keys=True))
     go=REPO/"artifacts/connection-poc/toolchain/go/bin/go"
     current=build_current_helpers(work,go)
+    prewarm_product_build(work,go)
     profile=work/"service-profile.json"
     profile.write_bytes(command(["ssh",*OPTIONS,SERVER,"cat /var/lib/remoteapp-prerelease/client-public/service-profile.json"]))
     build_go=test_build_wrapper(work,go)
@@ -194,7 +219,9 @@ def prepare():
         # Go's cwd is fixed without changing this process's working directory.
         try:r=subprocess.run(args,cwd=REPO/"poc/selfhost",stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240)
         except Exception:raise RuntimeError("activity_build_outcome_unknown") from None
-        if r.returncode:raise RuntimeError("activity_build_failed")
+        if r.returncode:
+            record_build_failure(work,target,r.stdout)
+            raise RuntimeError("activity_build_failed")
     a.save({"version":1,"phase":"built"})
     return work
 
