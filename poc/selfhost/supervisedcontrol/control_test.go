@@ -7,6 +7,7 @@ import (
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/installeddevice"
 	"remoteapp.local/selfhost-poc/privatepipe"
+	"remoteapp.local/selfhost-poc/startuptrace"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,6 +18,9 @@ type fixture struct{ calls atomic.Int32 }
 func (b *fixture) Forward(ctx context.Context, r installeddevice.Request) (json.RawMessage, error) {
 	b.calls.Add(1)
 	return json.RawMessage(`{"status":"device_result","passed":true}`), nil
+}
+func (b *fixture) ProductStage(context.Context) (startuptrace.Report, error) {
+	return startuptrace.Report{Status: "product_stage", Stage: "controller_dial"}, nil
 }
 func (b *fixture) Count(context.Context) (clientruntime.ProductCount, error) {
 	b.calls.Add(1)
@@ -48,6 +52,8 @@ func exercise(t *testing.T, ln net.Listener, dial func() (net.Conn, error)) {
 		{`{"Op":"quiesce_session","VaultScope":"foreign"}`, "request_rejected", 0},
 		{`{"Op":"maintenance_prepare"}`, "request_rejected", 0},
 		{`{"Op":"product_count","VaultScope":"override"}`, "request_rejected", 0},
+		{`{"Op":"product_stage","VaultScope":"override"}`, "request_rejected", 0},
+		{`{"Op":"product_stage"}`, "product_stage", 0},
 		{`{"Op":"device","Device":{"action":"status"},"VaultScope":"override"}`, "request_rejected", 0},
 		{`{"Op":"revoke_session","Device":{"grant_id":"foreign"}}`, "request_rejected", 0},
 		{`{"Op":"device","Device":{"action":"status"}}`, "device_result", 1},

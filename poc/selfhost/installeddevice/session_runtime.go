@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"net"
+	"remoteapp.local/selfhost-poc/startuptrace"
 	"time"
 
 	"remoteapp.local/selfhost-poc/clientruntime"
@@ -110,11 +111,13 @@ func (r *SessionRuntime) runTargetProduct(ctx context.Context, product clientrun
 			called, key, fingerprint = true, k, fp
 		}
 	}
+	startuptrace.Emit(ctx, startuptrace.TargetTLS)
 	child, err := clientruntime.StartBoundProduct(ctx, product, r.client, r.issuer, r.peers.grant, r.peers.binding, true, r.clock, 0, "")
 	if err != nil || child == nil || !called {
 		return stopPartialProduct(child, err)
 	}
 	return processowner.Own(ctx, child, func(life context.Context) error {
+		startuptrace.Emit(life, startuptrace.TargetListen)
 		listener, err := trackedSessionListener(life, func() (net.Listener, error) { return r.ListenOverlay(life) })
 		if err != nil {
 			return err
@@ -124,12 +127,14 @@ func (r *SessionRuntime) runTargetProduct(ctx context.Context, product clientrun
 		if err != nil {
 			return runtimeWorkerError(life, err)
 		}
+		startuptrace.Emit(life, startuptrace.TargetSecret)
 		if err = r.gate.DeliverProductSecret(life, secretConn, key, fingerprint); err != nil {
 			return runtimeWorkerError(life, err)
 		}
 		// Erase the owner's copies as soon as the authenticated one-shot delivery
 		// finishes. The target product retains its own private session key.
 		key, fingerprint = "", ""
+		startuptrace.Emit(life, startuptrace.TargetServe)
 		for {
 			conn, acceptErr := listener.Accept()
 			if acceptErr != nil {
@@ -147,21 +152,25 @@ func (r *SessionRuntime) runControllerProduct(ctx context.Context, product clien
 	if product.CertificateScope != "" || product.CertificateReopen || product.CertificateOpened != nil {
 		return invite.ErrDenied
 	}
+	startuptrace.Emit(ctx, startuptrace.ControllerListen)
 	listener, err := trackedSessionListener(ctx, func() (net.Listener, error) { return net.Listen("tcp4", "127.0.0.1:0") })
 	if err != nil {
 		return invite.ErrDenied
 	}
 	defer listener.Close()
+	startuptrace.Emit(ctx, startuptrace.ControllerDial)
 	overlay, err := r.DialOverlay(ctx)
 	if err != nil {
 		return err
 	}
+	startuptrace.Emit(ctx, startuptrace.ControllerSecret)
 	key, fingerprint, err := r.gate.ReceiveProductSecret(ctx, overlay)
 	if err != nil {
 		return err
 	}
 	product.ControllerKey = key
 	port := listener.Addr().(*net.TCPAddr).Port
+	startuptrace.Emit(ctx, startuptrace.ControllerTLS)
 	child, err := clientruntime.StartBoundProduct(ctx, product, r.client, r.issuer, r.peers.grant, r.peers.binding, false, r.clock, port, fingerprint)
 	key, fingerprint = "", ""
 	product.ControllerKey = ""
@@ -180,10 +189,12 @@ func (r *SessionRuntime) runControllerProduct(ctx context.Context, product clien
 			}
 		}()
 		defer func() { close(closed); <-workerDone }()
+		startuptrace.Emit(life, startuptrace.ControllerAccept)
 		local, err := listener.Accept()
 		if err != nil {
 			return runtimeWorkerError(life, err)
 		}
+		startuptrace.Emit(life, startuptrace.ControllerBridge)
 		return runtimeWorkerError(life, r.ConnectTLS(life, local))
 	})
 }

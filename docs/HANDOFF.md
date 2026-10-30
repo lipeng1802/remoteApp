@@ -1,5 +1,27 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r82：固定启动阶段、fresh 双机故障 join 与 registered 退休实测
+
+先读r81/Git，分支保持codex/connection-architecture-poc；docs/archive未跟踪保留，未推送。Windows SSH与Interactive桌面实际可用，无用户阻塞，自动续办继续ACTIVE。本组未修改服务二进制/业务Nginx/443、清空控制面或回写旧Store，保留本轮真实注册与撤销/cleaned历史。
+
+新增startuptrace固定阶段枚举和编译TEST context门禁，native product仅向stderr写PRODUCT_STAGE固定枚举，绝不写keys/身份/原错误。TEST supervisor的processowner.Spec显式开启采集，普通子进程仍默认discard。独立reader逐字节有界缓冲、持续排空，未知/过长/未结束行丢弃，仅缓存白名单；reader实际EOF/join纳入正常与专用fault_joined的完成条件，不能因诊断新增worker而漏等。ProductStage只读缓存，即使工作broken也不Exchange/重发provision/恢复业务；释放后拒绝。继承管道和同用户socket/pipe/relay均仅允许精确selector-free product_stage；旧backend无该能力只回固定unavailable，不扩大其它命令。
+
+runner在exercise失败后只读查询两端缓存，独占保存startup-diagnostic.json，仅白名单stage/unavailable/unreported，任何异常/额外字段/非字符串/外来stage均不持久化原文；诊断失败不替换原异常、不推进原工单、不停止owner/tunnel。trace增加固定op/status标签。相关说明见SUPERVISED_ACTIVITY.md。阶段表示进入某操作，不证明该操作已成功，不作为授权/PONG/join替代。
+
+验证：相关processowner/productmaintenance/supervisedcontrol/installeddevice完整Go race与3个实际入口编译通过；startuptrace TEST启用/禁用/未知枚举回归通过；实际子进程大stderr/未知秘密行/未结束行/默认禁用/缓存保持/reader实际join通过，追加未结束行后定向race再次通过；supervisedcontrol额外selector拒绝与无产品业务调用通过。新增productmaintenance真实子进程证明broken时读缓存不检查trust、不向child发送命令、不会消费下一业务回执，released拒绝，定向race通过。Windows八包/入口vet通过。Python全套149项PASS，ResourceWarning-as-error；py_compile与diff检查通过。此类fixture不替代下方真实双机结果。
+
+唯一新鲜工单artifacts/connection-poc/supervised-activity-r75-02574b52ce93，两端签名TEST短包新建，Windows根C:\Users\jarvis\remoteapp-r75-02574b52ce93、包remoteapp-r75-package-02574b52ce93，Mac根/private/tmp/remoteapp-r75-02574b52ce93/installed。首先Windows signed_import返回不确定且task1，原生进程/READY无残留后显式一次resume_windows，脚本原Absent trust/签名文件恢复门禁保留；随后两端持久owner/公开bootstrap READY。没有使用SSH token读原生凭据，Windows身份在Interactive任务创建。
+
+实际注册/新邀请/明确批准及并行provision后，双方network_watch，但Mac product_count始终product_unavailable，未观察到双方持续PONG，**本轮活动验收仍失败，不标正常zero或TLS payload通过**。终于取得可信固定阶段：startup-diagnostic.json为controller=controller_dial、target=target_listen。说明Mac未进入ReceiveProductSecret/TLS child、Windows已完成TLS启动进入overlay listener操作；阶段在调用前输出，不能据此证明target监听成功，更不能断定目标延迟就是唯一原因。需要下一组进一步区分DialOnlyOverlay的路由/节点门禁、实际Dial和WhoIs，以及target ListenOverlay门禁/监听就绪，再做延迟target真实socket回归；不要盲目延长3秒租约/忽略身份/自动重试provision。
+
+失败后active_round finally已返回session_revoked；本组再通过独立fault-revoke精确原bound请求确认撤销并写单独fault-state，未改原activity-state=exercise_outcome_unknown。**新r79-r81故障协议首次双机原生通过**：Mac与Windows实际产品专用fault_joined、独立supervisor signer关闭、两阶段fault_stop_ready→stdin EOF→fault_closed→实际native exit1，父holder/wrapper/task也实际exit1，原public metadata消失，严格PID绑定持久receipt成立；Mac monitor实际exit1（不是旧r78的SIGINT/-2），双方故障join均确认。材料mac-exit.json、mac-fault-joined.json、windows-fault-joined.json。不能把预期故障exit1称为正常zero。
+
+fault-retire重新验证双方proof后，Mac registered_test_retired/exit0且根不存在。Windows原生注册退休门禁与身份/记录清理通过，但再次test_retirement_release_delete/exit1，fault-state保持retirement_outcome_unknown，未自动重发删除。随后只在原任务已退出、原tool逐SHA核验、两端join/原root确认后，通过全新Interactive Limited任务RemoteApp-R82-FinishFiles-02574b52ce93显式调用同一原编译retire-node-test.exe finish-files；工具自身Absent binding/activation、空releases、签名bootstrap及历史trust门禁保持。实际registered_test_retired/exit0，原生根消失，windows-finish-result.txt存证；两份explicit operator脚本保留在工单用于审计，非产品自动重试入口。
+
+随后重新核对双方原proof/实际exit和根不存在，只删除本轮3个已非Running任务（owner/Retire/FinishFiles）、按原tunnels.json正常关闭两条SSH master；同一Mac receipt inode/内容核对后归档并删除原文件，holder与父空壳rmdir成功。fault-state最终fault_joined_and_test_roots_retired，joined/retired两端true、windows_finish_files_explicit=true；原activity-state仍unknown，不伪写normal成功。原生根均已退休，不再启动本轮安装或复用其短包。公开包、日志、证明保留，无本轮驻留native owner或TEST根。旧r78惰性诊断metadata/socket仍不动。
+
+下一组：优先定位controller_dial内部失败。补固定非秘密route/dial/peer/监听成功子阶段或可信失败分类，避免仅凭最后stage改启动顺序；必要时做受信TEST真实socket延迟启动测试，保持ACTIVE/身份/期限检查。确认根因后修复并fresh双机重新执行持续增长PONG（双方至少3次跨6秒）、正常quiesce、独立撤销、全部实际zero join与registered退休。故障链本组已真实通过，无新代码/证据需求不重复同样故障轮次；Windows目录sync/file-delete回执恢复仍应单独收口，不把finish-files恢复称为一次性自动退休。整体切片4未完成，正常活动/GUI/可信签名发行尚未通过。所有本组代码/README/HANDOFF本地提交，自动续办继续，不需用户操作。
+
 ## 2026-10-30 r81：Windows retained故障两阶段入口、持久receipt及独立故障工单
 
 先读r80/Git，分支保持，docs/archive未跟踪保留。本组接Windows retained holder和runner，未启动fresh双机原生安装、身份或真实Headscale会话，未触碰服务器/Store/Nginx/原生凭据；Windows SSH实测可用，无需用户介入，自动续办ACTIVE。r78根24f5894a6acb已退休不复活，其旧惰性管理metadata/socket仍保留，不能用本组fixture给旧进程补写join。

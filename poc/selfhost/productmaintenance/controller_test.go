@@ -403,3 +403,23 @@ func TestProductReleaseRetainsSignerOnJoinDeadline(t *testing.T) {
 		t.Fatal("signer close count")
 	}
 }
+
+func TestCachedStageDoesNotExchangeOrReopenBrokenProduct(t *testing.T) {
+	c, _, checks := controllerFixture(t, "forward")
+	// This fixture exits on an unknown product command. Telemetry must not send
+	// a product_stage command or consume its next stdout/business response.
+	c.broken = true
+	report, e := c.ProductStage(context.Background())
+	if e != nil || report.Status != "product_stage" || report.Stage != "unreported" || checks.Load() != 0 {
+		t.Fatal("cached telemetry touched trust/business")
+	}
+	c.broken = false
+	if _, e = c.child.Exchange(context.Background(), installeddevice.Request{Op: "device"}); e != nil {
+		t.Fatal("telemetry disturbed product pipe")
+	}
+	c.released = true
+	if _, e = c.ProductStage(context.Background()); e == nil {
+		t.Fatal("released owner reused")
+	}
+	c.released = false
+}

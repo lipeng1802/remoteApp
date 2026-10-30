@@ -69,7 +69,7 @@ func run(output func(any) error) (result error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	controller, e := productmaintenance.StartTest(ctx, r, processowner.Spec{Executable: string(product), SHA256: embeddedProductDigest}, factory, bf, func(record autonomousbinding.Record) (productmaintenance.Signer, error) {
+	controller, e := productmaintenance.StartTest(ctx, r, processowner.Spec{Executable: string(product), SHA256: embeddedProductDigest, CaptureProductStage: true}, factory, bf, func(record autonomousbinding.Record) (productmaintenance.Signer, error) {
 		s, e := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, record.VaultScope, record.PublicKey)()
 		if e != nil {
 			return nil, e
@@ -193,6 +193,21 @@ func run(output func(any) error) (result error) {
 					return e
 				}
 				return productmaintenance.ErrFaultJoined
+			}
+			if request.Op == "product_stage" {
+				if request != (installeddevice.Request{Op: "product_stage"}) {
+					return trustprofile.ErrTrust
+				}
+				report, err := controller.ProductStage(ctx)
+				if err != nil {
+					err = output(map[string]string{"status": "product_unavailable"})
+				} else {
+					err = output(report)
+				}
+				if err != nil {
+					return err
+				}
+				continue
 			}
 			if request.Op == "product_count" {
 				if request != (installeddevice.Request{Op: "product_count"}) {

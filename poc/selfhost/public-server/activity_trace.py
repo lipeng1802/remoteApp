@@ -21,7 +21,7 @@ class RecordedEndpoint:
     def __call__(self,frame):
         with self.lock:
             op=frame.get('Op') if isinstance(frame,dict) else None
-            if op not in ('device','network','provision','product_count','quiesce_session','revoke_session'):op='other'
+            if op not in ('device','network','provision','product_stage','product_count','quiesce_session','revoke_session'):op='other'
             nested=frame.get('Device' if op=='device' else 'Network',{}) if isinstance(frame,dict) else {}
             action=nested.get('action') if isinstance(nested,dict) else None
             if action not in ('register','invite','claim','incoming','approve','status','revoke','grant_clock'):action='other'
@@ -31,6 +31,6 @@ class RecordedEndpoint:
                 self.event('outcome_unknown',op,action)
                 raise
             status=result.get('status') if isinstance(result,dict) else None
-            if status not in ('device_result','network_authorization','network_watch','product_count','product_unavailable','session_quiesced','session_revoked','failed','unavailable','rejected'):status='other'
+            if status not in ('device_result','network_authorization','network_watch','product_stage','product_count','product_unavailable','session_quiesced','session_revoked','failed','unavailable','rejected'):status='other'
             self.event('returned',op,action,status)
             return result

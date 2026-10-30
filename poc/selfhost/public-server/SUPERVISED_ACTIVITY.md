@@ -26,3 +26,10 @@ python3 run_supervised_activity.py WORK retire
 Windows 首次文件 sync 失败时，只有确认该任务失败且无本轮原生进程/READY、Mac 尚未安装、短包仍有效，才可显式执行 `WORK resume-windows`。仅允许一次，委托原 `-ResumeFiles` 的 Absent trust 门禁；不能覆盖未知 root 或重建未知身份。
 
 这些步骤没有隐式 finally teardown。源代码回归、包压缩、SSH 上传或 HTTPS 探针都不代表双机活动通过。以工作目录 activity-state.json 及实际原生日志为准；只有 normal_activity_joined_and_test_roots_retired 才是本工具完整正常分支完成，GUI、签名发行及活撤销故障分支仍独立验收。
+
+
+## r82 TEST 启动阶段诊断
+
+fresh TEST supervisor 可通过同用户私有管理通路发送精确的 `{"Op":"product_stage"}`，读取原 product 的缓存固定阶段。该操作不进入 product 请求队列，不注册、不重发 provision、不恢复故障业务、不关闭 signer；含 selector/其它字段的请求仍拒绝。native 编译 TEST 门禁只向专用 stderr 写固定枚举，父进程以有界行缓冲丢弃所有未知/过长/未结束行和原始错误，普通产品默认不采集；stderr reader 必须实际 EOF/join，才能证明正常或故障收尾。
+
+阶段包括 target_tls/listen/secret/serve 与 controller_listen/dial/secret/tls/accept/bridge（完整命名见 startuptrace）。它表示进入哪个操作，不能证明该操作成功，更不是 payload/PONG 证明。exercise 失败后 runner 只读查询两端并独占保存 startup-diagnostic.json，仅持久化白名单标签或 unavailable/unreported；诊断失败保留原异常和原未知工单，不代替撤销/join/退休。已有证据不可覆盖。

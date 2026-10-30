@@ -76,7 +76,7 @@ class Owner:
                 self.joined=True;self.fault=True
             return {'status':'owner_fault_closed','joined':True,'fault':True,'exit_code':1}
         if self.joined or not isinstance(request, dict) or request.get("Op") not in {
-                "device", "network", "provision", "product_count", "revoke_session", "quiesce_session"}:
+                "device", "network", "provision", "product_stage", "product_count", "revoke_session", "quiesce_session"}:
             raise RuntimeError("holder_request_rejected")
         return self.endpoint(request)
 

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r82 增加 TEST 原生产品固定启动阶段诊断，不写出原始错误/秘密，不发送新的产品命令。fresh 双机实测仍未观察到持续 PONG，已定位到 Mac overlay dial 阶段（尚不能断定根因）；本轮两端严格故障收尾、真实 exit1、独立 registered 退休及精确 TEST 回收已通过。Windows 文件回执不确定后使用原工具显式 finish-files 完成。正常活动零退出、GUI/签名发行仍待；自动续办继续。
+
 r81 已接 Windows retained 故障两阶段收尾及独立故障工单：未知时保留输入/owner，严格证明与真实exit1完成后才退出，绝不改称正常zero。147项Python、Windows九个传输用例及完整脚本三种模式通过；均为组件/内存fixture，新双机PONG与原生故障验收仍待执行。
 
 r80 已给 native product 接入清理证据：区分业务故障与实际资源关闭失败，仅 TEST 生命周期全部收尾后才发专用 fault_joined；普通失败、强制/未知关闭仍拒绝。补齐监听取消 worker 的实际 join。相关 Go race、Windows内存组件通过；Windows驻留故障入口后续由r81接入；新双机PONG/原生故障验收仍待完成。

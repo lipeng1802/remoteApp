@@ -21,6 +21,15 @@ func TestProcessFixture(t *testing.T) {
 		return
 	}
 	mode := strings.TrimPrefix(os.Args[len(os.Args)-1], "fixture-")
+	if mode == "diagnostic" {
+		os.Stderr.WriteString("PRODUCT_STAGE controller_dial\n")
+		os.Stderr.WriteString(strings.Repeat("PRIVATE", 100000) + "\n")
+		os.Stderr.WriteString("PRODUCT_STAGE PRIVATE\n")
+		os.Stderr.WriteString("PRODUCT_STAGE controller_secret\n")
+		os.Stderr.WriteString("PRODUCT_STAGE controller_tls PRIVATE\n")
+		os.Stderr.WriteString("PRODUCT_STAGE controller_bridge")
+	}
+
 	if mode == "malformed" {
 		os.Stdout.WriteString("{\"status\":\"ready\",\"status\":\"ready\"}\n")
 		os.Exit(0)
@@ -351,5 +360,35 @@ func TestEndpointPreparationFailureJoinsPartialProduct(t *testing.T) {
 	case <-l.Product.Done():
 	default:
 		t.Fatal("partial product not joined")
+	}
+}
+
+func TestFixedStageCaptureIsOptInAndJoined(t *testing.T) {
+	for _, capture := range []bool{false, true} {
+		s := spec(t, "diagnostic")
+		s.CaptureProductStage = capture
+		c, e := Start(s)
+		if e != nil {
+			t.Fatal(e)
+		}
+		ready(t, c)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		e = c.Stop(ctx)
+		cancel()
+		if e != nil {
+			t.Fatal(e)
+		}
+		want := "unreported"
+		if capture {
+			want = "controller_secret"
+		}
+		if c.ProductStage() != want {
+			t.Fatalf("unexpected fixed stage %q", c.ProductStage())
+		}
+		select {
+		case <-c.diagnosticDone:
+		default:
+			t.Fatal("diagnostic reader not joined")
+		}
 	}
 }

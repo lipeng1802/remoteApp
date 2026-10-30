@@ -12,6 +12,7 @@ import (
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/installeddevice"
 	"remoteapp.local/selfhost-poc/privatepipe"
+	"remoteapp.local/selfhost-poc/startuptrace"
 )
 
 type Backend interface {
@@ -60,6 +61,22 @@ func Serve(ctx context.Context, ln net.Listener, b Backend) {
 			output := json.NewEncoder(conn)
 			command, done := context.WithTimeout(life, 20*time.Second)
 			defer done()
+			if request == (installeddevice.Request{Op: "product_stage"}) {
+				telemetry, ok := b.(interface {
+					ProductStage(context.Context) (startuptrace.Report, error)
+				})
+				if !ok {
+					output.Encode(map[string]string{"status": "product_unavailable"})
+					return
+				}
+				report, e := telemetry.ProductStage(command)
+				if e != nil {
+					output.Encode(map[string]string{"status": "product_unavailable"})
+				} else {
+					output.Encode(report)
+				}
+				return
+			}
 			if request == (installeddevice.Request{Op: "product_count"}) {
 				count, e := b.Count(command)
 				if e != nil {

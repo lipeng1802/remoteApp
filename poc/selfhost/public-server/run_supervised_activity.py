@@ -268,7 +268,17 @@ def exercise(work):
     work,m=metadata(work)
     public=json.loads((work/"windows-bootstrap.json").read_text())
     target=WindowsRelay(WIN,m["win_dir"]+"\\supervised-control-relay.exe",public["control_pipe"])
-    return Activity(work).exercise(RecordedEndpoint(work,'target',target),RecordedEndpoint(work,'controller',Endpoint(m["holder_dir"])),expiry(work))
+    target=RecordedEndpoint(work,'target',target)
+    controller=RecordedEndpoint(work,'controller',Endpoint(m["holder_dir"]))
+    try:
+        return Activity(work).exercise(target,controller,expiry(work))
+    except Exception:
+        # Cache-only native telemetry cannot authorize retries, close the owner,
+        # or replace the original failure with a diagnostic transport failure.
+        from startup_diagnostic import capture
+        try:capture(work,target,controller)
+        except Exception:pass
+        raise
 
 
 def stop(work):

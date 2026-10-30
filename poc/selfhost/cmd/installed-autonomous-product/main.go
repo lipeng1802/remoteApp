@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"remoteapp.local/selfhost-poc/startuptrace"
 	"runtime"
 	"sync"
 	"syscall"
@@ -101,6 +102,7 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	ctx = cleanupwitness.Context(ctx, w)
+	ctx = startuptrace.Context(ctx, release.Specification().Test)
 	defer cancel()
 	requests := make(chan installeddevice.Request)
 	readerDone := make(chan struct{})

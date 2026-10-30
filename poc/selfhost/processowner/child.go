@@ -3,6 +3,7 @@
 package processowner
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -17,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"remoteapp.local/selfhost-poc/privatepipe"
+	"remoteapp.local/selfhost-poc/startuptrace"
 )
 
 var ErrProcess = errors.New("owned_process_unavailable")
@@ -27,6 +29,8 @@ var ErrProcess = errors.New("owned_process_unavailable")
 type Spec struct {
 	Executable, SHA256 string
 	Args               []string
+	// CaptureProductStage is trusted TEST wiring; default stderr remains discarded.
+	CaptureProductStage bool
 }
 type reply struct {
 	value json.RawMessage
@@ -46,6 +50,9 @@ type Child struct {
 	terminalFrames             int
 	failedTerminal             bool
 	onJoined                   func(error)
+	diagnosticDone             chan struct{}
+	diagnosticErr              error
+	stage                      atomic.Value
 }
 
 func Start(s Spec) (*Child, error) {
@@ -91,8 +98,29 @@ func startOwnedProcess(s Spec, joined func(error)) (*Child, error) {
 	}
 	c := &Child{cmd: exec.Command(s.Executable, s.Args...), in: inW, out: outR, replies: make(chan reply, 16), readDone: make(chan struct{}), exited: make(chan struct{}), done: make(chan struct{}), stopping: make(chan struct{})}
 	c.onJoined = joined
+	c.diagnosticDone = make(chan struct{})
+	var diagnosticR, diagnosticW *os.File
+	if s.CaptureProductStage {
+		diagnosticR, diagnosticW, e = os.Pipe()
+		if e != nil {
+			inR.Close()
+			inW.Close()
+			outR.Close()
+			outW.Close()
+			return nil, ErrProcess
+		}
+	} else {
+		close(c.diagnosticDone)
+	}
 	c.cmd.Stdin, c.cmd.Stdout, c.cmd.Stderr = inR, outW, io.Discard
+	if diagnosticW != nil {
+		c.cmd.Stderr = diagnosticW
+	}
 	if c.cmd.Start() != nil {
+		if diagnosticW != nil {
+			diagnosticW.Close()
+			diagnosticR.Close()
+		}
 		inR.Close()
 		inW.Close()
 		outR.Close()
@@ -101,9 +129,54 @@ func startOwnedProcess(s Spec, joined func(error)) (*Child, error) {
 	}
 	inR.Close()
 	outW.Close()
+	if diagnosticW != nil {
+		diagnosticW.Close()
+		go c.drainStage(diagnosticR)
+	}
 	go func() { c.waitErr = c.cmd.Wait(); close(c.exited) }()
 	go c.read()
 	return c, nil
+}
+
+// drainStage bounds storage and discards all non-enum text, including raw stderr.
+func (c *Child) drainStage(f *os.File) {
+	defer close(c.diagnosticDone)
+	defer f.Close()
+	r := bufio.NewReader(f)
+	line := make([]byte, 0, 128)
+	overflow := false
+	for {
+		b, e := r.ReadByte()
+		if e != nil {
+			if e != io.EOF {
+				c.diagnosticErr = ErrProcess
+			}
+			return
+		}
+		if b == '\n' {
+			const prefix = "PRODUCT_STAGE "
+			if !overflow && bytes.HasPrefix(line, []byte(prefix)) {
+				s := string(line[len(prefix):])
+				if startuptrace.Valid(s) {
+					c.stage.Store(s)
+				}
+			}
+			line = line[:0]
+			overflow = false
+		} else if len(line) < 128 && !overflow {
+			line = append(line, b)
+		} else {
+			overflow = true
+		}
+	}
+}
+
+// ProductStage is cached telemetry and never sends a new product command.
+func (c *Child) ProductStage() string {
+	if s, ok := c.stage.Load().(string); ok {
+		return s
+	}
+	return "unreported"
 }
 func (c *Child) read() {
 	defer close(c.readDone)
@@ -139,7 +212,7 @@ func (c *Child) Done() <-chan struct{}   { return c.done }
 func (c *Child) JoinedFault() bool {
 	select {
 	case <-c.done:
-		return c.cmd.ProcessState != nil && c.cmd.ProcessState.ExitCode() == 1 && c.readErr == nil && c.terminalFrames == 1 && c.failedTerminal
+		return c.cmd.ProcessState != nil && c.cmd.ProcessState.ExitCode() == 1 && c.readErr == nil && c.diagnosticErr == nil && c.terminalFrames == 1 && c.failedTerminal
 	default:
 		return false
 	}
@@ -273,7 +346,8 @@ func (c *Child) stop(command []byte) {
 	}
 	<-c.readDone
 	<-c.exited
-	if c.fault.Load() || !closed || c.waitErr != nil || c.readErr != nil {
+	<-c.diagnosticDone
+	if c.fault.Load() || !closed || c.waitErr != nil || c.readErr != nil || c.diagnosticErr != nil {
 		c.closeErr = ErrProcess
 	}
 	c.mu.Unlock()
