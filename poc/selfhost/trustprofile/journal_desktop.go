@@ -103,10 +103,7 @@ func startDesktopJournal(executable, scope, mode string, test, installation bool
 	}
 	if e != nil || r.Status != status || r.Data != "" || r.Reason != "" {
 		j.abort()
-		if r.Reason == "interactive_logon_required" {
-			return nil, ErrDesktopLogon
-		}
-		return nil, ErrTrust
+		return nil, journalFailure(r.Reason)
 	}
 	return j, nil
 }
@@ -309,4 +306,17 @@ func (j *DesktopJournal) FaultTest(mode string) error {
 		return ErrTrust
 	}
 	return nil
+}
+
+// Never include unknown native reply text in public errors.
+var ErrNativeAuthentication = errors.New("native_authentication_required")
+
+func journalFailure(reason string) error {
+	switch reason {
+	case "interactive_logon_required":
+		return ErrDesktopLogon
+	case "native_authentication_required":
+		return errors.Join(ErrTrust, ErrNativeAuthentication)
+	}
+	return ErrTrust
 }

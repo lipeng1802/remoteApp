@@ -1,5 +1,21 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r88：原生错误分类；fresh helper本机journal CAS/重开通过
+
+先读r87/Git，分支保持，docs/archive未跟踪不纳入，不推送。只读检查本机RemoteAppTrustJournalTest-v1目录为同用户所有、目录、0700；未改权限/删锁/枚举或删除未知凭据。静态核对DesktopJournal与当前helper的Scope/Mode/Test、create/open/status/cleanup协议一致，未发现显式配置差异；不能据此证明旧r67二进制与当前源码所有行为相同，也不能把r87一般ErrTrust推断为锁屏。
+
+nativejournal.darwin将SDK常量errSecInteractionNotAllowed/errSecAuthFailed归类ErrAuthentication（仍errors.Is ErrUnavailable），不输出OS原文、值或账号。helper只输出固定native_authentication_required；登录错误保持interactive_logon_required，其它固定native_journal_unavailable。DesktopJournal初始握手/cleanup接收新固定原因，以errors.Join保留ErrTrust与ErrNativeAuthentication，未知reason仍纯ErrTrust不泄漏任意文本。它表示操作需要认证或认证遭拒，**不证明桌面已锁定/登出，不授权UI/重试/重置**。读写后续普通错误依旧封闭，不声称所有路径都已透传认证分类。没有改变classic login Keychain查询、禁止认证UI、访问范围/权限/回退，也没有把legacy abort当join。
+
+组件验证：nativejournal/trustprofile/helper入口/autonomousbinding/原生安装入口完整Go race通过；固定原因白名单、包装错误不泄漏原文、ErrUnavailable兼容、认证与桌面logon区分、未知reason拒绝回归通过。Windows四包vet通过。CGO编译现有kSecUseAuthenticationUIFail弃用警告仍在（无编译失败）；没有为消警改用LAContext/Data Protection Keychain，因既有注释明确指出ad-hoc helper缺受限entitlement。Python未变，不重复全套。
+
+新增可信实际证据：当前源构建并ad-hoc签名独立helper，路径artifacts/connection-poc/r88-native-classification/trust-journal，标识com.personalremotedesktop.test.trust-journal，helper.json记录最终SHA；不覆盖r67 immutable binary/签名库存或任何已安装根。与r87不同，执行前给native测试配置绝对audit目录，两个随机release/journal namespace均先独占0600写入并fsync文件/父目录，再允许任何native副作用。测试factory遇错误只日志固定公开错误，以免被autonomousbinding包装丢失。
+
+**本机原生实测PASS，范围仅journal组件**：TestNativeIdentityIntentCASAndReadOnlyReopen实际跑到PASS而非SKIP、go test exit0（native-result.txt）。第一新scope实际Begin/ReserveIdentity/关闭helper/只读重新打开intent/最终runtime Open拒绝；第二新scope实际Reserve→按原intent字节CAS最终Record→关闭/重开识别非intent；t.Cleanup双方精确TEST credential journal删除均成功，否则测试失败。native-summary.json核对audit scopes=2与exit0。本组无identity-vault、没有生成OS设备签名密钥，最终Record中的public只是组件fixture数据，不能当真实身份绑定/密钥持有证明；无Headscale、产品TLS或双机PONG。锁文件是helper既有持久互斥机制，不以删除未知锁宣称清空目录。
+
+本次新helper成功不解释或补写r87旧失败，也不使其丢失的scope变可归属；r87 failed-attempt.json及可能的未知TEST journal仍未解决，未广泛删除。旧afb6b84f403f Mac无scope pending仍保持隔离，不重放initialize/setup，不用本组两个新scope去替代旧对象归属。r67旧helper及既有安装均不替换。本组没有外部服务、Store、Nginx/443变化；自动续办保持ACTIVE，不需要用户操作。
+
+下一组应优先将经过当前构建/摘要审计的helper纳入**新鲜独立**验证包路径，不能继续假设r67缓存等于当前修复代码或覆盖历史目录。配合r86创建前intent与r85阶段回执实测新原生身份安装/未知回执门禁；先使真实连接路线恢复推进，再fresh双机采HTTP具体拒绝类别并修复readiness/网络根因，要求双方持续增长PONG、quiesce/独立撤销/全部实际zero/join/精确退休。两处旧未知现场始终单列未闭环，不能被新轮次掩盖或算总体全部清理；无安全关联不删。整体切片4/GUI/可信签名发行未完成。
+
 ## 2026-10-30 r87：intent独占只读诊断；本机原生日志创建失败未通过
 
 先读r86/Git，分支保持，docs/archive未跟踪，不推送。新增CheckCreationIntentWithJournal：只用原绑定scope/独占租约/create=false读取并精确解析canonical intent；foreign release、字段不全、额外/重复/多帧或非canonical均拒绝。完整最终Record返回非intent；损坏不当成absence。Close未知则清除found并报错，nil factory/非法scope预先拒绝，不写日志、不返回scope或调用OS identity、更不提供恢复/删除权限。共享creationIntent结构用于原Reserve写入，格式不变。

@@ -134,6 +134,9 @@ func openNative(scope string, test bool) (keyValues, error) {
 }
 
 func keychainError(status C.OSStatus) error {
+	if status == C.errSecInteractionNotAllowed || status == C.errSecAuthFailed {
+		return ErrAuthentication
+	}
 	if status == C.errSecItemNotFound {
 		return ErrMissing
 	}

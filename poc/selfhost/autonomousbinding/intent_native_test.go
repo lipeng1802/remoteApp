@@ -34,7 +34,11 @@ func TestNativeIdentityIntentCASAndReadOnlyReopen(t *testing.T) {
 		}
 	})
 	factory := func(s string, create, test bool) (autonomousbinding.Journal, error) {
-		return trustprofile.NewRecordDesktopJournal(exe, s, create, test)
+		j, e := trustprofile.NewRecordDesktopJournal(exe, s, create, test)
+		if e != nil {
+			t.Log("native journal open failure", e)
+		}
+		return j, e
 	}
 	i, e := autonomousbinding.BeginWithJournal(release, true, factory)
 	if e != nil {

@@ -16,10 +16,7 @@ func main() {
 	runtime.LockOSThread() // Windows mutex ownership is OS-thread-affine.
 	defer runtime.UnlockOSThread()
 	if e := run(); e != nil {
-		reason := "native_journal_unavailable"
-		if e == nativejournal.ErrLogon {
-			reason = "interactive_logon_required"
-		}
+		reason := nativejournal.FailureReason(e)
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "failed", "reason": reason})
 		os.Exit(1)
 	}
