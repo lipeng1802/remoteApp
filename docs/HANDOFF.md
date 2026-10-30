@@ -1,5 +1,25 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r84：HTTP分类与安装回执保留；Mac pending现场等待解锁
+
+先读r83/Git，分支保持，docs/archive仍未跟踪不纳入，未推送。本组未改预发布服务、业务Nginx/443或Store，没有新增真实注册/批准/provision/Headscale会话，不能把构建/HTTP fixture当双机通过。
+
+nodeproof补固定TEST HTTP拒绝分类：只在编译TEST context读取LocalAPI非101正文最多513字节，512以内且读取成功才识别审计SDK的400 bad-upgrade、403 permission、502 resolve/dial前缀与refused/timeout/其它dial；过长/未知泛化。原body/地址/异常不输出不存盘。Dial-Self先直接拒绝，生产不读诊断body；原ErrOverlayDial/ErrNoOverlayRoute、3秒预算、ACTIVE/身份和禁止OS网络fallback保持，不加重试。Go/Python枚举同步，标签不能授权任何动作。
+
+唯一新鲜工单artifacts/connection-poc/supervised-activity-r75-afb6b84f403f；Windows根C:\Users\jarvis\remoteapp-r75-afb6b84f403f，包remoteapp-r75-package-afb6b84f403f，Mac根/private/tmp/remoteapp-r75-afb6b84f403f/installed。Windows首次signed_import失败、task1/READY无/原native无后，原门禁显式resume_windows一次。恢复CLI返回非零，但只读审计证明Windows已READY/task Running，失败是在后续Mac setup：Mac根存在、mac-manager.json/owner metadata均无。**SSH/管理调用失败不能推断副作用没发生。** 未调用exercise，原activity-state仍startup_outcome_unknown，本组没有真实HTTP/PONG新结果。
+
+旧start_mac的command包装丢弃非零stdout，本次固定setup stage已丢失，不能重放有副作用的setup补证。只读原生检查：trust-install inspect=usable/epoch1；实际安装目录autonomous-enrollment-install status=maintenance_required/binding_pending/trust_epoch1，inspect=installation_rejected。签名payload/bootstrap已promote，OS身份创建结果未知。mac-partial-install-audit.json显示当前live native PID为空，但**当前没有进程不证明正常join或未创建身份**。未运行cleanup-reservation-test、删除未知Keychain项/锁/日志/根或回写旧Store；未知Mac根保留，不允许initialize/test-setup重试。
+
+Windows尚未开始业务，显式空stop-owner.request后严格closed/EOF/native+wrapper/task实际exit0、READY清除，idle zero join通过，不是活动zero验收。逐SHA验证原retire-idle-test.exe，Interactive Limited新任务RemoteApp-R84-IdleRetire-afb6b84f403f进入原生idle退休；身份/记录清理通过，文件阶段test_retirement_release_delete/exit1。未重复原删除。再核对原任务已结束、原日志/同工具SHA，通过新任务RemoteApp-R84-IdleFinishFiles-afb6b84f403f显式原工具finish-files，idle_test_retired/exit0/root不存在。windows-idle-*-result.txt和三份explicit operator脚本保留。只删本轮3个已结束任务，按tunnels.json正常关闭两条SSH master。startup-recovery.json最终windows_retired_mac_pending_preserved，Windows根退休，Mac pending根/父/holder空壳隔离保留。旧r78未知材料不动，r82/r83等退休根不复活。
+
+补setup_mac边界：启动前独占并fsync attempt与父目录，实际退出后只保存严格固定status/stage/exit码；raw stderr/异常/未知或混合schema/duplicate/假成功不存盘。partial root/结果或unknown attempt阻止重放；调用异常保留unknown、不重复native请求。不能拿新代码回填本次缺失历史stage。
+
+验证：nodeproof/startuptrace/streamgate/installeddevice/processowner完整Go race通过，分类前缀/拒绝类型/HTTP 403/502/Dial-Self、生产不读body、TEST最大513字节和超长不特化通过；原101字节回环保持。Windows三包vet通过。Python全151项PASS/ResourceWarning-as-error，日志python-r84-tests.txt；此后只补attempt父目录fsync，提交前定向管理回归，py_compile/diff检查。全部非新双机/原生pending恢复验收。
+
+**人工环境阻塞与最小操作**：ioreg只读会话检查CGSSessionScreenIsLocked=true、kCGSSessionOnConsoleKey=true、IOConsoleLocked=false，mac-session-locked.json原样存证。继续Mac原生密钥验收前，请用户解锁Mac登录桌面并保持唤醒，回复“已解锁”；无需Windows操作/PowerShell/提供密码/重配SSH。锁屏是否直接造成初始化失败尚未证明。按用户heartbeat“需要登录等人工操作时保存并暂停”授权，本组保存并本地提交后暂停既有remoteapp自动续办，不新建/不删除，不对同一阻塞再轮询。不是技能强制审批。恢复只在用户回复后进行。
+
+解锁后先处理afb6b84f403f的Mac pending。不要重放同一setup/initialize或假定解锁允许重置pending；原短包届时可能过期，不可用于网络会话。可以原编译只读/历史受限入口调查；优先补native identity创建/提交精确非秘密诊断、创建前持久绑定scope及未知回执保守收尾门禁。若本次scope未持久化，不得凭时间/文件名猜测关联或删除其它凭据；无法安全归属的现场隔离并明确记录，不能让新轮次掩盖。只在原生精确状态与授权成立后收口原根，再fresh验HTTP类别、确认根因修复listener readiness/真正网络问题，至少双方3次跨6秒PONG→quiesce→独立撤销→全部实际zero/join→registered退休才算活动通过。整体切片4、GUI/可信签名发行尚未完成。
+
 ## 2026-10-30 r83：真实 HTTP overlay upgrade 拒绝，目标监听成功已证明
 
 承接r82/Git，分支保持，docs/archive仍未跟踪不纳入；Windows SSH/Interactive正常，无需用户介入，自动续办继续ACTIVE。本组未修改业务Nginx/443、服务二进制、清空控制面、回写旧Store、复活退休根，不推送。

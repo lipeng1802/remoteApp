@@ -18,7 +18,7 @@ import time
 from activity_control import Activity
 from activity_trace import RecordedEndpoint
 from persistent_supervisor import Endpoint
-from supervised_requests import WindowsRelay
+from supervised_requests import WindowsRelay, reply as strict_reply
 
 REPO=Path(__file__).resolve().parents[3]
 WIN="jarvis@100.73.4.118"
@@ -218,10 +218,36 @@ try { & (Join-Path $PSScriptRoot 'validate-supervised-install.ps1') -StayReady -
     start_mac(work,m)
 
 
+def setup_mac(work,m):
+    # Never replay an install after an unknown reply or overwrite a partial root.
+    if Path(m["mac_root"]).exists() or (work/"mac-setup-result.json").exists():
+        raise RuntimeError("activity_mac_setup_explicit_recovery_required")
+    with (work/"mac-setup-attempt.json").open("x") as output:
+        json.dump({"version":1,"phase":"outcome_unknown"},output);output.flush();os.fsync(output.fileno())
+    descriptor=os.open(work,os.O_RDONLY)
+    try:os.fsync(descriptor)
+    finally:os.close(descriptor)
+    try:
+        result=subprocess.run([str(work/"darwin/test-setup")],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=90)
+    except Exception:raise RuntimeError("activity_mac_setup_outcome_unknown") from None
+    value={"version":1,"status":"unavailable","stage":"unavailable","exit_code":result.returncode}
+    stages={"compiled_configuration","signed_payload","protected_layout","signed_import","payload_promote",
+            "bootstrap_import","native_trust","native_activation","native_enrollment"}
+    try:
+        raw=strict_reply(result.stdout) if len(result.stdout)<=4096 else None
+        if type(raw) is dict and raw=={"status":"test_installed"} and result.returncode==0:
+            value.update(status="test_installed",stage="completed")
+        elif type(raw) is dict and set(raw)=={"status","stage"} and raw["status"]=="setup_failed_state_preserved" and type(raw["stage"]) is str and raw["stage"] in stages and result.returncode!=0:
+            value.update(status="setup_failed_state_preserved",stage=raw["stage"])
+    except Exception:pass
+    with (work/"mac-setup-result.json").open("x") as output:
+        json.dump(value,output,sort_keys=True);output.flush();os.fsync(output.fileno())
+    if value["status"]!="test_installed":raise RuntimeError("activity_mac_setup_unconfirmed")
+
+
 def start_mac(work,m):
     a=Activity(work)
-    value=json.loads(command([str(work/"darwin/test-setup")]))
-    if value.get("status")!="test_installed":raise RuntimeError("activity_mac_setup_unconfirmed")
+    setup_mac(work,m)
     with (work/"mac-public.log").open("x") as log:
         manager=subprocess.Popen([sys.executable,str(Path(__file__)),str(work),"monitor"],stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
     (work/"mac-manager.json").write_text(json.dumps({"pid":manager.pid}))

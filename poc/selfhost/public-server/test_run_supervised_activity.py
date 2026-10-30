@@ -122,5 +122,38 @@ class ManagementActivityGates(unittest.TestCase):
         with patch.object(runner.subprocess,"run",return_value=subprocess.CompletedProcess([],1,b"PRIVATE",b"PRIVATE")):
             with self.assertRaisesRegex(RuntimeError,"^activity_management_command_failed$"):runner.command(["trusted"])
 
+    def test_mac_setup_saves_only_strict_fixed_outcome_and_never_replays(self):
+        cases=[(1,b'{"status":"setup_failed_state_preserved","stage":"native_enrollment"}',"native_enrollment"),
+               (1,b'{"status":"setup_failed_state_preserved","stage":"PRIVATE"}',"unavailable"),
+               (1,b'{"status":"setup_failed_state_preserved","stage":"native_trust","PRIVATE":"PRIVATE"}',"unavailable"),
+               (0,b'{"status":"test_installed"}',"completed"),
+               (1,b'{"status":"test_installed"}',"unavailable"),(1,b'PRIVATE',"unavailable")]
+        for code,raw,want in cases:
+            with self.subTest(want=want),tempfile.TemporaryDirectory() as d:
+                w=Path(d);m={"mac_root":str(w/"installed")}
+                with patch.object(runner.subprocess,'run',return_value=subprocess.CompletedProcess([],code,raw,b'PRIVATE')) as call:
+                    if want=='completed':runner.setup_mac(w,m)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError,'setup_unconfirmed'):runner.setup_mac(w,m)
+                    text=(w/'mac-setup-result.json').read_text()
+                    self.assertNotIn('PRIVATE',text);self.assertEqual(json.loads(text)['stage'],want)
+                    with self.assertRaisesRegex(RuntimeError,'explicit_recovery_required'):runner.setup_mac(w,m)
+                    self.assertEqual(call.call_count,1)
+
+    def test_mac_setup_unknown_attempt_cannot_restart_and_existing_root_not_called(self):
+        for partial in (False,True):
+            with tempfile.TemporaryDirectory() as d:
+                w=Path(d);m={"mac_root":str(w/'installed')}
+                if partial:Path(m['mac_root']).mkdir()
+                with patch.object(runner.subprocess,'run',side_effect=OSError('PRIVATE')) as call:
+                    if partial:
+                        with self.assertRaisesRegex(RuntimeError,'explicit_recovery_required'):runner.setup_mac(w,m)
+                        call.assert_not_called()
+                    else:
+                        with self.assertRaisesRegex(RuntimeError,'setup_outcome_unknown'):runner.setup_mac(w,m)
+                        with self.assertRaises(FileExistsError):runner.setup_mac(w,m)
+                        self.assertEqual(call.call_count,1)
+                        self.assertFalse((w/'mac-setup-result.json').exists())
+
 
 if __name__=="__main__":unittest.main()

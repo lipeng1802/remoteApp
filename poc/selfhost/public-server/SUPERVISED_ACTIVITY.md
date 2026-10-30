@@ -36,3 +36,8 @@ fresh TEST supervisor 可通过同用户私有管理通路发送精确的 `{"Op"
 
 
 r83 将固定阶段细化到目标 ACTIVE/本机节点/IP/实际监听成功，以及控制端 ACTIVE/LocalAPI HTTP upgrade/禁止 Dial-Self/实际 overlay socket 与 WhoIs 门禁。只输出枚举，丢弃 HTTP response body、原始错误与地址。overlay_route_missing 仍严格拒绝系统网络回退；诊断不添加拨号重试、不延长期限、不使网络失败变成成功。target_listening 只证明监听创建与当时门禁成功，不能证明对端已经接入或存在 TLS payload。
+
+r84 的 HTTP 拒绝分类仅在编译 TEST context 启用时，读取最多 513 字节本地 LocalAPI 非101响应；超过512或读取失败保持泛化拒绝。只识别 pinned SDK 的固定 bad-upgrade、permission、resolve/dial 前缀及拒绝/超时类别，白名单枚举之外的正文从不持久化。Dial-Self在读取正文前直接拒绝；生产 context 不读取诊断正文。分类不改变原返回错误、重试策略、连接或 ACTIVE 期限，也不提供网络授权。
+
+
+Mac setup 启动前独占并同步 mac-setup-attempt.json，实际退出后只将严格固定 status/stage/退出码写入 mac-setup-result.json，不持久化原 stdout/stderr/异常。未知回执、已存在安装根或结果均禁止自动重放。初始化 pending 不等于未创建身份；不能仅凭没有驻留进程清理未知凭据或回写旧记录。

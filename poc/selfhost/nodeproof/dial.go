@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"strconv"
+	"strings"
 
 	"remoteapp.local/selfhost-poc/startuptrace"
 
@@ -42,12 +43,22 @@ func DialOnlyOverlay(ctx context.Context, lc *local.Client, host string, port ui
 		return nil, ErrOverlayDial
 	}
 	if res.StatusCode != http.StatusSwitchingProtocols {
-		res.Body.Close()
 		if res.StatusCode == http.StatusOK && res.Header.Get("Dial-Self") == "true" {
+			res.Body.Close()
 			startuptrace.Emit(ctx, startuptrace.OverlayRouteMissing)
 			return nil, ErrNoOverlayRoute
 		}
-		startuptrace.Emit(ctx, startuptrace.OverlayUpgradeRejected)
+		stage := startuptrace.OverlayUpgradeRejected
+		// TEST-only diagnostics: this never authorizes retry or changes the error.
+		// Do not retain/log any raw response body or address.
+		if startuptrace.Enabled(ctx) {
+			body, readErr := io.ReadAll(io.LimitReader(res.Body, 513))
+			if readErr == nil && len(body) <= 512 {
+				stage = classifyUpgradeFailure(res.StatusCode, string(body))
+			}
+		}
+		res.Body.Close()
+		startuptrace.Emit(ctx, stage)
 		return nil, ErrOverlayDial
 	}
 	var conn net.Conn
@@ -63,4 +74,32 @@ func DialOnlyOverlay(ctx context.Context, lc *local.Client, host string, port ui
 	}
 	startuptrace.Emit(ctx, startuptrace.OverlayUpgraded)
 	return netutil.NewAltReadWriteCloserConn(rwc, conn), nil
+}
+
+// classifyUpgradeFailure recognizes only the audited pinned LocalAPI branches.
+// Unknown/malformed/private text remains a single fixed rejection label. No
+// label changes the fail-closed transport return value or permits fallback.
+func classifyUpgradeFailure(status int, body string) startuptrace.Stage {
+	switch status {
+	case http.StatusBadRequest:
+		if body == "bad ts-dial upgrade\n" || body == "make request over HTTP/1\n" {
+			return startuptrace.OverlayBadUpgrade
+		}
+	case http.StatusForbidden:
+		return startuptrace.OverlayPermissionDenied
+	case http.StatusBadGateway:
+		if strings.HasPrefix(body, "resolve failure: ") {
+			return startuptrace.OverlayResolveFailed
+		}
+		if strings.HasPrefix(body, "dial failure: ") {
+			if strings.Contains(body, "connection refused") {
+				return startuptrace.OverlayConnectRefused
+			}
+			if strings.Contains(body, "i/o timeout") || strings.Contains(body, "context deadline exceeded") {
+				return startuptrace.OverlayConnectTimeout
+			}
+			return startuptrace.OverlayConnectFailed
+		}
+	}
+	return startuptrace.OverlayUpgradeRejected
 }
