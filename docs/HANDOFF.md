@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r86：新安装创建前原生日志意图与未知回执封闭
+
+先读r85/Git，分支保持，docs/archive未跟踪保留，不推送。本组仅改代码/组件测试，不操作原生凭据、不启动fresh短包、旧afb6b84f403f pending根不重放/不清理，不改服务/Store/Nginx。自动续办继续，无新增用户操作。
+
+autonomousbinding.Installer增加ReserveIdentity：在原独占绑定journal中先Commit(nil,固定identity_creation_intent)，保存Version/Kind/ReleaseScope/VaultScope，无私钥/公钥；成功回读精确字节之后才允许CLI调用CreateNativeIdentity。意图不证明身份创建成功，不授权恢复或删除。重复Reserve、外来scope Commit、未知意图提交或回读、未知最终CAS回执均封闭同一Installer，不能重试写入/退回旧nil创建。最终绑定按原意图bytes作CAS再精确newStore回读，才转移租约给运行时Store。Close仅关闭原日志租约，保留意图/不确定结果，不删除记录。原Initialize/未使用意图的旧本地API保留兼容；实际autonomous-enrollment-install路径已在OS副作用前调用ReserveIdentity，新增identity_intent/native_identity_intent固定stage，setup和Python白名单同步。
+
+intent含Kind、缺最终身份字段，原严格Record解析故意拒绝，不能当运行时绑定；cleanup-reservation-test的旧JournalPending路径也不能把新已提交intent当旧空reservation清除。现有诊断会保守显示binding_unusable而非自动恢复；下一组应增加精确的只读intent分类/恢复计划。只知道scope也不证明私钥属于某public、无活跃借用者或可安全删除；恢复/退休还需独立严格门禁，不能直接凭intent进行密钥创建/删除。
+
+新增CAS journal回归：创建前scope确实保存、intent不能运行、同scope重复不重写、外scope不提交、精确意图CAS最终绑定；两种真实写入后回执失败分别模拟intent/final不确定，后续提交均不再发起且原记录不改，租约Close不清除。相关autonomousbinding与两个实际CLI入口完整Go race通过，Python管理12项通过，Windows三包vet检查。本组使用内存journal，无真实Mac/Windows native journal或OS signer验收，不冒充原生持久化通过。diff检查通过，本地提交，不推送。
+
+下一组补原生intent只读检查与恢复状态机，明确旧无scope pending与新精确intent的不同边界；不得用新格式回填旧afb6记录，也不得按时间/文件名猜旧密钥归属。需验证native helper CAS真实可用，再准备新鲜包真实采HTTP拒绝类别及修复连接问题。旧Mac现场仍隔离，Windows已退休；正常活动PONG/zero/join、整体切片4、GUI/可信签名发行尚未完成。无新证据不重复旧失败轮次。
+
 ## 2026-10-30 r85：用户继续开发，补齐原生初始化固定回执
 
 用户明确继续任务，先读r84/Git，分支保持，docs/archive未跟踪保留，不推送。本机只读会话本次仅输出IOConsoleLocked=false，未返回CGSSessionScreenIsLocked；不把它当作pending可重置的授权或已证实锁屏根因。本组不运行旧setup/initialize，不创建新身份/包/会话、不改服务器/Store/业务Nginx。afb6b84f403f Mac pending根及潜在未知身份结果原样隔离，Windows已退休事实不变。

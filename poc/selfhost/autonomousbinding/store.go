@@ -47,10 +47,13 @@ type Store struct {
 // node-directory side effect. A failed install leaves the native pending marker
 // in place, so retry cannot silently select a fresh identity or namespace.
 type Installer struct {
-	j            Journal
-	releaseScope string
-	closed       bool
-	release      func()
+	intent                  []byte
+	intentAttempted, broken bool
+	vaultScope              string
+	j                       Journal
+	releaseScope            string
+	closed                  bool
+	release                 func()
 }
 
 var held = struct {
@@ -187,7 +190,7 @@ func BeginWithJournal(releaseScope string, test bool, factory JournalFactory) (*
 }
 
 func (i *Installer) Commit(vaultScope, public string) (*Store, error) {
-	if i == nil || i.closed || i.j == nil {
+	if i == nil || i.closed || i.j == nil || i.broken || (i.intentAttempted && vaultScope != i.vaultScope) {
 		return nil, ErrBinding
 	}
 	enrollmentScope, err := enrollmentstore.Scope(i.releaseScope, vaultScope, public)
@@ -195,7 +198,17 @@ func (i *Installer) Commit(vaultScope, public string) (*Store, error) {
 		return nil, ErrBinding
 	}
 	record := Record{Version: 1, ReleaseScope: i.releaseScope, VaultScope: vaultScope, PublicKey: public, EnrollmentScope: enrollmentScope}
-	store, err := newStore(i.j, i.releaseScope, &record)
+	var store *Store
+	if i.intentAttempted {
+		raw, _ := json.Marshal(record)
+		i.broken = true // unknown CAS receipts must never permit another commit
+		if i.j.Commit(i.intent, raw) != nil {
+			return nil, ErrBinding
+		}
+		store, err = newStore(i.j, i.releaseScope, nil)
+	} else {
+		store, err = newStore(i.j, i.releaseScope, &record)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -296,5 +309,34 @@ func (s *Store) Close() error {
 	if err != nil {
 		return ErrBinding
 	}
+	return nil
+}
+
+// ReserveIdentity must succeed before calling the OS vault. This is an intent,
+// NOT evidence that an identity exists or permission to reopen/delete one.
+// The final runtime binding remains unavailable until the exact CAS completes.
+func (i *Installer) ReserveIdentity(vaultScope string) error {
+	if i == nil || i.closed || i.j == nil || i.intentAttempted || !canonical(vaultScope, 16) {
+		return ErrBinding
+	}
+	i.intentAttempted = true
+	i.broken = true
+	intent := struct {
+		Version      int    `json:"version"`
+		Kind         string `json:"kind"`
+		ReleaseScope string `json:"release_scope"`
+		VaultScope   string `json:"vault_scope"`
+	}{1, "identity_creation_intent", i.releaseScope, vaultScope}
+	raw, _ := json.Marshal(intent)
+	if i.j.Commit(nil, raw) != nil {
+		return ErrBinding
+	}
+	got, e := i.j.Load()
+	if e != nil || !bytes.Equal(raw, got) {
+		return ErrBinding
+	}
+	i.intent = raw
+	i.vaultScope = vaultScope
+	i.broken = false
 	return nil
 }

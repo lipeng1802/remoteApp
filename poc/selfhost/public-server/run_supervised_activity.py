@@ -233,7 +233,7 @@ def setup_mac(work,m):
     value={"version":1,"status":"unavailable","stage":"unavailable","exit_code":result.returncode}
     stages={"compiled_configuration","signed_payload","protected_layout","signed_import","payload_promote",
             "bootstrap_import","native_trust","native_activation","native_enrollment",
-            "native_identity_reservation","native_identity_scope","native_identity_create","native_enrollment_scope",
+            "native_identity_intent","native_identity_reservation","native_identity_scope","native_identity_create","native_enrollment_scope",
             "native_enrollment_initialize","native_binding_commit","native_identity_join"}
     try:
         raw=strict_reply(result.stdout) if len(result.stdout)<=4096 else None

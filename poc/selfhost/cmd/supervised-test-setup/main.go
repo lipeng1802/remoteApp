@@ -191,7 +191,7 @@ func enrollmentFailureStage(output []byte) string {
 		return "native_enrollment"
 	}
 	switch v.Stage {
-	case "identity_reservation", "identity_scope", "identity_create", "enrollment_scope", "enrollment_initialize", "binding_commit", "identity_join":
+	case "identity_intent", "identity_reservation", "identity_scope", "identity_create", "enrollment_scope", "enrollment_initialize", "binding_commit", "identity_join":
 		return "native_" + v.Stage
 	}
 	return "native_enrollment"

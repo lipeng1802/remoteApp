@@ -186,6 +186,10 @@ func initialize(release trustinstall.Release, vault string, records trustinstall
 		return reply{}, err
 	}
 	vaultScope := hex.EncodeToString(raw[:])
+	stage = "identity_intent"
+	if err = reservation.ReserveIdentity(vaultScope); err != nil {
+		return reply{}, err
+	}
 	stage = "identity_create"
 	identity, err := clientruntime.CreateNativeIdentity(vault, embeddedSignerDigest, vaultScope)
 	if err != nil {
@@ -400,7 +404,7 @@ func failureReply(err error) reply {
 	var failed *initializationFailure
 	if errors.As(err, &failed) {
 		switch failed.stage {
-		case "identity_reservation", "identity_scope", "identity_create", "enrollment_scope", "enrollment_initialize", "binding_commit", "identity_join":
+		case "identity_intent", "identity_reservation", "identity_scope", "identity_create", "enrollment_scope", "enrollment_initialize", "binding_commit", "identity_join":
 			v.Stage = failed.stage
 		}
 	}
