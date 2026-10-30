@@ -45,9 +45,17 @@ type Child struct {
 	finishMode                 atomic.Uint32
 	terminalFrames             int
 	failedTerminal             bool
+	onJoined                   func(error)
 }
 
 func Start(s Spec) (*Child, error) {
+	return startOwnedProcess(s, nil)
+}
+
+// StartObserved is trusted local wiring. The callback runs only after the
+// normal stop/EOF/actual-exit checks, before Done; its error is not a work error.
+func StartObserved(s Spec, joined func(error)) (*Child, error) { return startOwnedProcess(s, joined) }
+func startOwnedProcess(s Spec, joined func(error)) (*Child, error) {
 	if !filepath.IsAbs(s.Executable) || filepath.Clean(s.Executable) != s.Executable {
 		return nil, ErrProcess
 	}
@@ -82,6 +90,7 @@ func Start(s Spec) (*Child, error) {
 		return nil, ErrProcess
 	}
 	c := &Child{cmd: exec.Command(s.Executable, s.Args...), in: inW, out: outR, replies: make(chan reply, 16), readDone: make(chan struct{}), exited: make(chan struct{}), done: make(chan struct{}), stopping: make(chan struct{})}
+	c.onJoined = joined
 	c.cmd.Stdin, c.cmd.Stdout, c.cmd.Stderr = inR, outW, io.Discard
 	if c.cmd.Start() != nil {
 		inR.Close()
@@ -268,5 +277,8 @@ func (c *Child) stop(command []byte) {
 		c.closeErr = ErrProcess
 	}
 	c.mu.Unlock()
+	if c.onJoined != nil {
+		c.onJoined(c.closeErr)
+	}
 	close(c.done)
 }

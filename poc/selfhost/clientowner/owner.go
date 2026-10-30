@@ -63,6 +63,7 @@ type Owner struct {
 	installed              *trustprofile.Installation
 	running                *Handle
 	broken, closed         bool
+	journalJoined          bool
 	retiredFault           bool
 	maintenanceRequested   bool
 	maintenanceAttempted   bool
@@ -275,6 +276,7 @@ func (o *Owner) Close(ctx context.Context) error {
 		}
 		closeErr := o.journal.Close()
 		o.closed = true
+		o.journalJoined = closeErr == nil
 		if closeErr != nil {
 			return closeErr
 		}
@@ -282,7 +284,18 @@ func (o *Owner) Close(ctx context.Context) error {
 	}
 	e := o.journal.Close()
 	o.closed = true
+	o.journalJoined = e == nil
 	return e
+}
+
+// JournalClosedCleanly separates business/runner failure from the actual
+// journal close barrier. A completed fault does not hide a failed journal close.
+func (o *Owner) JournalClosedCleanly(ctx context.Context) bool {
+	if e := o.lock(ctx); e != nil {
+		return false
+	}
+	defer o.unlock()
+	return o.closed && o.journalJoined
 }
 
 // RetireFault is explicit trusted maintenance, not a successful Stop. Only an
@@ -301,6 +314,7 @@ func (o *Owner) RetireFault(ctx context.Context) error {
 		return e
 	}
 	o.closed = true
+	o.journalJoined = true
 	o.retiredFault = true
 	return nil
 }

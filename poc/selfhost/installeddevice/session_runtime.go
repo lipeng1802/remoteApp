@@ -115,7 +115,7 @@ func (r *SessionRuntime) runTargetProduct(ctx context.Context, product clientrun
 		return stopPartialProduct(child, err)
 	}
 	return processowner.Own(ctx, child, func(life context.Context) error {
-		listener, err := r.ListenOverlay(life)
+		listener, err := trackedSessionListener(life, func() (net.Listener, error) { return r.ListenOverlay(life) })
 		if err != nil {
 			return err
 		}
@@ -147,7 +147,7 @@ func (r *SessionRuntime) runControllerProduct(ctx context.Context, product clien
 	if product.CertificateScope != "" || product.CertificateReopen || product.CertificateOpened != nil {
 		return invite.ErrDenied
 	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	listener, err := trackedSessionListener(ctx, func() (net.Listener, error) { return net.Listen("tcp4", "127.0.0.1:0") })
 	if err != nil {
 		return invite.ErrDenied
 	}
@@ -170,14 +170,16 @@ func (r *SessionRuntime) runControllerProduct(ctx context.Context, product clien
 	}
 	return processowner.Own(ctx, child, func(life context.Context) error {
 		closed := make(chan struct{})
+		workerDone := make(chan struct{})
 		go func() {
+			defer close(workerDone)
 			select {
 			case <-life.Done():
 				listener.Close()
 			case <-closed:
 			}
 		}()
-		defer close(closed)
+		defer func() { close(closed); <-workerDone }()
 		local, err := listener.Accept()
 		if err != nil {
 			return runtimeWorkerError(life, err)

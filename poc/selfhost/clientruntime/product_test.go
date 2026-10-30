@@ -34,7 +34,7 @@ func TestTLSProductFixture(t *testing.T) {
 	reader := privatepipe.NewReader(os.Stdin)
 	var cert []byte
 	var priv *rsa.PrivateKey
-	if mode == "controller" {
+	if strings.HasPrefix(mode, "controller") {
 		var cfg struct {
 			Port                     int
 			Key, Fingerprint, Target string
@@ -65,6 +65,9 @@ func TestTLSProductFixture(t *testing.T) {
 		}
 		if cmd.Op == "stop" {
 			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
+			if mode == "controller-nonzero" {
+				os.Exit(7)
+			}
 			os.Exit(0)
 		}
 		if cmd.Op == "count" {

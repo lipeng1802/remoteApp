@@ -79,11 +79,13 @@ func (c overlayConn) RemoteAddr() net.Addr { return c.remote }
 
 type overlayListener struct {
 	net.Listener
-	gate   *Gate
-	server *tsnet.Server
-	ctx    context.Context
-	done   chan struct{}
-	once   sync.Once
+	gate       *Gate
+	server     *tsnet.Server
+	ctx        context.Context
+	done       chan struct{}
+	workerDone chan struct{}
+	once       sync.Once
+	closeErr   error
 }
 
 func (l *overlayListener) Accept() (net.Conn, error) {
@@ -103,12 +105,17 @@ func (l *overlayListener) Accept() (net.Conn, error) {
 }
 
 func (l *overlayListener) Close() error {
-	var err error
+	l.closeInternal()
+	if l.workerDone != nil {
+		<-l.workerDone
+	}
+	return l.closeErr
+}
+func (l *overlayListener) closeInternal() {
 	l.once.Do(func() {
 		close(l.done)
-		err = l.Listener.Close()
+		l.closeErr = l.Listener.Close()
 	})
-	return err
 }
 
 func (g *Gate) peer(ctx context.Context, s *tsnet.Server, conn net.Conn) (net.Conn, error) {
@@ -192,11 +199,12 @@ func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener
 		}
 		return nil, session.ErrDenied
 	}
-	wrapped := &overlayListener{Listener: listener, gate: g, server: s, ctx: ctx, done: make(chan struct{})}
+	wrapped := &overlayListener{Listener: listener, gate: g, server: s, ctx: ctx, done: make(chan struct{}), workerDone: make(chan struct{})}
 	go func() {
+		defer close(wrapped.workerDone)
 		select {
 		case <-ctx.Done():
-			wrapped.Close()
+			wrapped.closeInternal()
 		case <-wrapped.done:
 		}
 	}()

@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r80：native product 专用fault_joined生产者与真实清理barrier
+
+承接r79/Git，分支保持，内部docs/archive未跟踪保留。本组落实r79缺失的native product nested-cleanup witness，未创建fresh双机安装/原生身份/线上grant或节点，没有运行旧短包，未触碰服务Store/Nginx/未知锁。Windows SSH内存组件测试实际可用，无需用户介入，自动续办ACTIVE。
+
+新增cleanupwitness：固定resource枚举，只经受信Go context传入，不接受peer/JSON/env/root/身份selector，不保存错误文本或秘密；Begin在分配前，Complete仅在实际barrier成功后。重复开始/完成、失败、未完成、seal后迟到均永久拒绝。mandatory owner/binding日志、命令reader、runner、内部signer必须实际存在；node/watch/session/TLS产品/transport监听器未启动时允许缺席，一旦开始也必须结束。只有TEST runner写出ready后arm，根run的全部defer返回后seal；非TEST不能生成故障证明。它是清理证据，不是网络权限或授权替代。
+
+installed-autonomous-product实际入口已接witness：信任日志open前Begin，owner.Close之后以新只读JournalClosedCleanly区分runner业务fault与journal.Close失败；binding.Close和命令reader真正完成单独记录。installeddevice.runner记录runner、内部signer.CloseJoined、enrollment；session工作失败可保持fault语义，但session/watch实际等待done、node/proof/SDK/native enrollment store CloseJoined无错误才能完成。clientruntime真实TLS子进程通过processowner.StartObserved callback记录严格closed/EOF/实际exit0之后的结果，非零/超时/缺ACK或内部abort不产生证明。native根run返回error而所有证据成立时才发专用fault_joined并exit1；未知/清理失败仍普通failed。正常closed/zero条件保留，r79接收端仍拒绝普通failed，没有扩大授权/有效期。
+
+检查清理链时补齐两处只有取消没有实际等待的辅助worker：controller本地监听器取消goroutine现在在SessionWork返回前实际join；overlay listener的外部Close等待其取消worker退出，worker内部使用closeInternal避免自己等待自己。TransportListener另有实际Close结果、sync.Once和永久错误记录，重复Close不能把先前未知变成功；所有地址/WhoIs/ACTIVE/3秒租约检查保持。本组**未**改变target先启动TLS产品再ListenOverlay的启动顺序，也未声称修复r78候选竞态。
+
+验证：相关cleanupwitness/clientowner/processowner/clientruntime/installeddevice/streamgate/productmaintenance完整Go race通过，两个实际产品/supervisor入口编译成功，Windows九包vet通过。新增witness seal/缺失/错误/重复/迟到/并发、日志关闭与业务fault分离、实际TLS子进程正常/非零退出、真实runner signer等待/失败/production拒绝、node/session/watch与监听关闭错误、取消worker等待测试。一次既有OwnedProductNonzeroExit测试出现假exit0：fixture用WriteFile发布由child并发轮询的release marker，可能先读到空/截断内容而退出0；改为临时文件写完close后rename原子发布，仅测试fixture变动，生产文件/信任门禁未改。定向20次通过及完整race通过，不把最初失败记为PASS。
+
+Windows首轮内存fixture的TLS子进程用例通过，但runner用例调用了无关prerelease.Create文件bootstrap，因Windows目录sync返回prerelease_bootstrap_failed_state_preserved而失败。该测试只要构造HTTP client并发送invalid命令，不会发任何HTTPS请求，故替换为纯内存独立root/issuer/CA签名profile，保留真实签名验证和TLS配置，不改生产bootstrap/sync逻辑。最初内存profile误复用root作为issuer被service_trust_rejected正确拒绝，改为独立issuer后定向race通过，未放宽此门禁。最终Windows逐SHA验证新归档/二进制后SSH运行4顶层/7子项全部PASS，无SKIP，TLS_EXITCODE=0/RUNNER_EXITCODE=0；材料artifacts/connection-poc/cleanup-witness-r80-20261030/windows-final-result.txt，以此替代先前windows-result.txt失败材料。测试不使用Credential Manager或原生设备身份，不能声称Windows原生/跨机fault验收。Python未改变，保留前组140项基线而未无意义重跑。
+
+下一组接Windows retained PowerShell holder和runner的显式fault路径。必须两阶段：未知/拒绝时保持生命周期stdin/owner驻留，不能进入原finally正常stop、不能把EXITCODE1或PID消失当join。fault_stop_ready严格布尔且精确schema后才关闭stdin；fault_closed/EOF/实际nativeexit1后才能产fault receipt。管理wrapper/task结果也要区分预期fault与normal exit0，正常stop回调不能误把fault当zero；晚到只读取原调用，不重发。接入完成前不启动混用旧holder的fresh双机故障包。
+
+之后补真实启动阶段诊断，核查r78 Mac payload未启动的target-listen候选竞态并做延迟启动的实际socket回归，再fresh双机持续PONG→正常quiesce→独立撤销→全部实际zero exit→registered在线退休；fault分支独立验。旧r78根24f5894a6acb已退休不复活，其惰性管理metadata/socket诊断材料仍保留，不能用组件测试替其补写join。整体切片4未完成，GUI/签名发行未验。本组README/协议说明/HANDOFF/代码本地提交，不推送，自动续办继续。
+
 ## 2026-10-30 r79：严格故障收尾协议组件，不把普通failed/exit1当join
 
 先读r78/Git，分支保持codex/connection-architecture-poc，docs/archive仍未跟踪保留。本组只做当前缺失的故障协议组件与内存/子进程回归，没有重跑过期双机包、创建原生身份/桌面owner/线上grant/node，未改变预发布服务或Store。Windows SSH实际可用，自动续办ACTIVE，无需用户介入。

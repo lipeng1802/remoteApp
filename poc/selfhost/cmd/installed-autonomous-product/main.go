@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/autonomousbinding"
+	"remoteapp.local/selfhost-poc/cleanupwitness"
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/enrollmentstore"
@@ -44,14 +45,24 @@ func main() {
 	encoder := json.NewEncoder(os.Stdout)
 	var outputMu sync.Mutex
 	output := func(value any) error { outputMu.Lock(); defer outputMu.Unlock(); return encoder.Encode(value) }
-	if run(output) != nil {
-		_ = output(map[string]string{"status": "failed"})
+	w := &cleanupwitness.Witness{}
+	err := runObserved(output, w)
+	w.Seal()
+	if err != nil {
+		status := "failed"
+		if w.Verified() {
+			status = "fault_joined"
+		}
+		_ = output(map[string]string{"status": status})
 		os.Exit(1)
 	}
 	_ = output(map[string]string{"status": "closed"})
 }
 
 func run(output func(any) error) (result error) {
+	return runObserved(output, nil)
+}
+func runObserved(output func(any) error, w *cleanupwitness.Witness) (result error) {
 	if len(os.Args) != 1 || embeddedProductDigest == "" {
 		return trustprofile.ErrTrust
 	}
@@ -72,6 +83,7 @@ func run(output func(any) error) (result error) {
 	if err != nil {
 		return err
 	}
+	w.Begin(cleanupwitness.OwnerJournal)
 	owner, err := clientowner.OpenExactRelease(release, factory, time.Now)
 	if err != nil {
 		return err
@@ -80,12 +92,19 @@ func run(output func(any) error) (result error) {
 		if closeErr := owner.Close(context.Background()); closeErr != nil {
 			result = closeErr
 		}
+		var cleanErr error
+		if !owner.JournalClosedCleanly(context.Background()) {
+			cleanErr = trustprofile.ErrTrust
+		}
+		w.Complete(cleanupwitness.OwnerJournal, cleanErr)
 	}()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx = cleanupwitness.Context(ctx, w)
 	defer cancel()
 	requests := make(chan installeddevice.Request)
 	readerDone := make(chan struct{})
+	w.Begin(cleanupwitness.CommandReader)
 	go func() {
 		defer close(readerDone)
 		defer close(requests)
@@ -106,7 +125,7 @@ func run(output func(any) error) (result error) {
 			}
 		}
 	}()
-	defer func() { cancel(); _ = os.Stdin.Close(); <-readerDone }()
+	defer func() { cancel(); _ = os.Stdin.Close(); <-readerDone; w.Complete(cleanupwitness.CommandReader, nil) }()
 
 	var first installeddevice.Request
 	select {
@@ -125,6 +144,7 @@ func run(output func(any) error) (result error) {
 	if err != nil {
 		return trustprofile.ErrTrust
 	}
+	w.Begin(cleanupwitness.BindingJournal)
 	binding, err := autonomousbinding.OpenWithJournal(release.Scope(), release.Specification().Test, bindingRecords(recordFactory))
 	if err != nil {
 		return trustprofile.ErrTrust
@@ -134,7 +154,9 @@ func run(output func(any) error) (result error) {
 		return trustprofile.ErrTrust
 	}
 	defer func() {
-		if closeErr := binding.Close(); closeErr != nil {
+		closeErr := binding.Close()
+		w.Complete(cleanupwitness.BindingJournal, closeErr)
+		if closeErr != nil {
 			result = closeErr
 		}
 	}()

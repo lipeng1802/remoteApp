@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/netip"
+	"remoteapp.local/selfhost-poc/cleanupwitness"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ type enrollment struct {
 	session              *enrollmentSession
 	binding              invite.NetworkBinding
 	peers                *SessionPeers
+	witness              *cleanupwitness.Witness
 }
 
 type enrollmentResult struct {
@@ -81,6 +83,8 @@ func (e *enrollment) start(ctx context.Context, g *authorizationGate, client net
 	call, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	var err error
+	e.witness = cleanupwitness.From(ctx)
+	e.witness.Begin(cleanupwitness.Node)
 	e.node, err = factory(call)
 	if err != nil || e.node == nil || call.Err() != nil {
 		return deny()
@@ -123,12 +127,14 @@ func (e *enrollment) closeJoined() error {
 	var joinedErr error
 	if e.session != nil {
 		e.session.Stop()
+		e.witness.Complete(cleanupwitness.Session, nil)
 		if err := e.session.Err(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			joinedErr = err
 		}
 	}
 	if e.watch != nil {
 		e.watch.Stop()
+		e.witness.Complete(cleanupwitness.Watch, nil)
 	}
 	if e.proofCancel != nil {
 		e.proofCancel()
@@ -137,6 +143,7 @@ func (e *enrollment) closeJoined() error {
 		return joinedErr
 	}
 	err := e.node.CloseJoined()
+	e.witness.Complete(cleanupwitness.Node, err)
 	e.ticket, e.key, e.address = "", "", ""
 	return errors.Join(joinedErr, err)
 }

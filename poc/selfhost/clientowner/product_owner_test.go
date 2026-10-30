@@ -90,7 +90,21 @@ func awaitAck(t *testing.T, path string) {
 }
 func releaseProduct(t *testing.T, path, value string) {
 	t.Helper()
-	if e := os.WriteFile(path, []byte(value), 0600); e != nil {
+	// The fixture polls concurrently: publishing an empty/truncated marker can
+	// accidentally select exit0 before the intended "fail" bytes are written.
+	f, e := os.CreateTemp(filepath.Dir(path), "release-pending-")
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer os.Remove(f.Name())
+	if _, e = f.WriteString(value); e != nil {
+		f.Close()
+		t.Fatal(e)
+	}
+	if e = f.Close(); e != nil {
+		t.Fatal(e)
+	}
+	if e = os.Rename(f.Name(), path); e != nil {
 		t.Fatal(e)
 	}
 }

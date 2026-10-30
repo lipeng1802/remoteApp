@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"remoteapp.local/selfhost-poc/cleanupwitness"
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/streamgate"
 )
@@ -143,6 +144,7 @@ func (e *enrollment) startWatch(ctx context.Context, g *authorizationGate, clien
 	life, cancel := context.WithCancel(ctx)
 	w := &enrollmentWatch{cancel: cancel, done: make(chan struct{})}
 	e.watch = w
+	e.witness.Begin(cleanupwitness.Watch)
 	go func() {
 		defer close(w.done)
 		defer w.denyGate()

@@ -1,6 +1,8 @@
 # Personal Remote Desktop MVP
 
-r79 增加严格的[故障收尾协议组件](poc/selfhost/public-server/FAULT_RETIREMENT.md)：先只读确认原授权撤销，再验证专用嵌套清理终态、实际 exit1 和父 signer join；普通 failed/非零退出不能替代证明。140项 Python、相关Go race及Windows内存协议通过；原生product清理witness与Windows holder仍待接入，真实故障及PONG验收尚未完成。
+r80 已给 native product 接入清理证据：区分业务故障与实际资源关闭失败，仅 TEST 生命周期全部收尾后才发专用 fault_joined；普通失败、强制/未知关闭仍拒绝。补齐监听取消 worker 的实际 join。相关 Go race、Windows内存组件通过；Windows驻留故障入口与新双机PONG/故障验收仍待完成。
+
+r79 增加严格的[故障收尾协议组件](poc/selfhost/public-server/FAULT_RETIREMENT.md)：先只读确认原授权撤销，再验证专用嵌套清理终态、实际 exit1 和父 signer join；普通 failed/非零退出不能替代证明。140项 Python、相关Go race及Windows内存协议通过；原生清理witness后续由r80接入；Windows holder、真实故障及PONG验收仍待完成。
 
 r78 增加不含秘密的 TEST 活动阶段诊断，137 项 Python 回归通过。首次真实并行 provision 后未观察到双方持续 PONG；已明确撤销，实际验证两平台 registered 在线退休门禁并回收安装根。正常活动零退出及故障收尾协议仍待完成，不能标为整体验收通过。
 

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"time"
 
+	"remoteapp.local/selfhost-poc/cleanupwitness"
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/session"
@@ -78,7 +79,7 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 		if e != nil {
 			return nil, e
 		}
-		child, e := processowner.Start(p.Spec)
+		child, e := startObservedTLS(ctx, p.Spec)
 		if e != nil {
 			return nil, e
 		}
@@ -102,7 +103,7 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	} else if p.CertificateReopen {
 		return nil, session.ErrDenied
 	}
-	child, e := processowner.Start(spec)
+	child, e := startObservedTLS(ctx, spec)
 	if e != nil {
 		return nil, e
 	}
@@ -152,6 +153,15 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	p.Observation.bind(child, true)
 	p.TargetReady(ready.Key, ready.Fingerprint)
 	return child, nil
+}
+
+func startObservedTLS(ctx context.Context, spec processowner.Spec) (*processowner.Child, error) {
+	w := cleanupwitness.From(ctx)
+	if w == nil {
+		return processowner.Start(spec)
+	}
+	w.Begin(cleanupwitness.TLSProduct)
+	return processowner.StartObserved(spec, func(e error) { w.Complete(cleanupwitness.TLSProduct, e) })
 }
 
 // StartBoundProduct is trusted composition for an already-authorized native

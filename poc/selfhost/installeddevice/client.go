@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"remoteapp.local/selfhost-poc/cleanupwitness"
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/invite"
@@ -120,9 +121,13 @@ func WatchedSessionViaTestTunnel(release trustinstall.Release, open clientruntim
 
 func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork, testTunnel ...bool) clientowner.Runner {
 	return func(ctx context.Context, profile trustprofile.Profile) (result error) {
+		w := cleanupwitness.From(ctx)
+		w.Begin(cleanupwitness.Runner)
+		defer w.Complete(cleanupwitness.Runner, nil)
 		if ctx.Err() != nil || open == nil || output == nil || commands == nil {
 			return trustprofile.ErrTrust
 		}
+		w.Begin(cleanupwitness.Signer)
 		signer, err := open()
 		if err != nil || signer == nil {
 			return trustprofile.ErrTrust
@@ -133,7 +138,9 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 			return trustprofile.ErrTrust
 		}
 		defer func() {
-			if err := joined.CloseJoined(); err != nil {
+			err := joined.CloseJoined()
+			w.Complete(cleanupwitness.Signer, err)
+			if err != nil {
 				result = trustprofile.ErrTrust
 			}
 		}()
@@ -169,6 +176,7 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		if err := output(map[string]string{"status": "ready"}); err != nil {
 			return err
 		}
+		w.Arm(release.Specification().Test)
 		for {
 			select {
 			case <-sessionDone:

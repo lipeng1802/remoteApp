@@ -15,6 +15,12 @@ TEST supervisor 的继承生命周期流接受无额外字段的 `stop_fault`，
 
 Python `JoinedPipe.stop_fault` 不在授权未知时关闭stdin；需要两阶段严格布尔、无额外字段、EOF及真实exit1。迟到最终回执只能继续读取同一调用，不重发请求，不借用正常 stop。`Owner.owner_stop_fault` 完成后返回 `owner_fault_closed`，清理本对象的原 metadata/socket；管理主进程也以故障分支 exit1。正常 owner_stop 不能借用该证明。
 
-**当前实际 native product 尚未实现嵌套清理 witness 和 `fault_joined` 生产者，故真实故障仍拒绝新证明。** 保持这一关闭状态，不得临时把普通failed当作替代。组件的真实fixture子进程、真实本地HTTPS/内存设备签名和Windows内存协议测试不是原生身份或双机 fault acceptance。
+## r80：native product 的清理证据
 
-下一组先实现 native product 的独立清理 witness：区分业务故障与 product/watch/node/signer/原生日志清理失败，只有全部实际完成且未强制中断才可发专用终态；随后接 Windows retained holder、runner fault阶段和故障工单回收。Windows holder遇到未知回复必须保持输入/owner驻留，不能落入原正常 finally stop，也不能自动重试。完成前不要启动混用旧holder的新双机故障验收包。
+当前源代码的 native product 已接入 `cleanupwitness`。它只通过可信 in-process context 传递，记录固定资源的开始/实际完成和永久失败，不接受 JSON/环境/root/身份选择字段，不保存错误文本或秘密。只有 TEST runner 写出初始ready后才可arm；根入口的全部defer结束后才seal。mandatory owner/binding日志、命令reader、runner和内部signer必须存在且实际结束；可选node/watch/session/TLS子进程/监听器一经开始也必须完成。重复生命周期、失败、未完成、迟到或非TEST全部拒绝，未启动资源不冒充已启动。
+
+业务故障与清理错误分别处理：session工作出错不等于node关闭失败；内部signer只有CloseJoined无错误才完成，TLS子进程只有closed/EOF/实际exit0才完成。node包含proof/SDK/原生enrollment lease关闭；owner日志的关闭结果与runner业务错误分离，binding关闭也单独检查。监听器关闭返回最初结果且不可晚到变成功，controller监听取消worker和overlay listener的取消worker都加入实际join。原生根入口只有在这些证据全部成立时才用专用 `fault_joined` 代替普通failed并exit1；正常closed/exit0不改。清理未知、abort、强制/非零TLS子进程等仍仅普通failed，不能让supervisor生成新故障证明。旧包没有这些hook，仍不接受普通failed替代。
+
+这些证据证明本地受信产品的收尾，不是授权、远程证明、活动PONG或文件退休许可。组件的真实fixture子进程、真实本地HTTPS/内存设备签名和Windows内存协议测试不是原生身份或双机 fault acceptance。
+
+下一组接 Windows retained holder、runner fault阶段和故障工单回收。Windows holder遇到未知回复必须保持输入/owner驻留，不能落入原正常 finally stop，也不能自动重试。完成前不要启动混用旧holder的新双机故障验收包；必须fresh重建当前签名TEST包，不覆盖/复活已退休安装。

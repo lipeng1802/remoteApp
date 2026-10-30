@@ -2,6 +2,7 @@ package installeddevice
 
 import (
 	"context"
+	"remoteapp.local/selfhost-poc/cleanupwitness"
 	"sync"
 
 	"remoteapp.local/selfhost-poc/invite"
@@ -43,6 +44,7 @@ func (e *enrollment) startSession(ctx context.Context, work SessionWork) error {
 	life, cancel := context.WithCancel(ctx)
 	s := &enrollmentSession{cancel: cancel, done: make(chan struct{})}
 	e.session = s
+	e.witness.Begin(cleanupwitness.Session)
 	go func() {
 		defer close(s.done)
 		s.err = work(life, e.peers.runtime)
