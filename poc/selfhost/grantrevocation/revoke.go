@@ -144,3 +144,19 @@ func (c *Channel) Close() {
 		c.api.Close()
 	}
 }
+
+// ConfirmRevoked only reads the pinned request through the independent OS
+// signer. Either participant may confirm; it can never approve or revoke.
+func (c *Channel) ConfirmRevoked(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ctx == nil || ctx.Err() != nil || c.closed || !c.pinned || !c.valid(c.grant) {
+		return ErrDenied
+	}
+	r, e := c.api.DeviceRequest(ctx, invite.Body{Action: "status", RequestID: c.request})
+	if e != nil || r != (invite.Result{Status: "revoked", RequestID: c.request}) {
+		return ErrDenied
+	}
+	c.confirmed = true
+	return nil
+}

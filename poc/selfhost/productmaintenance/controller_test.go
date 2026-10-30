@@ -50,6 +50,10 @@ func TestProductProcessFixture(t *testing.T) {
 				provisioned = true
 				json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "network_watch", "passed": true, "active": true})
 			case "product_count":
+				if mode == "forward-fault-count" {
+					json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "fault_joined"})
+					os.Exit(1)
+				}
 				if provisioned {
 					json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "product_count", "pongs": 3, "ended": false, "pin_rejected": false})
 				} else {
@@ -71,6 +75,25 @@ func TestProductProcessFixture(t *testing.T) {
 	}
 	if command.Op != "stop" && command.Op != "maintenance_finish" {
 		os.Exit(9)
+	}
+	if strings.HasPrefix(mode, "fault") {
+		if mode == "fault-slow" {
+			time.Sleep(150 * time.Millisecond)
+		}
+		if mode == "fault-extra" {
+			json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "fault_joined", "extra": true})
+		} else if mode == "fault-generic" {
+			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "failed"})
+		} else {
+			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "fault_joined"})
+		}
+		if mode == "fault-duplicate" {
+			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "fault_joined"})
+		}
+		if mode == "fault-zero" {
+			os.Exit(0)
+		}
+		os.Exit(1)
 	}
 	if mode == "extra" {
 		json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "closed", "joined": true})
@@ -165,6 +188,12 @@ func (f *revokeFixture) Revoke(context.Context) error {
 	return nil
 }
 func (f *revokeFixture) Close() { f.closes++ }
+func (f *revokeFixture) ConfirmRevoked(context.Context) error {
+	if f.unknown {
+		return ErrProduct
+	}
+	return nil
+}
 
 func TestIndependentRevokeSurvivesSealedOrFaultedProductAndUnknownReply(t *testing.T) {
 	c, signer, _ := controllerFixture(t, "forward")

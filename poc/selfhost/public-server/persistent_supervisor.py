@@ -46,11 +46,14 @@ class Owner:
         self.child = child
         self.endpoint = endpoint if endpoint is not None else LocalSupervisor(child)
         self.joined = False
+        self.fault = False
 
     def call(self, request):
         if request == {"Op": "owner_status"}:
             return {"status": "owner_status", "joined": self.joined}
         if request == {"Op": "owner_stop"}:
+            if getattr(self.child,'fault_stop_sent',False) or self.fault:
+                raise RuntimeError('holder_fault_stop_not_normal_close')
             if not self.joined:
                 # An outstanding/malformed business frame cannot become a stop
                 # acknowledgement. Preserve ownership for explicit recovery.
@@ -63,6 +66,15 @@ class Owner:
                 self.child.proc.stdout.close()
                 self.joined = True
             return {"status": "owner_closed", "joined": True, "zero_exit": True}
+        if request == {"Op":"owner_stop_fault"}:
+            if self.joined and not self.fault:raise RuntimeError('holder_normal_close_not_fault')
+            if not self.joined:
+                if isinstance(self.endpoint,LocalSupervisor) and (self.endpoint.poisoned or self.endpoint.pending):
+                    raise RuntimeError('holder_pipe_sealed_preserve_owner')
+                self.child.stop_fault()
+                self.child.proc.stdout.close()
+                self.joined=True;self.fault=True
+            return {'status':'owner_fault_closed','joined':True,'fault':True,'exit_code':1}
         if self.joined or not isinstance(request, dict) or request.get("Op") not in {
                 "device", "network", "provision", "product_count", "revoke_session", "quiesce_session"}:
             raise RuntimeError("holder_request_rejected")
@@ -125,6 +137,7 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
         if ready_file.read_bytes() != published:
             raise RuntimeError("holder_metadata_changed")
         ready_file.unlink()
+        return owner.fault
     finally:
         listener.close()
         # This function is intended to remain resident, not exit on a business
@@ -159,6 +172,6 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise SystemExit("trusted private directory and verified supervisor path required")
     try:
-        serve(sys.argv[1], [sys.argv[2]])
+        if serve(sys.argv[1], [sys.argv[2]]):raise SystemExit(1)
     except Exception:
         raise SystemExit("holder_failed_join_unconfirmed_state_preserved") from None

@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r79：严格故障收尾协议组件，不把普通failed/exit1当join
+
+先读r78/Git，分支保持codex/connection-architecture-poc，docs/archive仍未跟踪保留。本组只做当前缺失的故障协议组件与内存/子进程回归，没有重跑过期双机包、创建原生身份/桌面owner/线上grant/node，未改变预发布服务或Store。Windows SSH实际可用，自动续办ACTIVE，无需用户介入。
+
+新增grantrevocation.Channel.ConfirmRevoked：只用独立client/保留的signer查询已观察并Pin的同一request，两位参与者均可确认，不调用批准/revoke，不接受外来selector。取消、未固定、profile/grant到期、倒退、外来request、仍pending/approved、带grant或混合字段均拒绝。新增两组状态回归；既有真实本地HTTPS/Store/内存签名测试扩展确认双方approved时拒绝、真实revoke后双方只读status成功且mutation仍一次。不是OS signer验收。
+
+processowner.Child.JoinedFault必须专用fault_joined终态、实际exit1、stdout EOF及reader/stop全部完成；普通failed、正常closed、extra/重复终态、exit0、错误输出或未完成worker均拒绝。专用终态可能先被在途product_count读到，Exchange现精确识别并封闭业务、保留该终态给同一child的最终收尾，不把它当count或丢失。普通Stop的closed/zero约束完全保留。Controller.ReleaseFault先作只读原授权撤销确认，再stop/join原child，专用证明成立后关闭独立client并实际CloseJoined supervisor signer；unknown不牺牲signer，不重建child/身份。Signer join失败永久拒绝后续故障证明，stop超时只能显式等待同一child，不能恢复业务。
+
+TEST supervisor继承流新增精确stop_fault，公开业务socket/pipe仍拒绝。先在上述原生步骤完成后发fault_stop_ready严格布尔ACK；父进程此时才允许关闭stdin，使原生命令reader不会因阻塞Read造成互相等待。控制handler/reader/maintenance endpoint实际结束后才发fault_closed/严格joined=true/fault=true并实际exit1，defer清理错误阻止最终证明。授权未知时只回fault_stop_rejected并保留输入。Python JoinedPipe.stop_fault对应两阶段，拒绝/未知时不关闭stdin，不以普通stop混用回执；迟到最终回执只读取原调用，不重发。Owner.owner_stop_fault验证真实exit1、EOF、严格字段后清理自己的原metadata/socket，holder故障分支也exit1，不变成正常zero。真实子进程fixture验证拒绝后仍驻留、后续明确故障收尾、整数/额外/重复/错误exit拒绝，以及迟到最终回执保持同child、不能借普通stop。
+
+**重要关闭门禁：installed-autonomous-product当前还只发普通failed，未实现nested-cleanup witness/fault_joined生产者。新JoinFault/ReleaseFault故意拒绝这种旧产品，不得把普通failed改称专用证明。** 返回过run/exit1只能证明直接进程结束，不能证明嵌套product/watch/node/signer/原生日志正常清理，更不能接受内部legacy abort/强制关闭作join。新协议已预留严格接收端，但真实故障验收尚不可启动。Windows retained PowerShell holder及runner fault工单入口也尚未接此协议，不混用旧holder做新实机验收。
+
+验证：相关processowner/grantrevocation/productmaintenance/supervisedcontrol完整Go race通过，当前supervisor编译及Windows五包vet通过。新增5项productmaintenance顶层故障测试含5个拒绝子项（generic failed也拒绝）、独立signer失败、未知撤销不stop、timeout后显式same-child join、计数在途终态保存；Windows最终strict内存协议二进制逐SHA核验后在SSH运行，5顶层/5子项PASS，无SKIP/EXITCODE0。日志artifacts/connection-poc/fault-close-r79-20261030/windows-strict-result.txt；此前windows-result/windows-final-result为更早版本，仅以strict为最终。测试不调用Credential Manager，未用SSH token读取原生凭据。Windows仅保留公开内存测试目录及归档。Python完整140项PASS，ResourceWarning-as-error通过。均非双机PONG、原生fault或发行验收。
+
+下一组：1）先给native product接可信的嵌套cleanup witness：业务故障与清理失败分开；实际TLS child正常stop/join、watch/proof/node、内部signer、binding及owner日志关闭都必须有明确完成材料，未启动资源单独证明，任何强制/abort/cleanup未知都不发fault_joined。保持正常closed语义。2）接Windows retained holder和runner显式故障路径；未知回执保持stdin/owner，不进入原finally正常stop、不重复查询/重发mutation，严格验证中间ACK、最终fault proof、真实exit1及自己metadata清理。3）补真实阶段诊断，再查r78 Mac未启动payload的target-listen竞态；不盲目延长3秒租约或忽略签名/网络错误。新协议齐备后fresh包实测持续PONG及正常zero分支，故障分支分开验。
+
+r78退休根24f5894a6acb已不存在，不复活；其惰性旧holder metadata/socket仍作为诊断材料保留，不能以本轮fixture替它补写join。整体切片4未完成。本组README/说明/HANDOFF与代码本地提交，不推送，自动续办继续。
+
 ## 2026-10-30 r78：首次真实并行活动未通过，registered在线退休门禁已实测
 
 承接r77，自动续办ACTIVE，无需用户操作。本组新增activity_trace.RecordedEndpoint：每端独占新目录，调用前写calling，异常写outcome_unknown，返回仅记录固定白名单op/action/外层status；不序列化请求/回执/异常文本，不存grant/邀请码/身份/计数，已有证据拒绝覆盖。它只定位阶段，不能授权重试mutation或冒充PONG/join/撤销证明。两项秘密字段与未知错误回归通过，public-server完整137项Python PASS，ResourceWarning-as-error通过。

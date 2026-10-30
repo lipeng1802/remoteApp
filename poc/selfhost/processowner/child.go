@@ -43,6 +43,8 @@ type Child struct {
 	waitErr, readErr, closeErr error
 	stopOnce                   sync.Once
 	finishMode                 atomic.Uint32
+	terminalFrames             int
+	failedTerminal             bool
 }
 
 func Start(s Spec) (*Child, error) {
@@ -121,6 +123,19 @@ func (c *Child) read() {
 func (c *Child) Exited() <-chan struct{} { return c.exited }
 func (c *Child) Done() <-chan struct{}   { return c.done }
 
+// JoinedFault needs the trusted product's dedicated nested-cleanup receipt,
+// actual exit 1, stdout EOF and reader/stop join. Generic "failed" does NOT
+// attest nested node/signer cleanup. The producer must implement that barrier;
+// old products without it remain rejected. Stop's normal contract is unchanged.
+func (c *Child) JoinedFault() bool {
+	select {
+	case <-c.done:
+		return c.cmd.ProcessState != nil && c.cmd.ProcessState.ExitCode() == 1 && c.readErr == nil && c.terminalFrames == 1 && c.failedTerminal
+	default:
+		return false
+	}
+}
+
 // Exchange's response remains private to the trusted caller. Never log it:
 // product readiness may contain a temporary test HMAC. A timed-out exchange
 // latches fault and closes input; its late response cannot authorize reuse.
@@ -160,6 +175,21 @@ func (c *Child) Exchange(ctx context.Context, command any) (json.RawMessage, err
 		}
 		v, ok := <-c.replies
 		if !ok {
+			c.fault.Store(true)
+			result <- reply{err: ErrProcess}
+			return
+		}
+		// A terminal failure can arrive while telemetry/business is in flight.
+		// Preserve its exact receipt for the later joined-fault check instead of
+		// losing it as an invalid count response. No more business can use it.
+		var terminal struct {
+			Status string `json:"status"`
+		}
+		d := json.NewDecoder(bytes.NewReader(v.value))
+		d.DisallowUnknownFields()
+		if d.Decode(&terminal) == nil && d.Decode(new(any)) == io.EOF && terminal.Status == "fault_joined" {
+			c.terminalFrames++
+			c.failedTerminal = true
 			c.fault.Store(true)
 			result <- reply{err: ErrProcess}
 			return
@@ -216,12 +246,17 @@ func (c *Child) stop(command []byte) {
 	c.in.Close()
 	closed := false
 	for r := range c.replies {
+		c.terminalFrames++
 		var v struct {
 			Status string `json:"status"`
 		}
 		d := json.NewDecoder(bytes.NewReader(r.value))
 		d.DisallowUnknownFields()
-		if d.Decode(&v) != nil || d.Decode(new(any)) != io.EOF || v.Status != "closed" || closed {
+		valid := d.Decode(&v) == nil && d.Decode(new(any)) == io.EOF
+		if valid && v.Status == "fault_joined" {
+			c.failedTerminal = true
+		}
+		if !valid || v.Status != "closed" || closed {
 			c.fault.Store(true)
 		} else {
 			closed = true

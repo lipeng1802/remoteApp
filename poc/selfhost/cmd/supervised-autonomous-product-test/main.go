@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"os/signal"
@@ -175,6 +176,24 @@ func run(output func(any) error) (result error) {
 			if request == (installeddevice.Request{Op: "stop"}) {
 				return nil
 			}
+			if request == (installeddevice.Request{Op: "stop_fault"}) {
+				life, stop := context.WithTimeout(ctx, 20*time.Second)
+				e := controller.ReleaseFault(life)
+				stop()
+				if e != nil {
+					if e = output(map[string]string{"status": "fault_stop_rejected"}); e != nil {
+						return e
+					}
+					continue
+				}
+				// Parent may close lifecycle stdin only after native revocation
+				// confirmation + product/signer join. Final proof follows control
+				// handler and inherited reader cleanup, not this intermediate ACK.
+				if e = output(map[string]any{"status": "fault_stop_ready", "joined": true, "fault": true}); e != nil {
+					return e
+				}
+				return productmaintenance.ErrFaultJoined
+			}
 			if request.Op == "product_count" {
 				if request != (installeddevice.Request{Op: "product_count"}) {
 					return trustprofile.ErrTrust
@@ -210,8 +229,12 @@ func run(output func(any) error) (result error) {
 
 func main() {
 	output := json.NewEncoder(os.Stdout).Encode
-	if run(output) != nil {
-		output(map[string]string{"status": "failed"})
+	if e := run(output); e != nil {
+		if errors.Is(e, productmaintenance.ErrFaultJoined) {
+			output(map[string]any{"status": "fault_closed", "joined": true, "fault": true})
+		} else {
+			output(map[string]string{"status": "failed"})
+		}
 		os.Exit(1)
 	}
 	output(map[string]string{"status": "closed"})

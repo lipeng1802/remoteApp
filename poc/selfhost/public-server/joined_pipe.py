@@ -34,6 +34,8 @@ class JoinedPipe:
         self.prepared_seen = False
         self.failed_seen = False
         self.fault_joined = False
+        self.fault_stop_sent = False
+        self.fault_ready_seen = self.fault_closed_seen = False
         self.one_shot = isinstance(config, dict) and config.get("Op") == "prepare"
         self.join_stages = []
         self.diagnostics_done = threading.Event()
@@ -160,6 +162,8 @@ class JoinedPipe:
                 raise RuntimeError("private_upgrade_exit_mismatch")
 
     def stop(self, helper=True):
+        if getattr(self,'fault_stop_sent',False):
+            raise RuntimeError('private_fault_lifecycle_not_normal_close')
         with self.lock:
             if not self.stop_sent and self.proc.poll() is None:
                 self.send(dict(Op="stop"))
@@ -172,6 +176,33 @@ class JoinedPipe:
             self._join_diagnostics()
             if self.proc.returncode != 0:
                 raise RuntimeError("private_join_nonzero_exit")
+
+    def stop_fault(self):
+        # Private TEST lifecycle only. A rejected/unknown revocation check must
+        # leave stdin open: EOF would otherwise trigger generic signer release.
+        with self.lock:
+            if self.fault_joined:return
+            if self.stop_sent:raise RuntimeError("private_normal_stop_not_fault_protocol")
+            if not self.fault_stop_sent:
+                self.send({'Op':'stop_fault'});self.fault_stop_sent=True
+            if not self.fault_ready_seen:
+                ready=self.read(25)
+                if ready=={'status':'fault_stop_rejected'}:
+                    self.fault_stop_sent=False
+                    raise RuntimeError('private_fault_revocation_unconfirmed')
+                if not verified_fault_receipt(ready,'fault_stop_ready'):
+                    raise RuntimeError('private_fault_ready_unconfirmed')
+                self.fault_ready_seen=True
+                self.proc.stdin.close()
+            if not self.fault_closed_seen:
+                if not verified_fault_receipt(self.read(12),'fault_closed'):
+                    raise RuntimeError('private_fault_terminal_unconfirmed')
+                self.fault_closed_seen=True
+            self.proc.wait(timeout=12);self._join_diagnostics()
+            if self.buffer or not select.select([self.proc.stdout],[],[],12)[0] or os.read(self.proc.stdout.fileno(),1)!=b'':
+                raise RuntimeError('private_fault_eof_unconfirmed')
+            if self.proc.returncode!=1:raise RuntimeError('private_fault_exit_mismatch')
+            self.fault_joined=True
 
     def emergency(self):
         if getattr(self, "fault_joined", False):

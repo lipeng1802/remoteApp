@@ -48,6 +48,7 @@ type Controller struct {
 	requested, prepared, broken, closed, released bool
 	provisioned                                   bool
 	quiesced                                      bool
+	faultJoined, faultReleaseFailed               bool
 	expected                                      trustprofile.MaintenanceState
 	revocation                                    boundRevocation
 }

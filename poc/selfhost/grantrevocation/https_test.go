@@ -112,6 +112,17 @@ func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T
 	if e = channel.Pin(*approved.Grant); e != nil {
 		t.Fatal(e)
 	}
+	peerChannel, e := New(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: profile.Claims.Service, MinimumEpoch: 1, Bundled: profile}, peer, false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer peerChannel.Close()
+	if peerChannel.Observe(pending.RequestID, *approved.Grant) != nil || peerChannel.Pin(*approved.Grant) != nil {
+		t.Fatal("peer pin")
+	}
+	if channel.ConfirmRevoked(context.Background()) == nil || peerChannel.ConfirmRevoked(context.Background()) == nil || mutations.Load() != 0 {
+		t.Fatal("approved status became fault close authority")
+	}
 	target.Close() // independent transport must remain usable
 	if channel.Revoke(context.Background()) == nil {
 		t.Fatal("lost HTTP mutation receipt accepted")
@@ -125,5 +136,8 @@ func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T
 	final := call(controller, invite.Body{Action: "status", RequestID: pending.RequestID})
 	if final.Status != "revoked" || final.Grant != nil {
 		t.Fatal("revocation not authoritative")
+	}
+	if channel.ConfirmRevoked(context.Background()) != nil || peerChannel.ConfirmRevoked(context.Background()) != nil || mutations.Load() != 1 {
+		t.Fatal("both real signed status confirmations must remain read-only")
 	}
 }

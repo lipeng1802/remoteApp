@@ -43,6 +43,8 @@ func exercise(t *testing.T, ln net.Listener, dial func() (net.Conn, error)) {
 		calls     int32
 	}{
 		{`{"Op":"stop"}`, "request_rejected", 0},
+		{`{"Op":"stop_fault"}`, "request_rejected", 0},
+		{`{"Op":"stop_fault","VaultScope":"foreign"}`, "request_rejected", 0},
 		{`{"Op":"quiesce_session","VaultScope":"foreign"}`, "request_rejected", 0},
 		{`{"Op":"maintenance_prepare"}`, "request_rejected", 0},
 		{`{"Op":"product_count","VaultScope":"override"}`, "request_rejected", 0},
