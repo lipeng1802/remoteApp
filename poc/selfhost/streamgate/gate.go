@@ -15,6 +15,7 @@ import (
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/nodeproof"
 	"remoteapp.local/selfhost-poc/session"
+	"remoteapp.local/selfhost-poc/startuptrace"
 	"tailscale.com/tsnet"
 )
 
@@ -90,6 +91,7 @@ type overlayListener struct {
 
 func (l *overlayListener) Accept() (net.Conn, error) {
 	if !l.gate.active(l.ctx) {
+		startuptrace.Emit(l.ctx, startuptrace.TargetAcceptDenied)
 		return nil, session.ErrDenied
 	}
 	conn, err := l.Listener.Accept()
@@ -98,6 +100,7 @@ func (l *overlayListener) Accept() (net.Conn, error) {
 	}
 	verified, err := l.gate.peer(l.ctx, l.server, conn)
 	if err != nil {
+		startuptrace.Emit(l.ctx, startuptrace.TargetPeerDenied)
 		conn.Close()
 		return nil, err
 	}
@@ -171,16 +174,19 @@ func (g *Gate) peer(ctx context.Context, s *tsnet.Server, conn net.Conn) (net.Co
 // before the listener is exposed.
 func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener, error) {
 	if ctx == nil || s == nil || !g.server || !g.active(ctx) {
+		startuptrace.Emit(ctx, startuptrace.TargetGateDenied)
 		return nil, session.ErrDenied
 	}
 	lc, err := s.LocalClient()
 	if err != nil {
+		startuptrace.Emit(ctx, startuptrace.TargetLocalFailed)
 		return nil, session.ErrDenied
 	}
 	check, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	st, err := lc.Status(check)
 	if err != nil || st.Self == nil || st.Self.PublicKey.String() != g.binding.TargetNode {
+		startuptrace.Emit(ctx, startuptrace.TargetSelfDenied)
 		return nil, session.ErrDenied
 	}
 	found := false
@@ -190,10 +196,12 @@ func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener
 		}
 	}
 	if !found {
+		startuptrace.Emit(ctx, startuptrace.TargetSelfDenied)
 		return nil, session.ErrDenied
 	}
 	listener, err := s.Listen("tcp", ":47476")
 	if err != nil || !g.active(ctx) {
+		startuptrace.Emit(ctx, startuptrace.TargetListenFailed)
 		if listener != nil {
 			listener.Close()
 		}
@@ -208,6 +216,7 @@ func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener
 		case <-wrapped.done:
 		}
 	}()
+	startuptrace.Emit(ctx, startuptrace.TargetListening)
 	return wrapped, nil
 }
 
@@ -216,20 +225,25 @@ func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener
 // node and remote WhoIs identity before exposing the connection.
 func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, error) {
 	if ctx == nil || s == nil || g.server || !g.active(ctx) {
+		startuptrace.Emit(ctx, startuptrace.ControllerGateDenied)
 		return nil, session.ErrDenied
 	}
 	lc, err := s.LocalClient()
 	if err != nil {
+		startuptrace.Emit(ctx, startuptrace.ControllerLocalFailed)
 		return nil, session.ErrDenied
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	startuptrace.Emit(ctx, startuptrace.ControllerUpgrade)
 	conn, err := nodeproof.DialOnlyOverlay(dialCtx, lc, g.binding.TargetIP, 47476)
 	if err != nil {
 		cancel()
 		return nil, session.ErrDenied
 	}
+	startuptrace.Emit(ctx, startuptrace.ControllerPeer)
 	verified, err := g.peer(ctx, s, conn)
 	if err != nil {
+		startuptrace.Emit(ctx, startuptrace.ControllerPeerDenied)
 		conn.Close()
 		cancel()
 		return nil, err

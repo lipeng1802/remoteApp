@@ -33,3 +33,6 @@ Windows 首次文件 sync 失败时，只有确认该任务失败且无本轮原
 fresh TEST supervisor 可通过同用户私有管理通路发送精确的 `{"Op":"product_stage"}`，读取原 product 的缓存固定阶段。该操作不进入 product 请求队列，不注册、不重发 provision、不恢复故障业务、不关闭 signer；含 selector/其它字段的请求仍拒绝。native 编译 TEST 门禁只向专用 stderr 写固定枚举，父进程以有界行缓冲丢弃所有未知/过长/未结束行和原始错误，普通产品默认不采集；stderr reader 必须实际 EOF/join，才能证明正常或故障收尾。
 
 阶段包括 target_tls/listen/secret/serve 与 controller_listen/dial/secret/tls/accept/bridge（完整命名见 startuptrace）。它表示进入哪个操作，不能证明该操作成功，更不是 payload/PONG 证明。exercise 失败后 runner 只读查询两端并独占保存 startup-diagnostic.json，仅持久化白名单标签或 unavailable/unreported；诊断失败保留原异常和原未知工单，不代替撤销/join/退休。已有证据不可覆盖。
+
+
+r83 将固定阶段细化到目标 ACTIVE/本机节点/IP/实际监听成功，以及控制端 ACTIVE/LocalAPI HTTP upgrade/禁止 Dial-Self/实际 overlay socket 与 WhoIs 门禁。只输出枚举，丢弃 HTTP response body、原始错误与地址。overlay_route_missing 仍严格拒绝系统网络回退；诊断不添加拨号重试、不延长期限、不使网络失败变成成功。target_listening 只证明监听创建与当时门禁成功，不能证明对端已经接入或存在 TLS payload。

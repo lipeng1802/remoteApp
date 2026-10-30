@@ -15,6 +15,7 @@ func TestCompiledTESTGateAndFixedEnum(t *testing.T) {
 	old := os.Stderr
 	os.Stderr = w
 	defer func() { os.Stderr = old; r.Close(); w.Close() }()
+	Emit(nil, TargetGateDenied)
 	Emit(context.Background(), ControllerDial)
 	Emit(Context(context.Background(), false), TargetTLS)
 	Emit(Context(context.Background(), true), Stage("PRIVATE"))

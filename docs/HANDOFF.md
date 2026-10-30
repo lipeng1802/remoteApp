@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r83：真实 HTTP overlay upgrade 拒绝，目标监听成功已证明
+
+承接r82/Git，分支保持，docs/archive仍未跟踪不纳入；Windows SSH/Interactive正常，无需用户介入，自动续办继续ACTIVE。本组未修改业务Nginx/443、服务二进制、清空控制面、回写旧Store、复活退休根，不推送。
+
+固定TEST阶段新增target_gate_denied/local_failed/self_denied/listen_failed/listening/accept_denied/peer_denied，controller_gate_denied/local_failed/upgrade/peer/peer_denied，以及overlay_request_failed/upgrade_rejected/route_missing/response_invalid/upgraded。所有文字仅编译枚举，不输出状态码/body/地址/原错误/凭据。target_listening仅在节点/IP核验、实际s.Listen与后置ACTIVE检查成功、取消worker驻留后输出；controller_peer只在实际LocalAPI101升级socket取得后输出。Dial-Self仍精确拒绝、绝不回退系统Tailscale/OS socket；未增加重试、未改变3秒拨号或ACTIVE有效期。startuptrace.Emit处理nil context不影响原Gate的nil拒绝语义。Python证据白名单同步，未知仍unavailable，阶段不能替代PONG/授权/join。
+
+验证：nodeproof/streamgate/startuptrace/processowner/installeddevice/productmaintenance/supervisedcontrol完整Go race通过；新增真实HTTP LocalAPI传输三种拒绝子项（Dial-Self、403、502）分别核对固定stage、无PRIVATE body/地址泄漏、原错误类型和禁止fallback；另真实101 hijack socket传送一字节回环通过，证明成功upgrade路径仍通（只是本地传输fixture，非Headscale/TLS）。新增nil Emit TEST门禁定向race通过，Windows三包vet通过。Python相关4项PASS、ResourceWarning-as-error，py_compile/diff检查通过；无必要重复未变的全套149项。
+
+本组唯一新鲜双机工单artifacts/connection-poc/supervised-activity-r75-4d2643adc9c2，新签名TEST包独立根；Windows根C:\Users\jarvis\remoteapp-r75-4d2643adc9c2、包remoteapp-r75-package-4d2643adc9c2，Mac/private/tmp/remoteapp-r75-4d2643adc9c2/installed。首次Windows signed_import失败task1、READY无、无native进程后，通过原门禁显式resume_windows一次，签名文件/Absent trust要求保持；两端驻留owner READY、真实注册/明确批准及并行provision返回network_watch。Mac仍没有有效product_count，持续PONG未通过，原activity-state保持exercise_outcome_unknown。
+
+**新直接证据**：startup-diagnostic.json为controller=overlay_upgrade_rejected、target=target_listening。这次Windows实际监听创建与当时ACTIVE门禁成功已有明确证明；Mac进入LocalAPI请求并收到非101且非Dial-Self的HTTP响应，尚未进入WhoIs/ReceiveProductSecret/TLS child。可排除本轮是controller起始ACTIVE拒绝、LocalAPI请求传输error、禁止的系统fallback或WhoIs/TLS失败。但当前未保存HTTP状态/固定错误类别与两端相对先后，不能直接断言连接拒绝、ACL/UDP超时或目标启动竞态，更不能因为最后target已listening就断言Mac发起时已listen。
+
+失败后独立fault-revoke确认原授权已撤销，fault-stop再次通过两端严格native专用fault_joined、父signer join、两阶段EOF与实际exit1、PID绑定receipt/原metadata清理，Mac monitor实际1；这是必要的本次新资源收尾，不重复声称新增正常zero验收。fault-retire再验双方材料，Mac registered_test_retired0/root不存在；Windows仍test_retirement_release_delete1，保持未知，不重复原删除。随后逐SHA验证原tool与原release_delete日志、双方实际join，使用新唯一Interactive Limited任务RemoteApp-R83-FinishFiles-4d2643adc9c2显式调用原retire-node-test.exe finish-files，原生独立门禁未改，registered_test_retired0/root不存在。windows-finish-result.txt及两份explicit operator脚本留工单审计。随后重新确认双方proof与根不存在，3个本轮已结束任务精确删除、原两条SSH master正常关闭、同inode Mac receipt归档后删除、holder/父空壳rmdir。fault-state最终fault_joined_and_test_roots_retired，两端joined/retired true，windows_finish_files_explicit true。根均已退休，不再启动或复用短包；公开材料留存。r78未知惰性诊断材料不动。
+
+下一任务组先补**固定非秘密HTTP拒绝分类**：只在本地已pin的LocalAPI非101回复内有界读取、识别已审计SDK固定分支（如502 dial failure/resolve failure及connection refused/timeout），只持久枚举，绝不日志原body/地址，不重试mutation、放宽ACTIVE/身份/3秒门禁。SDK本地源码tailscale.com@v1.102.5/ipn/localapi/localapi.go:serveDial显示非route是Dial-Self，resolve/UserDial失败是502，坏upgrade等400；当前响应body已安全丢弃，不能事后猜它内容。源码本身不证明本轮具体错误。可结合可信TEST相对阶段时序，尽量让下一fresh轮同时给出确定根因与回归结果，避免仅换一个猜测反复建包。
+
+若确认目标尚未listen的TCP拒绝，应优先设计可验证的target-listener readiness（受信本地协调/已有签名TLS描述发布屏障或严格有界等候），用真实socket延迟启动回归复现再修复；当前target先StartBoundProduct(含证书/签名publication)再ListenOverlay，而controller立即Dial，是结构性竞态候选但仍需证据。不把所有502自动重试或扩大拨号预算、不放弃WhoIs。之后fresh双机必须双方PONG至少3次跨6秒、正常quiesce、独立撤销、全部实际zero/join与registered退休才算正常活动通过。Windows文件目录sync导致首次导入/退休回执不确定还需单独收口；不能把finish-files恢复算一次性自动成功。整体切片4/GUI/可信签名发行未完成。本组README/HANDOFF/代码本地提交，自动续办继续，无用户操作。
+
 ## 2026-10-30 r82：固定启动阶段、fresh 双机故障 join 与 registered 退休实测
 
 先读r81/Git，分支保持codex/connection-architecture-poc；docs/archive未跟踪保留，未推送。Windows SSH与Interactive桌面实际可用，无用户阻塞，自动续办继续ACTIVE。本组未修改服务二进制/业务Nginx/443、清空控制面或回写旧Store，保留本轮真实注册与撤销/cleaned历史。

@@ -4,7 +4,7 @@ import os
 
 STAGES=frozenset(('target_tls','target_listen','target_secret','target_serve',
     'controller_listen','controller_dial','controller_secret','controller_tls',
-    'controller_accept','controller_bridge','unreported'))
+    'controller_accept','controller_bridge','unreported','target_gate_denied','target_local_failed','target_self_denied','target_listen_failed','target_listening','target_accept_denied','target_peer_denied','controller_gate_denied','controller_local_failed','controller_upgrade','controller_peer','controller_peer_denied','overlay_request_failed','overlay_upgrade_rejected','overlay_route_missing','overlay_response_invalid','overlay_upgraded'))
 
 
 def label(endpoint):
