@@ -84,9 +84,10 @@ class Owner:
 def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
     directory = private_directory(directory)
     address, ready_file = directory/"owner.sock", directory/"owner.json"
+    fault_file=directory/'owner-fault-joined.json'
     # Preflight before starting any process/native ownership. Never replace an
     # old socket/bootstrap or silently adopt another retained owner's directory.
-    if address.exists() or address.is_symlink() or ready_file.exists() or ready_file.is_symlink():
+    if any(p.exists() or p.is_symlink() for p in (address,ready_file,fault_file)):
         raise RuntimeError("holder_metadata_exists")
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(address))
@@ -109,7 +110,7 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
         metadata = {"version": 1, "process_id": os.getpid(),
                     "vault_scope": ready["vault_scope"], "public_key": ready["public_key"]}
         if require_native:
-            metadata.update(control_socket=ready["control_socket"], supervisor_process_id=child.proc.pid)
+            metadata.update(control_socket=ready["control_socket"], supervisor_process_id=child.proc.pid,fault_protocol=1)
         published = json.dumps(metadata, separators=(",", ":")).encode()
         pending_file=directory/("owner.json."+str(os.getpid())+".new")
         with pending_file.open("xb") as output:
@@ -133,7 +134,19 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
                 except OSError:
                     # A lost receipt is not an instruction to stop the owner.
                     pass
-        # stop() proved closed + EOF + actual zero exit before metadata removal.
+        if owner.fault:
+            receipt={'version':1,'status':'owner_fault_closed','joined':True,'fault':True,'exit_code':1,
+                     'supervisor_process_id':child.proc.pid,'holder_process_id':os.getpid()}
+            pending_fault=directory/('owner-fault-joined.json.'+str(os.getpid())+'.new')
+            with pending_fault.open('xb') as output:
+                os.chmod(pending_fault,0o600)
+                output.write(json.dumps(receipt,separators=(',',':')).encode())
+                output.flush();os.fsync(output.fileno())
+            os.link(pending_fault,fault_file);pending_fault.unlink()
+            descriptor=os.open(directory,os.O_RDONLY)
+            try:os.fsync(descriptor)
+            finally:os.close(descriptor)
+        # Normal or dedicated fault protocol proved actual exit before cleanup.
         if ready_file.read_bytes() != published:
             raise RuntimeError("holder_metadata_changed")
         ready_file.unlink()

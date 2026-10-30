@@ -23,4 +23,22 @@ Python `JoinedPipe.stop_fault` 不在授权未知时关闭stdin；需要两阶�
 
 这些证据证明本地受信产品的收尾，不是授权、远程证明、活动PONG或文件退休许可。组件的真实fixture子进程、真实本地HTTPS/内存设备签名和Windows内存协议测试不是原生身份或双机 fault acceptance。
 
-下一组接 Windows retained holder、runner fault阶段和故障工单回收。Windows holder遇到未知回复必须保持输入/owner驻留，不能落入原正常 finally stop，也不能自动重试。完成前不要启动混用旧holder的新双机故障验收包；必须fresh重建当前签名TEST包，不覆盖/复活已退休安装。
+## r81：Windows retained holder 与独立故障工单
+
+Windows holder 支持空普通文件 `stop-owner-fault.request`，仅新 retained 模式和随包的 `supervised-fault-stop.ps1` 可用。它保留同一个 ReadLineAsync，未就绪/未知不抛出到普通 finally、不关闭stdin、不发普通stop。严格拒绝、畸形、混合marker均驻留；pending的迟到回执只继续读原调用。只有明确rejected时，新的空 `retry-owner-fault.request` 才允许一次显式重试；不自动重查/重发。原生Go中这只重新确认同一授权并加入同一个child，不重新注册/批准。
+
+PowerShell要求Go canonical map的精确两阶段JSON，拒绝整数bool、重复/额外字段；EOF及实际native exit1后原子发布 `owner-fault-joined.json`。父holder随后以预期故障抛出，wrapper/task必须exit1，不能写EXITCODE0。正常stop保持zero路径。Mac holder也持久化绑定原supervisor/holder PID的故障receipt；实际管理进程exit1且原metadata/socket消失才算管理收尾完成。
+
+fresh双机包通过bootstrap的整数 `fault_protocol=1` 声明此能力。显式操作为：
+
+```text
+python3 run_supervised_activity.py WORK fault-revoke
+python3 run_supervised_activity.py WORK fault-stop
+python3 run_supervised_activity.py WORK fault-retire
+```
+
+只接受原活动的exercise_outcome_unknown。fault-revoke在任何效应前落盘未知状态，通过原bound通路明确撤销，未知时保留owner/tunnel；不重发批准/provision。fault-stop依次等待Mac/Windows的实际receipt、原PID、真实exit1与metadata清理，分别持久化已确认角色，不重复停止已确认角色。正常zero、truthy字段、旧bootstrap、未知工单均拒绝。fault-retire重新检查双方实际材料后才运行原独立registered退休工具，仍要求原生租约/签名库存/在线issuer清理证明；未知删除不自动重跑。
+
+`fault-state.json` 与原 `activity-state.json` 分离；故障回收成功为fault_joined_and_test_roots_retired，不能改称正常活动/PONG/zero成功。部分删除或回执未知必须查看实际保存状态，不能假设所有owner/文件仍存在。Windows release_delete同步不确定仍使用原受限finish-files显式恢复，没有增加删除绕过。
+
+接下来必须fresh重建当前签名TEST包做实际验收，不混用旧holder、不覆盖/复活已退休安装。当前Windows真实进程/同用户pipe/完整PowerShell脚本测试使用内存fixture，不操作原生凭据或Headscale，尚未替代双机原生fault或PONG验收。

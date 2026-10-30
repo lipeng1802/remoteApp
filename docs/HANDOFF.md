@@ -1,5 +1,27 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r81：Windows retained故障两阶段入口、持久receipt及独立故障工单
+
+先读r80/Git，分支保持，docs/archive未跟踪保留。本组接Windows retained holder和runner，未启动fresh双机原生安装、身份或真实Headscale会话，未触碰服务器/Store/Nginx/原生凭据；Windows SSH实测可用，无需用户介入，自动续办ACTIVE。r78根24f5894a6acb已退休不复活，其旧惰性管理metadata/socket仍保留，不能用本组fixture给旧进程补写join。
+
+新增packaging/experimental/supervised-fault-stop.ps1状态机。只发送一次stop_fault并保留同一ReadLineAsync，精确比对Go canonical JSON，拒绝重复/额外字段和整数bool；未就绪/迟到只读原调用，不丢弃pending task。fault_stop_rejected保留输入，不自动重查；仅显式新retry-owner-fault.request允许一次重试。严格fault_stop_ready后才关闭stdin，fault_closed+EOF+实际nativeexit1后才joined。没有PID消失/普通failed/管理中断替代proof，也没有force kill。
+
+validate-supervised-install.ps1支持空普通非reparse的stop-owner-fault.request，仅retained模式且有新模块；混合marker/未知/畸形/日志或公证写入错误均保持owner与输入驻留，不能抛出到原finally正常stop，fault流程中的正常stop marker不会抢跑。整个fault分支捕获内部错误并保留进程，防止PowerShell退出隐式EOF提前关闭signer。成功原子发布owner-fault-joined.json绑定原native PID，随后以EXPECTED_FAULT...异常结束wrapper/task，必须EXITCODE1，绝不能写EXITCODE0。只有实际known退出才移除本对象原publicReady；未知保持metadata。正常stop仍走closed/zero且未改变功能。新Windows/macOS native bootstrap声明真实整数fault_protocol=1，fresh runner复制新模块；旧normal-only打包入口无模块仍可正常运行，但不能执行fault协议。
+
+Mac holder增加独占原子持久故障receipt，绑定原supervisor/holder PID，只有native两阶段/EOF/实际exit1通过才生成，再清理本对象原metadata/socket；外层monitor也必须实际exit1。原fault receipt/旧metadata出现时preflight拒绝启动新child，不能覆盖或采用旧身份。新增fault_activity.py及CLI fault-revoke/fault-stop/fault-retire。fault-state.json与原activity-state.json分离：只接受exercise_outcome_unknown，撤销前先持久化fault_revoke_unknown，严格selector-free原bound撤销确认后才进入故障stop；unknown不自动重发批准/provision/关闭tunnel。按controller→target等待durable proof、原PID、真实exit1及原metadata清理，每个角色确认后单独落盘，后续显式继续不重复已确认角色。正常zero不能当fault。
+
+fault-retire重新检查两端实际材料，不以phase文件代替证明；再复用原独立registered退休工具（严格原生租约/库存/在线issuer已撤销cleaned证明），结果写独立fault最终phase，不会把原活动标PONG/normal passed。Windows文件删除回执不确定仍需原受限finish-files显式恢复，未知删除不能自动重复。仅在双方原生根退休后核对同一Mac receipt内容/owner/文件inode才移除receipt及空壳。正常retire只抽取公共retire_pair实现，原normal门禁保留。CLI固定失败提示改为consult_saved_state，避免在部分删除后错误声称所有owner/文件仍被保留。
+
+验证：Python完整147项PASS，ResourceWarning-as-error通过，py_compile/diff检查通过。新增七项故障工单回归覆盖效应前未知落盘、truthy撤销拒绝、部分stop显式继续、原PID/严格bool/mixed字段拒绝、monitor正常zero拒绝、旧/布尔capability拒绝、未知删除/整数join禁止重复、退休重新查询双方proof并使用独立journal；Mac fixture同时核对新持久receipt。首次新增测试只因macOS /var→/private/var临时目录别名的fixture路径比较失败，统一resolve后全套通过，未改生产路径门禁。
+
+Windows实测材料artifacts/connection-poc/fault-holder-r81-20261030：windows-result.txt九种真实Go fixture进程用例全部PASS/TEST_EXITCODE0，涵盖valid/迟到ready/迟到final/明确拒绝后仅显式重试/整数/extra/duplicate/zero/普通failed；当前holder脚本AST无错误。首个直接EncodedCommand调用测试.ps1被执行策略阻止，审计确认无ops/receipt/残留fixture后，改为外层显式powershell.exe -NoProfile -ExecutionPolicy Bypass执行，仅本进程，不修改全局策略。没有把最初失败当通过。
+
+另新增独立cmd/retained-holder-fixture（仅内存测试工具，不进入产品/安装包）。真实Windows同用户named pipe以及actual validate-supervised-install.ps1/模块/wrapper完整执行normal、fault、rejected-retry三模式均PASS，windows-retained-result.txt记录TEST_EXITCODE0：正常退出0且无fault receipt；fault严格native1、wrapper1而非zero、publicReady消失、PID绑定receipt；rejected时实际parent仍运行/READY保留/无receipt且未重复native请求，直到显式fixture授权+retry marker。该fixture没有Credential Manager、真实签名身份、SDK或线上authority，不可当Interactive原生或双机产品验收。相关productmaintenance Go race、fixture入口编译及Windows vet通过；全测试均正常wait退出，无force kill。远端仅保留公开测试目录/归档/日志，无本组真实device/grant/node变化。
+
+下一组直接推进活动启动诊断与修复：在当前原生TEST产品/监督链补可信、固定枚举、无秘密的启动阶段证据，定位r78 Mac是在DialOverlay、ReceiveProductSecret、TLS descriptor/child哪一步未就绪；普通计数unavailable不能推出根因。针对target当前先启动TLS（证书/publication）再ListenOverlay、controller立即Dial的候选竞态，做延迟target/真实socket回归后确定修复；不盲目忽略错误/重试注册，不放宽3秒状态/信任/身份/期限。之后fresh当前两平台签名TEST包执行真实PONG增长→正常quiesce→独立撤销→正常zero/join→registered退休；再单独走新fault-revoke/stop/retire，不混用旧包/旧holder。若Windows release_delete再次不确定，由原工具finish-files精确收尾。PONG、原生fault、GUI和签名发行均未新增验收，整体切片4未完成。
+
+本组README/协议/HANDOFF/代码本地提交，不推送；自动续办继续。
+
 ## 2026-10-30 r80：native product 专用fault_joined生产者与真实清理barrier
 
 承接r79/Git，分支保持，内部docs/archive未跟踪保留。本组落实r79缺失的native product nested-cleanup witness，未创建fresh双机安装/原生身份/线上grant或节点，没有运行旧短包，未触碰服务Store/Nginx/未知锁。Windows SSH内存组件测试实际可用，无需用户介入，自动续办ACTIVE。

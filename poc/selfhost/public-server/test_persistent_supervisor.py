@@ -67,7 +67,7 @@ for line in sys.stdin:
             self.assertFalse((directory/"owner.sock").exists())
 
     def test_preflight_refuses_existing_metadata_before_starting_child(self):
-        for name in ("owner.sock", "owner.json"):
+        for name in ("owner.sock", "owner.json", "owner-fault-joined.json"):
             with self.subTest(name=name), tempfile.TemporaryDirectory(dir="/tmp") as raw:
                 directory = Path(raw).resolve()
                 (directory/name).write_text("preserved")

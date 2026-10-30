@@ -72,6 +72,9 @@ sys.exit(1)
             worker.join(5);self.assertFalse(worker.is_alive());self.assertEqual(outcomes,[True])
             self.assertEqual(children[0].proc.returncode,1);self.assertTrue(children[0].fault_joined)
             self.assertFalse((root/'owner.sock').exists());self.assertFalse((root/'owner.json').exists())
+            receipt=json.loads((root/'owner-fault-joined.json').read_text())
+            self.assertEqual(receipt,{'version':1,'status':'owner_fault_closed','joined':True,'fault':True,'exit_code':1,
+                                      'supervisor_process_id':children[0].proc.pid,'holder_process_id':__import__('os').getpid()})
 
     def test_fault_receipt_needs_true_booleans_exact_terminal_eof_and_exit_one(self):
         for mode in ('integer','extra','duplicate','zero','failed'):

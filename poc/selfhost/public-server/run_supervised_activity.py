@@ -175,6 +175,7 @@ def start(work):
     if a.read()["phase"]!="built" or expiry(work)-time.time()<600:raise RuntimeError("activity_fresh_build_required")
     a.save({"version":1,"phase":"startup_outcome_unknown"})
     shutil.copyfile(REPO/"packaging/experimental/validate-supervised-install.ps1",work/"windows/validate-supervised-install.ps1")
+    shutil.copyfile(REPO/"packaging/experimental/supervised-fault-stop.ps1",work/"windows/supervised-fault-stop.ps1")
     # Wrapper contains no grant/key and preserves actual desktop script errors.
     (work/"windows/run-owner.ps1").write_text("""$ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
@@ -300,6 +301,10 @@ def stop(work):
 def retire(work):
     work,m=metadata(work);a=Activity(work);state=a.read()
     if state["phase"]!="owners_joined_retirement_pending":raise RuntimeError("activity_join_before_retirement_required")
+    return retire_pair(work,m,a,state,'normal_activity_joined_and_test_roots_retired')
+
+
+def retire_pair(work,m,a,state,final_phase,before_empty_cleanup=None):
     # No automatic rerun after uncertain destructive cleanup. Explicit
     # finish-files/recovery requires the native tool's separate gates.
     state["phase"]="retirement_outcome_unknown";state["retired"]={};a.save(state)
@@ -333,8 +338,9 @@ try { $lines=@(& (Join-Path $PSScriptRoot 'retire-node-test.exe'));$code=$LASTEX
         ps("$ErrorActionPreference='Stop';$t="+quote(name)+";if((Get-ScheduledTask -TaskName $t).State -eq 'Running'){throw 'Task still running'};Unregister-ScheduledTask -TaskName $t -Confirm:$false")
     for item in reversed(json.loads((work/"tunnels.json").read_text())):
         command(["ssh",*OPTIONS,"-S",item["socket"],"-O","exit",item["host"]])
+    if before_empty_cleanup is not None:before_empty_cleanup()
     Path(m["holder_dir"]).rmdir();Path(m["mac_root"]).parent.rmdir()
-    state["phase"]="normal_activity_joined_and_test_roots_retired";a.save(state)
+    state["phase"]=final_phase;a.save(state)
 
 
 if __name__=="__main__":
@@ -342,6 +348,9 @@ if __name__=="__main__":
         if sys.argv[1:]==["prepare"]:print(prepare())
         elif len(sys.argv)==3 and sys.argv[2] in ("start","monitor","exercise","stop","retire","resume-windows"):
             {"start":start,"monitor":monitor,"exercise":exercise,"stop":stop,"retire":retire,"resume-windows":resume_windows}[sys.argv[2]](sys.argv[1])
+        elif len(sys.argv)==3 and sys.argv[2] in ('fault-revoke','fault-stop','fault-retire'):
+            import fault_activity
+            {'fault-revoke':fault_activity.revoke,'fault-stop':fault_activity.stop,'fault-retire':fault_activity.retire}[sys.argv[2]](sys.argv[1])
         else:raise RuntimeError("activity_explicit_step_required")
     except Exception:
-        raise SystemExit("activity_step_failed_state_and_owners_preserved") from None
+        raise SystemExit("activity_step_failed_consult_saved_state") from None
