@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r85：用户继续开发，补齐原生初始化固定回执
+
+用户明确继续任务，先读r84/Git，分支保持，docs/archive未跟踪保留，不推送。本机只读会话本次仅输出IOConsoleLocked=false，未返回CGSSessionScreenIsLocked；不把它当作pending可重置的授权或已证实锁屏根因。本组不运行旧setup/initialize，不创建新身份/包/会话、不改服务器/Store/业务Nginx。afb6b84f403f Mac pending根及潜在未知身份结果原样隔离，Windows已退休事实不变。
+
+autonomous-enrollment-install.initialize使用局部stage和包装错误记录identity_reservation/identity_scope/identity_create/enrollment_scope/enrollment_initialize/binding_commit/identity_join；保留Unwrap原错误供interactive_logon_required判定，但Error字符串固定，CLI只输出白名单Stage和固定Reason，不输出OS原错误、scope、公钥或私钥。其它inspect/status错误不伪带初始化stage。没有改变创建、提交、关闭、删除或重试策略，未把忽略的reservation.Close/legacy abort当join。
+
+supervised-test-setup在initialize子进程非零时读取固定失败stage，严格单帧/无重复字段/无额外字段/4096字节上界校验，映射native_前缀阶段；未知或畸形保持native_enrollment。Python setup结果白名单同步。旧r84丢失的历史stdout不能靠新代码补写，故本组不声称已定位它失败在identity_create。新增回归覆盖固定stage、原始错误不泄漏、登录原因保留、外来stage/extra/duplicate/多帧/过长/伪usable拒绝；两入口完整Go race通过，追加多帧门禁后setup定向race通过，Windows两入口vet通过，Python管理12项通过，diff检查通过。全部是代码/协议回归，不是原生pending恢复或双机PONG验收。
+
+按用户继续任务恢复既有remoteapp自动续办（保留原prompt/节奏，不新建）。下一组重点是创建前持久化确定的vault scope与身份创建未知回执，设计严格恢复/退休门禁并测试，不能删除原未知pending或猜测旧身份归属。原afb6现场仍须独立收口；没有安全关联就保持隔离并明确记录。之后fresh当前签名TEST包实际验证HTTP失败类别、确认并修复连接根因，保持原3秒/身份/授权检查，最终要求持续PONG和正常zero/join/精确退休。整体切片4未完成。
+
 ## 2026-10-30 r84：HTTP分类与安装回执保留；Mac pending现场等待解锁
 
 先读r83/Git，分支保持，docs/archive仍未跟踪不纳入，未推送。本组未改预发布服务、业务Nginx/443或Store，没有新增真实注册/批准/provision/Headscale会话，不能把构建/HTTP fixture当双机通过。

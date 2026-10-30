@@ -121,11 +121,7 @@ func enrollmentRecords(records trustinstall.RecordFactory) enrollmentstore.Journ
 func main() {
 	value, err := run()
 	if err != nil {
-		reason := "installation_rejected"
-		if errors.Is(err, trustprofile.ErrDesktopLogon) {
-			reason = "interactive_logon_required"
-		}
-		_ = json.NewEncoder(os.Stdout).Encode(reply{Status: "failed", Reason: reason})
+		_ = json.NewEncoder(os.Stdout).Encode(failureReply(err))
 		os.Exit(1)
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(value)
@@ -167,7 +163,13 @@ func inspect(release trustinstall.Release, records trustinstall.RecordFactory) (
 	return reply{Status: "usable", PublicKey: record.PublicKey, EnrollmentState: phase}, nil
 }
 
-func initialize(release trustinstall.Release, vault string, records trustinstall.RecordFactory) (reply, error) {
+func initialize(release trustinstall.Release, vault string, records trustinstall.RecordFactory) (value reply, result error) {
+	stage := "identity_reservation"
+	defer func() {
+		if result != nil {
+			result = &initializationFailure{stage: stage, cause: result}
+		}
+	}()
 	reservation, err := autonomousbinding.BeginWithJournal(release.Scope(), release.Specification().Test, bindingRecords(records))
 	if err != nil {
 		return reply{}, err
@@ -178,21 +180,25 @@ func initialize(release trustinstall.Release, vault string, records trustinstall
 			_ = reservation.Close()
 		}
 	}()
+	stage = "identity_scope"
 	var raw [16]byte
 	if _, err = rand.Read(raw[:]); err != nil {
 		return reply{}, err
 	}
 	vaultScope := hex.EncodeToString(raw[:])
+	stage = "identity_create"
 	identity, err := clientruntime.CreateNativeIdentity(vault, embeddedSignerDigest, vaultScope)
 	if err != nil {
 		return reply{}, err
 	}
 	public := hex.EncodeToString(identity.PublicKey())
+	stage = "enrollment_scope"
 	enrollmentScope, err := enrollmentstore.Scope(release.Scope(), vaultScope, public)
 	if err != nil {
 		_ = identity.DeleteCreatedIdentity()
 		return reply{}, err
 	}
+	stage = "enrollment_initialize"
 	state, err := enrollmentstore.InitializeWithJournal(enrollmentScope, release.Specification().Test, enrollmentRecords(records))
 	if err != nil {
 		_ = identity.DeleteCreatedIdentity()
@@ -205,12 +211,14 @@ func initialize(release trustinstall.Release, vault string, records trustinstall
 		_ = identity.CloseJoined()
 		return reply{}, enrollmentstore.ErrStorage
 	}
+	stage = "binding_commit"
 	binding, err := reservation.Commit(vaultScope, public)
 	if err != nil {
 		_ = identity.CloseJoined()
 		return reply{}, err
 	}
 	reserved = false
+	stage = "identity_join"
 	checkErr = binding.Check()
 	recordedScope := binding.Record().EnrollmentScope
 	closeErr = binding.Close()
@@ -374,4 +382,27 @@ func run() (reply, error) {
 		return cleanupTest(release, records, journalPath, vaultPath)
 	}
 	return initialize(release, vaultPath, records)
+}
+
+// CLI diagnostics preserve only fixed local stages, never the wrapped error.
+type initializationFailure struct {
+	stage string
+	cause error
+}
+
+func (e *initializationFailure) Error() string { return "identity_initialization_failed" }
+func (e *initializationFailure) Unwrap() error { return e.cause }
+func failureReply(err error) reply {
+	v := reply{Status: "failed", Reason: "installation_rejected"}
+	if errors.Is(err, trustprofile.ErrDesktopLogon) {
+		v.Reason = "interactive_logon_required"
+	}
+	var failed *initializationFailure
+	if errors.As(err, &failed) {
+		switch failed.stage {
+		case "identity_reservation", "identity_scope", "identity_create", "enrollment_scope", "enrollment_initialize", "binding_commit", "identity_join":
+			v.Stage = failed.stage
+		}
+	}
+	return v
 }

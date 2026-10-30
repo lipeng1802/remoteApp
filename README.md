@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r85 恢复开发，补齐原生身份初始化七个固定失败阶段，并贯通安装回执；相关回归通过。旧 Mac pending 仍隔离保留，尚未完成身份恢复或新双机 PONG 验收。
+
 r84 补充 TEST HTTP 拒绝分类及 Mac 安装回执保留，151项Python、相关Go race/Windows vet通过。新轮次在 Mac 原生初始化阶段留下 pending，尚未进入网络验证；Windows 已正常零退出并精确回收。检测到 Mac 屏幕锁定，现场保留，自动续办暂停等待解锁；尚不能认定锁屏就是初始化失败根因。
 
 r83 将真实连接失败缩小到 LocalAPI 未完成 HTTP overlay upgrade：fresh 双机中 Windows 已成功建立监听，Mac 未进入 WhoIs/密钥交换。原信任、3秒期限和禁止系统网络回退保持；尚未确认具体 HTTP 拒绝原因，也未标 PONG 通过。失败工单已严格故障 join、在线退休及精确回收，下一组继续定位并修复连接就绪问题。

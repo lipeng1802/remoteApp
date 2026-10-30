@@ -3,13 +3,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"remoteapp.local/selfhost-poc/installrelease"
+	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 	"runtime"
@@ -155,6 +158,7 @@ func run() error {
 	failureStage = "native_enrollment"
 	output, e := cmd.Output()
 	if e != nil {
+		failureStage = enrollmentFailureStage(output)
 		return e
 	}
 	var result struct {
@@ -171,4 +175,24 @@ func main() {
 		os.Exit(1)
 	}
 	json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "test_installed"})
+}
+
+func enrollmentFailureStage(output []byte) string {
+	if len(output) > 4096 {
+		return "native_enrollment"
+	}
+	var v struct {
+		Status string `json:"status"`
+		Stage  string `json:"stage"`
+		Reason string `json:"reason"`
+	}
+	reader := privatepipe.NewReader(bytes.NewReader(output))
+	if reader.Read(&v) != nil || reader.Read(new(any)) != io.EOF || v.Status != "failed" {
+		return "native_enrollment"
+	}
+	switch v.Stage {
+	case "identity_reservation", "identity_scope", "identity_create", "enrollment_scope", "enrollment_initialize", "binding_commit", "identity_join":
+		return "native_" + v.Stage
+	}
+	return "native_enrollment"
 }
