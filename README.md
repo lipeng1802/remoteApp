@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r77 修复 Windows PowerShell 中文公开诊断的 UTF-8 管理通道；已在 Interactive 桌面完成旧中断 TEST 安装的历史 idle 退休及受限文件收尾。它是异常回收证据，不代表活动会话或正常退出通过；自动续办已恢复。
+
 r76 在签发 TEST 短包前先核验 Windows 不可变输入，管理读取失败不再降级上传完整大包；仅该 TEST runner 去掉 Go 调试信息并降低压缩成本，原签名/库存/信任门禁保持。传输优化不代表双机 PONG 或产品验收通过。
 
 r75 补齐显式 fresh 双机包、驻留 owner、正常活动收尾及独立在线退休的管理入口：[活动 runner](poc/selfhost/public-server/SUPERVISED_ACTIVITY.md)。阶段未知时保留 signer 和 HTTPS 通路；Windows 大包改用固实压缩和逐文件哈希核验的不可变 helper 字节复用，不复用旧身份或安装根。此入口的构建/管理回归不能替代真实持续 PONG、双机正常退出或注册节点退休验收。

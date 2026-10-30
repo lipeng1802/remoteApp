@@ -14,6 +14,14 @@ import run_supervised_activity as runner
 
 
 class ManagementActivityGates(unittest.TestCase):
+    def test_powershell_declares_utf8_before_public_localized_diagnostics(self):
+        with patch.object(runner,'command',return_value='{"status":"已恢复"}'.encode('utf8')) as call:
+            self.assertEqual(runner.ps("'PUBLIC'"),'{"status":"已恢复"}')
+            encoded=call.call_args.args[0][-1].split()[-1]
+            script=base64.b64decode(encoded).decode('utf-16le')
+            self.assertTrue(script.startswith('$OutputEncoding=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=$OutputEncoding;'))
+            self.assertTrue(script.endswith("'PUBLIC'"))
+
     def test_reuse_requires_verified_exact_immutable_inputs_and_omits_only_those(self):
         with tempfile.TemporaryDirectory() as d:
             work=Path(d);source=work/'windows';(source/'payload').mkdir(parents=True)

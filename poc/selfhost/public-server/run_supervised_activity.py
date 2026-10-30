@@ -34,6 +34,9 @@ def command(args,timeout=90):
 
 
 def ps(body):
+    # Windows PowerShell otherwise emits the desktop OEM code page over SSH.
+    # Public localized diagnostics must not break the UTF-8 management reader.
+    body="$OutputEncoding=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=$OutputEncoding;"+body
     encoded=base64.b64encode(body.encode("utf-16le")).decode()
     if len(encoded)>6500:raise RuntimeError("activity_script_requires_file_upload")
     return command(["ssh",*OPTIONS,WIN,"powershell.exe -NoProfile -EncodedCommand "+encoded]).decode("utf8").strip()

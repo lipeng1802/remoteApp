@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r77：恢复自动续办、Windows旧工单历史idle退休完成
+
+用户明确继续开发并恢复自动续办；已更新既有remoteapp为ACTIVE，未新增自动化。先读r76/Git，分支保持，内部docs/archive未跟踪保留；Windows SSH whoami成功且登录桌面Explorer存在。只读审计旧工单supervised-activity-r75-7b74078f83e8发现：原任务Ready/LastTaskResult=3221225786、本轮native进程0，但owner-ready.json及first-owner-failure.txt均存在，安装根包含完整signed release/bootstrap。**修正r76的推断：恢复请求曾实际归档旧失败并启动owner发布READY，SSH管理报错不能证明mutation未执行。** 这些事实不证明原owner正常closed/EOF/exit0；当前无进程只是异常结束后的状态，不冒充正常join。
+
+审计中文PowerShell输出触发原ps管理适配器UTF8解码失败；现在EncodedCommand前显式设置OutputEncoding和Console.OutputEncoding为无BOM UTF8，原6500字符上界继续生效。新增实际编码/中文公开回执/前缀顺序回归，相关10项及public-server完整135项Python PASS，ResourceWarning-as-error通过。未读取原生凭据到SSH；审计只取公开任务/文件名/退出及存在性材料，restored-audit.json保存在原工单。
+
+不复用过期包启动会话，也未再次resume或重建身份。先比对独立retire-idle-test.exe与本地原包SHA，再通过新唯一Interactive Limited任务RemoteApp-R77-IdleRetire-7b74078f83e8调用一次原生退休工具。它在独占原生租约、历史签名安装、binding/enrollment确切idle及完整库存校验后删除闲置身份/记录，最终返回test_retirement_release_delete/exit1，保留未知文件回执。随后仅显式调用原编译工具finish-files，原工具重新要求binding/activationAbsent、releases空、bootstrap签名完好及历史trust成立，实际返回idle_test_retired/exit0；桌面任务LastTaskResult=0且安装根不存在。材料r77-retirement-result.txt/r77-finish-result.txt。此为历史idle异常收尾，不能扩大为跨机PONG/正常原owner零退出或registered在线退休通过。
+
+确认精确root不存在后，仅移除三个已非运行任务（旧r75、r77 idle及finish任务），按原tunnels.json关闭或确认已不存在的本轮两个SSH master，rmdir本轮空Mac holder/父目录；r77-closed-recovery.json记录完整公开结果。保留Windows公开包、诊断日志与本地工单，没有删未知锁/凭据、覆盖旧根、改Store/Nginx或恢复旧Store。原activity-state保持startup_outcome_unknown作为历史事实，不伪写活动成功。
+
+下一组直接生成新的随机fresh TEST包并继续当前activity runner，不复活已退休7b74078f83e8根。若首次signed_import文件同步回执失败，仍须确认失败且无活动native/READY、由原生Absent trust门禁显式resume-files；任何SSH错误必须以实际现场查证，不再推断mutation未执行。后续必须真实并行provision/ACTIVE/session-identity/PONG持续增长，再正常quiesce/独立撤销/实际join/registered退休。整体切片4未完成，自动续办ACTIVE，本组本地提交不推送。
+
 ## 2026-10-29 r76：TEST 包传输收口，Windows 离线暂停自动续办
 
 **当前需要用户介入：Windows 100.73.4.118 已离线。** 小SSH复核实际exit255/timeout；本机Tailscale BackendState=Running，目标peer存在但Online=false。不把离线等同已关机/已join，未继续重复轮询。已通过现有automation_update把remoteapp置为PAUSED，未新建自动化。用户最小操作：让Windows恢复网络和Tailscale在线，登录jarvis桌面并保持SSH可达，然后在本聊天回复“Windows已恢复，继续”。不需要手动执行旧验证脚本/删除root/重新加载已存在的公钥；不要复用本轮到期短包。具体原因可能是电源、睡眠或网络，现有证据不能区分。
