@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r78 增加不含秘密的 TEST 活动阶段诊断，137 项 Python 回归通过。首次真实并行 provision 后未观察到双方持续 PONG；已明确撤销，实际验证两平台 registered 在线退休门禁并回收安装根。正常活动零退出及故障收尾协议仍待完成，不能标为整体验收通过。
+
 r77 修复 Windows PowerShell 中文公开诊断的 UTF-8 管理通道；已在 Interactive 桌面完成旧中断 TEST 安装的历史 idle 退休及受限文件收尾。它是异常回收证据，不代表活动会话或正常退出通过；自动续办已恢复。
 
 r76 在签发 TEST 短包前先核验 Windows 不可变输入，管理读取失败不再降级上传完整大包；仅该 TEST runner 去掉 Go 调试信息并降低压缩成本，原签名/库存/信任门禁保持。传输优化不代表双机 PONG 或产品验收通过。

@@ -1,5 +1,23 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r78：首次真实并行活动未通过，registered在线退休门禁已实测
+
+承接r77，自动续办ACTIVE，无需用户操作。本组新增activity_trace.RecordedEndpoint：每端独占新目录，调用前写calling，异常写outcome_unknown，返回仅记录固定白名单op/action/外层status；不序列化请求/回执/异常文本，不存grant/邀请码/身份/计数，已有证据拒绝覆盖。它只定位阶段，不能授权重试mutation或冒充PONG/join/撤销证明。两项秘密字段与未知错误回归通过，public-server完整137项Python PASS，ResourceWarning-as-error通过。
+
+唯一fresh工单artifacts/connection-poc/supervised-activity-r75-24f5894a6acb；Windows根C:\Users\jarvis\remoteapp-r75-24f5894a6acb，包C:\Users\jarvis\remoteapp-r75-package-24f5894a6acb，Mac根/private/tmp/remoteapp-r75-24f5894a6acb/installed。构建/校验/传输/Interactive启动完成，首次signed_import不确定后按原Absent trust/无native与READY门禁显式resume_windows一次，两端owner/原生身份均READY；当时剩余约1021秒。新trace覆盖真实两端注册、新邀请/明确批准、grant_clock、并行provision，双方均返回network_watch。实际计数阶段Windows反复product_count，Mac始终product_unavailable，25秒观察期限内没有双方持续增长PONG，故本轮活动**失败，未通过TLS payload验收**。当前公开trace不含计数，不能反推Windows有有效PONG。
+
+active_round finally通过target独立revoke_session返回session_revoked；随后再次显式调用同一selector-free通路，严格核对status=session_revoked/passed真实bool，确认原授权终态并保存explicit-revocation-confirmed.json。未重发批准或provision，不伪写normal_revoked；activity-state仍exercise_outcome_unknown。stop/retire正常成功流水线未执行。
+
+明确故障收尾：先保存explicit-fault-stop-requested.json，再调用Mac holder现有owner_stop及Windows空stop marker。Mac holder返回holder_outcome_unknown_state_retained，Windows原owner任务实际exit1。没有任何正常zero owner join声明。随后在本轮profile仍有效、在线管理tunnel仍保留时，运行精确固定根的独立retire-node-test（Windows在新Interactive Limited任务，先核对exe SHA；Mac直接原生桌面进程）。Mac实际返回registered_test_retired/exit0且根不存在；Windows返回test_retirement_release_delete/exit1，表明其原生租约/registered/在线issuer已撤销且cleaned节点证明及身份/记录清理均已通过，文件删除回执仍不确定；随后仅调用原工具finish-files，实际registered_test_retired/exit0、任务LastTaskResult0且根不存在。两端真实registered在线退休门禁此次首次验证，不只是fixture或HTTPS探针。
+
+Mac原生owner故障停止后，旧Python holder因只认正常closed而仍驻留。**在独立registered退休已完成并证明原生租约空闲/根不存在后**，仅向核对PID及完整命令含本轮holder目录的惰性Python管理监听器发送正常SIGINT；专用monitor实际wait得到exit_code=-2，保存registered-retirement-mac.json。这不是强杀产品，不替代native worker join，也没有改称正常exit0。保留该holder的owner.json/owner.sock和空父壳作为故障诊断材料：当前旧协议无法提供正常join/原inode回收证据，不删除未知替换对象。下组应修复显式故障收尾协议，而非继续用管理中断当验收路径。
+
+确认两端安装根均不存在后，仅删除3个已非运行Windows任务（本轮owner/RegisteredRetire/FinishFiles），按tunnels.json关闭或确认本轮两个SSH master已不存在。公开包及日志保留，fault-retirement-evidence.json记录异常收尾、root不存在、任务/通路回收以及PONG和正常zero join均false。未清空控制面/回写旧Store；两端真实注册及其已撤销/cleaned历史必须保留，后续服务维护prepare仍需明确兼容终态历史，不能重用过去空Provisions基线。本轮原生根已经退休，**不得再启动24f5894a6acb安装或复用其过期短包**。
+
+下一任务组建议：一、补齐supervisor/holder的显式故障收尾协议，实际child/reader/control handler/signer join之后提供严格的fault receipt和实际exit1，正常closed/exit0条件完全保留；不能把现有Release错误、PID消失或holder中断包装为全部正常join。二、诊断Mac payload尚未启动的具体阶段。候选竞态：installeddevice/session_runtime.go中target先StartBoundProduct（含RSA证书/publish_tls/descriptor）再ListenOverlay，而controller立即DialOverlay，后者3秒内连接失败就封闭，无target-listener readiness屏障；trace只证明Mac未就绪，尚不能断言此候选就是根因。需要可信无秘密阶段证据/延迟target的真实socket回归，再调整启动顺序或有界readiness；不忽略连接/签名失败、不扩大授权/有效期、不中途自动重试注册。重建fresh包后再做持续PONG→正常quiesce→独立撤销→全部实际zero join→registered退休整链。
+
+总体切片4未完成；GUI、签名发行和正常活动验收均不得标PASS。README/说明/代码/交接本地提交，不推送；用户消息归档未跟踪保留。自动续办继续ACTIVE。
+
 ## 2026-10-30 r77：恢复自动续办、Windows旧工单历史idle退休完成
 
 用户明确继续开发并恢复自动续办；已更新既有remoteapp为ACTIVE，未新增自动化。先读r76/Git，分支保持，内部docs/archive未跟踪保留；Windows SSH whoami成功且登录桌面Explorer存在。只读审计旧工单supervised-activity-r75-7b74078f83e8发现：原任务Ready/LastTaskResult=3221225786、本轮native进程0，但owner-ready.json及first-owner-failure.txt均存在，安装根包含完整signed release/bootstrap。**修正r76的推断：恢复请求曾实际归档旧失败并启动owner发布READY，SSH管理报错不能证明mutation未执行。** 这些事实不证明原owner正常closed/EOF/exit0；当前无进程只是异常结束后的状态，不冒充正常join。

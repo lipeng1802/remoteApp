@@ -16,6 +16,7 @@ import tarfile
 import time
 
 from activity_control import Activity
+from activity_trace import RecordedEndpoint
 from persistent_supervisor import Endpoint
 from supervised_requests import WindowsRelay
 
@@ -266,7 +267,7 @@ def exercise(work):
     work,m=metadata(work)
     public=json.loads((work/"windows-bootstrap.json").read_text())
     target=WindowsRelay(WIN,m["win_dir"]+"\\supervised-control-relay.exe",public["control_pipe"])
-    return Activity(work).exercise(target,Endpoint(m["holder_dir"]),expiry(work))
+    return Activity(work).exercise(RecordedEndpoint(work,'target',target),RecordedEndpoint(work,'controller',Endpoint(m["holder_dir"])),expiry(work))
 
 
 def stop(work):

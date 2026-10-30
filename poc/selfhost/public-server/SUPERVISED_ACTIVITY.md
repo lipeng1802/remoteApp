@@ -19,6 +19,8 @@ python3 run_supervised_activity.py WORK retire
 
 `exercise` 采用 r74 阶段门禁及 r73 正常 quiesce 模式，要求真实双方 ACTIVE、PONG 连续增长至少三次且持续至少六秒，再实际正常 join 两个产品，保留独立 signer 明确撤销。未知回执不重发批准、不自动停止 owner、不关闭 tunnel。`stop` 只有在正常撤销已确认后才按 controller、target 顺序等待真实 owner closed/EOF/zero exit；Mac 独立监控实际进程退出，Windows 同时核对本轮 wrapper 退出材料与任务结果。SSH 成功、PID 消失或 marker 创建均不算 join。
 
+每端独占的 `trace-target`/`trace-controller` 目录仅逐步写入固定白名单操作、action、阶段及外层状态，调用前先写calling，异常写outcome_unknown；不序列化请求、回执或异常文本，也不记录邀请、grant、身份或计数。已有目录拒绝覆盖。它是诊断材料，不能作为签名授权、PONG增长、撤销或实际join证据，缺失/未知不能授权重试mutation。
+
 `retire` 仅在两端 owner 已 join 后进入一次性未知阶段，分别运行独立 `retire-node-test`。它们仍须原生独占租约、完整签名库存和当前 issuer 在线退休证明。只有工具明确返回 registered_test_retired 且精确 TEST 根不存在，才移除本轮非运行任务、关闭本轮管理通路、rmdir 本轮空目录。任何未知删除结果都不能自动重跑，需原生工具受限 recovery/finish-files 单独查证。管理归档和公开工单保留。
 
 Windows 首次文件 sync 失败时，只有确认该任务失败且无本轮原生进程/READY、Mac 尚未安装、短包仍有效，才可显式执行 `WORK resume-windows`。仅允许一次，委托原 `-ResumeFiles` 的 Absent trust 门禁；不能覆盖未知 root 或重建未知身份。
