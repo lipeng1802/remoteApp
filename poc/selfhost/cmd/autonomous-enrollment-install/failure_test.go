@@ -25,3 +25,18 @@ func TestInitializationFailureIsFixedAndPreservesLogonCause(t *testing.T) {
 		t.Fatal("cause lost")
 	}
 }
+
+func TestNativeJournalFailuresSurviveInitializationWrapper(t *testing.T) {
+	for _, v := range []struct {
+		err  error
+		want string
+	}{
+		{trustprofile.ErrNativeHelperTimeout, "native_helper_timeout"},
+		{trustprofile.ErrNativeAuthentication, "native_authentication_required"},
+	} {
+		r := failureReply(&initializationFailure{stage: "identity_intent", cause: v.err})
+		if r.Reason != v.want || r.Stage != "identity_intent" {
+			t.Fatal("lost fixed reason")
+		}
+	}
+}

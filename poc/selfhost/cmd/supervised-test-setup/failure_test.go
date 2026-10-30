@@ -20,3 +20,17 @@ func TestChildFailureOnlyAcceptsFixedStrictStage(t *testing.T) {
 		}
 	}
 }
+
+func TestEnrollmentReasonRejectsRawUnknownAndMixedReplies(t *testing.T) {
+	for _, v := range []struct{ raw, want string }{
+		{`{"status":"failed","stage":"identity_intent","reason":"native_helper_timeout"}`, "native_helper_timeout"},
+		{`{"status":"failed","stage":"identity_create","reason":"interactive_logon_required"}`, "interactive_logon_required"},
+		{`{"status":"failed","stage":"PRIVATE","reason":"native_helper_timeout"}`, ""},
+		{`{"status":"failed","stage":"identity_create","reason":"PRIVATE"}`, ""},
+		{`{"status":"failed","stage":"identity_create","reason":"native_helper_timeout","PRIVATE":true}`, ""},
+	} {
+		if got := enrollmentFailureReason([]byte(v.raw + "\n")); got != v.want {
+			t.Fatal("unsafe enrollment reason")
+		}
+	}
+}

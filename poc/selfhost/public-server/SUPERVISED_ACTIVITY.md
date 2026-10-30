@@ -47,3 +47,6 @@ r89 fresh prepare 在短期 profile 签发前构建当前源的 darwin/windows t
 
 
 r91 TCP listener 就绪等待：所有尝试共享原 DialOverlay 三秒截止及同一个 signed destination。LocalAPI 502 正文最多513字节，只有固定 dial failure 前缀且明确 connection refused/connection was refused 才返回专用拒绝错误；其它502/过长/未知保持终止，Dial-Self绝不回退。仅该拒绝可等待50ms，每次尝试前后仍检查ACTIVE，取消、撤销或截止立即停止并关闭未验证socket；随后原WhoIs/节点身份/密钥握手仍必需。这不重发注册/批准/provision，不扩大授权TTL。生产的502读取是有界操作性分类，不能再泛称所有生产失败都不读body；非502诊断仍仅TEST。必须新双机持续PONG验证，真实socket迟到监听fixture不是验收替代。
+
+
+r92 安装失败回执支持可选固定 reason：native_helper_timeout、native_authentication_required、interactive_logon_required；未知 reason、混合或非严格 schema 不保存原文。Native journal RPC 保持五秒原截止，超时仍失败/未知，类型与 ErrTrust 兼容，不许可重放/放弃租约；setup进一步区分 native_trust_factory/owner/initialize。此回执只能解释新执行，不可回填旧失败，认证类别也不等于已证明锁屏。

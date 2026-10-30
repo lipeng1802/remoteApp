@@ -22,6 +22,7 @@ import (
 
 var embeddedRelease, embeddedInstallRoot string
 var failureStage = "compiled_configuration"
+var failureReason string
 
 func run() error {
 	resume := len(os.Args) == 2 && os.Args[1] == "resume-files"
@@ -120,15 +121,17 @@ func run() error {
 		}
 	}
 	helper := filepath.Join(v.Directory, "trust-journal"+suffix)
-	failureStage = "native_trust"
+	failureStage = "native_trust_factory"
 	factory, e := r.NativeFactory(helper)
 	if e != nil {
 		return e
 	}
+	failureStage = "native_trust_owner"
 	offline, e := trustinstall.NewOfflineOwner(r, factory, time.Now)
 	if e != nil {
 		return e
 	}
+	failureStage = "native_trust_initialize"
 	if _, e = offline.Initialize(); e != nil {
 		return e
 	}
@@ -159,6 +162,7 @@ func run() error {
 	output, e := cmd.Output()
 	if e != nil {
 		failureStage = enrollmentFailureStage(output)
+		failureReason = enrollmentFailureReason(output)
 		return e
 	}
 	var result struct {
@@ -170,8 +174,16 @@ func run() error {
 	return nil
 }
 func main() {
-	if run() != nil {
-		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "setup_failed_state_preserved", "stage": failureStage})
+	if err := run(); err != nil {
+		value := map[string]string{"status": "setup_failed_state_preserved", "stage": failureStage}
+		reason := trustprofile.NativeFailureReason(err)
+		if reason == "" {
+			reason = failureReason
+		}
+		if reason != "" {
+			value["reason"] = reason
+		}
+		json.NewEncoder(os.Stdout).Encode(value)
 		os.Exit(1)
 	}
 	json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "test_installed"})
@@ -195,4 +207,24 @@ func enrollmentFailureStage(output []byte) string {
 		return "native_" + v.Stage
 	}
 	return "native_enrollment"
+}
+
+func enrollmentFailureReason(output []byte) string {
+	if enrollmentFailureStage(output) == "native_enrollment" {
+		return ""
+	}
+	var v struct {
+		Status string `json:"status"`
+		Stage  string `json:"stage"`
+		Reason string `json:"reason"`
+	}
+	r := privatepipe.NewReader(bytes.NewReader(output))
+	if r.Read(&v) != nil || r.Read(new(any)) != io.EOF {
+		return ""
+	}
+	switch v.Reason {
+	case "native_helper_timeout", "native_authentication_required", "interactive_logon_required":
+		return v.Reason
+	}
+	return ""
 }

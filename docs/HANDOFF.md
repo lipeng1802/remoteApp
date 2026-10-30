@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r92：原生信任首次失败的固定原因贯通，不扩大预算
+
+先读r91/Git，分支保持，docs/archive未跟踪，不推送。本组不创建新包/安装根/OS凭据/节点/会话，不重启已退休根，不修改服务/Store/Nginx。旧afb6/r87未知现场不动。自动续办ACTIVE，无需用户操作。
+
+DesktopJournal.rpc保留原5秒timer与现有abort逻辑，但现在返回errors.Join(ErrTrust,ErrNativeHelperTimeout)，start/Load/Commit/Close不再吞掉该类型。NativeFailureReason只返回白名单native_helper_timeout/native_authentication_required/interactive_logon_required，未知错误空字符串，绝不包含原文/账号/scope/凭据。错误仍失败和不确定结果，绝不是正常关闭/可重试或释放租约许可；本组没有修复或将legacy abort/重复Close改称成功join。网络3秒、授权有效期、身份验证全保留。
+
+setup将原native_trust细分native_trust_factory/owner/initialize，失败可附固定reason。autonomous-enrollment-install保留初始化包装中的已知native原因；privatepipe增加仅识别typed deviceLogonError的只读分类函数，修正设备helper明确logon类别此前不能跨package传到安装回执的问题，同名任意error文本不匹配。其自身RPC timeout目前仍旧通用错误，没有假称所有signer错误都已分类。binding/record层若故意转换为ErrBinding而丢掉原因，依然只会给出固定阶段，不补猜原因。
+
+setup对enrollment失败stdout仍严格单帧/无extra/duplicate/过长门禁，只有已知阶段及白名单Reason才传递。Python setup_mac兼容历史无reason失败和精确可选reason schema；原stdout/stderr/异常文本不持久化，未知reason整个回执泛化。成功只接受原精确test_installed/exit0，不因新增诊断接受非零或其他回执。attempt/partial root/unknown仍禁止重放。
+
+验证：trustprofile、privatepipe、原生安装入口、setup完整Go race通过。新增实际/bin/sleep沉默进程触发原5秒RPC超时，断言类型仍ErrTrust+ErrNativeHelperTimeout、封闭，不把现有强制abort当正常join；这只是无凭据负向fixture，不是OS/helper生命周期验收。其余覆盖固定原因不泄漏原文、unknown/text-only logon拒绝、typed原因穿过初始化包装、extra/不可信enrollment原因拒绝。Python全154项PASS/ResourceWarning-as-error，日志artifacts/connection-poc/r92-python-tests.txt；更新新native_trust_initialize阶段用例后管理15项再通过。Windows四包vet、py_compile、diff检查通过。没有新原生安装/双机PONG结果。
+
+下一组用当前runner准备fresh签名包直接执行，确保当前helper摘要随包更新并记录完整stage/reason。r91的native_trust第一次错误仍不可追溯，不能写成已确认冷启动/5秒超时/锁屏。若新回执确认timeout，应定位冷启动/Keychain/RPC边界与无副作用预检/确定性启动，再修复，不能直接扩大网络授权预算；若明确认证/登录不可用且须用户处理，则收尾当前已启动资源、保存精确阻塞并暂停自动续办，不反复轮询。若READY，真实验证r91 TCP等待方案，只有双方持续PONG至少3次跨6秒、正常quiesce/撤销/实际zero join/registered退休才算活动通过。新回执不放宽原Absent-trust/签名库存/记录门禁，也不授权重放未知初始化。整体切片4/GUI/可信发行、Windows文件回执一次性自动成功及两处旧未知现场仍未闭环。
+
 ## 2026-10-30 r91：TCP明确拒绝的三秒有界等待；新轮次止于安装恢复
 
 先读r90/Git，分支保持，docs/archive未跟踪不纳入，不推送。为候选目标监听竞态实现有界处理，未扩大授权/身份/截止、不改服务Store/Nginx/443。

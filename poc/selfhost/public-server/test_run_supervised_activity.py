@@ -192,5 +192,17 @@ class ManagementActivityGates(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError,'helper_audit_rejected'):runner.verified_windows_inputs(w)
                 self.assertEqual(call.call_count,1)
 
+    def test_mac_setup_reason_keeps_only_fixed_native_labels(self):
+        for reason in ('native_helper_timeout','native_authentication_required','interactive_logon_required','PRIVATE'):
+            with self.subTest(reason=reason),tempfile.TemporaryDirectory() as d:
+                w=Path(d);m={'mac_root':str(w/'installed')}
+                raw=json.dumps({'status':'setup_failed_state_preserved','stage':'native_trust_initialize','reason':reason}).encode()
+                with patch.object(runner.subprocess,'run',return_value=subprocess.CompletedProcess([],1,raw,b'PRIVATE')):
+                    with self.assertRaisesRegex(RuntimeError,'setup_unconfirmed'):runner.setup_mac(w,m)
+                text=(w/'mac-setup-result.json').read_text();value=json.loads(text)
+                self.assertNotIn('PRIVATE',text)
+                if reason=='PRIVATE':self.assertEqual(value['status'],'unavailable')
+                else:self.assertEqual(value['reason'],reason)
+
 
 if __name__=="__main__":unittest.main()

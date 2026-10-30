@@ -209,3 +209,7 @@ func (s *Signer) DeleteCreatedIdentity() error {
 	}
 	return nil
 }
+
+// IsInteractiveLogonError classifies only the typed local helper result, never
+// arbitrary errors carrying the same text. It grants no retry or UI permission.
+func IsInteractiveLogonError(err error) bool { return errors.Is(err, deviceLogonError) }

@@ -280,15 +280,16 @@ def setup_mac(work,m):
     except Exception:raise RuntimeError("activity_mac_setup_outcome_unknown") from None
     value={"version":1,"status":"unavailable","stage":"unavailable","exit_code":result.returncode}
     stages={"compiled_configuration","signed_payload","protected_layout","signed_import","payload_promote",
-            "bootstrap_import","native_trust","native_activation","native_enrollment",
+            "bootstrap_import","native_trust","native_trust_factory","native_trust_owner","native_trust_initialize","native_activation","native_enrollment",
             "native_identity_intent","native_identity_reservation","native_identity_scope","native_identity_create","native_enrollment_scope",
             "native_enrollment_initialize","native_binding_commit","native_identity_join"}
     try:
         raw=strict_reply(result.stdout) if len(result.stdout)<=4096 else None
         if type(raw) is dict and raw=={"status":"test_installed"} and result.returncode==0:
             value.update(status="test_installed",stage="completed")
-        elif type(raw) is dict and set(raw)=={"status","stage"} and raw["status"]=="setup_failed_state_preserved" and type(raw["stage"]) is str and raw["stage"] in stages and result.returncode!=0:
+        elif type(raw) is dict and (set(raw)=={"status","stage"} or (set(raw)=={"status","stage","reason"} and type(raw['reason']) is str and raw['reason'] in {'native_helper_timeout','native_authentication_required','interactive_logon_required'})) and raw["status"]=="setup_failed_state_preserved" and type(raw["stage"]) is str and raw["stage"] in stages and result.returncode!=0:
             value.update(status="setup_failed_state_preserved",stage=raw["stage"])
+            if 'reason' in raw:value['reason']=raw['reason']
     except Exception:pass
     with (work/"mac-setup-result.json").open("x") as output:
         json.dump(value,output,sort_keys=True);output.flush();os.fsync(output.fileno())

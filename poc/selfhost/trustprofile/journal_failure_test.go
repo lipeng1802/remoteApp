@@ -22,3 +22,19 @@ func TestNativeAuthenticationRemainsTrustFailure(t *testing.T) {
 		t.Fatal("unknown reason leaked")
 	}
 }
+
+func TestNativeBoundaryFailureReasonsAreFixed(t *testing.T) {
+	for _, v := range []struct {
+		err  error
+		want string
+	}{
+		{errors.Join(ErrTrust, ErrNativeHelperTimeout), "native_helper_timeout"},
+		{errors.Join(ErrTrust, ErrNativeAuthentication), "native_authentication_required"},
+		{ErrDesktopLogon, "interactive_logon_required"},
+		{errors.New("PRIVATE"), ""},
+	} {
+		if NativeFailureReason(v.err) != v.want {
+			t.Fatal("unsafe failure reason")
+		}
+	}
+}

@@ -103,6 +103,9 @@ func startDesktopJournal(executable, scope, mode string, test, installation bool
 	}
 	if e != nil || r.Status != status || r.Data != "" || r.Reason != "" {
 		j.abort()
+		if errors.Is(e, ErrNativeHelperTimeout) {
+			return nil, e
+		}
 		return nil, journalFailure(r.Reason)
 	}
 	return j, nil
@@ -150,7 +153,7 @@ func (j *DesktopJournal) rpc(v any) (journalReply, error) {
 	case <-time.After(5 * time.Second):
 		j.abort()
 		<-done
-		return journalReply{}, ErrTrust
+		return journalReply{}, errors.Join(ErrTrust, ErrNativeHelperTimeout)
 	}
 }
 func (j *DesktopJournal) finish() error {
@@ -176,6 +179,9 @@ func (j *DesktopJournal) Load() ([]byte, error) {
 	b, be := base64.StdEncoding.DecodeString(r.Data)
 	if e != nil || r.Status != "loaded" || r.Reason != "" || be != nil || base64.StdEncoding.EncodeToString(b) != r.Data || len(b) > 8191 || len(b) == 0 {
 		j.abort()
+		if errors.Is(e, ErrNativeHelperTimeout) {
+			return nil, e
+		}
 		return nil, ErrTrust
 	}
 	return b, nil
@@ -200,6 +206,9 @@ func (j *DesktopJournal) Commit(expected, next []byte) error {
 	r, e := j.rpc(map[string]string{"Op": "commit", "Expected": digest, "Data": base64.StdEncoding.EncodeToString(next)})
 	if e != nil || r.Status != "committed" || r.Data != "" || r.Reason != "" {
 		j.abort()
+		if errors.Is(e, ErrNativeHelperTimeout) {
+			return e
+		}
 		return ErrTrust
 	}
 	j.created = false
@@ -214,6 +223,9 @@ func (j *DesktopJournal) Close() error {
 	r, e := j.rpc(map[string]string{"Op": "stop"})
 	if e != nil || r.Status != "closed" || r.Data != "" || r.Reason != "" {
 		j.abort()
+		if errors.Is(e, ErrNativeHelperTimeout) {
+			return e
+		}
 		return ErrTrust
 	}
 	return j.finish()
@@ -319,4 +331,20 @@ func journalFailure(reason string) error {
 		return errors.Join(ErrTrust, ErrNativeAuthentication)
 	}
 	return ErrTrust
+}
+
+// Timeouts are uncertain outcomes, not a permission to retry or release leases.
+var ErrNativeHelperTimeout = errors.New("native_helper_timeout")
+
+func NativeFailureReason(err error) string {
+	if errors.Is(err, ErrNativeHelperTimeout) {
+		return "native_helper_timeout"
+	}
+	if errors.Is(err, ErrNativeAuthentication) {
+		return "native_authentication_required"
+	}
+	if errors.Is(err, ErrDesktopLogon) {
+		return "interactive_logon_required"
+	}
+	return ""
 }

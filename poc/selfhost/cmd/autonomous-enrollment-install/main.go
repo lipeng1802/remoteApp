@@ -15,6 +15,7 @@ import (
 	"remoteapp.local/selfhost-poc/autonomousbinding"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/enrollmentstore"
+	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
@@ -405,8 +406,11 @@ func (e *initializationFailure) Error() string { return "identity_initialization
 func (e *initializationFailure) Unwrap() error { return e.cause }
 func failureReply(err error) reply {
 	v := reply{Status: "failed", Reason: "installation_rejected"}
-	if errors.Is(err, trustprofile.ErrDesktopLogon) {
+	if privatepipe.IsInteractiveLogonError(err) {
 		v.Reason = "interactive_logon_required"
+	}
+	if reason := trustprofile.NativeFailureReason(err); reason != "" {
+		v.Reason = reason
 	}
 	var failed *initializationFailure
 	if errors.As(err, &failed) {
