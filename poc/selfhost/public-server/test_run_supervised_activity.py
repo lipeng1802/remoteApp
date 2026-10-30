@@ -155,5 +155,42 @@ class ManagementActivityGates(unittest.TestCase):
                         self.assertEqual(call.call_count,1)
                         self.assertFalse((w/'mac-setup-result.json').exists())
 
+    def test_current_helpers_build_before_profiles_and_keep_fixed_platform_wiring(self):
+        with tempfile.TemporaryDirectory() as d:
+            w=Path(d);calls=[]
+            def command(args,timeout=90):
+                calls.append(args)
+                if args[0]=='env':Path(args[args.index('-o')+1]).write_bytes(('CURRENT '+args[-1]+args[1]).encode())
+                return b''
+            with patch.object(runner,'command',side_effect=command):
+                audit=runner.build_current_helpers(w,Path('/trusted/go'))
+            self.assertEqual(set(audit['helpers']),{'darwin','windows'})
+            self.assertEqual(len(calls),6)
+            self.assertTrue(all('CGO_ENABLED=1' in a for a in calls if a[0]=='env' and a[1]=='GOOS=darwin'))
+            self.assertTrue(all('CGO_ENABLED=0' in a for a in calls if a[0]=='env' and a[1]=='GOOS=windows'))
+            self.assertFalse((w/'service-profile.json').exists())
+            with self.assertRaises(FileExistsError):runner.build_current_helpers(w,Path('/trusted/go'))
+
+    def test_new_helpers_are_uploaded_and_never_silently_reused_from_old_cache(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            w=Path(d);payload=w/'windows/payload';payload.mkdir(parents=True)
+            for name in ('trust-journal.exe','identity-vault.exe','tls-product.exe'):(payload/name).write_bytes(name.encode())
+            helpers={}
+            for platform in ('darwin','windows'):
+                helpers[platform]={n+('.exe' if platform=='windows' else ''):hashlib.sha256((n+'.exe').encode()).hexdigest() for n in ('trust-journal','identity-vault')}
+            audit={'version':1,'helpers':helpers};(w/'current-helpers.json').write_text(json.dumps(audit))
+            with patch.object(runner,'ps',return_value='INPUTS_VERIFIED') as call:
+                _,items=runner.verified_windows_inputs(w)
+                self.assertEqual([x['name'] for x in items],['tls-product.exe'])
+                self.assertNotIn('trust-journal.exe',call.call_args.args[0])
+                (payload/'identity-vault.exe').write_bytes(b'CHANGED')
+                with self.assertRaisesRegex(RuntimeError,'current_helper_changed'):runner.verified_windows_inputs(w)
+                self.assertEqual(call.call_count,1)
+                helpers['windows']['tls-product.exe']='a'*64
+                (w/'current-helpers.json').write_text(json.dumps(audit))
+                with self.assertRaisesRegex(RuntimeError,'helper_audit_rejected'):runner.verified_windows_inputs(w)
+                self.assertEqual(call.call_count,1)
+
 
 if __name__=="__main__":unittest.main()

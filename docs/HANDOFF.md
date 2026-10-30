@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r89：fresh准备接当前helper，旧缓存不再掩盖代码更新
+
+先读r88/Git，分支保持，docs/archive未跟踪不纳入，不推送。此组只构建可执行文件/验证管理逻辑，没有创建OS凭据、安装根、节点、授权、会话，不触碰业务Nginx/443/Store。旧afb6无scope pending、r87未知TEST journal仍保持隔离与未闭环事实，不以新构建掩盖。
+
+新增build_current_helpers：独占current-helpers目录，当前固定源cmd/trust-journal与cmd/identity-vault分别构建darwin/windows amd64（Darwin CGO1/Windows CGO0），Darwin固定com.personalremotedesktop.test.<name> ad-hoc签名，最终字节SHA审计current-helpers.json。源目录、命令和目标固定在受信管理代码，不接受peer/下载配置选择helper。调用在live profile读取/短期包签发之前，避免编译消耗短期有效期；目录或审计文件已存在禁止覆盖。构建失败不降级旧helper或松动门禁。
+
+fresh prepare仍逐SHA验证r67历史签名库存且不改历史文件；选择新helper字节时再次比对刚完成的审计，将其交给原签名TEST bundle builder，后者签名当前完整文件库存并嵌入固定digest/根。TLS产品保持经原库存验证的实际Swift/C#字节。Windows起包阶段严格校验audit版本、平台、两个允许名字与小写64位摘要，新helper必须与audit一致并进入上传archive，绝不尝试从r67缓存借用；缓存只对剩余未改变的TLS产品逐SHA核对后omit。篡改新helper即拒绝、额外TLS文件audit也拒绝，不能用audit把任意payload从上传/校验中排除。无audit的历史工作目录仍按原legacy缓存规则，用于只读/原收尾兼容，不会覆盖旧根。
+
+实际构建通过：artifacts/connection-poc/r89-current-helpers/current-helpers/{darwin,windows}下四个当前helper均实际Go build成功，Darwin两文件TEST ad-hoc签名成功，current-helpers.json保存最终SHA。没有执行这些identity helper，没有mint profile或创建双机短包；这只是构建与库存接线证据，不是原生安装/PONG/发行通过。r88的本机journal组件证据保持原范围。
+
+Python全153项PASS，ResourceWarning-as-error，日志artifacts/connection-poc/r89-python-tests.txt；新增覆盖固定两平台CGO/签名命令、构建时不创建profile、拒绝重复目录、新helper不借旧cache、篡改摘要在访问远端前拒绝。追加禁止audit声明TLS项及去重复go赋值后，管理14项再通过；py_compile/diff检查。本组Go业务源未变，不重复Go测试。README/说明/HANDOFF本地提交，不推送，自动续办继续ACTIVE，无用户操作。
+
+下一组直接使用当前runner prepare→新独立根start，记录Mac固定setup结果，Windows首次signed_import若仍失败只按原门禁一次显式resume，审计实际副作用后再决定。不要使用本组仅编译目录当安装包，也不要重用过期旧短包。新intent已在OS密钥创建前写入，若失败可精确保留scope，但不凭scope重建/删除身份；当前恢复/退休门禁仍需独立证据。两端READY后真实并行授权/provision/PONG，按r84分类确认HTTP错误后针对性修复，不盲目改3秒/身份/授权。成功要求双方至少3次跨6秒PONG、正常quiesce/撤销/实际zero join/registered退休；失败保留独立fault工单并严格收尾，未知文件回执不自动重试删除。整体切片4/GUI/可信发行与两处旧未知现场仍未闭环。
+
 ## 2026-10-30 r88：原生错误分类；fresh helper本机journal CAS/重开通过
 
 先读r87/Git，分支保持，docs/archive未跟踪不纳入，不推送。只读检查本机RemoteAppTrustJournalTest-v1目录为同用户所有、目录、0700；未改权限/删锁/枚举或删除未知凭据。静态核对DesktopJournal与当前helper的Scope/Mode/Test、create/open/status/cleanup协议一致，未发现显式配置差异；不能据此证明旧r67二进制与当前源码所有行为相同，也不能把r87一般ErrTrust推断为锁屏。

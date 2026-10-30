@@ -69,6 +69,29 @@ def verified_windows_inputs(work):
     for path in (work/"windows").rglob("*"):
         if path.is_file() and path.name in ("trust-journal.exe","identity-vault.exe","tls-product.exe"):
             files.append({"relative":path.relative_to(work/"windows").as_posix(),"name":path.name,"sha256":hashlib.sha256(path.read_bytes()).hexdigest()})
+    # Fresh helper bytes are never borrowed from the legacy cache. The fixed
+    # builder audit authorizes inclusion in the archive, not a cache fallback.
+    audit=work/'current-helpers.json'
+    if audit.exists():
+        current=json.loads(audit.read_text())
+        if set(current)!={'version','helpers'} or type(current['version']) is not int or current['version']!=1:
+            raise RuntimeError("activity_helper_audit_rejected")
+        helpers=current['helpers']
+        if type(helpers) is not dict or set(helpers)!={'darwin','windows'}:raise RuntimeError('activity_helper_audit_rejected')
+        for platform in ('darwin','windows'):
+            entries=helpers[platform]
+            expected={n+('.exe' if platform=='windows' else '') for n in ('trust-journal','identity-vault')}
+            if type(entries) is not dict or set(entries)!=expected:raise RuntimeError('activity_helper_audit_rejected')
+            for digest in entries.values():
+                if type(digest) is not str or len(digest)!=64 or any(c not in '0123456789abcdef' for c in digest):
+                    raise RuntimeError('activity_helper_audit_rejected')
+        selected=[]
+        for item in files:
+            digest=current['helpers'].get('windows',{}).get(item['name'])
+            if digest is not None:
+                if item['sha256']!=digest:raise RuntimeError("activity_current_helper_changed")
+            else:selected.append(item)
+        files=selected
     body="$ErrorActionPreference='Stop';$s="+quote(old)+";"
     for item in files:
         body+="if((Get-FileHash (Join-Path $s "+quote(item["name"])+")).Hash.ToLowerInvariant() -ne "+quote(item["sha256"])+"){throw 'Input mismatch'};"
@@ -77,6 +100,26 @@ def verified_windows_inputs(work):
     except RuntimeError:raise RuntimeError("activity_input_verification_unavailable") from None
     if not verified or not files:raise RuntimeError("activity_input_verification_unavailable")
     return old,files
+
+
+def build_current_helpers(work,go):
+    directory=work/'current-helpers';directory.mkdir(mode=0o700)
+    result={'version':1,'helpers':{}}
+    for target in ('darwin','windows'):
+        folder=directory/target;folder.mkdir(mode=0o700)
+        result['helpers'][target]={}
+        for name in ('trust-journal','identity-vault'):
+            filename=name+('.exe' if target=='windows' else '')
+            output=folder/filename
+            command(['env','GOOS='+target,'GOARCH=amd64','CGO_ENABLED='+('1' if target=='darwin' else '0'),
+                     str(go),'-C',str(REPO/'poc/selfhost'),'build','-trimpath','-o',str(output),'./cmd/'+name],240)
+            if target=='darwin':
+                command(['/usr/bin/codesign','--force','--sign','-','--identifier','com.personalremotedesktop.test.'+name,str(output)])
+            if not output.is_file() or output.is_symlink():raise RuntimeError('activity_current_helper_build_rejected')
+            result['helpers'][target][filename]=hashlib.sha256(output.read_bytes()).hexdigest()
+    with (work/'current-helpers.json').open('x') as out:
+        json.dump(result,out,sort_keys=True);out.flush();os.fsync(out.fileno())
+    return result
 
 
 def test_build_wrapper(work,go):
@@ -127,9 +170,10 @@ def prepare():
     # Read-only availability check BEFORE minting any short-lived TEST profile.
     _,inputs=verified_windows_inputs(prior)
     (work/'immutable-input-preflight.json').write_text(json.dumps(inputs,sort_keys=True))
+    go=REPO/"artifacts/connection-poc/toolchain/go/bin/go"
+    current=build_current_helpers(work,go)
     profile=work/"service-profile.json"
     profile.write_bytes(command(["ssh",*OPTIONS,SERVER,"cat /var/lib/remoteapp-prerelease/client-public/service-profile.json"]))
-    go=REPO/"artifacts/connection-poc/toolchain/go/bin/go"
     build_go=test_build_wrapper(work,go)
     for target in ("darwin","windows"):
         suffix=".exe" if target=="windows" else ""
@@ -140,6 +184,10 @@ def prepare():
             path=source/(name+suffix)
             expected=next(f["sha256"] for f in manifest["files"] if f["name"]==name+suffix)
             if hashlib.sha256(path.read_bytes()).hexdigest()!=expected:raise RuntimeError("activity_helper_source_changed")
+            if name in ('trust-journal','identity-vault'):
+                path=work/'current-helpers'/target/(name+suffix)
+                if hashlib.sha256(path.read_bytes()).hexdigest()!=current['helpers'][target][path.name]:
+                    raise RuntimeError('activity_current_helper_changed')
             helpers.append(str(path))
         args=[str(go),"run","./cmd/product-maintenance-validation-build",str(build_go),str(REPO/"poc/selfhost"),target,str(work/target),*helpers,
               "--verified-live-profile",str(profile),"--test-tunnel","--test-install-root",m["win_root"] if target=="windows" else m["mac_root"]]

@@ -41,3 +41,6 @@ r84 的 HTTP 拒绝分类仅在编译 TEST context 启用时，读取最多 513 
 
 
 Mac setup 启动前独占并同步 mac-setup-attempt.json，实际退出后只将严格固定 status/stage/退出码写入 mac-setup-result.json，不持久化原 stdout/stderr/异常。未知回执、已存在安装根或结果均禁止自动重放。初始化 pending 不等于未创建身份；不能仅凭没有驻留进程清理未知凭据或回写旧记录。
+
+
+r89 fresh prepare 在短期 profile 签发前构建当前源的 darwin/windows trust-journal 与 identity-vault；Darwin 仅作 TEST ad-hoc 签名，所有最终字节先记摘要。旧 r67 库存仍独立验证且保持不可变，只有未改变的 TLS 产品字节允许旧缓存复用；当前两种 helper 随新包完整上传，摘要变动直接拒绝。严格 audit 不允许增加 TLS 或任意文件名来规避缓存校验。构建/库存审计不等于原生安装、发行签名或双机验收。
