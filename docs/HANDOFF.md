@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-30 r87：intent独占只读诊断；本机原生日志创建失败未通过
+
+先读r86/Git，分支保持，docs/archive未跟踪，不推送。新增CheckCreationIntentWithJournal：只用原绑定scope/独占租约/create=false读取并精确解析canonical intent；foreign release、字段不全、额外/重复/多帧或非canonical均拒绝。完整最终Record返回非intent；损坏不当成absence。Close未知则清除found并报错，nil factory/非法scope预先拒绝，不写日志、不返回scope或调用OS identity、更不提供恢复/删除权限。共享creationIntent结构用于原Reserve写入，格式不变。
+
+autonomous-enrollment-install.diagnose在JournalCommitted时先只读检查intent，返回固定maintenance_required/identity_creation_unknown、不输出public_key且不调用identity probe。旧JournalPending仍binding_pending，不伪造成新格式；最终binding正常路径保持。检查与后续Open为两次独占租约，若期间状态改变，后者严格解析拒绝，不能凭先前结果扩大权限。afb6b84f403f旧Mac pending未碰，不重放setup、不删除未知凭据/锁，无服务/Store/Nginx变化。
+
+组件验证：autonomousbinding、原生安装CLI、testretirement、setup完整Go race通过；追加intent诊断不调用identity、只读factory不允许create/foreignscope、无写入/实际Close、坏关闭拒绝、nil factory等定向race通过，Windows两包vet通过。固定格式/字段测试不等于OS存储验收。
+
+**本机原生验证失败，不能记PASS**：新增opt-in TestNativeIdentityIntentCASAndReadOnlyReopen，先按r67签名库存SHA验证immutable darwin trust-journal，再尝试全新随机TEST journal。实际在BeginWithJournal/create阶段返回autonomous_binding_unavailable；cleanup返回service_trust_rejected，test exit1，没有到ReserveIdentity或最终CAS。因此没有本机原生CAS/重开/清理通过证据，更没有设备密钥/网络/PONG验收。材料artifacts/connection-poc/r87-native-intent/failed-attempt.json记原helperSHA与固定失败状态。测试没有调用identity-vault、创建OS设备签名密钥或接触authority；但journal创建是否已留pending未知。
+
+本次测试存在可避免的审计缺口：随机测试scope在进程内生成而未在副作用前落盘，失败退出后无法精确归属可能留下的原生TEST journal。不能凭时间、命名猜测或批量清理未知条目，也不假定create错误代表没有写入；未做广泛删除或重新尝试。已补硬前置：opt-in native测试还必须提供绝对REMOTEAPP_INTENT_TEST_AUDIT_DIR；每个随机release/journal scope以独占0600 JSON在任何native write前写入并fsync文件/父目录，缺失或失败直接拒绝。此文件仅TEST公开namespace metadata，不含凭据/私钥。新审计门禁之后未重跑原生测试，不能用代码修正回填已丢失scope或假称清理完成。
+
+下一组优先静态核对当前DesktopJournal协议与r67 helper能力、原生错误分类及系统登录边界，定位为什么native create/cleanup均被拒绝。没有新根因前不重复原生尝试；未来验证必须先具备scope审计和严格精确清理材料。不要把一般ErrTrust直接认定锁屏，也不要擅自删旧afb6 pending/未知TEST journal。新intent恢复/退休状态机仍待实现，必须固定原scope并证明实际身份/租约状态，不凭intent就重新创建或删除。之后fresh验证真实HTTP类别与持续PONG/正常zero/join/独立退休。整体切片4未完成。自动续办ACTIVE，本组无明确需要用户介入的外部阻塞，先继续代码与协议排查；若确认需用户登录/权限再保存暂停通知，不猜测要求用户操作。
+
 ## 2026-10-30 r86：新安装创建前原生日志意图与未知回执封闭
 
 先读r85/Git，分支保持，docs/archive未跟踪保留，不推送。本组仅改代码/组件测试，不操作原生凭据、不启动fresh短包、旧afb6b84f403f pending根不重放/不清理，不改服务/Store/Nginx。自动续办继续，无新增用户操作。

@@ -148,3 +148,25 @@ func TestDiagnosisUsableAndIdentityUnavailable(t *testing.T) {
 		t.Fatal("cleanup", err)
 	}
 }
+
+func TestDiagnosisIntentDoesNotProbeOrSelectIdentity(t *testing.T) {
+	release, vault := randomScope(t, 16), randomScope(t, 16)
+	raw, _ := json.Marshal(struct {
+		Version      int    `json:"version"`
+		Kind         string `json:"kind"`
+		ReleaseScope string `json:"release_scope"`
+		VaultScope   string `json:"vault_scope"`
+	}{1, "identity_creation_intent", release, vault})
+	bindingScope, _ := autonomousbinding.Scope(release)
+	factory := func(scope string, create, test bool) (trustinstall.Journal, error) {
+		if scope != bindingScope || create || !test {
+			t.Fatal("foreign or writable probe")
+		}
+		copied := append([]byte(nil), raw...)
+		return &testJournal{raw: &copied}, nil
+	}
+	got, e := diagnose(release, 1, true, factory, func(string, bool) (trustprofile.JournalState, error) { return trustprofile.JournalCommitted, nil }, func(autonomousbinding.Record) error { t.Fatal("identity selected from intent"); return nil })
+	if e != nil || got.Status != "maintenance_required" || got.Stage != "identity_creation_unknown" || got.PublicKey != "" {
+		t.Fatal("unsafe intent diagnostic", e)
+	}
+}

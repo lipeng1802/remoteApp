@@ -321,12 +321,7 @@ func (i *Installer) ReserveIdentity(vaultScope string) error {
 	}
 	i.intentAttempted = true
 	i.broken = true
-	intent := struct {
-		Version      int    `json:"version"`
-		Kind         string `json:"kind"`
-		ReleaseScope string `json:"release_scope"`
-		VaultScope   string `json:"vault_scope"`
-	}{1, "identity_creation_intent", i.releaseScope, vaultScope}
+	intent := creationIntent{1, "identity_creation_intent", i.releaseScope, vaultScope}
 	raw, _ := json.Marshal(intent)
 	if i.j.Commit(nil, raw) != nil {
 		return ErrBinding
@@ -339,4 +334,53 @@ func (i *Installer) ReserveIdentity(vaultScope string) error {
 	i.vaultScope = vaultScope
 	i.broken = false
 	return nil
+}
+
+// creationIntent contains only local public metadata in the protected journal.
+type creationIntent struct {
+	Version      int    `json:"version"`
+	Kind         string `json:"kind"`
+	ReleaseScope string `json:"release_scope"`
+	VaultScope   string `json:"vault_scope"`
+}
+
+func isCreationIntent(raw []byte, release string) (bool, error) {
+	var v creationIntent
+	r := privatepipe.NewReader(bytes.NewReader(append(append([]byte(nil), raw...), '\n')))
+	if r.Read(&v) == nil && r.Read(new(any)) == io.EOF && v.Version == 1 && v.Kind == "identity_creation_intent" && v.ReleaseScope == release && canonical(v.VaultScope, 16) {
+		exact, _ := json.Marshal(v)
+		if bytes.Equal(raw, exact) {
+			return true, nil
+		}
+	}
+	record, e := decode(raw)
+	if e != nil || record.ReleaseScope != release {
+		return false, ErrBinding
+	}
+	return false, nil
+}
+
+// CheckCreationIntentWithJournal is read-only and holds the normal exclusive
+// native binding lease. It returns no scope, never opens the OS identity, and
+// does not confer permission to recreate, adopt, commit or delete anything.
+func CheckCreationIntentWithJournal(release string, test bool, factory JournalFactory) (found bool, result error) {
+	if factory == nil || !canonical(release, 16) {
+		return false, ErrBinding
+	}
+	j, done, e := acquire(release, false, test, factory)
+	if e != nil {
+		return false, ErrBinding
+	}
+	defer done()
+	defer func() {
+		if j.Close() != nil {
+			found = false
+			result = ErrBinding
+		}
+	}()
+	raw, e := j.Load()
+	if e != nil {
+		return false, ErrBinding
+	}
+	return isCreationIntent(raw, release)
 }

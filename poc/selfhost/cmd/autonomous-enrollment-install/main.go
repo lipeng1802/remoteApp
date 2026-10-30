@@ -67,6 +67,13 @@ func diagnose(releaseScope string, epoch uint64, test bool, records trustinstall
 	default:
 		return reply{}, trustprofile.ErrTrust
 	}
+	intent, err := autonomousbinding.CheckCreationIntentWithJournal(releaseScope, test, bindingRecords(records))
+	if err != nil {
+		return diagnostic(epoch, maintenance("binding_unusable")), nil
+	}
+	if intent {
+		return diagnostic(epoch, maintenance("identity_creation_unknown")), nil
+	}
 	binding, err := autonomousbinding.OpenWithJournal(releaseScope, test, bindingRecords(records))
 	if err != nil {
 		return diagnostic(epoch, maintenance("binding_unusable")), nil
