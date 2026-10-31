@@ -181,12 +181,12 @@ func ImportStaged(source, installRoot, stagingName string, root []byte, channel,
 			return Verified{}, ErrRelease
 		}
 	}
-	directory, err := os.Open(destination)
+	directory, err := openDirectoryForSync(destination)
 	if err != nil {
 		return Verified{}, ErrRelease
 	}
 	syncErr, closeErr := directory.Sync(), directory.Close()
-	parent, parentErr := os.Open(releases)
+	parent, parentErr := openDirectoryForSync(releases)
 	if parentErr != nil {
 		return Verified{}, ErrRelease
 	}
@@ -283,7 +283,7 @@ func CleanupVerifiedTestRelease(directory, installRoot, expectedDigest string, e
 	if os.Remove(directory) != nil {
 		return ErrRelease
 	}
-	parent, err := os.Open(filepath.Dir(directory))
+	parent, err := openDirectoryForSync(filepath.Dir(directory))
 	if err != nil {
 		return ErrRelease
 	}

@@ -1,5 +1,95 @@
 # 下一次 Codex 会话交接
 
+## 2026-10-31 提交检查点：用户暂停自动化并要求推送
+
+用户明确要求暂停定时任务、提交并推送r94–r97改动。heartbeat windows 已设为 PAUSED，保留10分钟间隔；先前ACTIVE描述仅是历史状态。当前交付包含Windows目录同步修复、原生本机验证、离线预检及有界资源检查；验证结果与未验收边界见下文。临时产物和本地凭据不纳入提交，旧清理阻塞保持。恢复定时执行需用户后续指示。
+
+## 2026-10-31 r97：自动审查修复目录预算扫描的提前分配问题
+
+自动化 windows 已由用户恢复 ACTIVE，每10分钟续办；旧r94–r96中的PAUSED是历史状态。本轮按要求审查现有改动，没有启动Mac/服务器或新的安装包。
+
+发现实际缺陷：r96使用filepath.WalkDir，它会先读取整个目录再执行计数回调，因此10000项上限无法阻止单目录大量条目的提前内存分配。改为通过已核对对象身份的目录句柄分批ReadDir：每批最多64项，接近上限时最多读取剩余项数加1以判定超限；显式待处理目录栈避免递归调用栈增长，拒绝路径/对象变化、链接、异常读和Close失败。计数仍包含根目录，字节上限和固定诊断不变，失败不删除任何文件。这仍是只读观察，不是OS配额或并发目录的原子快照。
+
+新增2项测试PASS：读取接口请求量在0/1/63/64/10000剩余预算时均有界；真实129个单字节文件跨多个批次计数正确，超1项/超1字节拒绝，失败后目录可重命名证明句柄释放。另4项相关预算/预检回归PASS，合计6项无SKIP；Windows vet、diff检查PASS。测试仅129字节数据的小型临时目录，正常退出回收，无新安装包/原生身份/证据大文件。r96符号链接权限不足SKIP未被本轮替代；旧清理阻塞不重试。
+
+代码仍未提交/推送，保留既有修改；自动化继续ACTIVE。下一轮继续审查构建完成标记与输入/预检拒绝边界，仅有实际缺陷或必要验证才修改，不重复已有安装和网络测试。
+
+## 2026-10-31 r96：离线构建输入边界与产物预算检查
+
+继续用户要求的下一项Windows本机任务，针对临时文件累积补齐构建层限制。保持当前分支与r94/r95未提交改动，不连接Mac/服务器、不操作正式Agent、凭据或Tailscale，不重新尝试先前被审批拒绝的删除。
+
+新增builder readBuildInput：先Lstat普通非链接文件、核对打开后SameFile/大小，用LimitReader(limit+1)有界读取并复核大小/Close；helper/TLS/编译产品单文件100 MiB，与现有签名release上限一致，live公开profile上限64 KiB。非法、空、超长、缺失或目录输入在mkdir(bundle)之前拒绝，避免无效输入先留下输出目录。不会把原始错误/路径输出到诊断。
+
+仅 --offline-install-root 启用预算：bundle直属父目录作为专用工作目录，2 GiB逻辑字节预算；开始前预留512 MiB给单包，现存用量超过1.5 GiB拒绝。按helper在包内重复次数预估复制字节；编译阶段及发布fixture.json前再次检查单包512 MiB/工作目录2 GiB，最终检查为metadata预留字节。扫描最多10000项，链接/非普通对象/不可读取目录均拒绝；不执行任何删除。两种固定资源原因 test_build_input_rejected / test_build_budget_exceeded_or_unreadable 仅在离线入口输出；live管理回执仍使用旧固定构建原因，避免改变Python管理层白名单契约。
+
+限制边界：这些是构建前/阶段间观察，不是OS磁盘配额，不检查整个磁盘剩余空间、不限制外部并发写入、运行中单次编译的临时空间或共享Go缓存；阶段越界后停止，不继续发布完成fixture，不强行清理部分包。工作目录应是独立工单父目录，不应选包含整个共享缓存的artifacts根。2 GiB策略不代表安装执行阶段或其它builder已有同等限制。共享缓存仍按既有4 GiB软上限测量管理，不能声称硬上限已实现。
+
+验证：新增4项可执行测试PASS（有界输入/空及非法对象、嵌套目录精确字节与项数边界、固定诊断、无效输入在bundle/编译器前拒绝）；2项已有预检回归PASS。原生symlink创建无权限，新symlink用例明确SKIP，未开启开发者模式或提权；两项可选已构建包审计本轮没有新fixture亦未执行。真实CLI以目录作为helper输入，返回test_build_input_rejected/exit1，确认目标bundle与安装根均不存在。Windows vet及diff检查PASS。未生成新包或执行原生安装，不冒称新预算版本完整大包/双机验收；后续需要fresh包时再实测正常完成路径。
+
+体积：旧工单仍233.21 MiB，本轮未增加安装包/落盘日志，Go缓存2686.4→2691.5 MiB（约5.1 MiB增量）。临时单元测试使用几字节文件，未通过造GB级文件测试预算。自动化仍PAUSED，代码未提交/推送。下一步优先审查提交已完成的r94–r96；双机PONG/在线退休等待Mac恢复，避免为了重复已通过检查继续生成大包。
+
+## 2026-10-31 r95：离线安装构建前的只读目录预检
+
+用户要求继续下一任务，Mac仍不可连接。本组将r94“生成114 MiB包后才发现父目录DACL过宽”的环境失败前移：新增 installrelease.CheckFreshTestInstallRoot，只检查绝对规范路径、目标不存在、直接父目录满足既有TEST受保护目录规则，并实际关闭只读句柄。不创建根/目录、不修ACL、不打开凭据，不对旧状态做恢复；成功只是当前观察，不是保留安装位置、持久证明或授权，setup原有fresh-root/权限/签名/原生检查完整保留。
+
+离线builder的 --offline-install-root 现在在 mkdir(dest)、读取/复制helper、签发profile和启动编译器之前调用预检。新增 --check-offline-install-root <root> 独立只读模式，输出固定JSON test_install_parent_ready 或 test_install_preflight_failed；拒绝原因仅白名单 test_install_path_invalid / test_install_root_not_fresh / test_install_parent_unprotected。无法证明目标不存在时同样拒绝，不输出原始路径/错误/账号。live跨机builder不能在当前主机验证远端路径，本组不替换其流程，也不声称检测全部权限、磁盘或原生登录条件。
+
+验证：5项新增定向测试全部PASS、无SKIP，覆盖私有父目录、零目录写入和句柄释放、已存在文件/目录、缺失/相对路径、真实Windows宽DACL、缺少编译器及helper时仍在预检拒绝且不创建bundle。installrelease完整回归16项PASS；builder新增2项PASS，原有两项可选已构建包审计没有传fixture故仍SKIP，不冒称新包验收。两个改动包Windows vet和diff检查PASS。真实go run CLI三次：既有私有空holder下新候选返回ready；继承过宽DACL父目录返回parent_unprotected；已存在旧包目录返回root_not_fresh。只是只读查询，没有执行旧包或创建安装根。
+
+本轮无新安装包、无OS身份、无Mac/服务器连接、无正式Agent/Tailscale变动。只增加约7.1 MiB共享编译缓存（2679.3→2686.4 MiB），旧工单仍233.21 MiB；没有重试r94被自动审批拒绝的清理。旧两份包待用户手动清理的状态保持。本任务已完成，原heartbeat仍PAUSED，不自动提交/推送。
+
+下一步：审查并提交r94+r95当前本地改动；Mac恢复后用全新签名包继续双机PONG及registered在线退休，不能复用已退休/过期包。本次预检不替代系统登录/凭据可用性、完整网络或正式安装包验收。
+
+## 2026-10-31 r94：Windows 本机四项验证完成；目录同步修复及首次安装/idle 退休一次成功
+
+用户目前无法连接 Mac，授权按顺序推进 Windows 首次安装、清理、升级防回退、构建诊断，并要求限制临时文件。分支 codex/connection-architecture-poc，基线 4363a77；本轮改动未提交/推送，不连接 Mac 或服务器、不重放 r84/r87 未知现场、不替换正式 Agent。
+
+### 修复与边界
+
+Windows 真实目录复现：os.Open 后 File.Sync 返回 Access is denied；CreateFile 使用 GENERIC_READ|GENERIC_WRITE、BACKUP_SEMANTICS 后 FlushFileBuffers 实际成功。新增回归在修复前分别复现首次 ImportStaged 拒绝、删除计划持久化 ErrRemovalReceipt。新增 openDirectoryForSync：Windows 取得实际同步所需的写访问，OPEN_REPARSE_POINT 并核对句柄 directory/reparse 属性，Lstat/Stat/SameFile 核对对象；Unix 仍正常打开目录。release/bootstrap 导入、bootstrap 指针提交、精确 TEST release 清理、删除计划/分批删除目录同步使用该入口。Sync/Close 错误仍拒绝，没有忽略 AccessDenied、延迟或自动重试删除。API 依据：https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers 。本机通过不代表断电耐久/所有文件系统通过，也不能反推所有历史错误。
+
+bootstrap 测试移为两平台共同测试，按 runtime.GOOS 生成签名库存；实际验证 Windows 一次导入、升级、幂等重开、降级拒绝及精确清理。新增真实 Windows fresh 导入/清理无恢复、分批删除回执、文件/缺失目录/共享冲突拒绝和句柄释放测试。
+
+构建回归发现 validInstallRoot 用宿主 filepath 规则检查 Darwin root，Windows 因此误拒绝 /Library/...；改为目标 POSIX path 规则，增加非规范路径拒绝用例。新增真实 Windows 退出23的受控子进程验证构建固定分类、原文不泄漏，取消/已过期 ctx 仍拒绝。
+
+product-maintenance-validation-build 新增显式 --offline-install-root <唯一绝对根>，只允许本机平台，使用独立 TEST 自签 profile 和保留的 example 域名，编译实际 setup、enrollment、launcher、idle 退休工具。无 live profile、supervisor、registered 退休工具或管理 relay；不连接网络。仅 TLS payload 使用明确未执行的微小 fixture 占位，不能当画面/TLS 产品验收。新增离线库存审计。testretirement 原生租约回归修正 Windows .exe 后缀，并使用实际 vault 摘要，避免缺少参数造成假阳性拒绝。
+
+### 完整 Windows 本机入口实测
+
+输出工单 artifacts/connection-poc/windows-local-20261031。两个全新包都在执行前保存 fixture（仅公开签名材料）和完整文件 SHA256 清单：
+- A：offline-bundle 的安装根选在继承过宽 DACL 的仓库输出目录下，首次 setup 正确返回 protected_layout/exit1；根不存在、尚未创建 OS 身份。不放宽检查、不重放此包。
+- B：新建仅当前用户/SYSTEM/Administrators 可写的 offline-holder-b，另签全新 offline-bundle-b；两份离线签名库存和真实工具审计 PASS。首次 test-setup.exe 返回 test_installed/exit0，无 resume-files。
+- 实际原生 trust lease 被持有时 TestNativeLeasePreventsRetirement PASS，根及租约仍有效；随后 status 返回 usable / enrollment_state=idle / trust_epoch=2。
+- 租约释放后首次 retire-idle-test.exe 返回 idle_test_retired/exit0，root_absent=true；无 finish-files、无第二次删除、无强制终止。原生 TEST 身份/绑定/activation/trust 和本轮安装根由原有严格退休工具清理，相关 helper/setup/retire 进程无残留。
+- setup-attempt*.json、setup-result*.json、installed-status-b.json、idle-lease.txt、retire-attempt-b.json、retire-result-b.json 保留公开审计。两包都不能复用启动；B 已退休，A 未安装。
+
+### 其它验证
+
+- installrelease 13 个顶层测试 PASS，无 SKIP，含 bootstrap、占用/只读精确删除、篡改/替换/重出现拒绝。
+- 当前源码新构建 trust-journal.exe / identity-vault.exe；autonomousinstall 5 项 PASS，含真实编译两代维护入口的原生初始化/独占升级、身份保持、terminal enrollment、旧 profile/runtime 拒绝，无 SKIP。
+- clientowner 34 个顶层测试 PASS，无 SKIP，含原生日志/租约、实际 fixture 子进程退出、pending/崩溃后重开和防回退。
+- programremoval 定向 7 个顶层原生测试 PASS，无 SKIP，含独立进程 OS identity 认证、本机真实 TLS cancel/join、真实删除后 exit78、原事务续接、身份/activation/epoch 保持与计划替换拒绝。
+- trustinstall 原12项修复后 PASS；新增真实 Windows 构建失败3分支 PASS。builder 入口1项、setup2项 PASS。testretirement 首次缺 fixture 的 SKIP 如实保留；后续使用 B 完整 fixture 的原生 lease 测试已实际 PASS，不能把最初 SKIP算通过。
+- 相关七包 Windows vet、后续 builder/testretirement 与改动包 vet、diff检查 PASS。CGO=0，未执行 race。没有 Mac 原生/Python管理全套验证。
+- installed-autonomous-product 离线 GOENV=off/GOTOOLCHAIN=local/GOPROXY=off、trimpath/-s -w 预热编译成功约5.47秒，空配置 exe 未执行并已精确删除。B 中实际嵌入配置产品编译通过，但未启动网络/产品进程，不能当 PONG 通过。
+- 正式配对仅比较 metadata，证书 metadata、Tailscale 节点/版本前后一致，online=True；不读取 secret blob、不改正式凭据或防火墙。preservation-result.json 记录布尔结果。
+
+### 磁盘、自动化与待清理
+
+已创建当前聊天 heartbeat windows（“Windows 本机安装与升级收口”，每小时）；四项本机任务完成后已改为 PAUSED，防止空转和重复构建。没有自动推送/提交；等待用户下一阶段安排/Mac恢复，不自行扩展范围。
+
+共享 go-cache 从2363.2 MiB增至2679.3 MiB，复用既有工具链/模块缓存。完整新任务目录当前233.21 MiB，其中两份可再生已结束构建包各约114.2 MiB；当前 helper约4.83 MiB，其余为小型公开日志/审计，未产出Setup/DMG。测试临时目录正常退出后回收，B安装根已由退休工具删除。
+
+**清理阻塞**：自动审批先拒绝“已验证范围内递归删除两份已结束构建包”，再拒绝“逐个比对已保存清单 SHA256、仅删匹配文件及空目录”的较窄方案；工具仅给出 blocked by policy，没有具体理由。两次删除命令都未执行，不能写成已回收。停止尝试替代工具绕过。用户可手动删除工单下 offline-bundle、offline-bundle-b 两目录及空 offline-holder-b；保留父目录中的审计/日志和两个 helper。不要删除旧历史未知现场。
+
+后续自动化若恢复，继续遵守：新增临时产物2 GiB、共享缓存4 GiB软上限；大构建前后测量，只清理已确认退出且无原生状态的本任务可再生文件，不批量保留完整包。不能把界面中“自动化已创建”误报为仍ACTIVE。
+
+### 下一步
+
+本轮四项 Windows 本机工作已完成，可审查/提交当前改动。剩余真实双机持续PONG、注册节点在线退休、Mac原生回归、GUI及可信签名发行需后续环境，不应重跑过期包或复活已退休根；r84/r87旧未知现场仍单列。本次不是正式安装器发行/完整网络验收。
+
+复现使用 poc/selfhost 为工作目录；Go为 artifacts/connection-poc/toolchains/go1.26.6/go/bin/go.exe，GOPATH=artifacts/connection-poc/go-work，GOCACHE=artifacts/connection-poc/go-cache，GOENV=off/GOTOOLCHAIN=local/GOPROXY=off/CGO_ENABLED=0。全部路径绝对化。当前helper位于本轮输出目录。离线构建命令为 go run ./cmd/product-maintenance-validation-build <go.exe> <module> windows <新包目录> <journal.exe> <vault.exe> <明确未执行的TLS占位文件> --offline-install-root <用户私有父目录下全新根>。输出默认不是正式安装包；必须先保存公开fixture/哈希审计、确认父目录DACL、仅执行一次setup，未知结果保留；完整成功后才按本轮原生租约检查与独立idle工具收尾，禁止无条件重试。
+
 ## 2026-10-30 r93：新包未建完、未安装；构建诊断与签发前离线预热
 
 先读r92/Git，分支保持，docs/archive未跟踪，不推送。唯一新工单artifacts/connection-poc/supervised-activity-r75-b000b4578dd7：current helper构建/审计、原缓存只读核对、service-profile读取完成，Darwin bundle完整；Windows只有payload中的helper/trust-install/autonomous-enrollment-install，installed-autonomous-product缺失、bootstrap空、无fixture。prepare失败且activity-state保持build_outcome_unknown，没有运行start、上传archive、创建安装根/OS身份/owner/节点/授权。本轮不是Mac原生初始化失败或双机PONG失败，尚未到那些阶段。

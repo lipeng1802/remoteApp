@@ -21,3 +21,21 @@ r57 adds a separate TEST-only loopback endpoint with role/nonce/release-bound mu
 r58 adds an external TEST product supervisor that chooses identity from the existing native binding, uses a selector-free prepare on the product's inherited pipe, and requires actual zero product exit, EOF, reader join and native lease/binding rechecks before signed `closed`. The product itself enables prepare only for compiled TEST releases and opens no new network listener. The runner adds `child-tests.exe`, `supervisor-tests.exe`, and an actual compiled `fixture/` tree. Unused installer/launcher payload names are explicit fixture placeholders, not an installation frontend. Native validation covers actual idle product exit and executable removal, interrupted confirmation and retained product/leases; active Headscale/product traffic, normal business routing through the supervisor and production release boundaries remain pending.
 
 Inno behavior follows [PrepareToInstall](https://jrsoftware.org/ishelp/topic_scriptevents.htm) and [temporary extraction](https://jrsoftware.org/ishelp/topic_isxfunc_extracttemporaryfile.htm). Final validation must run in an interactive Windows session for native Credential Manager access.
+
+## Offline TEST install preflight
+
+Before building a native offline TEST fixture, run from `poc/selfhost`:
+
+```powershell
+& $go run ./cmd/product-maintenance-validation-build --check-offline-install-root $newInstallRoot
+```
+
+Use the existing portable Go toolchain with `GOENV=off`, `GOTOOLCHAIN=local`, `GOPROXY=off` and the shared cache. The root must be an absolute canonical **absent** path under an existing protected TEST parent. Success is the fixed JSON status `test_install_parent_ready`; failures return exit 1 and a fixed non-secret reason. The check never creates the root, changes ACLs, opens a credential store or invokes an installer. Go itself may populate its build cache.
+
+The native `--offline-install-root` builder performs this check automatically before creating its bundle or invoking a compiler. It is a read-only observation, not a reservation, free-space check, native credential check or installation receipt; actual setup retains all fresh-root, signature and permission checks. Do not bypass a rejection or reuse an old partial installation. Remote/live-profile builds still require checks on their actual destination host.
+
+### Offline build resource checks
+
+The offline builder now reserves 512 MiB for one bundle inside a dedicated work directory (the bundle's immediate parent). The work directory has a 2 GiB logical-size budget, so existing content must be at most 1.5 GiB before a new build. It rechecks work-directory and bundle sizes between compilation stages and before publishing `fixture.json`. Scanning rejects links, special/unreadable entries and more than 10,000 entries. Input executables are bounded to 100 MiB each; public service profiles to 64 KiB. Invalid inputs are rejected before creating the bundle.
+
+These are fail-closed observations, **not OS quotas**: a running compiler, its temporary files, external concurrent writes and shared Go caches are not capped by them. No automatic deletion occurs; failed partial builds remain for diagnosis. The existing 4 GiB shared-cache soft budget still needs separate measurement. Use a dedicated work directory rather than the parent of the whole Go cache. The offline CLI reports only fixed resource reasons; live-profile management retains its existing failure-receipt vocabulary. No full new package was built solely to test these checks.

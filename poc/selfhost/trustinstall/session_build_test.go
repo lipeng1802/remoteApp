@@ -60,6 +60,10 @@ func TestInstallRootBuildConfigurationIsCanonicalAndFixed(t *testing.T) {
 	}{
 		{"darwin", "relative/root"},
 		{"darwin", "/"},
+		{"darwin", "/fixed/../root"},
+		{"darwin", "/fixed/root/"},
+		{"darwin", "//fixed/root"},
+		{"darwin", `C:\Program Files\RemoteApp`},
 		{"windows", `c:\Program Files\RemoteApp`},
 		{"windows", `C:\Program Files\..\RemoteApp`},
 		{"windows", `C:/Program Files/RemoteApp`},

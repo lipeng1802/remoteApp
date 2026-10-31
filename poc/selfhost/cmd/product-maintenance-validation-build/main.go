@@ -41,11 +41,26 @@ func write(path string, raw []byte, mode os.FileMode) error {
 }
 func digest(raw []byte) string { h := sha256.Sum256(raw); return hex.EncodeToString(h[:]) }
 func run() error {
-	if len(os.Args) != 8 && ((len(os.Args) != 10 && len(os.Args) != 11 && len(os.Args) != 13) || os.Args[8] != "--verified-live-profile") {
+	if len(os.Args) == 3 && os.Args[1] == "--check-offline-install-root" {
+		return installrelease.CheckFreshTestInstallRoot(os.Args[2])
+	}
+	offlineInstall := len(os.Args) == 10 && os.Args[8] == "--offline-install-root"
+	if !offlineInstall && len(os.Args) != 8 && ((len(os.Args) != 10 && len(os.Args) != 11 && len(os.Args) != 13) || os.Args[8] != "--verified-live-profile") {
 		return os.ErrInvalid
 	}
 	goexe, module, target, dest, journal, vault, tlsProduct := os.Args[1], os.Args[2], os.Args[3], os.Args[4], os.Args[5], os.Args[6], os.Args[7]
-	live := len(os.Args) >= 10
+	live := len(os.Args) >= 10 && !offlineInstall
+	installRoot := ""
+	if offlineInstall {
+		installRoot = os.Args[9]
+		if target != runtime.GOOS || !filepath.IsAbs(installRoot) || filepath.Clean(installRoot) != installRoot || filepath.Dir(installRoot) == installRoot {
+			return os.ErrInvalid
+		}
+		// Before mkdir(dest), helper copies, signing or any compiler process.
+		if err := installrelease.CheckFreshTestInstallRoot(installRoot); err != nil {
+			return err
+		}
+	}
 	tunnel := len(os.Args) == 11 || len(os.Args) == 13
 	if tunnel && os.Args[10] != "--test-tunnel" {
 		return os.ErrInvalid
@@ -53,13 +68,16 @@ func run() error {
 	if len(os.Args) == 13 && os.Args[11] != "--test-install-root" {
 		return os.ErrInvalid
 	}
+	if len(os.Args) == 13 {
+		installRoot = os.Args[12]
+	}
 	var liveClaims trustprofile.Claims
 	var liveSource []byte
 	if live {
 		if !filepath.IsAbs(os.Args[9]) || filepath.Clean(os.Args[9]) != os.Args[9] {
 			return os.ErrInvalid
 		}
-		raw, e := os.ReadFile(os.Args[9])
+		raw, e := readBuildInput(os.Args[9], maximumProfileInput)
 		if e != nil {
 			return e
 		}
@@ -80,6 +98,26 @@ func run() error {
 	if target == "darwin" && runtime.GOOS != "darwin" {
 		return os.ErrInvalid
 	}
+	if offlineInstall {
+		if e := checkOfflineBuildBudget(dest, true); e != nil {
+			return e
+		}
+	}
+	journalRaw, e := readBuildInput(journal, maximumBuildInput)
+	if e != nil {
+		return e
+	}
+	vaultRaw, e := readBuildInput(vault, maximumBuildInput)
+	if e != nil {
+		return e
+	}
+	tlsRaw, e := readBuildInput(tlsProduct, maximumBuildInput)
+	if e != nil {
+		return e
+	}
+	if offlineInstall && 3*int64(len(journalRaw))+2*int64(len(vaultRaw))+int64(len(tlsRaw)) > offlineBundleBudget {
+		return errBuildBudget
+	}
 	if e := os.Mkdir(dest, 0700); e != nil {
 		return e
 	}
@@ -88,17 +126,11 @@ func run() error {
 			return e
 		}
 	}
-	journalRaw, e := os.ReadFile(journal)
-	if e != nil {
-		return e
-	}
-	vaultRaw, e := os.ReadFile(vault)
-	if e != nil {
-		return e
-	}
-	tlsRaw, e := os.ReadFile(tlsProduct)
-	if e != nil {
-		return e
+	checkBudget := func() error {
+		if offlineInstall {
+			return checkOfflineBuildBudget(dest, false)
+		}
+		return nil
 	}
 	public, key, e := ed25519.GenerateKey(rand.Reader)
 	if e != nil {
@@ -149,7 +181,7 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	product := filepath.Join(payload, "installed-autonomous-product"+suffix)
-	if live {
+	if live || offlineInstall {
 		// Replace TEST placeholders with real offline native provisioning tools.
 		for _, name := range []string{"trust-install", "autonomous-enrollment-install"} {
 			if e = os.Remove(filepath.Join(payload, name+suffix)); e != nil {
@@ -159,7 +191,13 @@ func run() error {
 		if e = trustinstall.Compile(ctx, goexe, module, target, filepath.Join(payload, "trust-install"+suffix), spec, now); e != nil {
 			return e
 		}
+		if e = checkBudget(); e != nil {
+			return e
+		}
 		if e = trustinstall.CompileAutonomousEnrollmentInstall(ctx, goexe, module, target, filepath.Join(payload, "autonomous-enrollment-install"+suffix), spec, digest(vaultRaw), now); e != nil {
+			return e
+		}
+		if e = checkBudget(); e != nil {
 			return e
 		}
 	}
@@ -168,6 +206,9 @@ func run() error {
 		compileProduct = trustinstall.CompileAutonomousProductTestTunnel
 	}
 	if e = compileProduct(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now); e != nil {
+		return e
+	}
+	if e = checkBudget(); e != nil {
 		return e
 	}
 	if target == "darwin" {
@@ -189,7 +230,7 @@ func run() error {
 	if e = write(filepath.Join(bootstrap, "trust-journal"+suffix), journalRaw, 0500); e != nil {
 		return e
 	}
-	if live {
+	if live || offlineInstall {
 		e = trustinstall.CompileInstalledReleaseLauncher(ctx, goexe, module, target, filepath.Join(bootstrap, "installed-release-launcher"+suffix), spec, now)
 	} else {
 		e = write(filepath.Join(bootstrap, "installed-release-launcher"+suffix), []byte("TEST unused launcher placeholder\n"), 0500)
@@ -208,12 +249,14 @@ func run() error {
 	if e = write(filepath.Join(bootstrap, installrelease.BootstrapManifestName), raw, 0400); e != nil {
 		return e
 	}
-	productRaw, e := os.ReadFile(product)
+	if e = checkBudget(); e != nil {
+		return e
+	}
+	productRaw, e := readBuildInput(product, maximumBuildInput)
 	if e != nil {
 		return e
 	}
-	if len(os.Args) == 13 {
-		installRoot := os.Args[12]
+	if installRoot != "" {
 		verified, e := installrelease.VerifyDirectory(payload, public, spec.Channel, target, 1)
 		if e != nil {
 			return e
@@ -234,24 +277,31 @@ func run() error {
 		if e = trustinstall.CompileTestProductSetup(ctx, goexe, module, target, filepath.Join(dest, "test-setup"+suffix), spec, installRoot, now); e != nil {
 			return e
 		}
-		if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now, true); e != nil {
+		if e = checkBudget(); e != nil {
 			return e
+		}
+		if !offlineInstall {
+			if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now, true); e != nil {
+				return e
+			}
 		}
 		if e = trustinstall.CompileIdleTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-idle-test"+suffix), spec, installRoot, digest(vaultRaw), now); e != nil {
 			return e
 		}
-		if e = trustinstall.CompileNodeTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-node-test"+suffix), spec, installRoot, digest(vaultRaw), now, true); e != nil {
-			return e
-		}
-		arch := runtime.GOARCH
-		if target == "windows" {
-			arch = "amd64"
-		}
-		relay := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-o", filepath.Join(dest, "supervised-control-relay"+suffix), "./cmd/supervised-control-relay")
-		relay.Dir = module
-		relay.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED=0", "GOOS="+target, "GOARCH="+arch)
-		if e = relay.Run(); e != nil {
-			return e
+		if !offlineInstall {
+			if e = trustinstall.CompileNodeTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-node-test"+suffix), spec, installRoot, digest(vaultRaw), now, true); e != nil {
+				return e
+			}
+			arch := runtime.GOARCH
+			if target == "windows" {
+				arch = "amd64"
+			}
+			relay := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-o", filepath.Join(dest, "supervised-control-relay"+suffix), "./cmd/supervised-control-relay")
+			relay.Dir = module
+			relay.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED=0", "GOOS="+target, "GOARCH="+arch)
+			if e = relay.Run(); e != nil {
+				return e
+			}
 		}
 	}
 	meta := struct {
@@ -264,11 +314,40 @@ func run() error {
 	if e != nil {
 		return e
 	}
+	if e = checkBudget(); e != nil {
+		return e
+	}
+	// Reserve metadata bytes before publishing the completed fixture marker.
+	if offlineInstall {
+		if _, e = checkTreeBudget(dest, offlineBundleBudget-int64(len(raw)), maximumBudgetEntries); e != nil {
+			return e
+		}
+		if _, e = checkTreeBudget(filepath.Dir(dest), offlineWorkBudget-int64(len(raw)), maximumBudgetEntries); e != nil {
+			return e
+		}
+	}
 	return write(filepath.Join(dest, "fixture.json"), raw, 0600)
 }
 func main() {
+	checkOnly := len(os.Args) == 3 && os.Args[1] == "--check-offline-install-root"
 	if e := run(); e != nil {
-		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "test_bundle_build_failed", "reason": trustinstall.BuildFailureReason(e)})
+		reason := installrelease.InstallPreflightReason(e)
+		if reason == "" {
+			if len(os.Args) == 10 && os.Args[8] == "--offline-install-root" {
+				reason = buildResourceReason(e)
+			}
+		}
+		if reason == "" {
+			reason = trustinstall.BuildFailureReason(e)
+		}
+		status := "test_bundle_build_failed"
+		if checkOnly {
+			status = "test_install_preflight_failed"
+		}
+		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": status, "reason": reason})
 		os.Exit(1)
+	}
+	if checkOnly {
+		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "test_install_parent_ready"})
 	}
 }

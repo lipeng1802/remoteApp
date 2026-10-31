@@ -2,10 +2,13 @@ package testretirement
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"remoteapp.local/selfhost-poc/trustinstall"
+	"runtime"
 	"testing"
 )
 
@@ -39,7 +42,11 @@ func TestNativeLeasePreventsRetirement(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	helper := filepath.Join(dir, "trust-journal")
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	helper := filepath.Join(dir, "trust-journal"+suffix)
 	factory, e := r.NativeFactory(helper)
 	if e != nil {
 		t.Fatal(e)
@@ -50,7 +57,13 @@ func TestNativeLeasePreventsRetirement(t *testing.T) {
 	}
 	defer lease.Close()
 	root := os.Getenv("REMOTEAPP_IDLE_RETIRE_ROOT")
-	if Idle(r, root, helper, filepath.Join(dir, "identity-vault"), "") == nil {
+	vault := filepath.Join(dir, "identity-vault"+suffix)
+	vaultRaw, e := os.ReadFile(vault)
+	if e != nil {
+		t.Fatal(e)
+	}
+	digest := sha256.Sum256(vaultRaw)
+	if Idle(r, root, helper, vault, hex.EncodeToString(digest[:])) == nil {
 		t.Fatal("retirement bypassed held trust lease")
 	}
 	if _, e = os.Stat(root); e != nil {

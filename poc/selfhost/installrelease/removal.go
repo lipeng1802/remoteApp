@@ -363,7 +363,7 @@ func RemoveProgramBatchTest(ctx context.Context, root string, p RemovalPlan, pub
 }
 
 func syncRemovalDirectory(path string) error {
-	f, err := os.Open(path)
+	f, err := openDirectoryForSync(path)
 	if err != nil {
 		return ErrRelease
 	}

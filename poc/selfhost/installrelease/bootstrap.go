@@ -212,12 +212,12 @@ func ImportBootstrapStaged(source, installRoot, stagingName string, root []byte,
 			return VerifiedBootstrap{}, ErrRelease
 		}
 	}
-	directory, err := os.Open(destination)
+	directory, err := openDirectoryForSync(destination)
 	if err != nil {
 		return VerifiedBootstrap{}, ErrRelease
 	}
 	syncErr, closeErr := directory.Sync(), directory.Close()
-	parent, err := os.Open(sets)
+	parent, err := openDirectoryForSync(sets)
 	if err != nil {
 		return VerifiedBootstrap{}, ErrRelease
 	}
@@ -470,7 +470,7 @@ func ActivateBootstrap(installRoot, stagingNonce string, candidate VerifiedBoots
 	if replaceAtomic(temporary, currentPath) != nil {
 		return ErrRelease
 	}
-	directory, err := os.Open(filepath.Dir(currentPath))
+	directory, err := openDirectoryForSync(filepath.Dir(currentPath))
 	if err != nil {
 		return ErrRelease
 	}

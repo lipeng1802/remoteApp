@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -12,6 +13,66 @@ import (
 	"testing"
 	"time"
 )
+
+func TestBuiltOfflineInstallationBundle(t *testing.T) {
+	dir := os.Getenv("REMOTEAPP_OFFLINE_BUILD_AUDIT")
+	if dir == "" {
+		t.Skip("explicit offline TEST build required")
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "fixture.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meta struct {
+		Release  string `json:"release"`
+		Platform string `json:"platform"`
+		Product  string `json:"product_sha256"`
+	}
+	if json.Unmarshal(raw, &meta) != nil {
+		t.Fatal("invalid metadata")
+	}
+	r, err := trustinstall.DecodeCompiled(meta.Release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := r.Specification()
+	if !s.Test || s.Service != "product-exit-test" || s.Bundled.Claims.Endpoint != "https://product-exit.example:8444" {
+		t.Fatal("not offline TEST trust")
+	}
+	public, err := hex.DecodeString(s.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = installrelease.VerifyDirectory(filepath.Join(dir, "payload"), public, s.Channel, meta.Platform, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = installrelease.VerifyBootstrapDirectory(filepath.Join(dir, "bootstrap-payload"), public, s.Channel, meta.Platform, 1); err != nil {
+		t.Fatal(err)
+	}
+	suffix := ""
+	if meta.Platform == "windows" {
+		suffix = ".exe"
+	}
+	for _, name := range []string{"supervisor", "retire-node-test", "supervised-control-relay"} {
+		if _, err = os.Stat(filepath.Join(dir, name+suffix)); !os.IsNotExist(err) {
+			t.Fatal("offline fixture contains online orchestration")
+		}
+	}
+	for _, name := range []string{"test-setup", "retire-idle-test", "payload/trust-install", "payload/autonomous-enrollment-install", "bootstrap-payload/installed-release-launcher"} {
+		b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)+suffix))
+		if err != nil || len(b) < 4096 || (meta.Platform == "windows" && string(b[:2]) != "MZ") {
+			t.Fatal("missing actual native tool", name)
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "payload", "installed-autonomous-product"+suffix))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.Sum256(b)
+	if hex.EncodeToString(h[:]) != meta.Product {
+		t.Fatal("product pin mismatch")
+	}
+}
 
 // Optional offline artifact audit. No executable is started or OS state opened.
 func TestBuiltLiveBundle(t *testing.T) {

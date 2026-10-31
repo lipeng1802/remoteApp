@@ -1,5 +1,3 @@
-//go:build !windows
-
 package installrelease
 
 import (
@@ -7,6 +5,7 @@ import (
 	"crypto/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -43,27 +42,27 @@ func TestBootstrapSetAtomicActivationAndOldSetFollowsCurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	channel := "bootstrap-test"
-	source1, original1 := bootstrapFixture(t, private, channel, "darwin", 1, 1)
-	source2, original2 := bootstrapFixture(t, private, channel, "darwin", 2, 2)
+	source1, original1 := bootstrapFixture(t, private, channel, runtime.GOOS, 1, 1)
+	source2, original2 := bootstrapFixture(t, private, channel, runtime.GOOS, 2, 2)
 	staging1 := ".staging-11111111111111111111111111111111"
 	staging2 := ".staging-22222222222222222222222222222222"
-	first, state, err := ReconcileBootstrapCandidate(source1, root, staging1, original1.ManifestDigest, 1, public, channel, "darwin", 1, true)
+	first, state, err := ReconcileBootstrapCandidate(source1, root, staging1, original1.ManifestDigest, 1, public, channel, runtime.GOOS, 1, true)
 	if err != nil || state != CandidateStaged {
 		t.Fatal("first bootstrap import", state, err)
 	}
-	first, err = PromoteBootstrapStaged(first.Directory, root, public, channel, "darwin", 1, true)
+	first, err = PromoteBootstrapStaged(first.Directory, root, public, channel, runtime.GOOS, 1, true)
 	if err != nil || ActivateBootstrap(root, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", first, "install", public, true) != nil {
 		t.Fatal("first bootstrap activation", err)
 	}
-	second, state, err := ReconcileBootstrapCandidate(source2, root, staging2, original2.ManifestDigest, 2, public, channel, "darwin", 2, true)
+	second, state, err := ReconcileBootstrapCandidate(source2, root, staging2, original2.ManifestDigest, 2, public, channel, runtime.GOOS, 2, true)
 	if err != nil || state != CandidateStaged {
 		t.Fatal("second bootstrap import", state, err)
 	}
-	second, err = PromoteBootstrapStaged(second.Directory, root, public, channel, "darwin", 2, true)
+	second, err = PromoteBootstrapStaged(second.Directory, root, public, channel, runtime.GOOS, 2, true)
 	if err != nil || ActivateBootstrap(root, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", second, "upgrade", public, true) != nil {
 		t.Fatal("second bootstrap activation", err)
 	}
-	active, err := OpenBootstrap(root, public, channel, "darwin", 1, true)
+	active, err := OpenBootstrap(root, public, channel, runtime.GOOS, 1, true)
 	if err != nil || active.ManifestDigest != second.ManifestDigest || active.Manifest.Epoch != 2 {
 		t.Fatal("old floor did not follow current bootstrap", err)
 	}
@@ -73,7 +72,7 @@ func TestBootstrapSetAtomicActivationAndOldSetFollowsCurrent(t *testing.T) {
 	if ActivateBootstrap(root, "cccccccccccccccccccccccccccccccc", first, "upgrade", public, true) == nil {
 		t.Fatal("bootstrap rollback accepted")
 	}
-	if CleanupBootstrapTestState(root, []VerifiedBootstrap{second, first}, public, channel, "darwin") != nil {
+	if CleanupBootstrapTestState(root, []VerifiedBootstrap{second, first}, public, channel, runtime.GOOS) != nil {
 		t.Fatal("bootstrap cleanup")
 	}
 	receipt, err := layoutReceipt(root, true)

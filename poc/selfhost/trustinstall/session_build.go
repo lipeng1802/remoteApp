@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -22,7 +23,8 @@ func validInstallRoot(target, root string) bool {
 		return false
 	}
 	if target == "darwin" {
-		return filepath.IsAbs(root) && filepath.Clean(root) == root && filepath.Dir(root) != root
+		// The target root is POSIX even when this builder runs on Windows.
+		return path.IsAbs(root) && path.Clean(root) == root && path.Dir(root) != root
 	}
 	if target != "windows" || root[0] < 'A' || root[0] > 'Z' || root[1] != ':' || root[2] != '\\' || strings.Contains(root, "/") || strings.HasSuffix(root, "\\") {
 		return false
