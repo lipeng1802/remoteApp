@@ -99,6 +99,9 @@ func run() error {
 		return os.ErrInvalid
 	}
 	if offlineInstall {
+		if e := checkOfflineOutputPath(dest, installRoot); e != nil {
+			return e
+		}
 		if e := checkOfflineBuildBudget(dest, true); e != nil {
 			return e
 		}
@@ -317,12 +320,12 @@ func run() error {
 	if e = checkBudget(); e != nil {
 		return e
 	}
-	// Reserve metadata bytes before publishing the completed fixture marker.
+	// Reserve metadata bytes and its entry in both enclosing trees.
 	if offlineInstall {
-		if _, e = checkTreeBudget(dest, offlineBundleBudget-int64(len(raw)), maximumBudgetEntries); e != nil {
+		if e = checkTreeBudgetForNewFile(dest, offlineBundleBudget, maximumBudgetEntries, int64(len(raw))); e != nil {
 			return e
 		}
-		if _, e = checkTreeBudget(filepath.Dir(dest), offlineWorkBudget-int64(len(raw)), maximumBudgetEntries); e != nil {
+		if e = checkTreeBudgetForNewFile(filepath.Dir(dest), offlineWorkBudget, maximumBudgetEntries, int64(len(raw))); e != nil {
 			return e
 		}
 	}

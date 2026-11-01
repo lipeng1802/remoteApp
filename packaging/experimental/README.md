@@ -36,6 +36,10 @@ The native `--offline-install-root` builder performs this check automatically be
 
 ### Offline build resource checks
 
+Offline output must be separate from the installation root: equal or lexically nested paths are rejected before bundle creation. On Windows, components ending in a dot or space are rejected. Existing parent directory identities are also compared so two spellings (such as an extended Windows path) cannot create the same fresh root. These observations do not lock the filesystem against concurrent changes. The check-only command above checks the installation candidate alone; it cannot validate a bundle path it was not given. Layout/input rejection uses `test_build_input_rejected` in the offline builder.
+
 The offline builder now reserves 512 MiB for one bundle inside a dedicated work directory (the bundle's immediate parent). The work directory has a 2 GiB logical-size budget, so existing content must be at most 1.5 GiB before a new build. It rechecks work-directory and bundle sizes between compilation stages and before publishing `fixture.json`. Scanning rejects links, special/unreadable entries and more than 10,000 entries. Input executables are bounded to 100 MiB each; public service profiles to 64 KiB. Invalid inputs are rejected before creating the bundle.
 
 These are fail-closed observations, **not OS quotas**: a running compiler, its temporary files, external concurrent writes and shared Go caches are not capped by them. No automatic deletion occurs; failed partial builds remain for diagnosis. The existing 4 GiB shared-cache soft budget still needs separate measurement. Use a dedicated work directory rather than the parent of the whole Go cache. The offline CLI reports only fixed resource reasons; live-profile management retains its existing failure-receipt vocabulary. No full new package was built solely to test these checks.
+
+Before writing the completion marker, both enclosing trees reserve its bytes and one directory entry. A successful pre-write scan is not an atomic completion or durability receipt; orchestration must still require the builder's successful exit and validate the signed inventories.

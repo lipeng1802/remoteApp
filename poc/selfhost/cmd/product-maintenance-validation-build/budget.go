@@ -130,6 +130,16 @@ func readBudgetEntries(reader interface {
 	return reader.ReadDir(n)
 }
 
+// Reserve both bytes and an entry for a new file before publishing it.
+// Like the scan itself, this does not reserve space against concurrent writers.
+func checkTreeBudgetForNewFile(root string, limit int64, maxEntries int, size int64) error {
+	if size < 0 || size > limit || maxEntries < 2 {
+		return errBuildBudget
+	}
+	_, err := checkTreeBudget(root, limit-size, maxEntries-1)
+	return err
+}
+
 func checkOfflineBuildBudget(dest string, before bool) error {
 	limit := offlineWorkBudget
 	if before {

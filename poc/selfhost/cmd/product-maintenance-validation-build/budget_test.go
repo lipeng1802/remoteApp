@@ -12,6 +12,54 @@ import (
 
 type budgetReadProbe struct{ requested int }
 
+func TestCompletionMarkerReservesEntryInBothTrees(t *testing.T) {
+	parent := t.TempDir()
+	bundle := filepath.Join(parent, "bundle")
+	if err := os.Mkdir(bundle, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "payload"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		root    string
+		entries int
+	}{{bundle, 2}, {parent, 3}} {
+		if err := checkTreeBudgetForNewFile(c.root, 3, c.entries, 2); err != errBuildBudget {
+			t.Fatal("completion marker exceeded entry budget", err)
+		}
+		if err := checkTreeBudgetForNewFile(c.root, 3, c.entries+1, 2); err != nil {
+			t.Fatal("exact reserved budget rejected", err)
+		}
+		if err := checkTreeBudgetForNewFile(c.root, 2, c.entries+1, 2); err != errBuildBudget {
+			t.Fatal("completion marker exceeded byte budget", err)
+		}
+	}
+	for _, size := range []int64{-1, 4} {
+		if err := checkTreeBudgetForNewFile(bundle, 3, 3, size); err != errBuildBudget {
+			t.Fatal("invalid reservation accepted", err)
+		}
+	}
+	if err := checkTreeBudgetForNewFile(bundle, 3, 0, 0); err != errBuildBudget {
+		t.Fatal("invalid entry budget accepted", err)
+	}
+	marker := filepath.Join(bundle, "fixture.json")
+	if _, err := os.Lstat(marker); !os.IsNotExist(err) {
+		t.Fatal("read-only check created marker", err)
+	}
+	if err := write(marker, []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		root    string
+		entries int
+	}{{bundle, 3}, {parent, 4}} {
+		if n, err := checkTreeBudget(c.root, 3, c.entries); err != nil || n != 3 {
+			t.Fatal("published marker does not fit reserved budget", n, err)
+		}
+	}
+}
+
 func (p *budgetReadProbe) ReadDir(n int) ([]os.DirEntry, error) { p.requested = n; return nil, io.EOF }
 
 func TestBudgetDirectoryReadIsBoundedBeforeEnumeration(t *testing.T) {
