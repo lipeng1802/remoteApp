@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r111：终止能力与网络撤销证明分离，组件实现及回归
+
+先读r110/Git，无上一重型任务，不轮询/重试当前Windows拒绝。本轮源码审查确认：既有Release是显式父进程退出收尾，Child.Stop本身不要求在线grant，但旧Windows包装器进入faultState后只允许既有一次重试；当前运行实例不能通过替换磁盘脚本获得新控制通路。没有调用quiesce把故障伪装成正常zero，也没有改变原ConfirmRevoked有效期门禁。
+
+新增仅可信父进程调用的Controller.CancelLocalFault组件：立即broken封闭，停止且只等待同一child；仅JoinedFault专用嵌套清理回执+实际exit1/EOF/reader join成立才关闭独立signer，并实际CloseJoined。签名join失败锁死，未知/超时保留所有权；成功标记localCancelJoined/released，不标记faultJoined，不查询/证明远端撤销，不触发maintenance/文件删除。原ReleaseFault在localCancelRequested后拒绝，防止本地终止回执转成在线撤销证据。未接入业务Forward/网络/CLI，不能由peer或过期包启动；这是后续显式本地取消协议的内部组件，未宣称已经修复旧运行现场。
+
+测试：真实子进程fixture证明远端撤销确认未知仍可本地fault join、独立signer仅关一次、无远端revoke/不生成faultJoined；超时保留同一child与signer、续接真实join；normal/generic/extra/zero错误回执不释放signer。productmaintenance完整Go race PASS 40.433秒；Windows包vet PASS，diff检查PASS。Go全使用nice10/GOMAXPROCS2/GOFLAGS-p2；无Python改动不重复管理测试。仅fixture组件，不是原生/双机/GUI验收。
+
+下一组接线必须设计独立local_cancel_closed回执（明确remote_revocation_verified=false、不等于zero或registered退休）及同一调用的终态/实际parent退出证明；端到端fixture先证明协议与失联/迟到语义。旧1c9a92f8aba3 Windows实例仍无新协议，继续保留，不改二进制/锁/Store、不做第三次fault重试。r84/r87保持，自动续办ACTIVE；当前没有需用户登录/密钥/开机的外部阻塞。代码/README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r110：一次性恢复仍拒绝；新增固定故障收尾分类
 
 先读r109/Git，承接session31433已exit1。一次只读核对Windows日志白名单：REJECTION_COUNT=2、TASK_Running、JOIN_RECEIPT_ABSENT，证明原请求与唯一ExplicitRetry均被拒绝。不能第三次重试，不能删除marker/重启/覆盖正在运行根。fault-state仍fault_stop_unknown、仅Mac joined；Windows租约/根/任务/隧道保留，独立撤销已确认。没有新网络会话/编译包或未知资源清理。

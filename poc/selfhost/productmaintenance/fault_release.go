@@ -43,7 +43,7 @@ func (c *Controller) ReleaseFault(ctx context.Context) error {
 	if c.faultJoined {
 		return nil
 	}
-	if c.child == nil || c.signer == nil || c.revocation == nil || !c.provisioned || c.requested || c.prepared || c.released || c.faultReleaseFailed {
+	if c.localCancelRequested || c.child == nil || c.signer == nil || c.revocation == nil || !c.provisioned || c.requested || c.prepared || c.released || c.faultReleaseFailed {
 		return errors.Join(ErrProduct, errFaultState)
 	}
 	confirm, ok := c.revocation.(interface{ ConfirmRevoked(context.Context) error })

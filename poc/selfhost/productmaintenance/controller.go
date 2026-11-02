@@ -49,6 +49,7 @@ type Controller struct {
 	provisioned                                   bool
 	quiesced                                      bool
 	faultJoined, faultReleaseFailed               bool
+	localCancelRequested, localCancelJoined       bool
 	expected                                      trustprofile.MaintenanceState
 	revocation                                    boundRevocation
 }
