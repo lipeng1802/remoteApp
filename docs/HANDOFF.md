@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r125：有空闲休眠断言仍跨睡眠窗口过期，暂停等Mac正常唤醒
+
+先读r124/Git，承接session91529最终exit1，无重型构建残留。9cdcf00d3b97最终built但start原fresh>=600秒门禁再次拒绝，未上传/建隧道/启动任何native owner。Darwin profile22:55:22+08签发，fixture23:26:53+08完成，间隔1891秒，超过原1200秒；Windows本轮完成仅用67秒。未延长/重签已有包。确认installed不存在、无Windows bootstrap/tunnels后仅rmdir本轮已知空holder/父目录，expired-build-audit.json记录，保留过期字节审计。
+
+期间只读进程观察Go compiler/linker在推进，caffeinate进程有PreventUserIdleSystemSleep断言。为核对外部挂起，读取pmset历史，只输出最近6条进入Sleep的时间及白名单原因（均未匹配细分，记other，不输出原日志）。包含21:03:39、21:21:20、21:37:57、22:02:14、22:32:10及**22:56:19**；最后一次发生在本轮Darwin签发之后，完成之前，证明主机在短包窗口内进入Sleep。不能断言由合盖/手动/系统哪一具体原因导致，也不能证明全部耗时只有睡眠。pmset只读进程自然exit0；没有终止任何native进程。caffeinate -i只针对空闲系统睡眠，不保证手动/合盖/DarkWake场景；不擅自改全局电源/禁锁屏。
+
+连续两个轮次因真实wall短签名窗口失效，继续自动重建没有新验收价值。按用户既有“确需人工外部状态则保存并暂停”授权，将remoteapp自动续办设PAUSED，保留原配置，不重复轮询/新建自动化。用户最小操作：让Mac正常唤醒、保持开盖并接电，确认后回复继续；可允许显示器息屏/锁屏，无需Windows重配SSH或重装。恢复后只fresh新工单，先查Git/HANDOFF及无重型进程，采live策略快照与实际TLS PONG，再按原normal/fault收尾。不得复用da09/9cd过期包、复活已退休root或回写旧Store。
+
+当前无本轮native资源需退休；旧1c9a92Windows与r84/r87未知现场继续保留，PONG/normal-zero/整体切片4/GUI/可信发行未完成。本组无源改动，不重复172项或Go构建。暂停记录本地提交不推送。
+
 ## 2026-11-02 r124：短包构建完成时过窗，安全拒绝；进程范围防空闲休眠
 
 先读r123/Git，session8182已exit1，无Go构建残留。da09ba6c0e2c最终built，但start在原expiry>=600秒门禁处拒绝，尚未改startup状态/打包上传/建隧道/启动任何原生owner。精确公开时间差：两平台TEST profile原lifetime均1200秒；Darwin fixture完成在issued后1830秒，Windows完成在其issued后1147秒。本轮不能网络验收，也不能复用/补签该包。没有足够证据断言唯一原因是睡眠、时钟变化或CPU；此前进程观测持续推进，3分钟单调构建ctx与长wall差异提示需要避免空闲挂起，但不当成已证实根因。
