@@ -77,6 +77,17 @@ func run(dir string) int {
 		switch r.Op {
 		case "open":
 			emit(map[string]any{"status": "ready", "control_pipe": name, "vault_scope": strings.Repeat("a", 32), "public_key": strings.Repeat("b", 64)})
+		case "stop_local_fault":
+			emit(map[string]any{"status": "local_cancel_ready", "joined": true, "fault": true, "remote_revocation_verified": false})
+			rest, e := io.ReadAll(os.Stdin)
+			if e != nil || len(rest) != 0 {
+				return 3
+			}
+			cancel()
+			listener.Close()
+			<-done
+			emit(map[string]any{"status": "local_cancel_closed", "joined": true, "fault": true, "remote_revocation_verified": false})
+			return 1
 		case "stop_fault":
 			if _, e := os.Stat(filepath.Join(dir, "fixture-authorize.request")); e != nil {
 				emit(map[string]string{"status": "fault_stop_rejected"})

@@ -374,3 +374,5 @@ TEST 故障收尾会输出固定 `FAULT_RELEASE_REASON` 分类，区分撤销确
 Mac/Unix TEST 持久 holder 已支持独立本地取消，并保存明确 `remote_revocation_verified=false` 的专用回执；已通过无原生凭据的真实子进程/socket fixture，Windows 父包装器仍待接线。
 
 Windows TEST 本地取消传输已在真实 PowerShell/Go fixture 子进程上通过10项检查，原fault传输9项回归通过；完整持久父包装器及原生产品仍待验收，不用于恢复旧运行实例。
+
+Windows 完整 TEST 持久父包装器已用内存 fixture 实测正常、远端fault、明确重试、直接本地取消及拒绝后本地取消5条路径；本地取消回执与远端撤销证据保持分离，原生/PONG验收仍待完成。

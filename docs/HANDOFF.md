@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r115：Windows完整持久父包装器本地取消实际通过
+
+先读r114/Git，无上一重型构建残留。本组补cmd/retained-holder-fixture的stop_local_fault双帧/EOF/actual exit1，依然仅内存身份/同用户pipe fixture，不创建原生凭据或TS节点。packaging test-retained-fault-holder扩为5种模式：normal、fault、rejected-retry、local、rejected-local。local从新鲜READY单次marker取消；rejected-local先证实fault_stop_rejected且保持所有权，再通过新本地marker切换，未创建远端授权fixture marker或重新批准。
+
+实际限额编译Windows fixture，上传新独立目录C:\Users\jarvis\remoteapp-r115-retained-memory-476af0c74b81，经SSH运行真实完整validate-supervised-install.ps1父循环，5项全部PASS，无SKIP。两种local路径均证实专用owner-local-cancel-joined.json、remote_revocation_verified实际bool false、owner/fault实际bool true、精确child PID、父进程actual exit1、无EXITCODE0、bootstrap删除、未生成owner-fault-joined；发送stop_local_fault恰好一次，rejected-local原stop_fault恰好一次。既有normal exit0、fault及明确重试路径均保持。audit/result保存在artifacts/connection-poc/remoteapp-r115-retained-memory-476af0c74b81。
+
+没有替换现存旧1c9a92运行脚本/程序、没第三次重试、没访问OS凭据/未知锁/Store，未连接预发布服务器或改Nginx。所有fixture parent/children由原协议实际等待退出，无kill；新目录/fixture副本保留审计，不宣称已回收磁盘。Go编译nice10/GOMAXPROCS2/GOFLAGS-p2，CGO0；无业务Go/Python源变化，不重复已通过套件；diff检查PASS。此结果是完整包装器+真实进程验证，仍不是原生签名/Headscale/PONG验收。
+
+下一组补Mac monitor/双机管理层独立local-cancel状态与公开回执识别，避免其exit1被误当remote fault或registered退休；只有本地join不允许清理注册资源。随后将Secret握手的具体拒绝阶段固定诊断接入新源码（不输出材料），再考虑新鲜原生工单。旧1c9a92实例缺少新协议仍单列未闭环，不能以本轮fixture成功替代。r84/r87保持。自动续办ACTIVE，无需用户介入，README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r114：Windows取消传输实测19项通过，持久父包装器接线
 
 先读r113/Git，确认无重型构建残留。Windows fault-stop模块增加可信LocalCancel开关，State固定持有模式；本地模式发送stop_local_fault，仅接受Go canonical精确local_cancel_ready/closed双帧且remote_revocation_verified=false，继续同一ReadLineAsync、EOF、actual exit1。拒绝extra/重复/整数/remote=true/正常exit0，不因超时关stdin或kill。Publish仅写owner_local_cancel_closed独立属性，原owner_fault_closed不添加假remote字段。
