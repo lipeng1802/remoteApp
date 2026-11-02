@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r113：Mac持久holder接线本地取消与独立落盘回执
+
+先读r112/Git，无前组构建残留，不访问/修改旧Windows现场。本轮Owner增加精确owner_stop_local_fault，走JoinedPipe独立双帧/实际exit1/EOF/diagnostics join之后才设置local_cancel，不设置fault；普通stop和owner_stop_fault不能混用，pending本地取消后业务请求拒绝。原LocalSupervisor业务reply未知/poisoned仍保留stdin，不把socket断开当取消；require_native元数据为新实例声明local_cancel_protocol=1。
+
+serve仅在确认真实本地取消join后写owner-local-cancel-joined.json（0600、独占临时文件、fsync/无覆盖link/目录sync），包含精确parent/child PID、remote_revocation_verified=false；不会写owner-fault-joined.json或零退出回执。落盘完成后只删除自身已核对bootstrap/socket，holder以故障exit1路径结束。旧本地取消回执也纳入启动拒绝，不能覆盖或收养旧现场。原fault协议回归保持。
+
+真实Unix socket/持久线程+独立Python子进程fixture端到端通过：拒绝extra请求后进程仍驻留；精确请求触发两阶段并实际exit1、stderr join、元数据清理及独立落盘；另验证不可转为normal/remote-fault、旧receipt预先拒绝且不启动子进程。public-server全163项PASS/ResourceWarning为error，diff检查PASS；无Go源变化不重复Go回归。此为内存身份fixture，require_native=false，不是Mac Keychain、Headscale或真实双机验收。
+
+下一组Windows持久父包装器同等接线：packaging/experimental/supervised-fault-stop.ps1、validate-supervised-install.ps1需独立请求/同一ReadLineAsync/remote=false严格回执及actual exit1；先在隔离fixture上验证，不替换现存Windows1c9a92根中的运行脚本或exe。Mac管理monitor/fault_activity后续还需独立识别本地取消，不能误送registered退休。r84/r87及当前Windows未join保持，自动续办ACTIVE，代码/README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r112：独立本地取消两阶段协议及迟到回执门禁
 
 先读r111/Git，无重型构建残留。仅新TEST supervisor的可信stdin接受精确stop_local_fault：调用CancelLocalFault真实组件后，先输出local_cancel_ready，待控制监听/继承reader/父清理defer实际join后main输出local_cancel_closed并exit1。两个回执都严格含joined=true/fault=true/remote_revocation_verified=false，独立ErrLocalCancelJoined，不是fault_closed、零退出、在线退休或文件删除许可。业务named-pipe控制仍拒绝stop_local_fault及携带selector版本；不暴露新网络权限，不改变任何有效期/确认门禁。

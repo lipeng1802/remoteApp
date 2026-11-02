@@ -370,3 +370,5 @@ TEST 故障收尾会输出固定 `FAULT_RELEASE_REASON` 分类，区分撤销确
 可信父进程的本地故障取消组件与在线撤销证明分离：必须实际 join 产品及 signer，且不产生远端撤销或正常零退出证明。目前尚未接入管理协议，不能用于旧运行实例恢复。
 
 新 TEST supervisor 的可信 stdin 支持独立本地故障取消双帧协议，Python 管理器校验实际 exit1/EOF；回执明确未验证远端撤销。Windows/Mac 持久包装器尚未接线，旧实例不适用。
+
+Mac/Unix TEST 持久 holder 已支持独立本地取消，并保存明确 `remote_revocation_verified=false` 的专用回执；已通过无原生凭据的真实子进程/socket fixture，Windows 父包装器仍待接线。

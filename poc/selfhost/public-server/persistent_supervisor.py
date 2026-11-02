@@ -47,12 +47,13 @@ class Owner:
         self.endpoint = endpoint if endpoint is not None else LocalSupervisor(child)
         self.joined = False
         self.fault = False
+        self.local_cancel = False
 
     def call(self, request):
         if request == {"Op": "owner_status"}:
             return {"status": "owner_status", "joined": self.joined}
         if request == {"Op": "owner_stop"}:
-            if getattr(self.child,'fault_stop_sent',False) or self.fault:
+            if getattr(self.child,'fault_stop_sent',False) or getattr(self.child,'local_cancel_sent',False) or self.fault or self.local_cancel:
                 raise RuntimeError('holder_fault_stop_not_normal_close')
             if not self.joined:
                 # An outstanding/malformed business frame cannot become a stop
@@ -66,7 +67,17 @@ class Owner:
                 self.child.proc.stdout.close()
                 self.joined = True
             return {"status": "owner_closed", "joined": True, "zero_exit": True}
+        if request == {"Op":"owner_stop_local_fault"}:
+            if self.joined and not self.local_cancel:raise RuntimeError('holder_other_close_not_local_cancel')
+            if not self.joined:
+                if isinstance(self.endpoint,LocalSupervisor) and (self.endpoint.poisoned or self.endpoint.pending):
+                    raise RuntimeError('holder_pipe_sealed_preserve_owner')
+                self.child.stop_local_fault()
+                self.child.proc.stdout.close()
+                self.joined=True;self.local_cancel=True
+            return {'status':'owner_local_cancel_closed','joined':True,'fault':True,'exit_code':1,'remote_revocation_verified':False}
         if request == {"Op":"owner_stop_fault"}:
+            if self.local_cancel:raise RuntimeError("holder_local_cancel_not_remote_fault")
             if self.joined and not self.fault:raise RuntimeError('holder_normal_close_not_fault')
             if not self.joined:
                 if isinstance(self.endpoint,LocalSupervisor) and (self.endpoint.poisoned or self.endpoint.pending):
@@ -75,7 +86,7 @@ class Owner:
                 self.child.proc.stdout.close()
                 self.joined=True;self.fault=True
             return {'status':'owner_fault_closed','joined':True,'fault':True,'exit_code':1}
-        if self.joined or not isinstance(request, dict) or request.get("Op") not in {
+        if getattr(self.child,'local_cancel_sent',False) or self.joined or not isinstance(request, dict) or request.get("Op") not in {
                 "device", "network", "provision", "product_stage", "product_count", "revoke_session", "quiesce_session"}:
             raise RuntimeError("holder_request_rejected")
         return self.endpoint(request)
@@ -85,9 +96,10 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
     directory = private_directory(directory)
     address, ready_file = directory/"owner.sock", directory/"owner.json"
     fault_file=directory/'owner-fault-joined.json'
+    local_file=directory/'owner-local-cancel-joined.json'
     # Preflight before starting any process/native ownership. Never replace an
     # old socket/bootstrap or silently adopt another retained owner's directory.
-    if any(p.exists() or p.is_symlink() for p in (address,ready_file,fault_file)):
+    if any(p.exists() or p.is_symlink() for p in (address,ready_file,fault_file,local_file)):
         raise RuntimeError("holder_metadata_exists")
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(address))
@@ -110,7 +122,7 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
         metadata = {"version": 1, "process_id": os.getpid(),
                     "vault_scope": ready["vault_scope"], "public_key": ready["public_key"]}
         if require_native:
-            metadata.update(control_socket=ready["control_socket"], supervisor_process_id=child.proc.pid,fault_protocol=1)
+            metadata.update(control_socket=ready["control_socket"], supervisor_process_id=child.proc.pid,fault_protocol=1,local_cancel_protocol=1)
         published = json.dumps(metadata, separators=(",", ":")).encode()
         pending_file=directory/("owner.json."+str(os.getpid())+".new")
         with pending_file.open("xb") as output:
@@ -134,10 +146,13 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
                 except OSError:
                     # A lost receipt is not an instruction to stop the owner.
                     pass
-        if owner.fault:
+        if owner.fault or owner.local_cancel:
             receipt={'version':1,'status':'owner_fault_closed','joined':True,'fault':True,'exit_code':1,
                      'supervisor_process_id':child.proc.pid,'holder_process_id':os.getpid()}
-            pending_fault=directory/('owner-fault-joined.json.'+str(os.getpid())+'.new')
+            if owner.local_cancel:
+                receipt.update(status='owner_local_cancel_closed',remote_revocation_verified=False)
+                fault_file=local_file
+            pending_fault=directory/(fault_file.name+'.'+str(os.getpid())+'.new')
             with pending_fault.open('xb') as output:
                 os.chmod(pending_fault,0o600)
                 output.write(json.dumps(receipt,separators=(',',':')).encode())
@@ -150,7 +165,7 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
         if ready_file.read_bytes() != published:
             raise RuntimeError("holder_metadata_changed")
         ready_file.unlink()
-        return owner.fault
+        return owner.fault or owner.local_cancel
     finally:
         listener.close()
         # This function is intended to remain resident, not exit on a business
