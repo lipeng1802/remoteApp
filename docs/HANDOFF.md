@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r114：Windows取消传输实测19项通过，持久父包装器接线
+
+先读r113/Git，确认无重型构建残留。Windows fault-stop模块增加可信LocalCancel开关，State固定持有模式；本地模式发送stop_local_fault，仅接受Go canonical精确local_cancel_ready/closed双帧且remote_revocation_verified=false，继续同一ReadLineAsync、EOF、actual exit1。拒绝extra/重复/整数/remote=true/正常exit0，不因超时关stdin或kill。Publish仅写owner_local_cancel_closed独立属性，原owner_fault_closed不添加假remote字段。
+
+validate-supervised-install为新安装包增加stop-owner-local-fault.request/owner-local-cancel-joined.json预先存在拒绝，独立local_cancel_protocol=1。可信空marker可在fresh驻留状态进入本地取消；或原fault-stop已**明确rejected且无pending read**时切换到独立本地协议。unknown/ready_pending/terminal_pending不切换、不丢弃迟到回执；本地拒绝不会消费原fault retry marker。沿原父循环完成actual exit后才能发布专用receipt/移除自身bootstrap，抛显式故障以免外包装写EXITCODE0。旧1c9a92运行脚本及二进制均未改，旧Windows工单仍未join，不能用新接线宣称恢复。
+
+实际Windows测试：限额交叉编译productmaintenance测试exe（仅memory fixture入口，不执行native测试），新独立目录C:\Users\jarvis\remoteapp-r114-memory-holder-36f42b2121e1，通过SSH运行PowerShell父状态机和真实Go子进程。原fault 9项、local 10项全部PASS，无SKIP；覆盖late-ready/late-final/rejected明确授权后单次重试、integer/extra/duplicate/zero/failed及本地remote-true拒绝，检查无普通stop回退、发包次数、真实exit1与公开receipt字段。新父包装器AST解析通过。audit与两份输出保存在artifacts/connection-poc/remoteapp-r114-memory-holder-36f42b2121e1。测试finally仅正常关闭fixture stdin并实际等待退出，不强杀；无OS凭据/Headscale/安装根/业务Nginx操作。新测试目录和exe保留作审计，未清理任何未知或此前被拒的目录。
+
+边界：实际验证的是Windows模块与真实fixture进程；validate-supervised-install完整驻留循环仅AST/源码接线，尚需专门的retained wrapper end-to-end fixture；不是原生产品验收。本轮Go只编译fixture，CGO0/GOOSwindows/nice10/GOMAXPROCS2/GOFLAGS-p2，无Python改动不重复163项。下一组优先完整持久父包装器fixture与Mac monitor独立local状态接线，随后才新鲜原生验证，registered退休仍要求另外的在线撤销证据。旧Windows以及r84/r87现场保持，不轮询重试。自动续办ACTIVE，无人工需求，README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r113：Mac持久holder接线本地取消与独立落盘回执
 
 先读r112/Git，无前组构建残留，不访问/修改旧Windows现场。本轮Owner增加精确owner_stop_local_fault，走JoinedPipe独立双帧/实际exit1/EOF/diagnostics join之后才设置local_cancel，不设置fault；普通stop和owner_stop_fault不能混用，pending本地取消后业务请求拒绝。原LocalSupervisor业务reply未知/poisoned仍保留stdin，不把socket断开当取消；require_native元数据为新实例声明local_cancel_protocol=1。

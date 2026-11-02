@@ -17,6 +17,8 @@ func TestWindowsFaultHolderFixture(t *testing.T) {
 		return
 	}
 	mode, log := strings.TrimPrefix(args[len(args)-2], "r81-holder-"), args[len(args)-1]
+	localCancel := strings.HasPrefix(mode, "local-")
+	mode = strings.TrimPrefix(mode, "local-")
 	emit := func(v any) {
 		if json.NewEncoder(os.Stdout).Encode(v) != nil {
 			os.Exit(8)
@@ -41,17 +43,28 @@ func TestWindowsFaultHolderFixture(t *testing.T) {
 			emit(map[string]string{"status": "fixture_authorized"})
 			continue
 		}
-		if r.Op != "stop_fault" {
+		if (!localCancel && r.Op != "stop_fault") || (localCancel && r.Op != "stop_local_fault") {
 			os.Exit(9)
 		}
 		if !authorized {
-			emit(map[string]string{"status": "fault_stop_rejected"})
+			status := "fault_stop_rejected"
+			if localCancel {
+				status = "local_cancel_rejected"
+			}
+			emit(map[string]string{"status": status})
 			continue
 		}
 		if mode == "late-ready" {
 			time.Sleep(250 * time.Millisecond)
 		}
 		ready := map[string]any{"status": "fault_stop_ready", "joined": true, "fault": true}
+		if localCancel {
+			ready["status"] = "local_cancel_ready"
+			ready["remote_revocation_verified"] = false
+		}
+		if mode == "remote-true" {
+			ready["remote_revocation_verified"] = true
+		}
 		if mode == "integer" {
 			ready["joined"] = 1
 		}
@@ -64,6 +77,10 @@ func TestWindowsFaultHolderFixture(t *testing.T) {
 			time.Sleep(250 * time.Millisecond)
 		}
 		final := map[string]any{"status": "fault_closed", "joined": true, "fault": true}
+		if localCancel {
+			final["status"] = "local_cancel_closed"
+			final["remote_revocation_verified"] = false
+		}
 		if mode == "extra" {
 			final["extra"] = true
 		}

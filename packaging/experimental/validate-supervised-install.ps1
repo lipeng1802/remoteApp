@@ -8,10 +8,12 @@ $stopRequest = Join-Path $PSScriptRoot 'stop-owner.request'
 $faultRequest = Join-Path $PSScriptRoot 'stop-owner-fault.request'
 $faultRetry = Join-Path $PSScriptRoot 'retry-owner-fault.request'
 $faultReceipt = Join-Path $PSScriptRoot 'owner-fault-joined.json'
+$localCancelRequest = Join-Path $PSScriptRoot 'stop-owner-local-fault.request'
+$localCancelReceipt = Join-Path $PSScriptRoot 'owner-local-cancel-joined.json'
 $faultModule = Join-Path $PSScriptRoot 'supervised-fault-stop.ps1'
 $faultAvailable = Test-Path -LiteralPath $faultModule
 if ($faultAvailable) { . $faultModule }
-if ($StayReady -and (@($publicReady,$stopRequest,$faultRequest,$faultRetry,$faultReceipt) | Where-Object {Test-Path -LiteralPath $_}).Count) { throw 'Fresh owner metadata required' }
+if ($StayReady -and (@($publicReady,$stopRequest,$faultRequest,$faultRetry,$faultReceipt,$localCancelRequest,$localCancelReceipt) | Where-Object {Test-Path -LiteralPath $_}).Count) { throw 'Fresh owner metadata required' }
 $faultState=$null
 $faultLastPhase=''
 $faultRetryUsed=$false
@@ -58,7 +60,7 @@ try {
     if ($StayReady) {
         # Public discovery only. Invitations/grants never enter this file.
         $public=@{version=1;process_id=$process.Id;control_pipe=$ready.control_pipe;vault_scope=$ready.vault_scope;public_key=$ready.public_key}
-        if($RetainUntilStop -and $faultAvailable){$public.fault_protocol=1}
+        if($RetainUntilStop -and $faultAvailable){$public.fault_protocol=1;$public.local_cancel_protocol=1}
         $published = ($public | ConvertTo-Json -Compress)
         $pendingReady = $publicReady + '.' + $process.Id + '.new'
         $file = [System.IO.File]::Open($pendingReady, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
@@ -75,18 +77,31 @@ try {
         }
         $deadline = [DateTime]::UtcNow.AddMinutes(10)
         while ($true) {
+            # A completed explicit rejection has no pending read. Only then may
+            # the trusted parent switch to its distinct local cancellation path.
+            if ($null -ne $faultState -and $faultState.Phase -eq 'rejected' -and -not $faultState.LocalCancel -and (Test-EmptyOwnerRequest $localCancelRequest)) {
+                $faultState=New-SupervisedFaultStopState $process -LocalCancel
+                Start-SupervisedFaultStop $faultState
+            }
+            if ($null -eq $faultState -and (Test-Path -LiteralPath $localCancelRequest)) {
+                $faultState=[pscustomobject]@{Phase='unknown'}
+                if($RetainUntilStop -and $faultAvailable -and (Test-EmptyOwnerRequest $localCancelRequest) -and -not(Test-Path -LiteralPath $stopRequest) -and -not(Test-Path -LiteralPath $faultRequest)) {
+                    $faultState=New-SupervisedFaultStopState $process -LocalCancel
+                    Start-SupervisedFaultStop $faultState
+                }
+            }
             if ($null -ne $faultState) {
                 # Poll only the SAME ReadLineAsync. No timeout -> finally stop,
                 # no discarded late reply, no repeated native status mutation.
                 $faultCompleted=$false
                 try {
                     if ($faultState.Phase -in @('ready_pending','terminal_pending','exit_pending')) { $null=Receive-SupervisedFaultStop $faultState }
-                    if ($faultState.Phase -eq 'rejected' -and -not $faultRetryUsed -and (Test-EmptyOwnerRequest $faultRetry)) {
+                    if ($faultState.Phase -eq 'rejected' -and -not $faultState.LocalCancel -and -not $faultRetryUsed -and (Test-EmptyOwnerRequest $faultRetry)) {
                         $faultRetryUsed=$true
                         Start-SupervisedFaultStop $faultState -ExplicitRetry
                     }
                     if ($faultState.Phase -ne $faultLastPhase) { $faultLastPhase=$faultState.Phase;Write-Output ('FAULT_STOP_PHASE '+$faultState.Phase) }
-                    if ($faultState.Phase -eq 'joined') { Publish-SupervisedFaultStop $faultState $faultReceipt;$faultCompleted=$true }
+                    if ($faultState.Phase -eq 'joined') { Publish-SupervisedFaultStop $faultState $(if($faultState.LocalCancel){$localCancelReceipt}else{$faultReceipt});$faultCompleted=$true }
                 } catch { $faultState.Phase='unknown' }
                 # Outside the retaining catch: the outer wrapper/task must
                 # NOT write EXITCODE=0 for a verified expected native fault.
