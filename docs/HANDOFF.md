@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r110：一次性恢复仍拒绝；新增固定故障收尾分类
+
+先读r109/Git，承接session31433已exit1。一次只读核对Windows日志白名单：REJECTION_COUNT=2、TASK_Running、JOIN_RECEIPT_ABSENT，证明原请求与唯一ExplicitRetry均被拒绝。不能第三次重试，不能删除marker/重启/覆盖正在运行根。fault-state仍fault_stop_unknown、仅Mac joined；Windows租约/根/任务/隧道保留，独立撤销已确认。没有新网络会话/编译包或未知资源清理。
+
+新增productmaintenance FaultReleaseReason及内部typed sentinel：lock_unavailable/state_rejected/revocation_unconfirmed/child_join_unconfirmed/signer_join_unconfirmed，未知文本只unavailable。错误仍errors.Is ErrProduct，锁/签名原typed原因保留；signer join失败继续锁死、不释放租约。TEST supervisor stderr增加固定FAULT_RELEASE_REASON，stdout原fault_stop_rejected/ready协议不变，无原文/路径/凭据。此诊断只在未来新源码实例生效，**不热替换当前Windows程序、不声称诊断出当前拒绝分支**。
+
+测试：真实fixture独立撤销未知/签名join失败/封闭后再调用的原因及ErrProduct兼容、字符串伪装拒绝回归；productmaintenance完整Go race通过35.895秒，supervisor入口编译通过（无测试文件），Windows两包vet通过，diff检查通过。所有Go均nice10/GOMAXPROCS2/GOFLAGS-p2。无Python改动，不重复158项。README补说明，代码本地提交不推送。
+
+后续优先离线设计当前持有owner在原grant/profile到期后的安全终止与可验证回执：不新增业务授权、不绕过旧有效期验证、不复用过期包；需要区分只允许取消/关闭本进程的终止能力与网络访问能力，并证明签名/节点/产品全部join且不误当正常zero。现有旧进程没有新通路，不能靠修改磁盘exe假称已修复。先审查可用既有控制操作与持有证明、写回归，再评估是否需要用户介入；尚未发现必须登录/密钥/开机的外部阻塞，自动续办ACTIVE，禁止无新证据轮询当前拒绝。PONG、normal-zero、当前registered退休与整体切片4仍未完成；r84/r87保持。
+
 ## 2026-11-02 r109：Windows并非已证实卡死，故障停止返回明确拒绝
 
 先读r108/Git，无构建或新包。本轮只读固定白名单提取Windows owner-result，观察TASK_Running、FAULT_STOP_PHASE ready_pending及rejected，无join回执。修正推断：不是已经证明stop/join线程阻塞；supervisor的ReleaseFault返回错误，包装器按设计保留进程。源码ReleaseFault可能在前置状态、独立ConfirmRevoked、child.JoinedFault或signer.CloseJoined拒绝，现有日志不足区分。没有JOIN_STAGE不等于证明停在某一分支，不读取/输出原始日志或凭据。

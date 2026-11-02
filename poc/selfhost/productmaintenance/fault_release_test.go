@@ -2,6 +2,8 @@ package productmaintenance
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -90,5 +92,39 @@ func TestFaultTerminalConsumedByTelemetryStillRequiresActualExitJoin(t *testing.
 	}
 	if e := c.ReleaseFault(context.Background()); e != nil || !c.child.JoinedFault() || s.closes.Load() != 1 {
 		t.Fatal("in-flight terminal lost or join missing", e)
+	}
+}
+
+func TestFaultReleaseReasonsAreFixedAndPreserveDenial(t *testing.T) {
+	for _, item := range []struct {
+		cause  error
+		reason string
+	}{
+		{errFaultLock, "lock_unavailable"}, {errFaultState, "state_rejected"},
+		{errFaultRevocation, "revocation_unconfirmed"}, {errFaultChild, "child_join_unconfirmed"},
+		{errFaultSigner, "signer_join_unconfirmed"},
+	} {
+		err := errors.Join(ErrProduct, fmt.Errorf("PRIVATE: %w", item.cause))
+		if FaultReleaseReason(err) != item.reason || !errors.Is(err, ErrProduct) {
+			t.Fatal("fixed reason mismatch")
+		}
+	}
+	if FaultReleaseReason(errors.New("revocation_unconfirmed PRIVATE")) != "unavailable" {
+		t.Fatal("text treated as typed proof")
+	}
+	c, _, _ := controllerFixture(t, "fault")
+	c.prepared = false
+	c.provisioned = true
+	c.revocation = &revokeFixture{unknown: true}
+	if e := c.ReleaseFault(context.Background()); FaultReleaseReason(e) != "revocation_unconfirmed" || !errors.Is(e, ErrProduct) {
+		t.Fatal("revocation failure misclassified")
+	}
+	c.revocation = &revokeFixture{}
+	c.signer = &failedSignerJoin{}
+	if e := c.ReleaseFault(context.Background()); FaultReleaseReason(e) != "signer_join_unconfirmed" || !c.faultReleaseFailed {
+		t.Fatal("signer failure misclassified")
+	}
+	if e := c.ReleaseFault(context.Background()); FaultReleaseReason(e) != "state_rejected" {
+		t.Fatal("failed join rearmed")
 	}
 }

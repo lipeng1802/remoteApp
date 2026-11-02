@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -181,6 +182,7 @@ func run(output func(any) error) (result error) {
 				e := controller.ReleaseFault(life)
 				stop()
 				if e != nil {
+					fmt.Fprintln(os.Stderr, "FAULT_RELEASE_REASON "+productmaintenance.FaultReleaseReason(e))
 					if e = output(map[string]string{"status": "fault_stop_rejected"}); e != nil {
 						return e
 					}
