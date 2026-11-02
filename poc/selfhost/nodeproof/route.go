@@ -13,15 +13,18 @@ import (
 // RouteStatus is diagnostic readiness, NEVER authorization or payload proof.
 // It exposes no peer keys, addresses, endpoints or raw LocalAPI errors.
 type RouteStatus struct {
-	Status       string `json:"status"`
-	QueryOK      bool   `json:"query_ok"`
-	Running      bool   `json:"running"`
-	PeerKnown    bool   `json:"peer_known"`
-	IPMatches    bool   `json:"ip_matches"`
-	InNetworkMap bool   `json:"in_network_map"`
-	AllowedIP    bool   `json:"allowed_ip"`
-	InEngine     bool   `json:"in_engine"`
-	Ready        bool   `json:"ready"`
+	Status         string `json:"status"`
+	QueryOK        bool   `json:"query_ok"`
+	Running        bool   `json:"running"`
+	PeerKnown      bool   `json:"peer_known"`
+	IPMatches      bool   `json:"ip_matches"`
+	InNetworkMap   bool   `json:"in_network_map"`
+	AllowedIP      bool   `json:"allowed_ip"`
+	InEngine       bool   `json:"in_engine"`
+	Ready          bool   `json:"ready"`
+	SelfRelayKnown bool   `json:"self_relay_known"`
+	PeerRelayKnown bool   `json:"peer_relay_known"`
+	HandshakeSeen  bool   `json:"handshake_seen"`
 }
 
 func ClientRouteStatus(ctx context.Context, lc *local.Client, node string, ip netip.Addr) RouteStatus {
@@ -39,11 +42,14 @@ func routeStatus(st *ipnstate.Status, failed bool, node string, ip netip.Addr) R
 	}
 	r.QueryOK = true
 	r.Running = st.BackendState == "Running"
+	r.SelfRelayKnown = st.Self != nil && st.Self.Relay != ""
 	p := st.Peer[public]
 	if p == nil || p.PublicKey != public {
 		return r
 	}
 	r.PeerKnown = true
+	r.PeerRelayKnown = p.Relay != ""
+	r.HandshakeSeen = !p.LastHandshake.IsZero()
 	for _, address := range p.TailscaleIPs {
 		r.IPMatches = r.IPMatches || address == ip
 	}

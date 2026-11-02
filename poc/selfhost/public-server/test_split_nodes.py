@@ -17,7 +17,7 @@ class NodeUploadTests(unittest.TestCase):
 
     def route(self,ready=True):
         return dict(status="route_status",query_ok=True,running=True,peer_known=ready,ip_matches=ready,
-                    in_network_map=ready,allowed_ip=ready,in_engine=False,ready=ready)
+                    in_network_map=ready,allowed_ip=ready,in_engine=False,ready=ready,self_relay_known=False,peer_relay_known=False,handshake_seen=False)
 
     def test_route_exact_schema_and_boolean_consistency(self):
         self.assertTrue(checked_route_status(self.route())["ready"])

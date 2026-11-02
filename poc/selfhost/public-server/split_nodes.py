@@ -10,8 +10,8 @@ from coordination_diagnostics import run_stage
 
 def checked_route_status(value):
     flags={"query_ok","running","peer_known","ip_matches","in_network_map","allowed_ip","in_engine","ready"}
-    if (not isinstance(value,dict) or set(value)!=flags|{"status"}
-            or value["status"]!="route_status" or any(type(value[k]) is not bool for k in flags)
+    if (not isinstance(value,dict) or set(value)!=flags|{"status","self_relay_known","peer_relay_known","handshake_seen"}
+            or value["status"]!="route_status" or any(type(value[k]) is not bool for k in flags|{"self_relay_known","peer_relay_known","handshake_seen"})
             or value["ready"]!=all(value[k] for k in flags-{"in_engine","ready"})):
         raise RuntimeError("invalid_overlay_route_status")
     return value

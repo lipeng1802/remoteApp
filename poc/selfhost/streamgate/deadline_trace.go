@@ -20,5 +20,14 @@ func deadlineRouteStage(r nodeproof.RouteStatus) startuptrace.Stage {
 	if !r.InEngine {
 		return startuptrace.DeadlineRouteEnginePending
 	}
+	if !r.SelfRelayKnown {
+		return startuptrace.DeadlineSelfRelayUnknown
+	}
+	if !r.PeerRelayKnown {
+		return startuptrace.DeadlinePeerRelayUnknown
+	}
+	if !r.HandshakeSeen {
+		return startuptrace.DeadlineHandshakeUnseen
+	}
 	return startuptrace.DeadlineRouteEnginePresent
 }

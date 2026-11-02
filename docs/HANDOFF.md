@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r122：初始map/引擎可见仍拨号超时；检查公网DERP入口并补传输布尔诊断
+
+先读r121/Git，承接session34209已结束，无Go残留。c7fdd5846bd6实际双端READY，exercise失败，controller=deadline_route_engine_present、target=target_listening；明确本轮三秒拨号到期后查询看到原signed peer路由Ready且InEngine=true，初始路由门禁没有使本轮活动成功。随后FAULT_REVOKED/JOINED/RETIRED全通过，最终双端joined/retired true。无持续PONG/normal-zero，不复活已退休root；旧1c9a92/r84/r87保持。
+
+只读基础传输检查：Windows公网8443的/health、/derp/probe均200；Mac首次urllib两项unavailable（未保存具体原因），随后为区分证书/网络的诊断调用两项均成功、系统curl强制直连也均TLS校验成功/200；不能倒推初次失败原因或声称持续稳定。Mac向/derp发送pinned协议Upgrade:DERP，真实TLS+HTTP101成功后立即关闭，没有发送节点身份/凭据，不是已认证DERP转发。服务器remoteapp-poc.service active；最近30分钟journal查询成功，固定关键词计数derp_lines=0、verification_failure_lines=0，没有导出原日志。计数零不等于证明服务无错误/客户端已认证。保存r122-public-transport、derp-upgrade、server-transport公开审计，未改Nginx/443/服务/策略/Store。第一次服务器诊断不兼容旧Python的subprocess.run，改用Popen后成功，无配置变化。
+
+新增RouteStatus三个纯布尔观测self_relay_known/peer_relay_known/handshake_seen，从本机状态是否有Relay/LastHandshake提取，原Ready公式完全不变，不输出region/IP/endpoint/key/时间。Python诊断schema要求新字段为真正bool，Ready仍只按原授权路由条件计算，不把有relay或握手当访问许可。TEST拨号deadline后且Ready/InEngine成立时，细分self relay未知/peer relay未知/未观测握手，沿原750ms一次Status查询，不再额外发连接、不延长3秒或重试。Relay字段只表示状态已知，**不证明实际DERP连接成功**；LastHandshake只表示曾被状态报告，不是应用PONG。
+
+nodeproof/streamgate/startuptrace完整race PASS3.050/19.437/1.658秒；新增RouteStatus字段真实状态fixture提取/不泄露原字符串/不提升Ready回归定向race PASS2.053秒，Windows三包vet与Python167项PASS（ResourceWarning为error），diff检查PASS。Go全nice10/GOMAXPROCS2/GOFLAGS-p2。
+
+已开启唯一串行fresh诊断轮次supervised-activity-r75-0ca99e8ba990，exec53677，日志/tmp/remoteapp-r122-round.log；prepare/start/exercise后沿原明确normal/fault收尾，未知即停。下轮只承接同一session/phase，不能重开；本轮用于实际观察relay/handshake布尔阶段，不因HTTP101或构建通过冒称payload。旧现场不动，自动续办ACTIVE，无用户操作，README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r121：新鲜轮次route-missing并完整退休；原3秒内初始路由可见性门禁
 
 先读r120/Git，承接session88234已结束，无Go残留。959bcd773a17实际首次双端READY，exercise失败，startup-diagnostic为controller=overlay_route_missing、target=target_listening；随后独立FAULT_REVOKED/FAULT_JOINED/FAULT_RETIRED全通过，最终双端joined/retired true。无持续PONG或normal-zero。该root已退休不复活；不能把它与r119拨号deadline混同，也不替代旧1c9a92/r84/r87未知现场。

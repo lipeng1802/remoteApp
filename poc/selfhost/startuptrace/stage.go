@@ -92,6 +92,12 @@ const (
 	DeadlineRouteEnginePresent Stage = "deadline_route_engine_present"
 )
 
+const (
+	DeadlineSelfRelayUnknown Stage = "deadline_ready_self_relay_unknown"
+	DeadlinePeerRelayUnknown Stage = "deadline_ready_peer_relay_unknown"
+	DeadlineHandshakeUnseen  Stage = "deadline_ready_handshake_unseen"
+)
+
 type Report struct {
 	Status string `json:"status"`
 	Stage  string `json:"stage"`
@@ -99,7 +105,7 @@ type Report struct {
 
 func Valid(s string) bool {
 	switch Stage(s) {
-	case ControllerRouteWait, ControllerRouteDenied, DeadlineRouteQueryFailed, DeadlineRoutePeerMissing, DeadlineRouteNotReady, DeadlineRouteEnginePending, DeadlineRouteEnginePresent, SecretTargetConfig, SecretTargetAuthorize, SecretTargetHello, SecretTargetNonce, SecretTargetSign, SecretTargetWelcome, SecretTargetProof, SecretTargetReauthorize, SecretTargetSend, SecretControllerConfig, SecretControllerAuthorize, SecretControllerHello, SecretControllerWelcome, SecretControllerVerify, SecretControllerSign, SecretControllerProof, SecretControllerReauthorize, SecretControllerReceive, SecretControllerCanonical, OverlayRequestDeadline, OverlayRequestCanceled, OverlayRequestEOF, OverlayRequestRefused, OverlayRequestReset, OverlayRequestTimeout, OverlayBadUpgrade, OverlayPermissionDenied, OverlayResolveFailed, OverlayConnectRefused, OverlayConnectTimeout, OverlayConnectFailed, TargetGateDenied, TargetLocalFailed, TargetSelfDenied, TargetListenFailed, TargetListening, TargetAcceptDenied, TargetPeerDenied, ControllerGateDenied, ControllerLocalFailed, ControllerUpgrade, ControllerPeer, ControllerPeerDenied, OverlayRequestFailed, OverlayUpgradeRejected, OverlayRouteMissing, OverlayResponseInvalid, OverlayUpgraded, TargetTLS, TargetListen, TargetSecret, TargetServe, ControllerListen, ControllerDial, ControllerSecret, ControllerTLS, ControllerAccept, ControllerBridge:
+	case DeadlineSelfRelayUnknown, DeadlinePeerRelayUnknown, DeadlineHandshakeUnseen, ControllerRouteWait, ControllerRouteDenied, DeadlineRouteQueryFailed, DeadlineRoutePeerMissing, DeadlineRouteNotReady, DeadlineRouteEnginePending, DeadlineRouteEnginePresent, SecretTargetConfig, SecretTargetAuthorize, SecretTargetHello, SecretTargetNonce, SecretTargetSign, SecretTargetWelcome, SecretTargetProof, SecretTargetReauthorize, SecretTargetSend, SecretControllerConfig, SecretControllerAuthorize, SecretControllerHello, SecretControllerWelcome, SecretControllerVerify, SecretControllerSign, SecretControllerProof, SecretControllerReauthorize, SecretControllerReceive, SecretControllerCanonical, OverlayRequestDeadline, OverlayRequestCanceled, OverlayRequestEOF, OverlayRequestRefused, OverlayRequestReset, OverlayRequestTimeout, OverlayBadUpgrade, OverlayPermissionDenied, OverlayResolveFailed, OverlayConnectRefused, OverlayConnectTimeout, OverlayConnectFailed, TargetGateDenied, TargetLocalFailed, TargetSelfDenied, TargetListenFailed, TargetListening, TargetAcceptDenied, TargetPeerDenied, ControllerGateDenied, ControllerLocalFailed, ControllerUpgrade, ControllerPeer, ControllerPeerDenied, OverlayRequestFailed, OverlayUpgradeRejected, OverlayRouteMissing, OverlayResponseInvalid, OverlayUpgraded, TargetTLS, TargetListen, TargetSecret, TargetServe, ControllerListen, ControllerDial, ControllerSecret, ControllerTLS, ControllerAccept, ControllerBridge:
 		return true
 	}
 	return false

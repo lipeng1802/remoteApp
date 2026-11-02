@@ -1,9 +1,11 @@
 package nodeproof
 
 import (
+	"encoding/json"
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/types/key"
@@ -51,5 +53,29 @@ func TestRouteStatusRequiresExactPeerMapAndHostRoute(t *testing.T) {
 		if bad == "" && r.InEngine {
 			t.Fatal("fixture unexpectedly active")
 		}
+	}
+}
+
+func TestRouteTransportTelemetryContainsOnlyBooleansAndDoesNotGrantReadiness(t *testing.T) {
+	node := "nodekey:" + strings.Repeat("a", 64)
+	var public key.NodePublic
+	public.UnmarshalText([]byte(node))
+	ip := netip.MustParseAddr("100.120.0.2")
+	peer := &ipnstate.PeerStatus{PublicKey: public, TailscaleIPs: []netip.Addr{ip}, Relay: "PRIVATE_PEER", LastHandshake: time.Unix(1, 0)}
+	st := &ipnstate.Status{BackendState: "Running", Self: &ipnstate.PeerStatus{Relay: "PRIVATE_SELF"}, Peer: map[key.NodePublic]*ipnstate.PeerStatus{public: peer}}
+	r := routeStatus(st, false, node, ip)
+	if !r.SelfRelayKnown || !r.PeerRelayKnown || !r.HandshakeSeen || r.Ready {
+		t.Fatal("telemetry changed readiness")
+	}
+	b, e := json.Marshal(r)
+	if e != nil || strings.Contains(string(b), "PRIVATE") || strings.Contains(string(b), node) || strings.Contains(string(b), ip.String()) {
+		t.Fatal("transport material exposed")
+	}
+	peer.Relay = ""
+	peer.LastHandshake = time.Time{}
+	st.Self = nil
+	r = routeStatus(st, false, node, ip)
+	if r.SelfRelayKnown || r.PeerRelayKnown || r.HandshakeSeen {
+		t.Fatal("unknown fields treated as observed")
 	}
 }
