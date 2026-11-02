@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r102：Mac TEST 构建限并发与降优先级
+
+已快进拉取Windows两次提交至cf0d520，承接r94–r101；这些历史段落中的“未提交”是当时状态，当前远端已包含。用户授权开始后续任务，remoteapp自动化仍暂停，没有恢复定时执行。docs/archive保持未跟踪。
+
+针对本机卡顿，在run_supervised_activity的helper/预热go build和外层go run builder统一使用nice 10、GOMAXPROCS=2、GOFLAGS=-p=2；外层环境由嵌套builder/helper构建继承，覆盖其GOENV=off路径。限制只用于TEST构建，不调低原生owner、watch、signer或TLS工作进程优先级；签名TTL、IPC/network与构建截止不变。不是CPU百分比、RSS或磁盘硬配额；尚未增加跨进程互斥、压力感知暂停或任务间冷却，不宣称已全部解决卡顿。现有两平台构建仍串行。
+
+真实小型子进程检查确认两个环境限额与nice>=10，父进程环境/优先级未变；管理模块18项通过；public-server全157项通过（ResourceWarning视为错误），这些是管理层回归，不是双机验收。Windows/服务器各一次只读SSH均成功，没有安装/启动新owner、访问凭据或修改服务器。下一步在资源限额下准备全新双机包；旧6301工单built但短签名已过期，禁止复用。真实持续PONG/正常zero join/registered退休仍未验收，r84/r87旧未知现场保持。不因SSH成功宣称Windows Interactive桌面可用。
+
 ## 2026-11-01 r101：对象别名修复、离线切片收口，自动续办暂停
 
 保留r98–r100未提交改动。继续源码审查发现其它builder有EvalSymlinks策略，但不能直接声称本入口已采用；新增原生入口测试实际证明Windows扩展路径（以双反斜杠、问号、反斜杠开头）与普通路径能指向同一安装根，filepath.Rel视为不同卷，修复前返回service_trust_rejected且rootExists=true。

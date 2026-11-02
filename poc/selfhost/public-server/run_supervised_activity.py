@@ -27,7 +27,15 @@ OPTIONS=["-o","BatchMode=yes","-o","ConnectTimeout=12","-o","IPQoS=none",
          "-o","ServerAliveInterval=5","-o","ServerAliveCountMax=2"]
 
 
+def limited_build_command(args):
+    # Fixed TEST policy inherited by nested builders; never applied to owners.
+    return ['/usr/bin/nice','-n','10','/usr/bin/env',
+            'GOMAXPROCS=2','GOFLAGS=-p=2',*args]
+
+
 def command(args,timeout=90):
+    if 'build' in args:
+        args=limited_build_command(args)
     try:r=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
     except Exception:raise RuntimeError("activity_management_outcome_unknown") from None
     if r.returncode:raise RuntimeError("activity_management_command_failed")
@@ -217,7 +225,7 @@ def prepare():
         args=[str(go),"run","./cmd/product-maintenance-validation-build",str(build_go),str(REPO/"poc/selfhost"),target,str(work/target),*helpers,
               "--verified-live-profile",str(profile),"--test-tunnel","--test-install-root",m["win_root"] if target=="windows" else m["mac_root"]]
         # Go's cwd is fixed without changing this process's working directory.
-        try:r=subprocess.run(args,cwd=REPO/"poc/selfhost",stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240)
+        try:r=subprocess.run(limited_build_command(args),cwd=REPO/"poc/selfhost",stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240)
         except Exception:raise RuntimeError("activity_build_outcome_unknown") from None
         if r.returncode:
             record_build_failure(work,target,r.stdout)

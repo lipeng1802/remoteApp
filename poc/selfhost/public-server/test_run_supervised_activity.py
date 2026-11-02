@@ -216,6 +216,16 @@ class ManagementActivityGates(unittest.TestCase):
                 with self.assertRaises(FileExistsError):runner.record_build_failure(w,'windows',raw)
                 with self.assertRaisesRegex(RuntimeError,'platform_rejected'):runner.record_build_failure(w,'../PRIVATE',raw)
 
+    def test_build_limits_reach_actual_child_without_changing_parent(self):
+        import os
+        parent=(os.environ.get('GOMAXPROCS'),os.environ.get('GOFLAGS'),os.getpriority(os.PRIO_PROCESS,0))
+        probe=[sys.executable,'-c',
+               'import os,json; print(json.dumps([os.environ["GOMAXPROCS"],os.environ["GOFLAGS"],os.getpriority(os.PRIO_PROCESS,0)]))']
+        result=json.loads(subprocess.check_output(runner.limited_build_command(probe)))
+        self.assertEqual(result[:2],['2','-p=2'])
+        self.assertGreaterEqual(result[2],10)
+        self.assertEqual(parent,(os.environ.get('GOMAXPROCS'),os.environ.get('GOFLAGS'),os.getpriority(os.PRIO_PROCESS,0)))
+
     def test_product_prewarm_is_compile_only_offline_before_profile(self):
         with tempfile.TemporaryDirectory() as d:
             w=Path(d)
