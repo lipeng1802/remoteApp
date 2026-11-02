@@ -234,6 +234,14 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 		return nil, session.ErrDenied
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	startuptrace.Emit(ctx, startuptrace.ControllerRouteWait)
+	if !waitInitialRoute(dialCtx, func(check context.Context) nodeproof.RouteStatus {
+		return nodeproof.ClientRouteStatus(check, lc, g.binding.TargetNode, g.cfg.Binding.TargetIP)
+	}, g.active) {
+		startuptrace.Emit(ctx, startuptrace.ControllerRouteDenied)
+		cancel()
+		return nil, session.ErrDenied
+	}
 	startuptrace.Emit(ctx, startuptrace.ControllerUpgrade)
 	conn, err := dialUntilListening(dialCtx, func(attempt context.Context) (net.Conn, error) {
 		return nodeproof.DialOnlyOverlay(attempt, lc, g.binding.TargetIP, 47476)

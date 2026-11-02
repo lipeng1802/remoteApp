@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r121：新鲜轮次route-missing并完整退休；原3秒内初始路由可见性门禁
+
+先读r120/Git，承接session88234已结束，无Go残留。959bcd773a17实际首次双端READY，exercise失败，startup-diagnostic为controller=overlay_route_missing、target=target_listening；随后独立FAULT_REVOKED/FAULT_JOINED/FAULT_RETIRED全通过，最终双端joined/retired true。无持续PONG或normal-zero。该root已退休不复活；不能把它与r119拨号deadline混同，也不替代旧1c9a92/r84/r87未知现场。
+
+核对pinned tailscale.com v1.102.5本地源码：localapi.serveDial在UserDialPlan viaTailscale=false时返回HTTP200/Dial-Self=true；tsnet.UseNetstackForIP查询lb.PeerForIP。当前应用正确拒绝此回退，不能通过系统Tailscale/socket来“修复”。只能据此确定本轮LocalAPI未选择overlay路线，**尚不能断言控制面ACL、peer map或引擎哪一个唯一出错**。
+
+新增控制端初始路由可见性门禁：在原DialOverlay三秒ctx内、第一次LocalAPI拨号之前，通过既有ClientRouteStatus核对原signed target node/IP、Running、精确map/AllowedIP。仅等待初始map Ready，50ms间隔只读；未知query、非Running、已知peer但IP冲突立即拒绝，取消/截止或每次前后ACTIVE失效立即停。不刷新ctx，不重发注册/批准/provision，不等待或重试已失败的Dial-Self/route-withdrawal拨号；InEngine=false仍允许idle peer，不误当ACL拒绝。后续原WhoIs/本机节点/签名/Secret门禁全部保留。两个新固定阶段controller_route_wait/denied用于诊断；这是避免在map尚不可见时立即启动拨号的候选改进，未宣称已修复真实网络。
+
+回归验证原ctx deadline完全相同、初始missing→Ready、查询期间撤销、未知/身份冲突只查一次、取消后零查询、截止封闭；streamgate/startuptrace完整race PASS19.624/1.947秒，Windows两包vet exit0，Python全167项PASS/ResourceWarning为error，diff检查PASS。Go均nice10/GOMAXPROCS2/GOFLAGS-p2。
+
+测试后已启动唯一串行fresh轮次supervised-activity-r75-c7fdd5846bd6，exec session34209，日志/tmp/remoteapp-r121-round.log；记录时仍prepare。driver沿原prepare/start/exercise/明确normal或fault收尾，未知即停，不finally或重放。下轮先承接同一工单/session/phase，不重复开包；本地取消若需要仍不能当remote退休。旧三个未闭环现场保持，自动续办ACTIVE，无人工需求，README/HANDOFF与代码本地提交不推送。
+
 ## 2026-11-02 r120：刷新回归改为观察完成响应；新轮次进行中
 
 先读r119/Git，无重型构建残留。既有managed测试固定Sleep1100ms后同时断言请求数/active，不能分辨是刷新未完成还是watch封闭。本轮仅测试fixture增加成功state响应完成事件（有界buffer32、非阻塞，不影响真实worker）；测试等3个实际成功响应，明确区分worker提前终态、观察超时及响应完成后active已封闭。观察者最多2秒，仅测试等待，不延长生产watch/HTTP/授权有效期，不重复启动或重开gate。
