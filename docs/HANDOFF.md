@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r124：短包构建完成时过窗，安全拒绝；进程范围防空闲休眠
+
+先读r123/Git，session8182已exit1，无Go构建残留。da09ba6c0e2c最终built，但start在原expiry>=600秒门禁处拒绝，尚未改startup状态/打包上传/建隧道/启动任何原生owner。精确公开时间差：两平台TEST profile原lifetime均1200秒；Darwin fixture完成在issued后1830秒，Windows完成在其issued后1147秒。本轮不能网络验收，也不能复用/补签该包。没有足够证据断言唯一原因是睡眠、时钟变化或CPU；此前进程观测持续推进，3分钟单调构建ctx与长wall差异提示需要避免空闲挂起，但不当成已证实根因。
+
+确认Mac installed不存在、无Windows bootstrap/tunnels后，仅rmdir本轮已知空holder/父目录；expired-build-audit.json保留证据，完整过期构建审计保留，不覆盖/改旧profile或native状态。旧1c9a92/r84/r87现场不动。
+
+新增run_awake_validation.py：通过/usr/bin/caffeinate -i启动唯一worker，只有进程存活时抑制**空闲系统休眠**；不改pmset/global配置、不阻止显示器休眠/锁屏，不宣称能防止手动睡眠/合盖。worker仍原prepare/start/exercise及明确normal/fault收尾，未知即停、无finally teardown、无重放；caffeinate随worker结束释放断言，不降低native owner优先级，Go子构建继续原nice10/GOMAXPROCS2/GOFLAGS-p2。原20分钟profile/三秒拨号/所有门禁不延长。
+
+新增进程范围参数/exit传播与start未知不重放不收尾测试；Python全172项PASS/ResourceWarning为error，diff检查PASS。无Go改动，不重复Go测试。已实际启动新轮次supervised-activity-r75-9cdcf00d3b97，exec91529，日志/tmp/remoteapp-r124-round.log；系统断言只读检查确有caffeinate PreventUserIdleSystemSleep条目，未输出其它进程/用户细节。当前prepare进行中，下轮承接该唯一session/phase，不重复启动。只有活动策略快照+真实PONG才能推进验收，不将防睡眠或构建成功当网络通过。自动续办ACTIVE，无需用户介入，README/HANDOFF与代码本地提交不推送。
+
 ## 2026-11-02 r123：握手状态可见仍TCP超时；接入只读live策略计数
 
 先读r122/Git，承接session53677已结束，无Go残留。0ca99e8ba990真实双端READY，exercise失败controller=deadline_route_engine_present、target=target_listening；本轮新分类中该标签意味着失败后查询报告原peer Ready/InEngine、自端/对端Relay字段非空且LastHandshake非零。它只证明状态曾报告握手，不能证明TCP47476或应用载荷成功，也不能把relay字段当当前DERP转发路径。随后独立FAULT_REVOKED/JOINED/RETIRED全通过，root已退休不复活；旧1c9a92/r84/r87保持。没有持续PONG/normal-zero。
