@@ -226,6 +226,30 @@ class ManagementActivityGates(unittest.TestCase):
         self.assertGreaterEqual(result[2],10)
         self.assertEqual(parent,(os.environ.get('GOMAXPROCS'),os.environ.get('GOFLAGS'),os.getpriority(os.PRIO_PROCESS,0)))
 
+    def test_recovered_tls_requires_exact_inventory_without_old_helpers(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);prior=root/'prior';recovery=root/'recovery'
+            for target in ('darwin','windows'):
+                source=prior/target/'payload';source.mkdir(parents=True)
+                name='tls-product'+('.exe' if target=='windows' else '')
+                raw=('TLS '+target).encode()
+                (source/'release-manifest.json').write_text(json.dumps({'manifest':{'files':[{'name':name,'sha256':hashlib.sha256(raw).hexdigest()}]}}))
+                path=recovery/'windows'/name if target=='windows' else source/name
+                path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(raw)
+            paths=runner.verified_tls_sources(prior,recovery)
+            self.assertEqual(set(paths),{'darwin','windows'})
+            path=paths['windows'];raw=path.read_bytes();path.write_bytes(b'changed')
+            with self.assertRaisesRegex(RuntimeError,'tls_source_changed'):runner.verified_tls_sources(prior,recovery)
+            path.unlink()
+            with self.assertRaisesRegex(RuntimeError,'tls_source_changed'):runner.verified_tls_sources(prior,recovery)
+            path.symlink_to(paths['darwin'])
+            with self.assertRaisesRegex(RuntimeError,'tls_source_changed'):runner.verified_tls_sources(prior,recovery)
+            path.unlink();path.write_bytes(raw)
+            manifest=prior/'windows/payload/release-manifest.json';value=json.loads(manifest.read_text())
+            value['manifest']['files']*=2;manifest.write_text(json.dumps(value))
+            with self.assertRaisesRegex(RuntimeError,'tls_inventory_rejected'):runner.verified_tls_sources(prior,recovery)
+
     def test_product_prewarm_is_compile_only_offline_before_profile(self):
         with tempfile.TemporaryDirectory() as d:
             w=Path(d)

@@ -110,6 +110,24 @@ def verified_windows_inputs(work):
     return old,files
 
 
+def verified_tls_sources(prior, recovery):
+    result={}
+    for target in ('darwin','windows'):
+        name='tls-product'+('.exe' if target=='windows' else '')
+        source=prior/target/'payload'
+        manifest=json.loads((source/'release-manifest.json').read_text())['manifest']
+        entries=[f for f in manifest['files'] if f['name']==name]
+        if len(entries)!=1:raise RuntimeError('activity_tls_inventory_rejected')
+        digest=entries[0]['sha256']
+        if type(digest) is not str or len(digest)!=64 or any(c not in '0123456789abcdef' for c in digest):
+            raise RuntimeError('activity_tls_inventory_rejected')
+        path=(recovery/'windows'/name) if target=='windows' else source/name
+        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=digest:
+            raise RuntimeError('activity_tls_source_changed')
+        result[target]=path
+    return result
+
+
 def prewarm_product_build(work,go):
     # Compile-only with the same dependency flags as the signed builder. No
     # profile/key is minted and the empty-config executables are never run.
@@ -200,7 +218,11 @@ def prepare():
     a=Activity(work);a.save({"version":1,"phase":"build_outcome_unknown"})
     prior=REPO/"artifacts/connection-poc/supervised-consent-r67-156f90fb5c70"
     # Read-only availability check BEFORE minting any short-lived TEST profile.
-    _,inputs=verified_windows_inputs(prior)
+    tls=verified_tls_sources(prior,REPO/'artifacts/connection-poc/r104-verified-input-recovery')
+    inputs=[{'relative':'payload/tls-product.exe','name':'tls-product.exe','sha256':hashlib.sha256(tls['windows'].read_bytes()).hexdigest()}]
+    body="$ErrorActionPreference='Stop';$p='C:\\Users\\jarvis\\remoteapp-r67-package-156f90fb5c70\\payload\\tls-product.exe';"
+    body+="if((Get-FileHash -LiteralPath $p).Hash.ToLowerInvariant() -ne "+quote(inputs[0]['sha256'])+"){throw 'Input mismatch'};'INPUTS_VERIFIED'"
+    if ps(body)!='INPUTS_VERIFIED':raise RuntimeError('activity_input_verification_unavailable')
     (work/'immutable-input-preflight.json').write_text(json.dumps(inputs,sort_keys=True))
     go=REPO/"artifacts/connection-poc/toolchain/go/bin/go"
     current=build_current_helpers(work,go)
@@ -210,18 +232,13 @@ def prepare():
     build_go=test_build_wrapper(work,go)
     for target in ("darwin","windows"):
         suffix=".exe" if target=="windows" else ""
-        source=prior/target/"payload"
-        manifest=json.loads((source/"release-manifest.json").read_text())["manifest"]
         helpers=[]
-        for name in ("trust-journal","identity-vault","tls-product"):
-            path=source/(name+suffix)
-            expected=next(f["sha256"] for f in manifest["files"] if f["name"]==name+suffix)
-            if hashlib.sha256(path.read_bytes()).hexdigest()!=expected:raise RuntimeError("activity_helper_source_changed")
-            if name in ('trust-journal','identity-vault'):
-                path=work/'current-helpers'/target/(name+suffix)
-                if hashlib.sha256(path.read_bytes()).hexdigest()!=current['helpers'][target][path.name]:
-                    raise RuntimeError('activity_current_helper_changed')
+        for name in ('trust-journal','identity-vault'):
+            path=work/'current-helpers'/target/(name+suffix)
+            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest()!=current['helpers'][target][path.name]:
+                raise RuntimeError('activity_current_helper_changed')
             helpers.append(str(path))
+        helpers.append(str(tls[target]))
         args=[str(go),"run","./cmd/product-maintenance-validation-build",str(build_go),str(REPO/"poc/selfhost"),target,str(work/target),*helpers,
               "--verified-live-profile",str(profile),"--test-tunnel","--test-install-root",m["win_root"] if target=="windows" else m["mac_root"]]
         # Go's cwd is fixed without changing this process's working directory.

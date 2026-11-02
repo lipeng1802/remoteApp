@@ -360,3 +360,5 @@ git -c http.proxy=http://127.0.0.1:1080 push origin main
 上一轮 borrower 已由用户确认正常 STOPPED、测试 journal 清理，身份 creator 仍 READY。就绪等待改为服务启动后的绝对 10 分钟预算（包含构建和上传），保留原 15 分钟服务期限及授权有效期；29 项协调回归通过。真实 compiled 双机联合验收尚未通过，须使用全新匹配验证包，不能复用已回收端点。详见 [交接](docs/HANDOFF.md)。
 
 TEST 双机管理构建现采用 `nice 10`、`GOMAXPROCS=2`、`GOFLAGS=-p=2`，降低前台资源争抢；仅覆盖该管理入口及嵌套构建，不是内存/CPU硬配额，不改变会话进程或安全截止。
+
+TEST fresh 构建的 TLS 输入可使用独立恢复目录中的原库存同摘要字节；历史 helper 不复用，采用当前源码重建并审计。恢复字节与构建通过均不代表双机会话验收。

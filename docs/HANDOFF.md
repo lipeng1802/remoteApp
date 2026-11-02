@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r105：恢复字节接入fresh构建，当前构建进行中
+
+先读r104/Git，无Go构建残留。prepare现用verified_tls_sources分别验证Mac原tls-product和r104独立目录Windows tls-product.exe，仍以原r67 manifest唯一文件项与严格小写SHA约束，拒绝缺失/篡改/链接/重复清单项。签发前Windows确切缓存TLS再次Get-FileHash匹配才前进。旧helper缺失不再阻碍不会使用的字节；两个helper均来自当前源码build_current_helpers及current-helpers摘要审计，入builder前再次核对，包含拒绝symlink。start仍沿原current-helper审计/远端TLS摘要缓存门禁，不覆盖历史目录或运行过期包。
+
+新增接线回归覆盖没有历史helper仍可选择TLS、缺失/改字节/符号链接/重复项拒绝，public-server全158项PASS（ResourceWarning为error），diff检查通过。未改Go代码，不重复Go回归。README记录来源及非验收边界。
+
+已实际开启fresh prepare，工单supervised-activity-r75-406b6ee1aeb7，exec session88261，公开固定错误日志/tmp/remoteapp-r105-prepare.log。确认immutable-input-preflight已落盘，current-helpers构建阶段进行中，activity-state仍build_outcome_unknown；尚未调用start，没有native身份/owner/节点。nice10/GOMAXPROCS2/GOFLAGS-p2有效，严禁下轮重开prepare，必须先承接session/检查进程与最终phase。构建完成且签名剩余有效才进入start，失败/到期不复用。本轮未连接或修改服务控制面，r84/r87未知现场保持。自动续办ACTIVE，本组本地提交不推送。
+
 ## 2026-11-02 r104：确切Windows缓存字节恢复至独立审计目录
 
 先读r103/Git，保持分支、docs/archive不跟踪，不推送；本轮没有Go构建或native启动。检查旧r67签名库存：Mac tls-product尚在，两helper不在；Windows三项全部缺失。Windows确切固定缓存路径三项Get-FileHash均匹配本机保存的r67 release-manifest清单。通过既有SSH/scp分别只读取三项到新建artifacts/connection-poc/r104-verified-input-recovery/windows，再次本机SHA256核对全部匹配，audit.json记录固定来源与摘要。未执行下载exe、未覆盖历史目录、未复用旧授权/安装根；只是恢复构建字节，不是安装或PONG通过。
