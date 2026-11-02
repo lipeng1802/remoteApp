@@ -239,6 +239,12 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 		return nodeproof.DialOnlyOverlay(attempt, lc, g.binding.TargetIP, 47476)
 	}, g.active)
 	if err != nil {
+		// TEST-only read after a failed dial; never changes its result, budget
+		// or authorization. Query has its own existing 750ms status bound.
+		if startuptrace.Enabled(ctx) && dialCtx.Err() == context.DeadlineExceeded {
+			status := nodeproof.ClientRouteStatus(ctx, lc, g.binding.TargetNode, g.cfg.Binding.TargetIP)
+			startuptrace.Emit(ctx, deadlineRouteStage(status))
+		}
 		cancel()
 		return nil, session.ErrDenied
 	}

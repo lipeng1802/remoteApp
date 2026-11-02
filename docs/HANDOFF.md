@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r119：新轮次完整故障退休；确认拨号deadline，补失败后路由快照
+
+先读r118/Git、承接session77927已结束且无Go进程。05f65376f4ea串行轮次实际OWNERS_READY→EXERCISE_FAILED→FAULT_REVOKED→FAULT_JOINED→FAULT_RETIRED，最终fault-state双端joined/retired true、fault_joined_and_test_roots_retired；原activity仍exercise_outcome_unknown。Mac首次test_installed/exit0。startup-diagnostic明确controller=overlay_request_deadline、target=target_listening：本轮实际LocalAPI拨号ctx到期，而不是已到Secret或HTTP明确拒绝；不反推r108历史原因。无持续PONG或normal-zero，完整故障退出/在线退休通过不能代替它们。新root已退休，禁止复活；旧1c9a92/r84/r87仍未闭环。
+
+排查一候选：新增真实LocalAPI HTTP101→取消建立ctx→继续socket payload的回归，**未修改运行代码就PASS**，证明当前pinned Go传输这条测试路径不会因建立ctx结束而直接丢掉已升级流；没有据猜测增加WithoutCancel/延长截止。此回归不证明跨机所有传输行为，但避免错误修复。
+
+新增仅TEST且仅拨号原ctx实际DeadlineExceeded后的只读路由快照：复用ClientRouteStatus原750ms query上界和原signed target node/IP，只输出固定query_failed/peer_missing/not_ready/engine_pending/engine_present之一。生产无新query；拨号3秒不延长、不重试、不返回conn、不授权任何业务；TEST失败返回可能额外等待最多750ms收集诊断。该快照是失败后观察，不能断言整个拨号期间同状态。加入startuptrace与Python白名单。纯分类回归区分Ready与InEngine，未知只泛化，无地址/endpoint/raw error。
+
+验证：nodeproof/startuptrace race PASS；streamgate整体race首轮失败于既有TestManagedHTTPSRefreshAndTerminalCauses/pending_query_cancel（1100ms Sleep后要求>=3次刷新且active），新增代码不在此测试分支。只重跑该失败子项race后PASS 6.987秒；没有声称整包首轮通过、没有证明失败只是负载/偶发。新分类回归已在首轮运行，Windows三包vet PASS，Python全167项PASS/ResourceWarning为error，diff检查PASS。Go nice10/GOMAXPROCS2/GOFLAGS-p2；没有重开大构建或旧网络会话。
+
+下一组先把既有刷新测试失败条件区分计数不足与active封闭，必要时用事件驱动观察替代固定Sleep（不得延长生产watch/授权有效期）；再fresh轮次采失败路由快照或Secret细阶段，只有有新证据才改连接策略。原生/双机PONG/normal-zero仍待验收，当前轮次已严格退休，旧未知现场不动。自动续办ACTIVE，无人工需求，本组README/HANDOFF与代码本地提交不推送。
+
 ## 2026-11-02 r118：旧隧道当前无占用，开启串行新鲜双机轮次
 
 先读r117/Git，无Go构建残留。只读核对旧1c9a92的精确tunnels.json：两个/tmp/ra75-...socket均已不存在，Mac127.0.0.1:18444连接拒绝、Windows18444 Listen数量0。未找到旧socket时立即停止对它的-O操作，没有删socket/关未知进程，也没有猜测自然断开原因。缺失不等于掌握实际SSH退出码，更不等于旧Windows native join；r118-transport-audit.json明确两个join_proven=false，旧tunnels.json/root/任务/凭据保持不改。
