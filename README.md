@@ -378,3 +378,5 @@ Windows TEST 本地取消传输已在真实 PowerShell/Go fixture 子进程上�
 Windows 完整 TEST 持久父包装器已用内存 fixture 实测正常、远端fault、明确重试、直接本地取消及拒绝后本地取消5条路径；本地取消回执与远端撤销证据保持分离，原生/PONG验收仍待完成。
 
 TEST 管理器新增显式 `local-stop`，仅支持声明新协议的双方owner，单列 `local_joined_remote_unverified` 状态；即使本地join完成也不授权注册资源退休或文件删除，旧运行实例不适用。
+
+TEST Secret互证现提供固定子阶段诊断，区分配置、授权、签名、读写及证明检查；生产禁用，不输出密钥/指纹/授权材料，不放宽互证或截止。

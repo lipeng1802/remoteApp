@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r117：Secret握手固定子阶段，原验证/截止保持
+
+先读r116/Git，无重型残留，不轮询旧Windows拒绝。session Deliver/ReceiveProductSecret加入19个固定TEST子阶段（config/authorize/hello/nonce/sign/welcome/proof/reauthorize/send及控制端verify/receive/canonical），startuptrace.Valid及Python缓存诊断白名单同步。将原短路组合按相同顺序拆开，以区分签名失败、写welcome失败、proof验证与再次授权等边界；不输出原文、key、fingerprint、grant/签名材料，不改任何格式、信任/角色/双端签名/在线授权/3秒deadline或失败返回。没有新增重试或网络回退。
+
+新增真实TCP双端握手trace回归：生产禁用无输出、TEST成功抵达target-send/controller-canonical且原互证返回相同；故障signer只到target-sign、不发welcome/secret。逐行只允许固定stage，断言无测试key/fingerprint，失败仍双端拒绝。session/startuptrace完整Go race PASS 8.712/2.625秒；Windows两包vet PASS；public-server全167项PASS/ResourceWarning为error，diff检查PASS。Go均nice10/GOMAXPROCS2/GOFLAGS-p2；组件证据不解释r108具体历史原因。
+
+本组未开新包/安装/网络会话，当前旧Windows1c9a92持有根/任务与旧tunnels依然保留。下一组fresh prepare前先核对旧双机隧道的固定18444监听占用：不能盲目再开同端口、不能收养未知socket，若安全关闭或复用须单独记录确切旧工单所有权及实际SSH退出，绝不将其当native join/注册退休。原remote revocation已确认但旧Windows尚无join，不能删除root/凭据/锁。解决运输占用后才fresh新工单采secret子阶段，同时使用新local-stop通路作明确故障fallback；local join不等于registered退休。r84/r87保持，自动续办ACTIVE，无需用户操作。README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r116：管理层本地取消单列状态，拒绝旧协议与退休混用
 
 先读r115/Git，无重型进程。新增local_cancel_proof严格按角色/PID/协议版本验证专用receipt：remote_revocation_verified必须实际bool false，version/exit/PID必须实际int；额外字段、普通fault status、角色互换、truthy整数、错误PID均拒绝。Mac文件须同用户0600普通非链接且<=8192字节。该文件检查是既有可信本地目录下的回执读取，不宣称能阻止同用户并发替换。
