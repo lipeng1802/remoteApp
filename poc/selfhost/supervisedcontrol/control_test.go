@@ -48,6 +48,8 @@ func exercise(t *testing.T, ln net.Listener, dial func() (net.Conn, error)) {
 	}{
 		{`{"Op":"stop"}`, "request_rejected", 0},
 		{`{"Op":"stop_fault"}`, "request_rejected", 0},
+		{`{"Op":"stop_local_fault"}`, "request_rejected", 0},
+		{`{"Op":"stop_local_fault","VaultScope":"foreign"}`, "request_rejected", 0},
 		{`{"Op":"stop_fault","VaultScope":"foreign"}`, "request_rejected", 0},
 		{`{"Op":"quiesce_session","VaultScope":"foreign"}`, "request_rejected", 0},
 		{`{"Op":"maintenance_prepare"}`, "request_rejected", 0},

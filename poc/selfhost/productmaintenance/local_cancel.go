@@ -1,6 +1,11 @@
 package productmaintenance
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var ErrLocalCancelJoined = errors.New("local_cancel_joined")
 
 // CancelLocalFault is a trusted-parent-only decrease of authority. It neither
 // queries nor proves remote revocation and must never produce its receipt.

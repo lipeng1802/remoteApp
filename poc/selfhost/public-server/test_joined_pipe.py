@@ -83,6 +83,42 @@ class JoinedPipeTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): p.join_fault()
             self.assertFalse(p.fault_joined)
 
+    def test_local_cancel_requires_separate_frames_exit_and_no_remote_claim(self):
+        ready=dict(status='local_cancel_ready',joined=True,fault=True,remote_revocation_verified=False)
+        final=dict(ready,status='local_cancel_closed')
+        for mode in ('good','integer','remote','extra','zero','duplicate','rejected'):
+            with self.subTest(mode=mode):
+                a=dict(ready);b=dict(final)
+                if mode=='integer':a['joined']=1
+                if mode=='remote':a['remote_revocation_verified']=True
+                if mode=='extra':b['extra']='PRIVATE'
+                if mode=='rejected':a={'status':'local_cancel_rejected'}
+                code='import sys,json; r=json.loads(sys.stdin.readline()); assert r=={"Op":"stop_local_fault"}; print('+repr(json.dumps(a))+'); sys.stdin.read(); print('+repr(json.dumps(b))+'); '
+                if mode=='duplicate':code+='print('+repr(json.dumps(b))+'); '
+                code+='sys.exit('+('0' if mode=='zero' else '1')+')'
+                p=self.child(code)
+                if mode=='good':
+                    p.stop_local_fault();p.stop_local_fault()
+                    self.assertTrue(p.local_cancel_joined)
+                    self.assertFalse(p.fault_joined);self.assertFalse(p.closed_seen)
+                else:
+                    with self.assertRaises(RuntimeError):p.stop_local_fault()
+                    self.assertFalse(p.local_cancel_joined)
+                    if mode in ('integer','remote','rejected'):self.assertFalse(p.proc.stdin.closed)
+
+    def test_local_cancel_late_ready_uses_same_request(self):
+        code='import sys,json,time; assert json.loads(sys.stdin.readline())=={"Op":"stop_local_fault"}; time.sleep(.15); print(\'{"status": "local_cancel_ready", "joined": true, "fault": true, "remote_revocation_verified": false}\'); assert sys.stdin.read()==""; print(\'{"status": "local_cancel_closed", "joined": true, "fault": true, "remote_revocation_verified": false}\'); sys.exit(1)'
+        p=self.child(code);read=p.read
+        p.read=lambda timeout=12:read(.02)
+        with self.assertRaises(Exception):p.stop_local_fault()
+        self.assertTrue(p.local_cancel_sent);self.assertFalse(p.proc.stdin.closed)
+        with self.assertRaises(RuntimeError):p.request('product_count')
+        with self.assertRaises(RuntimeError):p.stop()
+        with self.assertRaises(RuntimeError):p.stop_fault()
+        with self.assertRaises(RuntimeError):p.join_upgraded()
+        p.read=read;p.stop_local_fault()
+        self.assertTrue(p.local_cancel_joined)
+
     def child(self,code,config=None):
         p=JoinedPipe([sys.executable,"-u","-c",code],config)
         def cleanup():

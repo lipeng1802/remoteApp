@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r112：独立本地取消两阶段协议及迟到回执门禁
+
+先读r111/Git，无重型构建残留。仅新TEST supervisor的可信stdin接受精确stop_local_fault：调用CancelLocalFault真实组件后，先输出local_cancel_ready，待控制监听/继承reader/父清理defer实际join后main输出local_cancel_closed并exit1。两个回执都严格含joined=true/fault=true/remote_revocation_verified=false，独立ErrLocalCancelJoined，不是fault_closed、零退出、在线退休或文件删除许可。业务named-pipe控制仍拒绝stop_local_fault及携带selector版本；不暴露新网络权限，不改变任何有效期/确认门禁。
+
+Python JoinedPipe新增独立stop_local_fault两阶段读取，ready前不关stdin，最终必须精确schema/真实bool、stdout EOF、actual exit1和stderr reader join。迟到ready续读同一个请求，不重发；pending时普通request/stop/stop_fault/join_upgraded全部拒绝，emergency只续接同一本地取消协议。失败不kill，不把local_cancel_joined写成fault_joined。旧Windows包装器/现存1c9a92根均未替换或调用新操作，当前Windows仍未确认join；无第三次fault重试、无新网络工单。
+
+回归：Python真实子进程fixture覆盖独立双帧/幂等、joined整数、remote=true、额外字段、重复终态、exit0、明确拒绝、迟到ready及同请求续接/禁止协议混用；public-server全160项PASS/ResourceWarning为error。Go supervisedcontrol race通过（新增业务端拒绝两项），supervisor入口编译通过/无测试文件，Windows两包vet通过；r111已验证CancelLocalFault真实child组件，本轮不重跑该完整包。所有Go nice10/GOMAXPROCS2/GOFLAGS-p2。测试中首次测试文件引号及旧__new__fixture缺新属性问题已修正，最终全套通过，不把失败轮计入通过。
+
+边界：尚无实际新supervisor与Python端联合的原生验证；Windows Interactive/Mac持久holder尚未接线此协议。下一组先用明确隔离的新fixture构建双平台父包装器协议（不创建OS凭据），再评估后续新鲜原生工单；禁止以新代码假称当前旧实例可恢复。当前旧Windows原程序终止通路仍需单列，不清理持有根/未知锁。r84/r87保持，自动续办ACTIVE，无需用户操作。README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r111：终止能力与网络撤销证明分离，组件实现及回归
 
 先读r110/Git，无上一重型任务，不轮询/重试当前Windows拒绝。本轮源码审查确认：既有Release是显式父进程退出收尾，Child.Stop本身不要求在线grant，但旧Windows包装器进入faultState后只允许既有一次重试；当前运行实例不能通过替换磁盘脚本获得新控制通路。没有调用quiesce把故障伪装成正常zero，也没有改变原ConfirmRevoked有效期门禁。

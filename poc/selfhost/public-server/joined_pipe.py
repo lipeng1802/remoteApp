@@ -34,6 +34,7 @@ class JoinedPipe:
         self.prepared_seen = False
         self.failed_seen = False
         self.fault_joined = False
+        self.local_cancel_sent = self.local_cancel_ready = self.local_cancel_closed = self.local_cancel_joined = False
         self.fault_stop_sent = False
         self.fault_ready_seen = self.fault_closed_seen = False
         self.one_shot = isinstance(config, dict) and config.get("Op") == "prepare"
@@ -145,10 +146,12 @@ class JoinedPipe:
 
     def request(self, op, **values):
         with self.lock:
+            if getattr(self,'local_cancel_sent',False):raise RuntimeError("private_local_cancel_pending")
             self.send(dict(Op=op, **values))
             return self.read()
 
     def join_upgraded(self):
+        if getattr(self,'local_cancel_sent',False):raise RuntimeError("private_local_cancel_not_upgrade")
         # Upgrade already quiesced the runner. EOF only releases the command
         # reader; never send a second stop or confuse its ACK with upgrade.
         with self.lock:
@@ -165,6 +168,7 @@ class JoinedPipe:
         if getattr(self,'fault_stop_sent',False):
             raise RuntimeError('private_fault_lifecycle_not_normal_close')
         with self.lock:
+            if getattr(self,'local_cancel_sent',False):raise RuntimeError("private_local_cancel_not_normal_stop")
             if not self.stop_sent and self.proc.poll() is None:
                 self.send(dict(Op="stop"))
                 self.stop_sent = True
@@ -182,6 +186,7 @@ class JoinedPipe:
         # leave stdin open: EOF would otherwise trigger generic signer release.
         with self.lock:
             if self.fault_joined:return
+            if getattr(self,'local_cancel_sent',False):raise RuntimeError("private_fault_not_local_cancel_protocol")
             if self.stop_sent:raise RuntimeError("private_normal_stop_not_fault_protocol")
             if not self.fault_stop_sent:
                 self.send({'Op':'stop_fault'});self.fault_stop_sent=True
@@ -204,7 +209,39 @@ class JoinedPipe:
             if self.proc.returncode!=1:raise RuntimeError('private_fault_exit_mismatch')
             self.fault_joined=True
 
+    def stop_local_fault(self):
+        # Trusted parent lifecycle only; this cannot prove remote revocation.
+        def verified(value,status):
+            return (isinstance(value,dict) and set(value)=={'status','joined','fault','remote_revocation_verified'}
+                    and value['status']==status and value['joined'] is True and value['fault'] is True
+                    and value['remote_revocation_verified'] is False)
+        with self.lock:
+            if self.local_cancel_joined:return
+            if self.stop_sent or self.fault_stop_sent or self.fault_joined:
+                raise RuntimeError('private_local_cancel_protocol_conflict')
+            if not self.local_cancel_sent:
+                self.send({'Op':'stop_local_fault'});self.local_cancel_sent=True
+            if not self.local_cancel_ready:
+                ready=self.read(25)
+                if ready=={'status':'local_cancel_rejected'}:
+                    self.local_cancel_sent=False
+                    raise RuntimeError('private_local_cancel_rejected')
+                if not verified(ready,'local_cancel_ready'):
+                    raise RuntimeError('private_local_cancel_ready_unconfirmed')
+                self.local_cancel_ready=True;self.proc.stdin.close()
+            if not self.local_cancel_closed:
+                if not verified(self.read(12),'local_cancel_closed'):
+                    raise RuntimeError('private_local_cancel_terminal_unconfirmed')
+                self.local_cancel_closed=True
+            self.proc.wait(timeout=12);self._join_diagnostics()
+            if self.buffer or not select.select([self.proc.stdout],[],[],12)[0] or os.read(self.proc.stdout.fileno(),1)!=b'':
+                raise RuntimeError('private_local_cancel_eof_unconfirmed')
+            if self.proc.returncode!=1:raise RuntimeError('private_local_cancel_exit_mismatch')
+            self.local_cancel_joined=True
+
     def emergency(self):
+        if getattr(self,'local_cancel_sent',False):
+            return self.stop_local_fault()
         if getattr(self, "fault_joined", False):
             self.proc.wait(timeout=12)
             self._join_diagnostics()

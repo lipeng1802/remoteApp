@@ -177,6 +177,21 @@ func run(output func(any) error) (result error) {
 			if request == (installeddevice.Request{Op: "stop"}) {
 				return nil
 			}
+			if request == (installeddevice.Request{Op: "stop_local_fault"}) {
+				life, stop := context.WithTimeout(ctx, 20*time.Second)
+				e := controller.CancelLocalFault(life)
+				stop()
+				if e != nil {
+					if e = output(map[string]string{"status": "local_cancel_rejected"}); e != nil {
+						return e
+					}
+					continue
+				}
+				if e = output(map[string]any{"status": "local_cancel_ready", "joined": true, "fault": true, "remote_revocation_verified": false}); e != nil {
+					return e
+				}
+				return productmaintenance.ErrLocalCancelJoined
+			}
 			if request == (installeddevice.Request{Op: "stop_fault"}) {
 				life, stop := context.WithTimeout(ctx, 20*time.Second)
 				e := controller.ReleaseFault(life)
@@ -247,7 +262,9 @@ func run(output func(any) error) (result error) {
 func main() {
 	output := json.NewEncoder(os.Stdout).Encode
 	if e := run(output); e != nil {
-		if errors.Is(e, productmaintenance.ErrFaultJoined) {
+		if errors.Is(e, productmaintenance.ErrLocalCancelJoined) {
+			output(map[string]any{"status": "local_cancel_closed", "joined": true, "fault": true, "remote_revocation_verified": false})
+		} else if errors.Is(e, productmaintenance.ErrFaultJoined) {
 			output(map[string]any{"status": "fault_closed", "joined": true, "fault": true})
 		} else {
 			output(map[string]string{"status": "failed"})
