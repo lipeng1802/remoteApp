@@ -376,3 +376,5 @@ Mac/Unix TEST 持久 holder 已支持独立本地取消，并保存明确 `remot
 Windows TEST 本地取消传输已在真实 PowerShell/Go fixture 子进程上通过10项检查，原fault传输9项回归通过；完整持久父包装器及原生产品仍待验收，不用于恢复旧运行实例。
 
 Windows 完整 TEST 持久父包装器已用内存 fixture 实测正常、远端fault、明确重试、直接本地取消及拒绝后本地取消5条路径；本地取消回执与远端撤销证据保持分离，原生/PONG验收仍待完成。
+
+TEST 管理器新增显式 `local-stop`，仅支持声明新协议的双方owner，单列 `local_joined_remote_unverified` 状态；即使本地join完成也不授权注册资源退休或文件删除，旧运行实例不适用。

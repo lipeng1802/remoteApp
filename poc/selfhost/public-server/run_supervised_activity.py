@@ -268,6 +268,15 @@ def monitor(work):
     out=work/"mac-exit.json"
     with out.open("x") as f:
         json.dump({"version":1,"nonce":m["nonce"],"exit_code":result.returncode},f);f.flush();os.fsync(f.fileno())
+    local=Path(m['holder_dir'])/'owner-local-cancel-joined.json'
+    if local.exists() or local.is_symlink():
+        from local_cancel_proof import mac_file
+        public=strict_reply((work/'mac-bootstrap.json').read_bytes())
+        mac_file(local,public)
+        if result.returncode!=1:raise RuntimeError('activity_local_cancel_exit_rejected')
+        with (work/'mac-local-cancel-exit.json').open('x') as f:
+            json.dump({'version':1,'nonce':m['nonce'],'exit_code':1,'remote_revocation_verified':False},f);f.flush();os.fsync(f.fileno())
+
 
 
 def start(work):
@@ -485,6 +494,9 @@ try { $lines=@(& (Join-Path $PSScriptRoot 'retire-node-test.exe'));$code=$LASTEX
 if __name__=="__main__":
     try:
         if sys.argv[1:]==["prepare"]:print(prepare())
+        elif len(sys.argv)==3 and sys.argv[2]=="local-stop":
+            import local_cancel_activity
+            local_cancel_activity.stop(sys.argv[1])
         elif len(sys.argv)==3 and sys.argv[2] in ("start","monitor","exercise","stop","retire","resume-windows"):
             {"start":start,"monitor":monitor,"exercise":exercise,"stop":stop,"retire":retire,"resume-windows":resume_windows}[sys.argv[2]](sys.argv[1])
         elif len(sys.argv)==3 and sys.argv[2] in ('fault-revoke','fault-stop','fault-retire'):

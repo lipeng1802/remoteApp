@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r116：管理层本地取消单列状态，拒绝旧协议与退休混用
+
+先读r115/Git，无重型进程。新增local_cancel_proof严格按角色/PID/协议版本验证专用receipt：remote_revocation_verified必须实际bool false，version/exit/PID必须实际int；额外字段、普通fault status、角色互换、truthy整数、错误PID均拒绝。Mac文件须同用户0600普通非链接且<=8192字节。该文件检查是既有可信本地目录下的回执读取，不宣称能阻止同用户并发替换。
+
+Mac monitor沿原subprocess.run实际wait写原mac-exit，只有专用receipt身份匹配且实际exit1，另写mac-local-cancel-exit；不会把local cancellation变成原remote fault proof。新增显式local-stop CLI，双方bootstrap必须先支持local_cancel_protocol=1且PID有效才允许任何取消副作用；旧1c9a92协议立即拒绝，未在旧现场运行。另用local-cancel-state记录unknown/各端join，最终仅local_joined_remote_unverified及remote=false，不回写原activity/fault-state。Mac双重校验monitor实际exit和独立receipt；Windows仅新可信空marker及专用receipt+task actual exit1/非Running。续接已保存joined也必须重验原回执，不仅相信journal，不重复触发取消；本入口无retire/删除/授权/注册动作，保留根/租约和服务资源直到另有严格退休证据。
+
+测试新增4项：真实小文件receipt strict schema/权限/链接/身份拒绝；旧pair能力不足在endpoint、ps、journal之前拒绝；双端已保存join仍重验、缺proof失败且不重发/不出现fault-state；monitor仅actual wait exit1+正确专用receipt生成独立marker（wait结果为fixture模拟，不扩大为实际原生证明）。public-server全167项PASS，ResourceWarning为error，diff检查PASS；修正测试发现的PowerShell str需显式UTF8编码再进严格bytes parser问题，最终通过。无Go改动不重复构建，未连接Windows/服务器，不轮询旧拒绝。
+
+下一组优先Secret握手固定子阶段定位（检查/签名/读写/授权），避免继续用target_secret/controller_secret泛化；然后将新鲜双端包一次性串行prepare/start/exercise与local fallback管理验收，不复用过期短包。独立local取消即使成功也不代表online撤销或registered退休，未知旧Windows/r84/r87仍单列，不能清理。自动续办ACTIVE，无需用户操作，README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r115：Windows完整持久父包装器本地取消实际通过
 
 先读r114/Git，无上一重型构建残留。本组补cmd/retained-holder-fixture的stop_local_fault双帧/EOF/actual exit1，依然仅内存身份/同用户pipe fixture，不创建原生凭据或TS节点。packaging test-retained-fault-holder扩为5种模式：normal、fault、rejected-retry、local、rejected-local。local从新鲜READY单次marker取消；rejected-local先证实fault_stop_rejected且保持所有权，再通过新本地marker切换，未创建远端授权fixture marker或重新批准。
