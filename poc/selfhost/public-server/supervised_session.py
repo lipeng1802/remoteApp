@@ -75,13 +75,14 @@ def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,
 
 
 def active_round(target, controller, *, profile_expires_at, clock=time.time,
-                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False):
+                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False, after_provision=None):
     """Fresh explicit approval -> clocks -> concurrent provision -> PONG -> revoke.
 
     A mutation/receipt error fails this episode. It does not stop/delete owners,
     retry an uncertain revoke, or claim all network resources have been joined.
     Caller must preserve signer access when revocation remains unconfirmed.
     """
+    require(after_provision is None or callable(after_provision),'session_observer_invalid')
     require(type(quiesce_before_revoke) is bool,"session_quiesce_mode_invalid")
     require(type(profile_expires_at) is int and profile_expires_at - clock() >= 240,
             "session_profile_window_insufficient")
@@ -126,6 +127,7 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
             require(isinstance(result, dict) and set(result) == {"status", "passed", "active"}
                     and result["status"] == "network_watch" and result["passed"] is True
                     and result["active"] is True, "session_active_watch_unconfirmed")
+        if after_provision is not None:after_provision()
         result = observe_growth((target, controller), expires_at=expiry, clock=clock,
                                 monotonic=monotonic, sleep=sleep)
         result["active_watch_both"] = True

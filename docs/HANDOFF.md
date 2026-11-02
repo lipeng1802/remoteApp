@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r123：握手状态可见仍TCP超时；接入只读live策略计数
+
+先读r122/Git，承接session53677已结束，无Go残留。0ca99e8ba990真实双端READY，exercise失败controller=deadline_route_engine_present、target=target_listening；本轮新分类中该标签意味着失败后查询报告原peer Ready/InEngine、自端/对端Relay字段非空且LastHandshake非零。它只证明状态曾报告握手，不能证明TCP47476或应用载荷成功，也不能把relay字段当当前DERP转发路径。随后独立FAULT_REVOKED/JOINED/RETIRED全通过，root已退休不复活；旧1c9a92/r84/r87保持。没有持续PONG/normal-zero。
+
+只读源码审查：backend签ACTIVE前确认内存provisionRules存在精确controllerIP→targetIP:47476，Headscale driver policy set后也比较get返回；仍需实际活动时的控制面快照，不能只靠源码排除策略传播/外部变化。本轮通过固定headscale -c /etc/remoteapp-poc/config.yaml -o json policy get，在服务器内解析只返回query_ok、47476/47477规则数；当前退休后实际query_ok=true且两者均0（r123-idle-policy.json）。没有导出IP/完整policy、读密钥、set规则或改服务。
+
+新增TEST协调器after_provision只读观察钩子，必须两端provision均ACTIVE返回后且任何PONG观察前调用一次；默认无钩子行为不变，非法callback在任何设备操作前拒绝。runner用固定私有SSH policy get观察器：15秒管理上界，仅保存严格schema真正bool与0..256整数计数；未知/额外/私有response只记query_ok=false，不输出原文、不用计数授权活动或退休；独占已有audit不重复查询/覆盖。此管理观察可能延迟首个计数读取，但不延长native三秒拨号、租约/有效期，不重试provision；observe_growth原独立25秒及至少6秒持续增长条件不变。即使观察成功，payload恒定仍失败并执行原明确撤销。
+
+Python新增3项包括上述顺序/不能替代PONG、固定schema/private不落盘/重复audit拒绝；全170项PASS/ResourceWarning为error。首次新测试追加到__main__之后造成导入缩进错误，已修正最终全套通过；没有计入失败轮。Go未改，不重复Go构建/回归。diff检查PASS。
+
+已启动唯一fresh轮次supervised-activity-r75-da09ba6c0e2c，exec8182，日志/tmp/remoteapp-r123-round.log；串行prepare/start/exercise及原明确normal或fault收尾，未知即停。此轮用于获得活动时provision-policy-observation.json，规则计数只诊断存在性，**不证明与双方signed身份逐项一致或客户端已应用**。下轮先承接同一session/phase，不重复开包。自动续办ACTIVE，无人工需求，README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r122：初始map/引擎可见仍拨号超时；检查公网DERP入口并补传输布尔诊断
 
 先读r121/Git，承接session34209已结束，无Go残留。c7fdd5846bd6实际双端READY，exercise失败，controller=deadline_route_engine_present、target=target_listening；明确本轮三秒拨号到期后查询看到原signed peer路由Ready且InEngine=true，初始路由门禁没有使本轮活动成功。随后FAULT_REVOKED/JOINED/RETIRED全通过，最终双端joined/retired true。无持续PONG/normal-zero，不复活已退休root；旧1c9a92/r84/r87保持。

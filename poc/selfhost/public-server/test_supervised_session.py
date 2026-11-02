@@ -138,4 +138,14 @@ class ActiveSessionBoundaries(unittest.TestCase):
                     counts((lambda frame: bad, lambda frame: bad))
 
 
+
+    def test_observer_runs_after_both_provisions_and_never_replaces_payload_proof(self):
+        p=ActivePair('constant');observed=[]
+        def observer():
+            self.assertEqual(p.provision_finished,{'target','controller'})
+            self.assertEqual(p.count_calls,0);observed.append(True)
+        with self.assertRaises(RuntimeError):
+            active_round(p.endpoint('target'),p.endpoint('controller'),profile_expires_at=1500,clock=lambda:1000+p.elapsed,monotonic=lambda:p.elapsed,sleep=p.sleep,after_provision=observer)
+        self.assertEqual(observed,[True]);self.assertEqual(p.revoke_calls,1)
+
 if __name__ == "__main__": unittest.main()

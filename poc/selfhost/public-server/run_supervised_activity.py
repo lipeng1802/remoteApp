@@ -409,7 +409,11 @@ def exercise(work):
     target=RecordedEndpoint(work,'target',target)
     controller=RecordedEndpoint(work,'controller',Endpoint(m["holder_dir"]))
     try:
-        return Activity(work).exercise(target,controller,expiry(work))
+        from supervised_session import active_round
+        from policy_observation import observe
+        def episode(t,c,**options):
+            return active_round(t,c,after_provision=lambda:observe(work),**options)
+        return Activity(work).exercise(target,controller,expiry(work),episode=episode)
     except Exception:
         # Cache-only native telemetry cannot authorize retries, close the owner,
         # or replace the original failure with a diagnostic transport failure.
