@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r109：Windows并非已证实卡死，故障停止返回明确拒绝
+
+先读r108/Git，无构建或新包。本轮只读固定白名单提取Windows owner-result，观察TASK_Running、FAULT_STOP_PHASE ready_pending及rejected，无join回执。修正推断：不是已经证明stop/join线程阻塞；supervisor的ReleaseFault返回错误，包装器按设计保留进程。源码ReleaseFault可能在前置状态、独立ConfirmRevoked、child.JoinedFault或signer.CloseJoined拒绝，现有日志不足区分。没有JOIN_STAGE不等于证明停在某一分支，不读取/输出原始日志或凭据。
+
+基于**新的明确fault_stop_rejected证据**，使用包装器现有一次性ExplicitRetry通路：确认日志rejected且retry-owner-fault.request不存在后，仅创建本工单空marker。包装器仅在rejected且未用过重试时消费；没有重做注册/授权/provision或改变任何信任/有效期。随后续接原fault-stop，exec session31433，日志/tmp/remoteapp-r109-stop.log；当前仍等待结果，严禁再次创建marker或重启任务。下轮先承接同一调用，若仍拒绝则保留现场并补固定阶段诊断/评估安全恢复，不以强杀当join。Mac已确认joined保持，不重复动作。
+
+只读源码发现ConfirmRevoked会检查原grant及profile有效期；这使过期后的原通路可能拒绝，但**没有证据证明首次r108拒绝就是过期**，不授权放宽有效期或回写时钟。本组没有源改动/编译/重复测试，r84/r87与当前Windows未闭环现场保持，自动续办ACTIVE，无外部人工需求。后续首先使原故障工单可验证收口，暂不新建网络会话。
+
 ## 2026-11-02 r108：实际进入双端secret阶段；Windows故障join未确认
 
 先读r107/Git，确认1c9a92f8aba3 fresh包built且无Go进程，最短签名尚余778秒，实际start exit0，两端bootstrap/owners_ready，未resume。exercise失败，缓存stage controller_secret/target_secret：本轮实际通过controller DialOverlay到ReceiveProductSecret、target Accept到DeliverProductSecret边界，但不能断言secret握手成功或历史LocalAPI错误已根治；持续PONG/正常zero仍未通过。
