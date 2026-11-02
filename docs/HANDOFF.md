@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r118：旧隧道当前无占用，开启串行新鲜双机轮次
+
+先读r117/Git，无Go构建残留。只读核对旧1c9a92的精确tunnels.json：两个/tmp/ra75-...socket均已不存在，Mac127.0.0.1:18444连接拒绝、Windows18444 Listen数量0。未找到旧socket时立即停止对它的-O操作，没有删socket/关未知进程，也没有猜测自然断开原因。缺失不等于掌握实际SSH退出码，更不等于旧Windows native join；r118-transport-audit.json明确两个join_proven=false，旧tunnels.json/root/任务/凭据保持不改。
+
+因此无需共享旧隧道或改变固定端口，已开启**单个**串行新鲜轮次：工单supervised-activity-r75-05f65376f4ea，exec session77927，日志/tmp/remoteapp-r118-round.log。driver按prepare→start→exercise顺序，构建均通过现有限额入口，native管理driver不降优先级。exercise正常则按原normal stop/retire；失败则按原明确fault revoke→stop→retire。任一步未知/拒绝立即异常停止保留现场，没有finally teardown、没有自动重放/放宽门禁。新包含r117 Secret固定子阶段与r112–r116本地取消能力；本轮尚未自动调用local-stop，不把本地join当在线退休。
+
+记录时activity-state仍build_outcome_unknown，driver会在构建exit0且原TTL门禁满足后才start，不可下轮重复prepare/start/exercise。下一轮先承接session/日志阶段和原工单phase；若fault-stop拒绝，使用新能力时必须兼容某端已fault joined的混合状态，不能盲目把整个pair改成本地取消或重发注册。旧1c9a92及r84/r87仍未闭环，不能被新结果掩盖。本组无源改动，不重复已通过测试；本记录本地提交不推送，自动续办ACTIVE，无需用户操作。
+
 ## 2026-11-02 r117：Secret握手固定子阶段，原验证/截止保持
 
 先读r116/Git，无重型残留，不轮询旧Windows拒绝。session Deliver/ReceiveProductSecret加入19个固定TEST子阶段（config/authorize/hello/nonce/sign/welcome/proof/reauthorize/send及控制端verify/receive/canonical），startuptrace.Valid及Python缓存诊断白名单同步。将原短路组合按相同顺序拆开，以区分签名失败、写welcome失败、proof验证与再次授权等边界；不输出原文、key、fingerprint、grant/签名材料，不改任何格式、信任/角色/双端签名/在线授权/3秒deadline或失败返回。没有新增重试或网络回退。
