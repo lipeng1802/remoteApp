@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r108：实际进入双端secret阶段；Windows故障join未确认
+
+先读r107/Git，确认1c9a92f8aba3 fresh包built且无Go进程，最短签名尚余778秒，实际start exit0，两端bootstrap/owners_ready，未resume。exercise失败，缓存stage controller_secret/target_secret：本轮实际通过controller DialOverlay到ReceiveProductSecret、target Accept到DeliverProductSecret边界，但不能断言secret握手成功或历史LocalAPI错误已根治；持续PONG/正常zero仍未通过。
+
+fault-revoke exit0，独立撤销已确认；fault-stop exit1，fault-state=fault_stop_unknown且joined仅controller=true。Mac实际exit1/fault receipt及holder关闭已确认；Windows当前TASK_Running、无owner-fault-joined.json，owner-result未观察到product_stopping/product_joined/workers_joined/node_closed/signer_closed或EXITCODE1。单次cache-only product_stage仍target_secret。未强杀、不删除租约、不运行fault-retire、不回写双端joined。现存Windows根/任务与tunnels必须保留；已明确撤销，不重启/注册/批准/重做exercise，工单不能换包掩盖。
+
+下一组优先审查session.Deliver/ReceiveProductSecret与stop/join互锁、产品签名调用生命周期。源码secret函数设3秒连接deadline、defer closeOnCancel并调用OS签名；只有stage边界证据，不能猜为IPC、锁屏或具体签名错误。可通过原cache诊断及只读代码继续排查；后续只有确切join回执才允许registered retirement。fault.stop本身准许在fault_stop_unknown显式续接，但不得无新证据重复轮询或用重放当修复。未发生用户必须操作的外部阻塞，自动续办保持ACTIVE。r84/r87未知现场保持，当前新增未闭环Windows工单单列。本轮没有代码改动，不重复回归/构建，本记录本地提交不推送。
+
 ## 2026-11-02 r107：LocalAPI请求失败类型化诊断
 
 先读r106/Git，确认无Go构建残留。给DialOnlyOverlay NewRequest/DoLocalRequest错误增加纯类型分类：context deadline/cancel、EOF/unexpectedEOF、syscall ECONNREFUSED/ECONNRESET、net.Error Timeout；errors.Is/As可识别包装，未知或同名文本仍overlay_request_failed。全部只输出固定TEST stage，不读/记录原error/host/body，不改变返回ErrOverlayDial，不转为ErrOverlayNotListening，不新增重试/系统socket回退，不改3秒安全截止。startuptrace.Valid和Python startup_diagnostic白名单同步新增六项。
