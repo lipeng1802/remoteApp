@@ -9,6 +9,7 @@ import (
 	"net/http/httptrace"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"remoteapp.local/selfhost-poc/startuptrace"
 
@@ -34,13 +35,13 @@ func DialOnlyOverlay(ctx context.Context, lc *local.Client, host string, port ui
 	}})
 	req, e := http.NewRequestWithContext(ctx, "POST", "http://"+apitype.LocalAPIHost+"/localapi/v0/dial", nil)
 	if e != nil {
-		startuptrace.Emit(ctx, startuptrace.OverlayRequestFailed)
+		startuptrace.Emit(ctx, classifyRequestFailure(e))
 		return nil, ErrOverlayDial
 	}
 	req.Header = http.Header{"Upgrade": {"ts-dial"}, "Connection": {"upgrade"}, "Dial-Host": {host}, "Dial-Port": {strconv.Itoa(int(port))}, "Dial-Network": {"tcp"}}
 	res, e := lc.DoLocalRequest(req)
 	if e != nil {
-		startuptrace.Emit(ctx, startuptrace.OverlayRequestFailed)
+		startuptrace.Emit(ctx, classifyRequestFailure(e))
 		return nil, ErrOverlayDial
 	}
 	if res.StatusCode != http.StatusSwitchingProtocols {
@@ -106,4 +107,26 @@ func classifyUpgradeFailure(status int, body string) startuptrace.Stage {
 		}
 	}
 	return startuptrace.OverlayUpgradeRejected
+}
+
+// Only typed causes become fixed TEST telemetry; never inspect private error text.
+// Classification does not change ErrOverlayDial, deadlines, or retry permission.
+func classifyRequestFailure(err error) startuptrace.Stage {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return startuptrace.OverlayRequestDeadline
+	case errors.Is(err, context.Canceled):
+		return startuptrace.OverlayRequestCanceled
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		return startuptrace.OverlayRequestEOF
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return startuptrace.OverlayRequestRefused
+	case errors.Is(err, syscall.ECONNRESET):
+		return startuptrace.OverlayRequestReset
+	}
+	var timeout net.Error
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		return startuptrace.OverlayRequestTimeout
+	}
+	return startuptrace.OverlayRequestFailed
 }

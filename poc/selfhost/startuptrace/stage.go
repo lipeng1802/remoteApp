@@ -51,6 +51,15 @@ const (
 	OverlayConnectFailed    Stage = "overlay_connect_failed"
 )
 
+const (
+	OverlayRequestDeadline Stage = "overlay_request_deadline"
+	OverlayRequestCanceled Stage = "overlay_request_canceled"
+	OverlayRequestEOF      Stage = "overlay_request_eof"
+	OverlayRequestRefused  Stage = "overlay_request_refused"
+	OverlayRequestReset    Stage = "overlay_request_reset"
+	OverlayRequestTimeout  Stage = "overlay_request_timeout"
+)
+
 type Report struct {
 	Status string `json:"status"`
 	Stage  string `json:"stage"`
@@ -58,7 +67,7 @@ type Report struct {
 
 func Valid(s string) bool {
 	switch Stage(s) {
-	case OverlayBadUpgrade, OverlayPermissionDenied, OverlayResolveFailed, OverlayConnectRefused, OverlayConnectTimeout, OverlayConnectFailed, TargetGateDenied, TargetLocalFailed, TargetSelfDenied, TargetListenFailed, TargetListening, TargetAcceptDenied, TargetPeerDenied, ControllerGateDenied, ControllerLocalFailed, ControllerUpgrade, ControllerPeer, ControllerPeerDenied, OverlayRequestFailed, OverlayUpgradeRejected, OverlayRouteMissing, OverlayResponseInvalid, OverlayUpgraded, TargetTLS, TargetListen, TargetSecret, TargetServe, ControllerListen, ControllerDial, ControllerSecret, ControllerTLS, ControllerAccept, ControllerBridge:
+	case OverlayRequestDeadline, OverlayRequestCanceled, OverlayRequestEOF, OverlayRequestRefused, OverlayRequestReset, OverlayRequestTimeout, OverlayBadUpgrade, OverlayPermissionDenied, OverlayResolveFailed, OverlayConnectRefused, OverlayConnectTimeout, OverlayConnectFailed, TargetGateDenied, TargetLocalFailed, TargetSelfDenied, TargetListenFailed, TargetListening, TargetAcceptDenied, TargetPeerDenied, ControllerGateDenied, ControllerLocalFailed, ControllerUpgrade, ControllerPeer, ControllerPeerDenied, OverlayRequestFailed, OverlayUpgradeRejected, OverlayRouteMissing, OverlayResponseInvalid, OverlayUpgraded, TargetTLS, TargetListen, TargetSecret, TargetServe, ControllerListen, ControllerDial, ControllerSecret, ControllerTLS, ControllerAccept, ControllerBridge:
 		return true
 	}
 	return false

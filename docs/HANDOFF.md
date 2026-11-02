@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r107：LocalAPI请求失败类型化诊断
+
+先读r106/Git，确认无Go构建残留。给DialOnlyOverlay NewRequest/DoLocalRequest错误增加纯类型分类：context deadline/cancel、EOF/unexpectedEOF、syscall ECONNREFUSED/ECONNRESET、net.Error Timeout；errors.Is/As可识别包装，未知或同名文本仍overlay_request_failed。全部只输出固定TEST stage，不读/记录原error/host/body，不改变返回ErrOverlayDial，不转为ErrOverlayNotListening，不新增重试/系统socket回退，不改3秒安全截止。startuptrace.Valid和Python startup_diagnostic白名单同步新增六项。
+
+定向测试验证包装类型、文本伪装/未知拒绝；真实local.Client Dial故障注入四类错误，均只有一次Dial、无conn、仍ErrOverlayDial且非可等待refusal。nodeproof/startuptrace Go race PASS；public-server 158项PASS（ResourceWarning为error）；Windows两包vet PASS，全部Go使用nice10/GOMAXPROCS2/GOFLAGS-p2。测试是诊断与传输拒绝回归，不能确定r106历史原因或冒称PONG。
+
+下一步fresh prepare/start/exercise以新stage采实际证据，不能重启已退休406b6e根。r84/r87未知现场不动。自动续办ACTIVE，无需用户操作，README/HANDOFF本地提交不推送。
+
+本组测试结束后已实际启动fresh prepare：supervised-activity-r75-1c9a92f8aba3，exec session26963，日志/tmp/remoteapp-r107-prepare.log；当前构建进行中，不重复开启。下轮先承接最终phase/会话结果，未到built不start；未调用原生安装。
+
 ## 2026-11-02 r106：首次安装双端READY；活动失败，独立撤销/故障join/在线退休通过
 
 先读r105/Git，确认prepare session已完成、phase=built、无Go进程；同一fresh工单406b6ee1aeb7，开始时最短profile尚余731秒，实际调用start。Windows本次首次setup即READY（没有resume-windows），Mac setup-result明确test_installed/completed/exit0；两端公开bootstrap驻留，phase=owners_ready。r94 Windows目录同步修复已随本轮新包实际接入；不反推历史全部根因。
