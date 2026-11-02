@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r103：限额prepare在旧Windows字节预检拒绝
+
+用户已恢复remoteapp自动续办；先读r102/Git，确认无Go编译残留。使用nice10/GOMAXPROCS2/GOFLAGS-p2运行fresh prepare，新工单21c6d59d09f8立即固定错误退出；未到helper编译、profile读取、短包签发或start。只读定位r67源windows目录及fixture仍在，但受信预检要核对的trust-journal.exe/identity-vault.exe/tls-product.exe全不存在；verified_windows_inputs明确files为空必拒绝。Windows SSH一次成功，不能把本次解释为密钥或离线故障。
+
+仅rmdir本工单已知空holder和父目录（installed不存在）；prepare-preflight-audit.json记录固定原因。保留build_outcome_unknown原状态，不回写成功/重跑旧工单，不访问凭据/运行native owner。此轮未连接服务器、未修改控制面。两处历史未知现场保持。下一组应审查如何从源码重建并重新签发可信TLS输入，或按既有签名库存从确切可验证缓存恢复字节；不得用fixture占位、绕过空files检查或覆盖历史签名目录。先解决构建输入来源，随后再fresh签发双机包。自动续办继续，尚无需用户操作；无PONG/新原生验收。代码未改，不重复157项回归。
+
 ## 2026-11-02 r102：Mac TEST 构建限并发与降优先级
 
 已快进拉取Windows两次提交至cf0d520，承接r94–r101；这些历史段落中的“未提交”是当时状态，当前远端已包含。用户授权开始后续任务，remoteapp自动化仍暂停，没有恢复定时执行。docs/archive保持未跟踪。
