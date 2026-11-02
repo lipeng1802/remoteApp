@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r120：刷新回归改为观察完成响应；新轮次进行中
+
+先读r119/Git，无重型构建残留。既有managed测试固定Sleep1100ms后同时断言请求数/active，不能分辨是刷新未完成还是watch封闭。本轮仅测试fixture增加成功state响应完成事件（有界buffer32、非阻塞，不影响真实worker）；测试等3个实际成功响应，明确区分worker提前终态、观察超时及响应完成后active已封闭。观察者最多2秒，仅测试等待，不延长生产watch/HTTP/授权有效期，不重复启动或重开gate。
+
+streamgate完整Go race本轮PASS23.227秒（含全部managed终态及r119新快照用例），Windows vet PASS，diff检查PASS。没有声称证实r119历史失败唯一根因；事件驱动提升证据质量而非用重试掩盖。Go nice10/GOMAXPROCS2/GOFLAGS-p2；Python无变化不重复167项。
+
+测试完成后已开启唯一串行fresh验证driver，工单supervised-activity-r75-959bcd773a17，exec session88234，日志/tmp/remoteapp-r120-round.log，记录时phase=build_outcome_unknown。prepare→start→exercise，正常走normal stop/retire；失败走明确fault revoke/stop/retire，任一步未知即停保留现场，无finally/隐式重放。本轮将实际采r119的拨号deadline后路由快照或r117 Secret子阶段，不放宽3秒或信任门禁。下轮先承接同一session/最终phase，不能重复开包/重复操作；必要混合fault/local取消须逐端核对原回执。
+
+05f653前轮已退休不复活，1c9a92旧Windows及r84/r87保持未闭环，不将新轮次结果替代它们。没有用户必须介入的外部阻塞，自动续办ACTIVE；代码/README/HANDOFF本地提交不推送。
+
 ## 2026-11-02 r119：新轮次完整故障退休；确认拨号deadline，补失败后路由快照
 
 先读r118/Git、承接session77927已结束且无Go进程。05f65376f4ea串行轮次实际OWNERS_READY→EXERCISE_FAILED→FAULT_REVOKED→FAULT_JOINED→FAULT_RETIRED，最终fault-state双端joined/retired true、fault_joined_and_test_roots_retired；原activity仍exercise_outcome_unknown。Mac首次test_installed/exit0。startup-diagnostic明确controller=overlay_request_deadline、target=target_listening：本轮实际LocalAPI拨号ctx到期，而不是已到Secret或HTTP明确拒绝；不反推r108历史原因。无持续PONG或normal-zero，完整故障退出/在线退休通过不能代替它们。新root已退休，禁止复活；旧1c9a92/r84/r87仍未闭环。

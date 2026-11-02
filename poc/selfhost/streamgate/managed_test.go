@@ -31,6 +31,7 @@ type managedFixture struct {
 	client              *invite.NetworkClient
 	fail, freeze, stall atomic.Bool
 	queries             atomic.Int64
+	refreshed           chan struct{}
 	initial             invite.NetworkState
 	endpoint            string
 	certificate         []byte
@@ -41,7 +42,7 @@ func managedSetup(t *testing.T) *managedFixture {
 }
 func managedSetupWithSigner(t *testing.T, signer invite.DeviceSigner) *managedFixture {
 	t.Helper()
-	f := &managedFixture{binding: invite.NetworkBinding{TargetNode: "nodekey:" + strings.Repeat("a", 64), ControllerNode: "nodekey:" + strings.Repeat("b", 64), TargetIP: "100.120.0.42", ControllerIP: "100.120.0.93"}}
+	f := &managedFixture{refreshed: make(chan struct{}, 32), binding: invite.NetworkBinding{TargetNode: "nodekey:" + strings.Repeat("a", 64), ControllerNode: "nodekey:" + strings.Repeat("b", 64), TargetIP: "100.120.0.42", ControllerIP: "100.120.0.93"}}
 	var e error
 	f.store, e = invite.Open(filepath.Join(t.TempDir(), "private"), time.Now)
 	if e != nil {
@@ -110,7 +111,12 @@ func managedSetupWithSigner(t *testing.T, signer invite.DeviceSigner) *managedFi
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(reply)
+		if json.NewEncoder(w).Encode(reply) == nil && request.Body.Action == "state" {
+			select {
+			case f.refreshed <- struct{}{}:
+			default:
+			}
+		}
 	}))
 	t.Cleanup(server.Close)
 	f.endpoint, f.certificate = server.URL, server.Certificate().Raw
@@ -264,9 +270,24 @@ func TestManagedHTTPSRefreshAndTerminalCauses(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			m := f.start(t, ctx)
-			time.Sleep(1100 * time.Millisecond)
-			if f.queries.Load() < 3 || !m.Gate().active(ctx) {
-				t.Fatal("helper did not refresh independently")
+			// Observe actual completed responses, not a scheduler-dependent
+			// sleep. This timeout belongs only to the test observer; the real
+			// watch still expires/fails closed on its unchanged budgets.
+			observed := 0
+			timer := time.NewTimer(2 * time.Second)
+			defer timer.Stop()
+			for observed < 3 {
+				select {
+				case <-f.refreshed:
+					observed++
+				case <-m.Done():
+					t.Fatalf("watch terminated before refresh observation: completed=%d requests=%d", observed, f.queries.Load())
+				case <-timer.C:
+					t.Fatalf("refresh response observation timed out: completed=%d requests=%d", observed, f.queries.Load())
+				}
+			}
+			if !m.Gate().active(ctx) {
+				t.Fatalf("watch inactive after completed responses: completed=%d requests=%d", observed, f.queries.Load())
 			}
 			switch mode {
 			case "revoke":
