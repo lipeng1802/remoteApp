@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r104：确切Windows缓存字节恢复至独立审计目录
+
+先读r103/Git，保持分支、docs/archive不跟踪，不推送；本轮没有Go构建或native启动。检查旧r67签名库存：Mac tls-product尚在，两helper不在；Windows三项全部缺失。Windows确切固定缓存路径三项Get-FileHash均匹配本机保存的r67 release-manifest清单。通过既有SSH/scp分别只读取三项到新建artifacts/connection-poc/r104-verified-input-recovery/windows，再次本机SHA256核对全部匹配，audit.json记录固定来源与摘要。未执行下载exe、未覆盖历史目录、未复用旧授权/安装根；只是恢复构建字节，不是安装或PONG通过。
+
+下一组改prepare输入接线：TLS选取原签名清单约束的本地Mac/新独立Windows恢复字节；两个helper使用当前源码构建及current-helpers审计，不再要求已缺失且不会使用的旧helper存在。Windows远端TLS缓存继续逐摘要核对后才可省略上传。失败不得降级fixture或跳过签名清单/摘要。为接线补缺失/篡改/额外项回归，然后fresh prepare；新工单不得回写r103失败状态。现有r67 manifest作为历史字节来源约束，过期包仍不得作为运行包。自动续办继续，无需用户介入；真实PONG/zero join/registered退休仍待验收。
+
 ## 2026-11-02 r103：限额prepare在旧Windows字节预检拒绝
 
 用户已恢复remoteapp自动续办；先读r102/Git，确认无Go编译残留。使用nice10/GOMAXPROCS2/GOFLAGS-p2运行fresh prepare，新工单21c6d59d09f8立即固定错误退出；未到helper编译、profile读取、短包签发或start。只读定位r67源windows目录及fixture仍在，但受信预检要核对的trust-journal.exe/identity-vault.exe/tls-product.exe全不存在；verified_windows_inputs明确files为空必拒绝。Windows SSH一次成功，不能把本次解释为密钥或离线故障。
