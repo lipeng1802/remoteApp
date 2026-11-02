@@ -1,5 +1,15 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-02 r106：首次安装双端READY；活动失败，独立撤销/故障join/在线退休通过
+
+先读r105/Git，确认prepare session已完成、phase=built、无Go进程；同一fresh工单406b6ee1aeb7，开始时最短profile尚余731秒，实际调用start。Windows本次首次setup即READY（没有resume-windows），Mac setup-result明确test_installed/completed/exit0；两端公开bootstrap驻留，phase=owners_ready。r94 Windows目录同步修复已随本轮新包实际接入；不反推历史全部根因。
+
+立即exercise，真实服务OS签名注册/claim/invite/incoming/approve/status/grant-clock均有返回trace，但完整activity未成功，不把单个device_result自动视为每项负向断言PASS。最终exercise返回固定失败，startup-diagnostic为controller=overlay_request_failed、target=target_listening；未观察到满足要求的持续PONG，也没有正常quiesce/zero-exit证据。此新阶段与历史r90 overlay_connect_failed不同：源码nodeproof/dial.go中NewRequest或DoLocalRequest报错都会emit该类别，尚不能认定是HTTP502、目标拒绝、deadline或EOF。禁止直接扩大3秒/重试整个注册授权，禁止在失败owner上重开会话。
+
+沿既有明确fault流程：fault-revoke exit0（独立session_revoked确认），fault-stop exit0（两端真实joined，fault退出码1），fault-retire exit0。最终fault-state=fault_joined_and_test_roots_retired、joined与retired双端true；在线registered TEST身份/节点/授权/原生状态及安装根按工具实际退休，任务/隧道/已知空holder清理完成，无finish-files补做，无强杀。原activity-state保留exercise_outcome_unknown，不回写正常成功。工单已退休永不复活，r84/r87旧未知现场仍不动。
+
+下一组优先补LocalAPI请求错误固定类型诊断（ctx deadline/cancel、类型化网络原因），不输出error原文、host或凭据；必要定向测试后再fresh新工单实际验证。不能把HTTP拒绝等待r91当作已修复本轮DoLocalRequest失败。本轮无代码改动，不重复回归/构建。自动续办ACTIVE，无用户操作，尚未完成整体切片4、GUI或可信发行；本记录本地提交不推送。
+
 ## 2026-11-02 r105：恢复字节接入fresh构建，当前构建进行中
 
 先读r104/Git，无Go构建残留。prepare现用verified_tls_sources分别验证Mac原tls-product和r104独立目录Windows tls-product.exe，仍以原r67 manifest唯一文件项与严格小写SHA约束，拒绝缺失/篡改/链接/重复清单项。签发前Windows确切缓存TLS再次Get-FileHash匹配才前进。旧helper缺失不再阻碍不会使用的字节；两个helper均来自当前源码build_current_helpers及current-helpers摘要审计，入builder前再次核对，包含拒绝symlink。start仍沿原current-helper审计/远端TLS摘要缓存门禁，不覆盖历史目录或运行过期包。
