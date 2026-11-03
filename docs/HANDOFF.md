@@ -6,6 +6,10 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-03 r157：验证加密 IP 往返与 TCP 的区别
+
+可信 TEST 的 TCP 超时若随后得到 DERP Disco 回复，且原授权仍 ACTIVE，再对同一签名目标执行一次 750ms TSMP。只记录固定结果。TSMP 证据覆盖加密 IP 往返，无法标明 TSMP 实际经 DERP 或 UDP，也不等于 TCP/TLS PONG。Go 与 Python 定向测试通过。合并 r156 Windows 子进程退出细分进行新鲜双机验收，日志 /tmp/remoteapp-r157-round.log。旧故障现场保留。
+
 ## 2026-11-03 r156：区分 Windows 子进程退出与可信 join
 
 对 daa5589ad6dc 的精确安装和包目录只读检查，仅见 supervisor 与 identity-vault，未见载荷进程。进程缺席无法补齐终帧、EOF、退出码和 cleanup witness。保留现场。新增固定诊断区分等待、管道、退出码及终帧，Windows 包装器只接受白名单。未改变退出和 join 判定。processowner 和 productmaintenance 定向测试通过。后续与下一组数据面修复合并验证。

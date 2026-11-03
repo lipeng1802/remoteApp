@@ -29,8 +29,23 @@ func discoveryStage(ctx context.Context, client *local.Client, target netip.Addr
 	case reply.Endpoint == "" && reply.PeerRelay != "" && reply.DERPRegionID == 0:
 		return startuptrace.ControllerDiscoveryUDPRelay
 	case reply.Endpoint == "" && reply.PeerRelay == "" && reply.DERPRegionID > 0:
-		return startuptrace.ControllerDiscoveryDERP
+		return derpDataStage(ctx, client, target, active)
 	default:
 		return startuptrace.ControllerDiscoveryUnavailable
 	}
+}
+
+// TSMP verifies an encrypted peer IP round trip without using the TCP listener.
+func derpDataStage(ctx context.Context, client *local.Client, target netip.Addr, active func(context.Context) bool) startuptrace.Stage {
+	probe, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
+	defer cancel()
+	if !active(probe) {
+		return startuptrace.ControllerDiscoveryDERP
+	}
+	reply, err := client.Ping(probe, target, tailcfg.PingTSMP)
+	if err != nil || probe.Err() != nil || reply == nil || reply.Err != "" ||
+		reply.IP != target.String() || reply.NodeIP != target.String() || !active(probe) {
+		return startuptrace.ControllerDiscoveryDERPDataUnconfirmed
+	}
+	return startuptrace.ControllerDiscoveryDERPDataObserved
 }
