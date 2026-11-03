@@ -1,13 +1,14 @@
 # Trusted TEST lifecycle transport, not a publisher/identity authentication API.
 function New-SupervisedFaultStopState {
     param([System.Diagnostics.Process]$Process,[switch]$LocalCancel)
-    return [pscustomobject]@{ Process=$Process; Phase='new'; PendingRead=$null; LocalCancel=[bool]$LocalCancel }
+    return [pscustomobject]@{ Process=$Process; Phase='new'; PendingRead=$null; LocalCancel=[bool]$LocalCancel; RejectionReason='' }
 }
 function Start-SupervisedFaultStop {
     param($State, [switch]$ExplicitRetry)
     if ($State.Phase -ne 'new' -and -not ($ExplicitRetry -and $State.Phase -eq 'rejected')) { throw 'Fault lifecycle already pending or sealed' }
     # Persist in the resident parent's state BEFORE any write. No EOF/fallback
     # stop on an unknown write or read; the signer may still be needed.
+    $State.RejectionReason=''
     $State.Phase='ready_pending'
     try {
         $op=if($State.LocalCancel){'stop_local_fault'}else{'stop_fault'}
@@ -31,6 +32,12 @@ function Receive-SupervisedFaultStop {
         $line=$State.PendingRead.GetAwaiter().GetResult()
         if ($State.Phase -eq 'ready_pending') {
             $rejected=if($State.LocalCancel){'{"status":"local_cancel_rejected"}'}else{'{"status":"fault_stop_rejected"}'}
+            if (-not $State.LocalCancel -and $line -cmatch '\A\{"reason":"(lock_unavailable|state_rejected|revocation_unconfirmed|child_join_unconfirmed|signer_join_unconfirmed|unavailable)","status":"fault_stop_rejected"\}\z') {
+                $State.RejectionReason=$Matches[1]
+                $State.PendingRead=$null
+                $State.Phase='rejected'
+                return $State.Phase
+            }
             if ([string]::Equals($line,$rejected,[StringComparison]::Ordinal)) {
                 $State.PendingRead=$null; $State.Phase='rejected'; return $State.Phase
             }

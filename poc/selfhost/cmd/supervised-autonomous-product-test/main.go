@@ -198,7 +198,11 @@ func run(output func(any) error) (result error) {
 				stop()
 				if e != nil {
 					fmt.Fprintln(os.Stderr, "FAULT_RELEASE_REASON "+productmaintenance.FaultReleaseReason(e))
-					if e = output(map[string]string{"status": "fault_stop_rejected"}); e != nil {
+					rejection := map[string]string{"status": "fault_stop_rejected"}
+					if runtime.GOOS == "windows" {
+						rejection["reason"] = productmaintenance.FaultReleaseReason(e)
+					}
+					if e = output(rejection); e != nil {
 						return e
 					}
 					continue

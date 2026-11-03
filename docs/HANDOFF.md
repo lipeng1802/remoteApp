@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r136：隐藏任务保留故障停止拒绝原因
+
+Windows supervisor 在可信父子 stdout 的拒绝帧中附带固定 reason。包装器精确匹配 JSON 字段及原因白名单并输出到任务日志，兼容旧拒绝帧。成功、EOF 和退出证明保持各自门禁。Windows 交叉 vet 通过，实际 Windows PowerShell 验证允许固定原因并拒绝陌生原因及额外字段。完整原生链路待复验。
+
+下一组补目标侧接收观测，合并到一次新鲜验收。632cc4279023 与 888d728cad1c 保留历史原生现场，无新停止请求。
+
 ## 2026-11-03 r135：精确绑定仍超时，Windows 故障停止被拒
 
 632cc4279023 双端 READY，目标过滤匹配且服务端有一条载荷规则。控制端仍在拨号阶段超时，目标未报告 TCP Accept。撤销成功，Mac join 已确认。Windows 包装器记录 ready_pending 和 rejected，任务仍 Running。日志未提供细分拒绝原因。已通过控制协议关闭本工单两个专用 SSH 隧道，记录 transport-closed.json。保留 Windows 安装根、进程和凭据，尚无退休证明。

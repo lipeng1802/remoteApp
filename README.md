@@ -398,3 +398,5 @@ Mac 可用 `poc/selfhost/public-server/run_awake_validation.py` 执行单次串�
 TEST 目标端记录本机过滤快照中签名对端 TCP 规则的匹配状态，用于定位拨号失败。
 
 目标载荷监听绑定签名 IPv4 地址和 TCP 47476。TEST 诊断分别记录 TCP 接入与身份校验阶段。
+
+Windows 隐藏 TEST 任务通过严格的父子拒绝帧记录固定故障停止原因。

@@ -100,7 +100,7 @@ try {
                         $faultRetryUsed=$true
                         Start-SupervisedFaultStop $faultState -ExplicitRetry
                     }
-                    if ($faultState.Phase -ne $faultLastPhase) { $faultLastPhase=$faultState.Phase;Write-Output ('FAULT_STOP_PHASE '+$faultState.Phase) }
+                    if ($faultState.Phase -ne $faultLastPhase) { $faultLastPhase=$faultState.Phase;Write-Output ('FAULT_STOP_PHASE '+$faultState.Phase);if($faultState.Phase -eq 'rejected' -and $faultState.RejectionReason){Write-Output ('FAULT_RELEASE_REASON '+$faultState.RejectionReason)} }
                     if ($faultState.Phase -eq 'joined') { Publish-SupervisedFaultStop $faultState $(if($faultState.LocalCancel){$localCancelReceipt}else{$faultReceipt});$faultCompleted=$true }
                 } catch { $faultState.Phase='unknown' }
                 # Outside the retaining catch: the outer wrapper/task must
