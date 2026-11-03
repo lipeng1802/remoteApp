@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r141：记录批准后查询与撤销的固定状态
+
+活动日志现在区分 request_rejected，并对批准、查询和撤销记录布尔 passed、白名单设备状态及授权是否存在。日志不包含请求 ID、授权正文或原始响应，也不替代精确撤销回执。17 项定向 Python 测试通过，Windows SSH 复测成功。
+
+使用全新签名包运行单一工单，日志 /tmp/remoteapp-r141-round.log。下一轮先接续该工单并检查固定阶段。e4cc83467910 保持隔离。
+
 ## 2026-11-03 r140：定位到批准后查询，Windows relay 可达
 
 e4cc83467910 通过原 Windows relay 发出受支持的只读 product_stage，退出码 0，返回 unreported。r139 的 Windows owner_status 属于 Mac holder 协议，Windows relay 会在连接管道前拒绝，因此不能用来判断管道故障。

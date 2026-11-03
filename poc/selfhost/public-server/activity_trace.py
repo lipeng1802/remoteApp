@@ -11,10 +11,11 @@ class RecordedEndpoint:
         self.directory.mkdir(mode=0o700)  # Existing evidence must be preserved.
         self.endpoint=endpoint;self.sequence=0;self.lock=threading.Lock()
 
-    def event(self,phase,op,action,status=None):
+    def event(self,phase,op,action,status=None, evidence=None):
         self.sequence+=1
         value={'version':1,'phase':phase,'op':op,'action':action}
         if status is not None:value['status']=status
+        if evidence is not None:value.update(evidence)
         with (self.directory/('%06d.json'%self.sequence)).open('x') as output:
             json.dump(value,output,sort_keys=True);output.flush();os.fsync(output.fileno())
 
@@ -31,6 +32,17 @@ class RecordedEndpoint:
                 self.event('outcome_unknown',op,action)
                 raise
             status=result.get('status') if isinstance(result,dict) else None
-            if status not in ('device_result','network_authorization','network_watch','product_stage','product_count','product_unavailable','session_quiesced','session_revoked','failed','unavailable','rejected'):status='other'
-            self.event('returned',op,action,status)
+            if status not in ('device_result','network_authorization','network_watch','product_stage','product_count','product_unavailable','session_quiesced','session_revoked','failed','unavailable','rejected','request_rejected'):status='other'
+            evidence = {}
+            if status == 'device_result' and action in ('approve', 'status', 'revoke'):
+                passed = result.get('passed')
+                if type(passed) is bool:
+                    evidence['passed'] = passed
+                device = result.get('device')
+                if passed is True and isinstance(device, dict):
+                    state = device.get('status')
+                    if state in ('pending', 'approved', 'denied', 'revoked'):
+                        evidence['device_state'] = state
+                    evidence['grant_present'] = 'grant' in device
+            self.event('returned',op,action,status,evidence)
             return result

@@ -24,3 +24,23 @@ class PublicActivityTrace(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'PRIVATE'):traced({'Op':'provision','Network':{'grant':'PRIVATE'}})
             text=''.join(p.read_text() for p in traced.directory.iterdir())
             self.assertNotIn('PRIVATE',text);self.assertIn('provision',text);self.assertIn('outcome_unknown',text)
+
+    def test_status_trace_records_only_public_terminal_evidence(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            responses = iter((
+                {'status':'device_result','passed':True,'device':{'status':'revoked','request_id':'PRIVATE'}},
+                {'status':'device_result','passed':False,'device':{'status':'PRIVATE'}},
+                {'status':'request_rejected'},
+            ))
+            traced = RecordedEndpoint(Path(d), 'controller', lambda _:next(responses))
+            for _ in range(3):
+                traced({'Op':'device','Device':{'action':'status','request_id':'PRIVATE'}})
+            rows = [json.loads(p.read_text()) for p in sorted(traced.directory.glob('*.json'))][1::2]
+            self.assertEqual(rows[0]['device_state'], 'revoked')
+            self.assertTrue(rows[0]['passed'])
+            self.assertFalse(rows[0]['grant_present'])
+            self.assertFalse(rows[1]['passed'])
+            self.assertNotIn('device_state', rows[1])
+            self.assertEqual(rows[2]['status'], 'request_rejected')
+            self.assertNotIn('PRIVATE', repr(rows))
