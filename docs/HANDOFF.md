@@ -1,5 +1,13 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r140：定位到批准后查询，Windows relay 可达
+
+e4cc83467910 通过原 Windows relay 发出受支持的只读 product_stage，退出码 0，返回 unreported。r139 的 Windows owner_status 属于 Mac holder 协议，Windows relay 会在连接管道前拒绝，因此不能用来判断管道故障。
+
+原工单固定阶段日志证明两端注册调用、邀请码、claim、incoming 与目标 approve 均返回 device_result。随后 Mac 对同一请求的两次 status 返回未识别状态。清理路径的 Windows status 和 device revoke 均返回 device_result，但固定日志未保留 passed 或终态，不能视为已确认撤销。本轮无 grant_clock、provision 或载荷调用记录，独立 revoke_session 也无法据此证明原授权的撤销结果。
+
+后续先给只读查询及清理记录加入经过白名单约束的终态证据，再用新鲜工单定位 Mac status。原工单保留，不重发批准或撤销，不推进 stop 或退休。
+
 ## 2026-11-03 r139：原工单只读核对
 
 e4cc83467910 的 Headscale 策略查询成功，载荷与持有证明规则计数均为零。该结果只证明当前规则快照，无法区分会话从未进入授权、自然到期或撤销成功。Mac owner 仍可查询且未 join。Windows SSH 正常，精确 Interactive 任务仍 Running，READY 文件与 relay 存在，未见故障 join 回执。Windows 私有 relay 调用无有效响应。活动记录仅有 exercise_outcome_unknown，未生成 provision 后策略观察。
