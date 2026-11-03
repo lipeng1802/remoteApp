@@ -275,6 +275,13 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 						stage = startuptrace.ControllerPeerSendUnchanged
 						if grew {
 							stage = startuptrace.ControllerPeerSendObserved
+							direct, relay := status.PeerUDPSelection()
+							switch {
+							case direct && !relay:
+								stage = startuptrace.ControllerPeerSendDirectSelected
+							case relay && !direct:
+								stage = startuptrace.ControllerPeerSendUDPRelaySelected
+							}
 						}
 					}
 				}

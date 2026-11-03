@@ -28,6 +28,8 @@ type RouteStatus struct {
 	peerTxBytes    int64
 	peerNode       key.NodePublic
 	peerIP         netip.Addr
+	peerDirectUDP  bool
+	peerUDPRelay   bool
 }
 
 func ClientRouteStatus(ctx context.Context, lc *local.Client, node string, ip netip.Addr) RouteStatus {
@@ -64,6 +66,7 @@ func routeStatus(st *ipnstate.Status, failed bool, node string, ip netip.Addr) R
 	}
 	if r.IPMatches && r.InEngine {
 		r.peerTxBytes, r.peerNode, r.peerIP = p.TxBytes, public, ip
+		r.peerDirectUDP, r.peerUDPRelay = p.CurAddr != "", p.PeerRelay != ""
 	}
 	r.Ready = r.Running && r.PeerKnown && r.IPMatches && r.InNetworkMap && r.AllowedIP
 	return r
@@ -77,4 +80,9 @@ func (r RouteStatus) PeerTransmitGrowth(before RouteStatus) (grew, known bool) {
 		return false, false
 	}
 	return r.peerTxBytes > before.peerTxBytes, true
+}
+
+// PeerUDPSelection describes only the current SDK route selection snapshot.
+func (r RouteStatus) PeerUDPSelection() (direct, relay bool) {
+	return r.peerDirectUDP, r.peerUDPRelay
 }
