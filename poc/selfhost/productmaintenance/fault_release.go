@@ -11,8 +11,16 @@ var errFaultRevocation = errors.New("fault release revocation unconfirmed")
 var errFaultChild = errors.New("fault release child join unconfirmed")
 var errFaultSigner = errors.New("fault release signer join unconfirmed")
 
+type faultChildEvidence string
+
+func (e faultChildEvidence) Error() string { return string(e) }
+
 // FaultReleaseReason exposes fixed TEST diagnostics, never underlying errors.
 func FaultReleaseReason(err error) string {
+	var child faultChildEvidence
+	if errors.As(err, &child) {
+		return string(child)
+	}
 	for _, item := range []struct {
 		cause  error
 		reason string
@@ -52,7 +60,7 @@ func (c *Controller) ReleaseFault(ctx context.Context) error {
 	}
 	_ = c.child.Stop(ctx)
 	if !c.child.JoinedFault() {
-		return errors.Join(ErrProduct, errFaultChild)
+		return errors.Join(ErrProduct, errFaultChild, faultChildEvidence(c.child.FaultJoinFailure()))
 	}
 	c.revocation.Close()
 	if err := c.signer.CloseJoined(); err != nil {

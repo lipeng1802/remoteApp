@@ -6,6 +6,10 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-03 r156：区分 Windows 子进程退出与可信 join
+
+对 daa5589ad6dc 的精确安装和包目录只读检查，仅见 supervisor 与 identity-vault，未见载荷进程。进程缺席无法补齐终帧、EOF、退出码和 cleanup witness。保留现场。新增固定诊断区分等待、管道、退出码及终帧，Windows 包装器只接受白名单。未改变退出和 join 判定。processowner 和 productmaintenance 定向测试通过。后续与下一组数据面修复合并验证。
+
 ## 2026-11-03 r155：DERP 发现成功，Windows 子进程 join 未确认
 
 daa5589ad6dc 双端 READY，目标过滤规则匹配。控制端 TCP 超时后，固定签名目标的 Disco 返回 DERP 路径，证明该次发现往返可达，不能证明 TCP 或 TLS 载荷。独立撤销和 Mac 故障 join 已确认。Windows 精确 Interactive 任务仍 Running，固定日志为 child_join_unconfirmed，说明 supervisor 已通过撤销核对但未取得可信子进程 join。无 Windows join 回执，尚未退休。

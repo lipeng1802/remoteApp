@@ -32,7 +32,7 @@ function Receive-SupervisedFaultStop {
         $line=$State.PendingRead.GetAwaiter().GetResult()
         if ($State.Phase -eq 'ready_pending') {
             $rejected=if($State.LocalCancel){'{"status":"local_cancel_rejected"}'}else{'{"status":"fault_stop_rejected"}'}
-            if (-not $State.LocalCancel -and $line -cmatch '\A\{"reason":"(lock_unavailable|state_rejected|revocation_unconfirmed|child_join_unconfirmed|signer_join_unconfirmed|unavailable)","status":"fault_stop_rejected"\}\z') {
+            if (-not $State.LocalCancel -and $line -cmatch '\A\{"reason":"(lock_unavailable|state_rejected|revocation_unconfirmed|child_join_unconfirmed|child_pipe_unconfirmed|child_exit_unexpected|child_terminal_unconfirmed|child_join_pending|signer_join_unconfirmed|unavailable)","status":"fault_stop_rejected"\}\z') {
                 $State.RejectionReason=$Matches[1]
                 $State.PendingRead=$null
                 $State.Phase='rejected'

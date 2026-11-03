@@ -218,6 +218,25 @@ func (c *Child) JoinedFault() bool {
 	}
 }
 
+// FaultJoinFailure reports only fixed TEST categories after the join barrier.
+func (c *Child) FaultJoinFailure() string {
+	select {
+	case <-c.done:
+		switch {
+		case c.readErr != nil || c.diagnosticErr != nil:
+			return "child_pipe_unconfirmed"
+		case c.cmd.ProcessState == nil || c.cmd.ProcessState.ExitCode() != 1:
+			return "child_exit_unexpected"
+		case c.terminalFrames != 1 || !c.failedTerminal:
+			return "child_terminal_unconfirmed"
+		default:
+			return "child_join_unconfirmed"
+		}
+	default:
+		return "child_join_pending"
+	}
+}
+
 // Exchange's response remains private to the trusted caller. Never log it:
 // product readiness may contain a temporary test HMAC. A timed-out exchange
 // latches fault and closes input; its late response cannot authorize reuse.
