@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r134：目标过滤匹配，收紧监听绑定并复验
+
+f69687a06d31 目标报告 target_filter_match，控制端仍拨号超时。服务端有一条载荷规则，双端故障 join、撤销及退休通过。SDK 对通配监听需额外匹配当前节点地址。目标现直接绑定签名 IPv4 和 TCP 47476，记录 Accept 实际返回与结束阶段。streamgate 和 startuptrace 测试通过。尚无持续 PONG。
+
+新工单 supervised-activity-r75-632cc4279023，exec session 1441，日志 /tmp/remoteapp-r134-round.log。承接同一进程，核对目标 Accept、Secret 握手及收尾。
+
 ## 2026-11-03 r133：观测目标端过滤规则
 
 TEST 监听建立后通过本机 LocalAPI 读取一次过滤规则，使用 SDK 解析并匹配签名绑定中的源、目标、TCP 和 47476。只记录匹配、无 IP 匹配或不可用三个阶段。此快照仅用于诊断，授权仍由原 gate 决定。streamgate 和 startuptrace 测试通过。

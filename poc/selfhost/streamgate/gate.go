@@ -96,8 +96,10 @@ func (l *overlayListener) Accept() (net.Conn, error) {
 	}
 	conn, err := l.Listener.Accept()
 	if err != nil {
+		startuptrace.Emit(l.ctx, startuptrace.TargetAcceptEnded)
 		return nil, err
 	}
+	startuptrace.Emit(l.ctx, startuptrace.TargetTCPAccepted)
 	verified, err := l.gate.peer(l.ctx, l.server, conn)
 	if err != nil {
 		startuptrace.Emit(l.ctx, startuptrace.TargetPeerDenied)
@@ -199,7 +201,7 @@ func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener
 		startuptrace.Emit(ctx, startuptrace.TargetSelfDenied)
 		return nil, session.ErrDenied
 	}
-	listener, err := s.Listen("tcp", ":47476")
+	listener, err := s.Listen("tcp4", net.JoinHostPort(g.binding.TargetIP, "47476"))
 	if err != nil || !g.active(ctx) {
 		startuptrace.Emit(ctx, startuptrace.TargetListenFailed)
 		if listener != nil {

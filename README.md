@@ -396,3 +396,5 @@ Mac 可用 `poc/selfhost/public-server/run_awake_validation.py` 执行单次串�
 原生签名器允许两个精确的 Product Secret 握手角色域。现有部署需要新构建的签名器。
 
 TEST 目标端记录本机过滤快照中签名对端 TCP 规则的匹配状态，用于定位拨号失败。
+
+目标载荷监听绑定签名 IPv4 地址和 TCP 47476。TEST 诊断分别记录 TCP 接入与身份校验阶段。
