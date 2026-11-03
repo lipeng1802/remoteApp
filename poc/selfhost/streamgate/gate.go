@@ -249,8 +249,10 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	startuptrace.Emit(ctx, startuptrace.ControllerRouteWait)
+	var routeBaseline nodeproof.RouteStatus
 	if !waitInitialRoute(dialCtx, func(check context.Context) nodeproof.RouteStatus {
-		return nodeproof.ClientRouteStatus(check, lc, g.binding.TargetNode, g.cfg.Binding.TargetIP)
+		routeBaseline = nodeproof.ClientRouteStatus(check, lc, g.binding.TargetNode, g.cfg.Binding.TargetIP)
+		return routeBaseline
 	}, g.active) {
 		startuptrace.Emit(ctx, startuptrace.ControllerRouteDenied)
 		cancel()
@@ -268,6 +270,14 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 			stage := deadlineRouteStage(status)
 			if stage == startuptrace.DeadlineRouteEnginePresent {
 				stage = controllerSendStage(sendBaseline, readControllerSend(ctx, lc))
+				if stage == startuptrace.ControllerSendObserved {
+					if grew, known := status.PeerTransmitGrowth(routeBaseline); known {
+						stage = startuptrace.ControllerPeerSendUnchanged
+						if grew {
+							stage = startuptrace.ControllerPeerSendObserved
+						}
+					}
+				}
 			}
 			startuptrace.Emit(ctx, stage)
 		}

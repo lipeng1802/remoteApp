@@ -25,6 +25,9 @@ type RouteStatus struct {
 	SelfRelayKnown bool   `json:"self_relay_known"`
 	PeerRelayKnown bool   `json:"peer_relay_known"`
 	HandshakeSeen  bool   `json:"handshake_seen"`
+	peerTxBytes    int64
+	peerNode       key.NodePublic
+	peerIP         netip.Addr
 }
 
 func ClientRouteStatus(ctx context.Context, lc *local.Client, node string, ip netip.Addr) RouteStatus {
@@ -59,6 +62,19 @@ func routeStatus(st *ipnstate.Status, failed bool, node string, ip netip.Addr) R
 			r.AllowedIP = r.AllowedIP || prefix == netip.PrefixFrom(ip, 32)
 		}
 	}
+	if r.IPMatches && r.InEngine {
+		r.peerTxBytes, r.peerNode, r.peerIP = p.TxBytes, public, ip
+	}
 	r.Ready = r.Running && r.PeerKnown && r.IPMatches && r.InNetworkMap && r.AllowedIP
 	return r
+}
+
+// PeerTransmitGrowth compares only observations of the same bound peer.
+// The counter covers all WireGuard traffic to that peer, not a TCP flow.
+func (r RouteStatus) PeerTransmitGrowth(before RouteStatus) (grew, known bool) {
+	if !r.peerIP.IsValid() || r.peerIP != before.peerIP || r.peerNode != before.peerNode ||
+		before.peerTxBytes < 0 || r.peerTxBytes < before.peerTxBytes {
+		return false, false
+	}
+	return r.peerTxBytes > before.peerTxBytes, true
 }
