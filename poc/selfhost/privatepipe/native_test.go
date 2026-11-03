@@ -109,7 +109,7 @@ func TestNativeVaultIdentityAndIsolation(t *testing.T) {
 	if _, e = next.Sign(message); e != nil {
 		t.Fatal("reopened signature")
 	}
-	for _, domain := range []string{"remoteapp-provision-intent-v1", "remoteapp-node-possession-v1", "remoteapp-session-target-v1", "remoteapp-session-controller-v1", "remoteapp-session-product-tls-target-v1", "remoteapp-session-product-tls-controller-v1"} {
+	for _, domain := range []string{"remoteapp-provision-intent-v1", "remoteapp-node-possession-v1", "remoteapp-session-target-v1", "remoteapp-session-controller-v1", "remoteapp-session-product-secret-target-v1", "remoteapp-session-product-secret-controller-v1", "remoteapp-session-product-tls-target-v1", "remoteapp-session-product-tls-controller-v1"} {
 		if _, e = next.Sign([]byte(domain + "\n{}")); e != nil {
 			t.Fatal("native helper domain", domain)
 		}

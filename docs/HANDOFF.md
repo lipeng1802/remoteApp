@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r129：修复 Secret 握手签名域缺失
+
+888d728cad1c 双端 READY，活动策略实测有一条 47476 规则和零条 47477 规则。控制端等待 welcome，目标停在 sign。源码确认原生签名白名单缺少 Secret 握手的两个角色域。已补齐 Windows vault、桌面探针、Go bridge 和 Swift vault 的精确域，并更新域探针回归。四个相关 Go 包测试通过。新包双机验收待执行。
+
+远端撤销成功，Mac 故障退出已验证，Windows 返回明确 fault-stop rejected。已对该工单提交一次本地取消请求，首次读取尚无退出回执。下一轮先核对同一回执和任务实际退出，保留根与隧道，分别处理本地退出和在线退休证明，避免端口冲突后再开新包。
+
 ## 2026-11-03 r128：SSH 恢复，双机轮次执行中
 
 Mac 经 BatchMode SSH 实际收到 Windows 的 SSH_OK，确认无重型任务后启动唯一新轮次 supervised-activity-r75-888d728cad1c。exec session 59413，日志 /tmp/remoteapp-r128-round.log。下一轮承接同一进程和工单，读取活动策略、PONG 和收尾回执。运行中不重复开包。

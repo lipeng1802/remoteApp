@@ -27,7 +27,7 @@ func (s *domainProbeSigner) Sign(raw []byte) ([]byte, error) {
 func TestProbeRejectsStaleSignerBeforeRemoteEnrollment(t *testing.T) {
 	_, key, _ := ed25519.GenerateKey(rand.Reader)
 	s := &domainProbeSigner{key: key}
-	if probeSigningDomains(s) != nil || s.calls != 8 {
+	if probeSigningDomains(s) != nil || s.calls != 10 {
 		t.Fatal("complete signing contract not probed")
 	}
 	s = &domainProbeSigner{key: key, stale: true}

@@ -392,3 +392,5 @@ TEST 路由诊断包含本端/对端relay是否已知及是否曾观测握手的
 私有TEST协调器可在双端provision后只读记录Headscale载荷/证明规则数量，不导出策略材料；计数不属于身份、客户端策略应用或PONG验收证据。
 
 Mac 可用 `poc/selfhost/public-server/run_awake_validation.py` 执行单次串行TEST轮次；仅进程存活时以 `caffeinate -i` 防空闲系统休眠，不改全局设置、不阻止显示器休眠/手动睡眠，所有短期有效期门禁保持。
+
+原生签名器允许两个精确的 Product Secret 握手角色域。现有部署需要新构建的签名器。
