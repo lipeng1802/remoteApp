@@ -1,5 +1,9 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r128：SSH 恢复，双机轮次执行中
+
+Mac 经 BatchMode SSH 实际收到 Windows 的 SSH_OK，确认无重型任务后启动唯一新轮次 supervised-activity-r75-888d728cad1c。exec session 59413，日志 /tmp/remoteapp-r128-round.log。下一轮承接同一进程和工单，读取活动策略、PONG 和收尾回执。运行中不重复开包。
+
 ## 2026-11-03 r127：按验收结果合并任务，Windows 管理入口待复核
 
 用户确认 Windows 侧已恢复。从执行验收的 Mac 复测 BatchMode SSH，100.73.4.118:22 仍在 8 秒连接预算内超时，未进入认证。双机轮次尚未启动，自动续办保持暂停。
