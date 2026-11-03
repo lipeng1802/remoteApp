@@ -2,6 +2,7 @@ package testretirement
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,7 +18,7 @@ import (
 
 var errOnlineRetirement = errors.New("node_retirement_unconfirmed")
 
-func confirmNodeRetirement(ctx context.Context, r trustinstall.Release, p trustprofile.Profile, identity autonomousbinding.Record, node enrollmentstore.Record, vault, digest string, tunnel bool) (result error) {
+func confirmNodeRetirement(ctx context.Context, r trustinstall.Release, p trustprofile.Profile, identity autonomousbinding.Record, node enrollmentstore.Record, vault, digest string, port uint16) (result error) {
 	if ctx == nil || ctx.Err() != nil || !r.Specification().Test || node.Phase != "registered" {
 		return errOnlineRetirement
 	}
@@ -48,8 +49,10 @@ func confirmNodeRetirement(ctx context.Context, r trustinstall.Release, p trustp
 		return errOnlineRetirement
 	}
 	create := invite.NewProfileNetworkClient
-	if tunnel {
-		create = invite.NewTestTunnelNetworkClient
+	if port != 0 {
+		create = func(p trustprofile.Profile, root ed25519.PublicKey, service string, floor uint64, signer invite.DeviceSigner) (*invite.NetworkClient, error) {
+			return invite.NewTestTunnelNetworkClientOnPort(p, root, service, floor, signer, port)
+		}
 	}
 	client, err := create(p, root, r.Specification().Service, r.Specification().MinimumEpoch, signer)
 	if err != nil {

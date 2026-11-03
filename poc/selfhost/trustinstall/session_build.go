@@ -208,29 +208,29 @@ func CompileIdleTestRetirement(ctx context.Context, goexe, module, target, dest 
 
 // CompileNodeTestRetirement adds online, short-lived issuer proof to the fixed
 // TEST teardown. Runtime still cannot choose an identity, node or destination.
-func CompileNodeTestRetirement(ctx context.Context, goexe, module, target, dest string, s Specification, root, signerDigest string, now time.Time, tunnel bool) error {
-	if !s.Test || !validInstallRoot(target, root) || !canonical(signerDigest, 32) || (tunnel && s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444") {
+func CompileNodeTestRetirement(ctx context.Context, goexe, module, target, dest string, s Specification, root, signerDigest string, now time.Time, port uint16) error {
+	if !s.Test || !validInstallRoot(target, root) || !canonical(signerDigest, 32) || (port != 0 && (port < 1024 || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444")) {
 		return trustprofile.ErrTrust
 	}
 	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(root)) + " -X main.embeddedSignerDigest=" + signerDigest + " -X main.embeddedMode=registered"
-	if tunnel {
-		extra += " -X main.embeddedTestTunnel=loopback18444"
+	if port != 0 {
+		extra += testTunnelFlags(port)
 	}
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/retire-idle-test", extra, now)
 }
 
 // CompileProductSupervisorTest fixes the product executable/digests at build
 // time. Runtime starts only an existing native binding; it cannot choose keys.
-func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, testTunnel ...bool) error {
+func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, testTunnel ...uint16) error {
 	if !s.Test || !validInstallRoot(target, productPath) || !canonical(productDigest, 32) || !canonical(signerDigest, 32) {
 		return trustprofile.ErrTrust
 	}
 	extra := " -X main.embeddedProductPath=" + base64.RawURLEncoding.EncodeToString([]byte(productPath)) + " -X main.embeddedProductDigest=" + productDigest + " -X main.embeddedSignerDigest=" + signerDigest
 	if len(testTunnel) > 0 {
-		if len(testTunnel) != 1 || !testTunnel[0] || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" {
+		if len(testTunnel) != 1 || testTunnel[0] < 1024 || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" {
 			return trustprofile.ErrTrust
 		}
-		extra += " -X main.embeddedTestTunnel=loopback18444"
+		extra += testTunnelFlags(testTunnel[0])
 	}
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/supervised-autonomous-product-test", extra, now)
 }
@@ -320,13 +320,13 @@ func CompileDesktopTestSession(ctx context.Context, goexe, module, dest string, 
 	}
 	return compileEntry(ctx, goexe, module, "windows", dest, s, signerDigest, productDigest, "./cmd/desktop-session", false, now)
 }
-func CompileAutonomousProductTestTunnel(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, now time.Time) error {
+func CompileAutonomousProductTestTunnel(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, now time.Time, port uint16) error {
 	if !s.Test || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" || !canonical(productDigest, 32) {
 		return trustprofile.ErrTrust
 	}
-	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-autonomous-product", true, now, true)
+	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-autonomous-product", true, now, port)
 }
-func compileEntry(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, native bool, now time.Time, testTunnel ...bool) error {
+func compileEntry(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, native bool, now time.Time, testTunnel ...uint16) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust
 	}
@@ -343,10 +343,10 @@ func compileEntry(ctx context.Context, goexe, module, target, dest string, s Spe
 	}
 	extra := ""
 	if len(testTunnel) > 0 {
-		if len(testTunnel) != 1 || !testTunnel[0] || !s.Test || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" {
+		if len(testTunnel) != 1 || testTunnel[0] < 1024 || !s.Test || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" {
 			return trustprofile.ErrTrust
 		}
-		extra = " -X main.embeddedTestTunnel=loopback18444"
+		extra = testTunnelFlags(testTunnel[0])
 	}
 	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags=-X main.embeddedRelease="+encoded+" -X main.embeddedSignerDigest="+signerDigest+" -X main.embeddedProductDigest="+productDigest+extra, "-o", dest, entry)
 	cmd.Dir = module
@@ -366,4 +366,21 @@ func compileEntry(ctx context.Context, goexe, module, target, dest string, s Spe
 		return buildProcessFailure(ctx)
 	}
 	return nil
+}
+
+func testTunnelFlags(port uint16) string {
+	return " -X main.embeddedTestTunnel=loopback" + strconv.Itoa(int(port))
+}
+
+// ParseTestTunnelPort validates compiled TEST routing. Empty selects direct HTTPS.
+func ParseTestTunnelPort(value string) (uint16, error) {
+	if value == "" {
+		return 0, nil
+	}
+	raw, ok := strings.CutPrefix(value, "loopback")
+	port, err := strconv.ParseUint(raw, 10, 16)
+	if !ok || err != nil || port < 1024 || strconv.FormatUint(port, 10) != raw {
+		return 0, trustprofile.ErrTrust
+	}
+	return uint16(port), nil
 }

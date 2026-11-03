@@ -87,10 +87,11 @@ func run(output func(any) error) (result error) {
 	if e != nil {
 		return e
 	}
-	if embeddedTestTunnel != "" && embeddedTestTunnel != "loopback18444" {
+	port, portErr := trustinstall.ParseTestTunnelPort(embeddedTestTunnel)
+	if portErr != nil {
 		return trustprofile.ErrTrust
 	}
-	if e = controller.ConfigureRevocation(ctx, embeddedTestTunnel == "loopback18444"); e != nil {
+	if e = controller.ConfigureRevocation(ctx, port); e != nil {
 		return e
 	}
 	l, e := net.Listen("tcp4", "127.0.0.1:0")

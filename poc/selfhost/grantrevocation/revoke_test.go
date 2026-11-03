@@ -163,7 +163,7 @@ func TestExpiredClosedControllerAndCancelledContextsCannotSign(t *testing.T) {
 			}
 		})
 	}
-	if _, e := New(trustinstall.Specification{}, nil, false); e == nil {
+	if _, e := New(trustinstall.Specification{}, nil, 0); e == nil {
 		t.Fatal("production enabled")
 	}
 }

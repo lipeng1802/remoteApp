@@ -33,7 +33,7 @@ type Channel struct {
 	pinned, attempted, confirmed, closed bool
 }
 
-func New(s trustinstall.Specification, signer invite.DeviceSigner, tunnel bool) (*Channel, error) {
+func New(s trustinstall.Specification, signer invite.DeviceSigner, port uint16) (*Channel, error) {
 	if !s.Test || signer == nil {
 		return nil, ErrDenied
 	}
@@ -42,8 +42,10 @@ func New(s trustinstall.Specification, signer invite.DeviceSigner, tunnel bool) 
 		return nil, ErrDenied
 	}
 	create := invite.NewProfileNetworkClient
-	if tunnel {
-		create = invite.NewTestTunnelNetworkClient
+	if port != 0 {
+		create = func(p trustprofile.Profile, root ed25519.PublicKey, service string, floor uint64, signer invite.DeviceSigner) (*invite.NetworkClient, error) {
+			return invite.NewTestTunnelNetworkClientOnPort(p, root, service, floor, signer, port)
+		}
 	}
 	client, e := create(s.Bundled, root, s.Service, s.MinimumEpoch, signer)
 	if e != nil {

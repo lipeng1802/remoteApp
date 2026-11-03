@@ -55,7 +55,7 @@ type Controller struct {
 }
 
 // ConfigureRevocation is trusted compiled wiring, never a pipe-supplied switch.
-func (c *Controller) ConfigureRevocation(ctx context.Context, tunnel bool) error {
+func (c *Controller) ConfigureRevocation(ctx context.Context, port uint16) error {
 	if e := c.lock(ctx); e != nil {
 		return e
 	}
@@ -63,7 +63,7 @@ func (c *Controller) ConfigureRevocation(ctx context.Context, tunnel bool) error
 	if c.revocation != nil || c.child == nil || c.requested || c.broken || c.provisioned || c.released {
 		return ErrProduct
 	}
-	r, e := grantrevocation.New(c.r.Specification(), c.signer, tunnel)
+	r, e := grantrevocation.New(c.r.Specification(), c.signer, port)
 	if e != nil {
 		return e
 	}

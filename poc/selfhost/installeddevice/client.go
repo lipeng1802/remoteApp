@@ -4,6 +4,7 @@ package installeddevice
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/hex"
 	"time"
 
@@ -112,14 +113,14 @@ func WatchedEnrollmentRunnerWithSession(release trustinstall.Release, open clien
 
 // WatchedSessionViaTestTunnel requires explicit compiled TEST opt-in. Requests
 // cannot choose a tunnel, root or endpoint. Production wiring stays unchanged.
-func WatchedSessionViaTestTunnel(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, work SessionWork) clientowner.Runner {
-	if !release.Specification().Test {
+func WatchedSessionViaTestTunnel(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, work SessionWork, port uint16) clientowner.Runner {
+	if port < 1024 || !release.Specification().Test {
 		return func(context.Context, trustprofile.Profile) error { return trustprofile.ErrTrust }
 	}
-	return runner(release, open, commands, output, factory, true, true, work, true)
+	return runner(release, open, commands, output, factory, true, true, work, port)
 }
 
-func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork, testTunnel ...bool) clientowner.Runner {
+func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork, testTunnel ...uint16) clientowner.Runner {
 	return func(ctx context.Context, profile trustprofile.Profile) (result error) {
 		w := cleanupwitness.From(ctx)
 		w.Begin(cleanupwitness.Runner)
@@ -146,11 +147,13 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		}()
 		anchor := release.Anchor()
 		createClient := invite.NewProfileNetworkClient
-		if len(testTunnel) == 1 && testTunnel[0] {
+		if len(testTunnel) == 1 {
 			if !release.Specification().Test {
 				return trustprofile.ErrTrust
 			}
-			createClient = invite.NewTestTunnelNetworkClient
+			createClient = func(p trustprofile.Profile, root ed25519.PublicKey, service string, floor uint64, signer invite.DeviceSigner) (*invite.NetworkClient, error) {
+				return invite.NewTestTunnelNetworkClientOnPort(p, root, service, floor, signer, testTunnel[0])
+			}
 		}
 		client, err := createClient(profile, anchor.Root[:], anchor.Service, anchor.MinimumEpoch, signer)
 		if err != nil {

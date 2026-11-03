@@ -101,7 +101,7 @@ func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T
 	if approved.Grant == nil {
 		t.Fatal("grant missing")
 	}
-	channel, e := New(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: profile.Claims.Service, MinimumEpoch: 1, Bundled: profile}, owner, false)
+	channel, e := New(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: profile.Claims.Service, MinimumEpoch: 1, Bundled: profile}, owner, 0)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -112,7 +112,7 @@ func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T
 	if e = channel.Pin(*approved.Grant); e != nil {
 		t.Fatal(e)
 	}
-	peerChannel, e := New(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: profile.Claims.Service, MinimumEpoch: 1, Bundled: profile}, peer, false)
+	peerChannel, e := New(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: profile.Claims.Service, MinimumEpoch: 1, Bundled: profile}, peer, 0)
 	if e != nil {
 		t.Fatal(e)
 	}

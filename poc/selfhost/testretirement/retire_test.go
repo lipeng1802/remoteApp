@@ -13,7 +13,7 @@ import (
 )
 
 func TestProductionRetirementRefused(t *testing.T) {
-	if Registered(context.Background(), trustinstall.Release{}, "/no-test-root", "/no-helper", "/no-vault", "", false) == nil {
+	if Registered(context.Background(), trustinstall.Release{}, "/no-test-root", "/no-helper", "/no-vault", "", 0) == nil {
 		t.Fatal("production registered teardown allowed")
 	}
 	if Idle(trustinstall.Release{}, "/no-test-root", "/no-helper", "/no-vault", "") == nil {

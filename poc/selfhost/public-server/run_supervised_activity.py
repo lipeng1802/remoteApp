@@ -28,13 +28,32 @@ OPTIONS=["-o","BatchMode=yes","-o","ConnectTimeout=12","-o","IPQoS=none",
          "-o","ServerAliveInterval=5","-o","ServerAliveCountMax=2"]
 
 
-def require_free_forward_port():
+def require_free_forward_port(port):
     """Check the fixed TEST port before creating a bundle or remote root."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         try:
-            listener.bind(("127.0.0.1", 18444))
+            listener.bind(("127.0.0.1", port))
         except OSError:
             raise RuntimeError("activity_local_forward_port_unavailable") from None
+
+
+def require_windows_forward_port(port):
+    # Any listener on the selected Windows port is treated as occupied.
+    if ps(f"$ErrorActionPreference='Stop';if(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq {port}){{'BUSY'}}else{{'FREE'}}") != "FREE":
+        raise RuntimeError("activity_windows_forward_port_unavailable")
+
+
+def select_forward_port():
+    for port in range(18445, 18461):
+        try:
+            require_free_forward_port(port)
+            require_windows_forward_port(port)
+        except RuntimeError as error:
+            if str(error) not in ("activity_local_forward_port_unavailable", "activity_windows_forward_port_unavailable"):
+                raise
+        else:
+            return port
+    raise RuntimeError("activity_forward_port_pool_exhausted")
 
 
 def limited_build_command(args):
@@ -201,6 +220,8 @@ def metadata(work):
             or m["mac_root"]!="/private/tmp/remoteapp-r75-"+n+"/installed"
             or m["holder_dir"]!="/private/tmp/remoteapp-r75-"+n+"/holder"):
         raise RuntimeError("activity_fixed_roots_invalid")
+    port=m.setdefault("forward_port",18444)
+    if type(port) is not int or not 18444<=port<=18460:raise RuntimeError("activity_forward_port_invalid")
     return work,m
 
 
@@ -217,13 +238,13 @@ def record_build_failure(work,target,raw):
 
 
 def prepare():
-    require_free_forward_port()
+    port=select_forward_port()
     n=secrets.token_hex(6)
     work=REPO/"artifacts/connection-poc"/("supervised-activity-r75-"+n)
     work.mkdir(mode=0o700)
     parent=Path("/private/tmp/remoteapp-r75-"+n);parent.mkdir(mode=0o700)
     (parent/"holder").mkdir(mode=0o700)
-    m=dict(nonce=n,win_dir="C:\\Users\\jarvis\\remoteapp-r75-package-"+n,
+    m=dict(nonce=n,forward_port=port,win_dir="C:\\Users\\jarvis\\remoteapp-r75-package-"+n,
            win_root="C:\\Users\\jarvis\\remoteapp-r75-"+n,mac_root=str(parent/"installed"),holder_dir=str(parent/"holder"))
     (work/"management.json").write_text(json.dumps(m,sort_keys=True))
     a=Activity(work);a.save({"version":1,"phase":"build_outcome_unknown"})
@@ -251,7 +272,7 @@ def prepare():
             helpers.append(str(path))
         helpers.append(str(tls[target]))
         args=[str(go),"run","./cmd/product-maintenance-validation-build",str(build_go),str(REPO/"poc/selfhost"),target,str(work/target),*helpers,
-              "--verified-live-profile",str(profile),"--test-tunnel","--test-install-root",m["win_root"] if target=="windows" else m["mac_root"]]
+              "--verified-live-profile",str(profile),f"--test-tunnel={port}","--test-install-root",m["win_root"] if target=="windows" else m["mac_root"]]
         # Go's cwd is fixed without changing this process's working directory.
         try:r=subprocess.run(limited_build_command(args),cwd=REPO/"poc/selfhost",stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240)
         except Exception:raise RuntimeError("activity_build_outcome_unknown") from None
@@ -291,8 +312,10 @@ def monitor(work):
 
 
 def start(work):
-    require_free_forward_port()
     work,m=metadata(work);a=Activity(work)
+    port=m["forward_port"]
+    require_free_forward_port(port)
+    require_windows_forward_port(port)
     if a.read()["phase"]!="built" or expiry(work)-time.time()<600:raise RuntimeError("activity_fresh_build_required")
     a.save({"version":1,"phase":"startup_outcome_unknown"})
     shutil.copyfile(REPO/"packaging/experimental/validate-supervised-install.ps1",work/"windows/validate-supervised-install.ps1")
@@ -319,7 +342,7 @@ try { & (Join-Path $PSScriptRoot 'validate-supervised-install.ps1') -StayReady -
         ps("$ErrorActionPreference='Stop';$s=Join-Path "+quote(input_source)+" "+quote(item["name"])+";$p=Join-Path "+d+" "+quote(item["relative"].replace('/','\\'))+";if(Test-Path $p){throw 'Input target exists'};"
            "if((Get-FileHash $s).Hash.ToLowerInvariant() -ne "+quote(item["sha256"])+"){throw 'Input changed'};Copy-Item -LiteralPath $s -Destination $p;if((Get-FileHash $p).Hash.ToLowerInvariant() -ne "+quote(item["sha256"])+"){throw 'Copied input mismatch'}")
     tunnels=[]
-    for label,host,flags in (("server",SERVER,["-L","127.0.0.1:18444:127.0.0.1:8444"]),("windows",WIN,["-R","127.0.0.1:18444:127.0.0.1:18444"])):
+    for label,host,flags in (("server",SERVER,["-L",f"127.0.0.1:{port}:127.0.0.1:8444"]),("windows",WIN,["-R",f"127.0.0.1:{port}:127.0.0.1:{port}"])):
         sock="/tmp/ra75-"+m["nonce"]+"-"+label+".sock"
         command(["ssh",*OPTIONS,"-M","-S",sock,"-fNT","-o","ExitOnForwardFailure=yes",*flags,host])
         tunnels.append({"socket":sock,"host":host})

@@ -16,7 +16,8 @@ var embeddedRelease, embeddedInstallRoot, embeddedSignerDigest string
 var embeddedMode, embeddedTestTunnel string
 
 func run() error {
-	if (embeddedMode != "" && embeddedMode != "registered") || (embeddedTestTunnel != "" && embeddedTestTunnel != "loopback18444") {
+	port, portErr := trustinstall.ParseTestTunnelPort(embeddedTestTunnel)
+	if (embeddedMode != "" && embeddedMode != "registered") || portErr != nil || (port != 0 && embeddedMode != "registered") {
 		return os.ErrInvalid
 	}
 	finish := len(os.Args) == 2 && os.Args[1] == "finish-files"
@@ -46,7 +47,7 @@ func run() error {
 	if embeddedMode == "registered" {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		return testretirement.Registered(ctx, r, string(raw), filepath.Join(dir, "trust-journal"+suffix), filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, embeddedTestTunnel == "loopback18444")
+		return testretirement.Registered(ctx, r, string(raw), filepath.Join(dir, "trust-journal"+suffix), filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, port)
 	}
 	return testretirement.Idle(r, string(raw), filepath.Join(dir, "trust-journal"+suffix), filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest)
 }

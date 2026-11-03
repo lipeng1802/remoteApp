@@ -62,8 +62,21 @@ func run() error {
 		}
 	}
 	tunnel := len(os.Args) == 11 || len(os.Args) == 13
-	if tunnel && os.Args[10] != "--test-tunnel" {
-		return os.ErrInvalid
+	var port uint16
+	if tunnel {
+		value := "loopback18444"
+		if os.Args[10] != "--test-tunnel" {
+			raw, ok := strings.CutPrefix(os.Args[10], "--test-tunnel=")
+			if !ok {
+				return os.ErrInvalid
+			}
+			value = "loopback" + raw
+		}
+		var err error
+		port, err = trustinstall.ParseTestTunnelPort(value)
+		if err != nil {
+			return err
+		}
 	}
 	if len(os.Args) == 13 && os.Args[11] != "--test-install-root" {
 		return os.ErrInvalid
@@ -204,11 +217,12 @@ func run() error {
 			return e
 		}
 	}
-	compileProduct := trustinstall.CompileAutonomousProductClient
 	if tunnel {
-		compileProduct = trustinstall.CompileAutonomousProductTestTunnel
+		e = trustinstall.CompileAutonomousProductTestTunnel(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now, port)
+	} else {
+		e = trustinstall.CompileAutonomousProductClient(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now)
 	}
-	if e = compileProduct(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now); e != nil {
+	if e != nil {
 		return e
 	}
 	if e = checkBudget(); e != nil {
@@ -284,7 +298,7 @@ func run() error {
 			return e
 		}
 		if !offlineInstall {
-			if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now, true); e != nil {
+			if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now, port); e != nil {
 				return e
 			}
 		}
@@ -292,7 +306,7 @@ func run() error {
 			return e
 		}
 		if !offlineInstall {
-			if e = trustinstall.CompileNodeTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-node-test"+suffix), spec, installRoot, digest(vaultRaw), now, true); e != nil {
+			if e = trustinstall.CompileNodeTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-node-test"+suffix), spec, installRoot, digest(vaultRaw), now, port); e != nil {
 				return e
 			}
 			arch := runtime.GOARCH

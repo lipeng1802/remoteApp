@@ -29,12 +29,12 @@ func Idle(r trustinstall.Release, root, helper, vault, vaultDigest string) (resu
 // Registered requires live issuer proof that this exact native node's grant
 // was explicitly revoked and its remote provision already cleaned. It never
 // accepts an operator-supplied grant/node/identity or treats expiry as cleanup.
-func Registered(ctx context.Context, r trustinstall.Release, root, helper, vault, vaultDigest string, tunnel bool) error {
+func Registered(ctx context.Context, r trustinstall.Release, root, helper, vault, vaultDigest string, port uint16) error {
 	if ctx == nil || ctx.Err() != nil {
 		return errOnlineRetirement
 	}
 	return retire(r, root, helper, vault, vaultDigest, func(profile trustprofile.Profile, identity autonomousbinding.Record, node enrollmentstore.Record) error {
-		return confirmNodeRetirement(ctx, r, profile, identity, node, vault, vaultDigest, tunnel)
+		return confirmNodeRetirement(ctx, r, profile, identity, node, vault, vaultDigest, port)
 	})
 }
 

@@ -174,11 +174,14 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 	}}
 	commands := make(chan installeddevice.Request)
 	makeRunner := installeddevice.WatchedEnrollmentRunnerWithSession
-	if embeddedTestTunnel != "" {
-		if embeddedTestTunnel != "loopback18444" || !release.Specification().Test {
-			return trustprofile.ErrTrust
+	port, portErr := trustinstall.ParseTestTunnelPort(embeddedTestTunnel)
+	if portErr != nil || (port != 0 && !release.Specification().Test) {
+		return trustprofile.ErrTrust
+	}
+	if port != 0 {
+		makeRunner = func(r trustinstall.Release, open clientruntime.SignerFactory, commands <-chan installeddevice.Request, output func(any) error, factory installeddevice.EnrollmentFactory, work installeddevice.SessionWork) clientowner.Runner {
+			return installeddevice.WatchedSessionViaTestTunnel(r, open, commands, output, factory, work, port)
 		}
-		makeRunner = installeddevice.WatchedSessionViaTestTunnel
 	}
 	runner := makeRunner(
 		release,
