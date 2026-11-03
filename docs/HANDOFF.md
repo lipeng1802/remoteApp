@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r135：精确绑定仍超时，Windows 故障停止被拒
+
+632cc4279023 双端 READY，目标过滤匹配且服务端有一条载荷规则。控制端仍在拨号阶段超时，目标未报告 TCP Accept。撤销成功，Mac join 已确认。Windows 包装器记录 ready_pending 和 rejected，任务仍 Running。日志未提供细分拒绝原因。已通过控制协议关闭本工单两个专用 SSH 隧道，记录 transport-closed.json。保留 Windows 安装根、进程和凭据，尚无退休证明。
+
+下一组优先使 Windows 故障拒绝原因在隐藏任务中可见，并采集目标端接收计数，区分未到达与目标处理丢弃。没有新证据前不重跑整轮或重发停止。持续 PONG 与正常退出仍待验收。
+
 ## 2026-11-03 r134：目标过滤匹配，收紧监听绑定并复验
 
 f69687a06d31 目标报告 target_filter_match，控制端仍拨号超时。服务端有一条载荷规则，双端故障 join、撤销及退休通过。SDK 对通配监听需额外匹配当前节点地址。目标现直接绑定签名 IPv4 和 TCP 47476，记录 Accept 实际返回与结束阶段。streamgate 和 startuptrace 测试通过。尚无持续 PONG。
