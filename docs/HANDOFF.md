@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r139：原工单只读核对
+
+e4cc83467910 的 Headscale 策略查询成功，载荷与持有证明规则计数均为零。该结果只证明当前规则快照，无法区分会话从未进入授权、自然到期或撤销成功。Mac owner 仍可查询且未 join。Windows SSH 正常，精确 Interactive 任务仍 Running，READY 文件与 relay 存在，未见故障 join 回执。Windows 私有 relay 调用无有效响应。活动记录仅有 exercise_outcome_unknown，未生成 provision 后策略观察。
+
+保留 fault_revoke_unknown。下一组优先检查 Windows relay 到同一登录会话命名管道的只读可达性，并设计可绑定原会话的独立只读撤销对账。零规则本身不能推进故障 stop 或退休。
+
 ## 2026-11-03 r138：双机工单撤销回执未知
 
 e4cc83467910 已完成新鲜包准备且两端报告 READY。活动阶段失败，两端诊断均为 unreported，持续 PONG 未确认。收尾已持久化 fault_revoke_unknown，尚无撤销确认、join 或退休证明。保留本工单原生现场及记录，未重发撤销、启动新工单或关闭其隧道。
