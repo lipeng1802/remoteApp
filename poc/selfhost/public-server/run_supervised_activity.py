@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import tarfile
@@ -25,6 +26,15 @@ WIN="jarvis@100.73.4.118"
 SERVER="root@182.92.117.114"
 OPTIONS=["-o","BatchMode=yes","-o","ConnectTimeout=12","-o","IPQoS=none",
          "-o","ServerAliveInterval=5","-o","ServerAliveCountMax=2"]
+
+
+def require_free_forward_port():
+    """Check the fixed TEST port before creating a bundle or remote root."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        try:
+            listener.bind(("127.0.0.1", 18444))
+        except OSError:
+            raise RuntimeError("activity_local_forward_port_unavailable") from None
 
 
 def limited_build_command(args):
@@ -207,6 +217,7 @@ def record_build_failure(work,target,raw):
 
 
 def prepare():
+    require_free_forward_port()
     n=secrets.token_hex(6)
     work=REPO/"artifacts/connection-poc"/("supervised-activity-r75-"+n)
     work.mkdir(mode=0o700)
@@ -280,6 +291,7 @@ def monitor(work):
 
 
 def start(work):
+    require_free_forward_port()
     work,m=metadata(work);a=Activity(work)
     if a.read()["phase"]!="built" or expiry(work)-time.time()<600:raise RuntimeError("activity_fresh_build_required")
     a.save({"version":1,"phase":"startup_outcome_unknown"})
