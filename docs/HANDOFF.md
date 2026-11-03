@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r130：旧工单本地取消被拒，签名修复进入双机复验
+
+888d728cad1c 的 Windows 包装器记录两次 rejected，分别对应故障停止与独立本地取消。任务仍 Running，无真实 join 回执。远端撤销已确认，通过 SSH 控制协议退出该工单两个精确隧道，单独记录 transport-closed.json。原生进程、安装根与凭据保留待查。
+
+确认无重型进程后启动签名域修复后的唯一新工单 supervised-activity-r75-00080bb563af。exec session 58091，日志 /tmp/remoteapp-r130-round.log。承接同一轮次，重点核对 Secret 握手、持续 PONG 和双方退出回执。
+
 ## 2026-11-03 r129：修复 Secret 握手签名域缺失
 
 888d728cad1c 双端 READY，活动策略实测有一条 47476 规则和零条 47477 规则。控制端等待 welcome，目标停在 sign。源码确认原生签名白名单缺少 Secret 握手的两个角色域。已补齐 Windows vault、桌面探针、Go bridge 和 Swift vault 的精确域，并更新域探针回归。四个相关 Go 包测试通过。新包双机验收待执行。
