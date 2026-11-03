@@ -313,7 +313,7 @@ try { & (Join-Path $PSScriptRoot 'validate-supervised-install.ps1') -StayReady -
         tunnels.append({"socket":sock,"host":host})
         (work/"tunnels.json").write_text(json.dumps(tunnels))
     ps("$ErrorActionPreference='Stop';$d="+d+";$t="+task+";if(Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue){throw 'Task exists'};"
-       "$a=New-ScheduledTaskAction -Execute powershell.exe -Argument ('-NoProfile -ExecutionPolicy Bypass -File '+[char]34+(Join-Path $d 'run-owner.ps1')+[char]34);"
+       "$a=New-ScheduledTaskAction -Execute powershell.exe -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File '+[char]34+(Join-Path $d 'run-owner.ps1')+[char]34);"
        "$p=New-ScheduledTaskPrincipal -UserId jarvis -LogonType Interactive -RunLevel Limited;Register-ScheduledTask -TaskName $t -Action $a -Principal $p | Out-Null;Start-ScheduledTask -TaskName $t")
     for unused in range(80):
         raw=ps("$d="+d+";$p=Join-Path $d 'owner-ready.json';if(Test-Path $p){[IO.File]::ReadAllText($p)}elseif(Test-Path (Join-Path $d 'owner-result.txt')){if((Get-Content (Join-Path $d 'owner-result.txt') -Raw) -match 'EXITCODE=1'){'FAILED'}}")
@@ -476,7 +476,7 @@ try { $lines=@(& (Join-Path $PSScriptRoot 'retire-node-test.exe'));$code=$LASTEX
     command(["scp","-q",*OPTIONS,str(work/"run-retire.ps1"),WIN+":"+"remoteapp-r75-package-"+m["nonce"]+"/run-retire.ps1"])
     d=quote(m["win_dir"]);task=quote("RemoteApp-R75-Retire-"+m["nonce"])
     ps("$ErrorActionPreference='Stop';$d="+d+";$t="+task+";if(Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue){throw 'Retirement task exists'};"
-       "$a=New-ScheduledTaskAction -Execute powershell.exe -Argument ('-NoProfile -ExecutionPolicy Bypass -File '+[char]34+(Join-Path $d 'run-retire.ps1')+[char]34);"
+       "$a=New-ScheduledTaskAction -Execute powershell.exe -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File '+[char]34+(Join-Path $d 'run-retire.ps1')+[char]34);"
        "$p=New-ScheduledTaskPrincipal -UserId jarvis -LogonType Interactive -RunLevel Limited;Register-ScheduledTask -TaskName $t -Action $a -Principal $p | Out-Null;Start-ScheduledTask -TaskName $t")
     for unused in range(120):
         value=ps("$d="+d+";$p=Join-Path $d 'retire-result.txt';if(Test-Path $p){$s=Get-Content $p -Raw;if($s -match 'EXITCODE=1'){'FAILED'}elseif(($s -match 'EXITCODE=0') -and (Get-ScheduledTask -TaskName "+task+").State -ne 'Running' -and (Get-ScheduledTaskInfo -TaskName "+task+").LastTaskResult -eq 0 -and -not(Test-Path "+quote(m["win_root"])+")){'RETIRED'}}")

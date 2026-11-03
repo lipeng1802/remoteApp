@@ -1,5 +1,9 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r131：隐藏 Windows 验收任务窗口
+
+新建的 owner 和退休任务均以 PowerShell -WindowStyle Hidden 启动。保留 Interactive 用户上下文供原生凭据使用。Python 语法检查通过，下一轮实机核对桌面表现。r130 日志已到 FAULT_RETIRED，活动会话仍未通过，下一轮读取固定诊断与收尾回执。
+
 ## 2026-11-03 r130：旧工单本地取消被拒，签名修复进入双机复验
 
 888d728cad1c 的 Windows 包装器记录两次 rejected，分别对应故障停止与独立本地取消。任务仍 Running，无真实 join 回执。远端撤销已确认，通过 SSH 控制协议退出该工单两个精确隧道，单独记录 transport-closed.json。原生进程、安装根与凭据保留待查。
