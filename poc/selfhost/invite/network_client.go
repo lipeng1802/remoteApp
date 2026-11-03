@@ -110,7 +110,13 @@ func NewProfileNetworkClient(p trustprofile.Profile, root ed25519.PublicKey, ser
 // SSH forward. URL/Host/TLS verification are unchanged; only TCP routing differs.
 // No proxy environment, runtime destination or TLS verification bypass.
 func NewTestTunnelNetworkClient(p trustprofile.Profile, root ed25519.PublicKey, service string, floor uint64, signer DeviceSigner) (*NetworkClient, error) {
-	if p.Claims.Endpoint != "https://mk.fengmap.com:8444" {
+	return NewTestTunnelNetworkClientOnPort(p, root, service, floor, signer, 18444)
+}
+
+// NewTestTunnelNetworkClientOnPort accepts the loopback port selected by trusted
+// TEST wiring before signing. It does not change the HTTPS identity.
+func NewTestTunnelNetworkClientOnPort(p trustprofile.Profile, root ed25519.PublicKey, service string, floor uint64, signer DeviceSigner, port uint16) (*NetworkClient, error) {
+	if port < 1024 || p.Claims.Endpoint != "https://mk.fengmap.com:8444" {
 		return nil, ErrDenied
 	}
 	c, e := NewProfileNetworkClient(p, root, service, floor, signer)
@@ -122,7 +128,7 @@ func NewTestTunnelNetworkClient(p trustprofile.Profile, root ed25519.PublicKey, 
 		if network != "tcp" || address != "mk.fengmap.com:8444" {
 			return nil, ErrDenied
 		}
-		return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "tcp", "127.0.0.1:18444")
+		return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(int(port))))
 	}
 	return c, nil
 }

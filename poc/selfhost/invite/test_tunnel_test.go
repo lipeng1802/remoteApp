@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"net"
 	"net/http"
 	"os"
 	"remoteapp.local/selfhost-poc/trustprofile"
@@ -33,6 +34,25 @@ func TestTestTunnelRetainsTLSAndRejectsOtherDestinations(t *testing.T) {
 	}
 	if _, e := NewTestTunnelNetworkClient(p, ed25519.PublicKey(make([]byte, 32)), p.Claims.Service, 1, signer); e == nil {
 		t.Fatal("unsigned trust accepted")
+	}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	port := uint16(listener.Addr().(*net.TCPAddr).Port)
+	isolated, err := NewTestTunnelNetworkClientOnPort(p, root, p.Claims.Service, 1, signer, port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer isolated.Close()
+	conn, err := isolated.client.Transport.(*http.Transport).DialContext(t.Context(), "tcp", "mk.fengmap.com:8444")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn.Close()
+	if _, err := NewTestTunnelNetworkClientOnPort(p, root, p.Claims.Service, 1, signer, 0); err == nil {
+		t.Fatal("invalid port accepted")
 	}
 	p.Claims.Endpoint = server.URL
 	p, _ = trustprofile.Sign(release, p.Claims)
