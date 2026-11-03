@@ -10,19 +10,19 @@ import (
 	"tailscale.com/client/local"
 )
 
-type targetReceiveSnapshot struct {
+type overlayCounterSnapshot struct {
 	packets, filterDrops uint64
 	valid                bool
 }
 
-func readTargetReceive(ctx context.Context, client *local.Client) targetReceiveSnapshot {
+func readOverlayCounters(ctx context.Context, client *local.Client, packetMetric, dropMetric string) overlayCounterSnapshot {
 	check, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
 	raw, err := client.DaemonMetrics(check)
 	if err != nil {
-		return targetReceiveSnapshot{}
+		return overlayCounterSnapshot{}
 	}
-	var snapshot targetReceiveSnapshot
+	var snapshot overlayCounterSnapshot
 	var packetsFound, dropsFound bool
 	for _, line := range strings.Split(string(raw), "\n") {
 		fields := strings.Fields(line)
@@ -30,10 +30,10 @@ func readTargetReceive(ctx context.Context, client *local.Client) targetReceiveS
 			continue
 		}
 		switch fields[0] {
-		case "tstun_in_from_wg":
+		case packetMetric:
 			snapshot.packets, err = strconv.ParseUint(fields[1], 10, 64)
 			packetsFound = err == nil
-		case "tstun_in_from_wg_drop_filter":
+		case dropMetric:
 			snapshot.filterDrops, err = strconv.ParseUint(fields[1], 10, 64)
 			dropsFound = err == nil
 		}
@@ -43,7 +43,7 @@ func readTargetReceive(ctx context.Context, client *local.Client) targetReceiveS
 }
 
 // Daemon counters are aggregate. An increase cannot identify a particular flow.
-func observeTargetReceiveEnd(ctx context.Context, client *local.Client, baseline targetReceiveSnapshot) {
+func observeTargetReceiveEnd(ctx context.Context, client *local.Client, baseline overlayCounterSnapshot) {
 	if !startuptrace.Enabled(ctx) || client == nil {
 		startuptrace.Emit(ctx, startuptrace.TargetAcceptEnded)
 		return
@@ -59,4 +59,25 @@ func observeTargetReceiveEnd(ctx context.Context, client *local.Client, baseline
 		stage = startuptrace.TargetReceiveObserved
 	}
 	startuptrace.Emit(ctx, stage)
+}
+
+func readTargetReceive(ctx context.Context, client *local.Client) overlayCounterSnapshot {
+	return readOverlayCounters(ctx, client, "tstun_in_from_wg", "tstun_in_from_wg_drop_filter")
+}
+
+func readControllerSend(ctx context.Context, client *local.Client) overlayCounterSnapshot {
+	return readOverlayCounters(ctx, client, "tstun_out_to_wg", "tstun_out_to_wg_drop_filter")
+}
+
+func controllerSendStage(baseline, final overlayCounterSnapshot) startuptrace.Stage {
+	switch {
+	case !baseline.valid || !final.valid || final.packets < baseline.packets || final.filterDrops < baseline.filterDrops:
+		return startuptrace.ControllerSendUnavailable
+	case final.filterDrops > baseline.filterDrops:
+		return startuptrace.ControllerSendFilterDrop
+	case final.packets > baseline.packets:
+		return startuptrace.ControllerSendObserved
+	default:
+		return startuptrace.ControllerSendUnchanged
+	}
 }

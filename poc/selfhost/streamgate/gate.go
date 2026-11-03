@@ -88,7 +88,7 @@ type overlayListener struct {
 	workerDone      chan struct{}
 	once            sync.Once
 	closeErr        error
-	receiveBaseline targetReceiveSnapshot
+	receiveBaseline overlayCounterSnapshot
 	metricsClient   *local.Client
 }
 
@@ -243,6 +243,10 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 		startuptrace.Emit(ctx, startuptrace.ControllerLocalFailed)
 		return nil, session.ErrDenied
 	}
+	var sendBaseline overlayCounterSnapshot
+	if startuptrace.Enabled(ctx) {
+		sendBaseline = readControllerSend(ctx, lc)
+	}
 	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	startuptrace.Emit(ctx, startuptrace.ControllerRouteWait)
 	if !waitInitialRoute(dialCtx, func(check context.Context) nodeproof.RouteStatus {
@@ -261,7 +265,11 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 		// or authorization. Query has its own existing 750ms status bound.
 		if startuptrace.Enabled(ctx) && dialCtx.Err() == context.DeadlineExceeded {
 			status := nodeproof.ClientRouteStatus(ctx, lc, g.binding.TargetNode, g.cfg.Binding.TargetIP)
-			startuptrace.Emit(ctx, deadlineRouteStage(status))
+			stage := deadlineRouteStage(status)
+			if stage == startuptrace.DeadlineRouteEnginePresent {
+				stage = controllerSendStage(sendBaseline, readControllerSend(ctx, lc))
+			}
+			startuptrace.Emit(ctx, stage)
 		}
 		cancel()
 		return nil, session.ErrDenied
