@@ -6,6 +6,12 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-03 r155：DERP 发现成功，Windows 子进程 join 未确认
+
+daa5589ad6dc 双端 READY，目标过滤规则匹配。控制端 TCP 超时后，固定签名目标的 Disco 返回 DERP 路径，证明该次发现往返可达，不能证明 TCP 或 TLS 载荷。独立撤销和 Mac 故障 join 已确认。Windows 精确 Interactive 任务仍 Running，固定日志为 child_join_unconfirmed，说明 supervisor 已通过撤销核对但未取得可信子进程 join。无 Windows join 回执，尚未退休。
+
+下一组优先检查 Windows 子进程退出码、终帧、EOF 和 cleanup witness 的固定诊断；同时区分 DERP 发现与 WireGuard 数据面，不再重复只验证发现。本轮保留 Windows 现场和原转发，不强杀、不重发停止、不退休。
+
 ## 2026-11-03 r154：受限对端发现验证
 
 仅在可信 TEST 载荷拨号超时、签名节点路由仍匹配、有出站且路径未分类时，原 LocalAPI 向固定目标发一次 750ms Disco 请求。前后检查 ACTIVE 和授权有效性。只记录直连、UDP peer relay、DERP 或未知固定标签。其结果不延长 TCP 拨号、不准许重拨、不证明实际应用载荷。Go 与 Python 定向测试通过。实际验证日志 /tmp/remoteapp-r154-round.log。
