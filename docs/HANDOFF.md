@@ -1,5 +1,9 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r126：Windows SSH 不可达
+
+恢复后新工单 supervised-activity-r75-f111052fa894 止于签发前输入预检。独立 BatchMode SSH 探测 100.73.4.118:22 超时，尚无法区分离线、Tailscale 路由或 SSH 服务问题。本轮无构建、签发、上传或原生启动。已移除本轮空 holder 与父目录并保留工单记录。自动续办保持暂停，待 Windows 管理通道恢复后继续。
+
 ## 2026-11-02 r125：有空闲休眠断言仍跨睡眠窗口过期，暂停等Mac正常唤醒
 
 先读r124/Git，承接session91529最终exit1，无重型构建残留。9cdcf00d3b97最终built但start原fresh>=600秒门禁再次拒绝，未上传/建隧道/启动任何native owner。Darwin profile22:55:22+08签发，fixture23:26:53+08完成，间隔1891秒，超过原1200秒；Windows本轮完成仅用67秒。未延长/重签已有包。确认installed不存在、无Windows bootstrap/tunnels后仅rmdir本轮已知空holder/父目录，expired-build-audit.json记录，保留过期字节审计。
