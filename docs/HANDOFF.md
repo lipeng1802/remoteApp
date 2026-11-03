@@ -6,6 +6,12 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-03 r147：拨号源码对照与磁盘约束
+
+固定 SDK v1.102.5 中，LocalAPI dial 在发回 HTTP 101 之前先执行 UserDialPlan，再调用 UserDial 建立真实 TCP。tsnet.Server.Dial 也进入同一 UserDial，但没有前置路线门禁，可能走系统拨号分支。现有失败在 101 前，直接替换入口既无证据能修复目标未收到包，也会失去 Dial-Self 拒绝边界。下一组保持现有入口，优先检查拨号前后该节点实际链路与出站计数，使用精确 TEST 证据区分发送与路径问题。
+
+现有 remoteapp 自动化确认 ACTIVE，并追加磁盘检查和精确清理约束。工作卷可用约 155 GiB，connection-poc 约 15 GiB；本轮保留现有文件。
+
 ## 2026-11-03 r146：独立端口实测通过，集中处理载荷路径
 
 5260aaaecf31 双端 READY、进入 provision，Headscale 载荷规则为 1。控制端报告 deadline_route_engine_present，目标端报告 target_receive_unchanged，尚无持续 PONG。独立撤销、双端故障 join 和本工单 TEST 根退休已确认。正常零退出仍待活动会话成功后验收，历史工单另行对账。
