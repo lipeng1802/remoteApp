@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r133：观测目标端过滤规则
+
+TEST 监听建立后通过本机 LocalAPI 读取一次过滤规则，使用 SDK 解析并匹配签名绑定中的源、目标、TCP 和 47476。只记录匹配、无 IP 匹配或不可用三个阶段。此快照仅用于诊断，授权仍由原 gate 决定。streamgate 和 startuptrace 测试通过。
+
+新轮次 supervised-activity-r75-f69687a06d31，exec session 2015，日志 /tmp/remoteapp-r133-round.log。承接同一轮次并核对目标过滤阶段、PONG、退出回执和隐藏任务启动情况。
+
 ## 2026-11-03 r132：签名修复复验止于 TCP 拨号，故障收尾完成
 
 00080bb563af 双端 READY。活动策略实测有一条 47476 规则及零条 47477 规则。控制端在 Secret 握手前拨号超时，超时后观测到对端路由、引擎和握手状态。目标最后阶段为 target_listening。本轮未触发修复后的 Secret 签名路径，持续 PONG 与正常零退出仍待验收。独立撤销、双端故障 join 及两端 TEST 根退休均已确认。

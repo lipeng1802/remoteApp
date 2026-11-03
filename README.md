@@ -394,3 +394,5 @@ TEST 路由诊断包含本端/对端relay是否已知及是否曾观测握手的
 Mac 可用 `poc/selfhost/public-server/run_awake_validation.py` 执行单次串行TEST轮次；仅进程存活时以 `caffeinate -i` 防空闲系统休眠，不改全局设置、不阻止显示器休眠/手动睡眠，所有短期有效期门禁保持。
 
 原生签名器允许两个精确的 Product Secret 握手角色域。现有部署需要新构建的签名器。
+
+TEST 目标端记录本机过滤快照中签名对端 TCP 规则的匹配状态，用于定位拨号失败。

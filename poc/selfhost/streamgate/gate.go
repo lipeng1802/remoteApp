@@ -217,6 +217,7 @@ func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener
 		}
 	}()
 	startuptrace.Emit(ctx, startuptrace.TargetListening)
+	observeTargetFilter(ctx, lc, g.cfg.Binding.ControllerIP, g.cfg.Binding.TargetIP)
 	return wrapped, nil
 }
 
