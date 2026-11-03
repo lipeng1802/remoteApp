@@ -286,6 +286,9 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 					}
 				}
 			}
+			if stage == startuptrace.ControllerSendObserved || stage == startuptrace.ControllerPeerSendObserved {
+				stage = discoveryStage(ctx, lc, g.cfg.Binding.TargetIP, g.active)
+			}
 			startuptrace.Emit(ctx, stage)
 		}
 		cancel()
