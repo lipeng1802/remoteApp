@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r137：目标接收计数与新鲜双机复验
+
+TEST 目标在监听建立时记录 WireGuard 接收与过滤丢弃基线，Accept 失败时通过有时限的本地 API 读取差值，只输出固定阶段。计数是进程级汇总，不能归因到该 TCP 流。streamgate、startuptrace 和 Python 诊断测试通过，Mac 到 Windows SSH 已复测成功。
+
+本轮日志 /tmp/remoteapp-r137-round.log。下次先查该日志与现有工单，再接续，避免重复构建。持续 PONG、正常 join 与退休仍待实际证据。
+
 ## 2026-11-03 r136：隐藏任务保留故障停止拒绝原因
 
 Windows supervisor 在可信父子 stdout 的拒绝帧中附带固定 reason。包装器精确匹配 JSON 字段及原因白名单并输出到任务日志，兼容旧拒绝帧。成功、EOF 和退出证明保持各自门禁。Windows 交叉 vet 通过，实际 Windows PowerShell 验证允许固定原因并拒绝陌生原因及额外字段。完整原生链路待复验。

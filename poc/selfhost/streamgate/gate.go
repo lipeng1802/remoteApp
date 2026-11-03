@@ -16,6 +16,7 @@ import (
 	"remoteapp.local/selfhost-poc/nodeproof"
 	"remoteapp.local/selfhost-poc/session"
 	"remoteapp.local/selfhost-poc/startuptrace"
+	"tailscale.com/client/local"
 	"tailscale.com/tsnet"
 )
 
@@ -80,13 +81,15 @@ func (c overlayConn) RemoteAddr() net.Addr { return c.remote }
 
 type overlayListener struct {
 	net.Listener
-	gate       *Gate
-	server     *tsnet.Server
-	ctx        context.Context
-	done       chan struct{}
-	workerDone chan struct{}
-	once       sync.Once
-	closeErr   error
+	gate            *Gate
+	server          *tsnet.Server
+	ctx             context.Context
+	done            chan struct{}
+	workerDone      chan struct{}
+	once            sync.Once
+	closeErr        error
+	receiveBaseline targetReceiveSnapshot
+	metricsClient   *local.Client
 }
 
 func (l *overlayListener) Accept() (net.Conn, error) {
@@ -96,7 +99,7 @@ func (l *overlayListener) Accept() (net.Conn, error) {
 	}
 	conn, err := l.Listener.Accept()
 	if err != nil {
-		startuptrace.Emit(l.ctx, startuptrace.TargetAcceptEnded)
+		observeTargetReceiveEnd(l.ctx, l.metricsClient, l.receiveBaseline)
 		return nil, err
 	}
 	startuptrace.Emit(l.ctx, startuptrace.TargetTCPAccepted)
@@ -220,6 +223,10 @@ func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener
 	}()
 	startuptrace.Emit(ctx, startuptrace.TargetListening)
 	observeTargetFilter(ctx, lc, g.cfg.Binding.ControllerIP, g.cfg.Binding.TargetIP)
+	if startuptrace.Enabled(ctx) {
+		wrapped.metricsClient = lc
+		wrapped.receiveBaseline = readTargetReceive(ctx, lc)
+	}
 	return wrapped, nil
 }
 
