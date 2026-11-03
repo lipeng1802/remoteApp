@@ -1,5 +1,11 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-03 r146：独立端口实测通过，集中处理载荷路径
+
+5260aaaecf31 双端 READY、进入 provision，Headscale 载荷规则为 1。控制端报告 deadline_route_engine_present，目标端报告 target_receive_unchanged，尚无持续 PONG。独立撤销、双端故障 join 和本工单 TEST 根退休已确认。正常零退出仍待活动会话成功后验收，历史工单另行对账。
+
+后续合并成一个载荷任务组。先在固定签名目标及现有 ACTIVE、Self/WhoIs 门禁下，核对 LocalAPI HTTP Upgrade 和同一 tsnet 实例的直接 TCP 拨号路径。用能区分这两条路径的定向验证决定修复，再启动一次全新签名双机工单，在同一轮完成持续 PONG、撤销、正常退出和注册退休。暂停纯日志改动触发的整轮重建。GUI 和签名安装包可先整理验收入口，实际验收依赖载荷通过。
+
 ## 2026-11-03 r145：签名双机包接通独立回环转发
 
 同一端口由 TEST 工单选出，写入管理记录和三种签名工件的编译配置，供载荷、独立撤销和注册退休使用。两端 SSH 转发与部署前检查使用同一端口，历史记录默认 18444。实际 Windows 与 Mac 预检选出 18445。定向 Go 测试及 Python awake runner 测试通过。
