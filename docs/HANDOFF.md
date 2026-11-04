@@ -6,6 +6,12 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r184：provision 前原生收尾验收通过
+
+7a4fc1af8f54 两端原生 READY，Windows approve 与 Mac approved status 均 passed=true。协调器在 grant_clock 后主动中断，未发 provision。Windows 对原授权明确撤销，Mac status 返回 revoked 且无 grant，双方独立 preprovision_terminal 查询通过。两端正常零退出，idle 原生退休、精确任务与隧道清理通过，记录 preprovision_joined_and_test_roots_retired。该证据不涉及 TCP/TLS 活动会话。
+
+接下来正常双机验收日志 /tmp/remoteapp-r184-active.log。旧故障原工单保持隔离，不自动采用本轮新协议处理旧包。
+
 ## 2026-11-04 r183：批准观察时间边界与 provision 前独立收尾
 
 回归测试复现真实签名授权在本机尚未到 IssuedAt 时 Observe 立即拒绝。新增最多 2 秒、受原调用上下文约束的等待，仅对签名、参与者、profile 和 300 秒期限均有效且未来不超过 2 秒的授权进行；每次重新验证，时间到达前不写入观察状态。历史 Mac 拒绝原因尚不能唯一归因，新增固定拒绝原因区分 child Exchange 与授权观察。
