@@ -5,6 +5,7 @@ package streamgate
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,7 +13,7 @@ import (
 
 	_ "tailscale.com/feature/capture"
 	"tailscale.com/net/netns"
-	"tailscale.com/tailcfg"
+
 	"tailscale.com/tsnet"
 	"tailscale.com/tstest/integration"
 	"tailscale.com/tstest/integration/testcontrol"
@@ -67,7 +68,8 @@ func TestSDKCaptureFirstPacketHeader(t *testing.T) {
 	if err != nil {
 		t.Fatal("first local node unavailable")
 	}
-	if _, err = second.Up(ctx); err != nil {
+	secondStatus, err := second.Up(ctx)
+	if err != nil {
 		t.Fatal("second local node unavailable")
 	}
 	client, err := first.LocalClient()
@@ -79,23 +81,38 @@ func TestSDKCaptureFirstPacketHeader(t *testing.T) {
 		t.Fatal("capture stream unavailable")
 	}
 	defer stream.Close()
-	done := make(chan bool, 1)
-	go func() { done <- readSYNHeader(stream) }()
-	defer func() { stream.Close(); <-done }()
-	peer, err := second.LocalClient()
+	listener, err := first.Listen("tcp4", net.JoinHostPort(status.TailscaleIPs[0].String(), "47476"))
 	if err != nil {
-		t.Fatal("peer client unavailable")
+		t.Fatal("local SDK listener unavailable")
 	}
-	if _, err = peer.Ping(ctx, status.TailscaleIPs[0], tailcfg.PingTSMP); err != nil {
-		t.Fatal("local encrypted IP ping unavailable")
+	defer listener.Close()
+	done := make(chan synEvidence, 1)
+	go func() {
+		done <- readSYNEvidence(stream, secondStatus.TailscaleIPs[0], status.TailscaleIPs[0], true, nil)
+	}()
+	defer func() { stream.Close(); <-done }()
+	// The first accepted connection is sufficient; the test sends no payload.
+	accepted := make(chan struct{})
+	go func() {
+		defer close(accepted)
+		conn, err := listener.Accept()
+		if err == nil {
+			conn.Close()
+		}
+	}()
+	defer func() { listener.Close(); <-accepted }()
+	conn, err := second.Dial(ctx, "tcp4", net.JoinHostPort(status.TailscaleIPs[0].String(), "47476"))
+	if err != nil {
+		t.Fatal("local SDK TCP unavailable")
 	}
+	conn.Close()
 	select {
-	case valid := <-done:
-		done <- valid
-		if !valid {
-			t.Fatal("invalid SDK header")
+	case evidence := <-done:
+		done <- evidence
+		if !evidence.syn || !evidence.reply {
+			t.Fatal("SDK TCP handshake not observed")
 		}
 	case <-ctx.Done():
-		t.Fatal("first packet did not flush SDK header")
+		t.Fatal("TCP handshake did not flush SDK capture")
 	}
 }
