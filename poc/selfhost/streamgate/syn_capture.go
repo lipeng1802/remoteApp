@@ -10,7 +10,8 @@ import (
 )
 
 type synEvidence struct {
-	syn, reply bool
+	syn, reply  bool
+	validStream bool
 }
 
 // readSYNEvidence consumes the pinned SDK capture format without recording
@@ -30,7 +31,7 @@ func readSYNHeader(r io.Reader) bool {
 }
 
 func readSYNRecords(r io.Reader, controller, target netip.Addr, atTarget bool, observe func(synEvidence)) synEvidence {
-	var evidence synEvidence
+	evidence := synEvidence{validStream: true}
 	if !controller.Is4() || !target.Is4() || controller == target {
 		return evidence
 	}
