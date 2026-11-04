@@ -6,13 +6,27 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r198：真实持续TLS PONG、正常zero join与registered退休通过
+
+8df6831后的唯一新鲜工单2a01f13f9a81已完成，原exec session96745实际exit0，日志/tmp/remoteapp-r197-active.log。阶段为OWNERS_READY → NORMAL_REVOKED → NORMAL_JOINED → NORMAL_RETIRED，没有进入故障分支。activity-state最终normal_activity_joined_and_test_roots_retired，两角色joined/retired均true；checks为双方ACTIVE watch、真实payload增长、7次增长样本、双方正常quiesce和独立撤销已确认。
+
+实测先采到target_tls，17761ms首次target_filter_match；18120ms目标TLS子程序计数为0且ended=false；18220ms控制端start_controller返回controller_started/passed=true，随后实际TLS载荷开始。Windows target正计数7→15→24→32→40→48→56→64，跨度6078ms；Mac controller为4→12→20→28→37→45→52→61，跨度6104ms。均跨多次原3秒state租约。原生TCP/密钥交换截止、WhoIs/双方身份、issuer TLS descriptor和信任/有效期没有放宽。该轮证明分阶段启动接线后的跨机TLS载荷可持续活动，不断言已唯一解释全部历史网络故障，也不等于GUI/画面键鼠/正式发行验收。
+
+两端quiesce实际正常join后，通过原独立签名通路撤销，再真实监督父进程zero退出。Mac mac-exit.json为实际exit_code=0；Windows owner/task及retire任务均zero。独立registered TEST退休工具完成原生租约、在线精确node回收证明、签名库存程序文件删除和原生TEST记录清理；两安装根不存在。本轮精确进程计数均0，Windows两任务/bootstrap缺席，Mac holder/父目录缺席，两条SSH master socket消失；只读服务策略为payload_rule_count=0/proof_rule_count=0。证据在原工单active-session-evidence.json、normal-postcheck.json、mac-process-postcheck.json及trace-{target,controller}，只保存公开分类/计数，不保存grant或凭据。构建归档21,400,032字节，使用原受信字节缓存重组；本机现可用约139GiB，无需删除签名输入/证据。
+
+验收范围仍须拆清：本轮TEST整根退休实际删除了已签名程序文件；**独立认证卸载器在真实跨机活动owner上的program-only删除与身份/信任保留，尚未合并到同一真实工单**。r58/r94既有原生独立删除和本地TLS组件证据保留，不能借本轮TEST退休扩大为该跨机卸载整链通过。因此原四组尚有这一收口项，remoteapp自动续办继续ACTIVE，不新建自动化、不无变化重跑本轮PONG。
+
+下一较大任务组：先实现绑定选择身份的固定TEST独立卸载客户端（不从IPC/argv接收vault/key/root），接当前受保护bootstrap；维护成功后的supervisor须保留原独立撤销owner直到在线撤销/父退出明确，不能因maintenance_closed提前丢弃signer。程序删除后的TEST退休必须单列严格组合门禁，验证原生program_removed事务/签名计划/原binding/在线node退休和未知文件拒绝，不能复用要求完整release库存的Registered工具绕过缺失文件。边界回归后才做一份包含新接线的真实双机活动→认证退出交接→程序-only删除→撤销/精确退休验收。不要对2a01f13f9a81或0ae911e3d9bb复活/重跑；9610faf58fe6等历史未闭环工单单列保留，不向过期旧包重发停止/删除。
+
+整体其余事项：当前卸载收口后按r127合并GUI明确同意/状态/停止及实际画面键鼠验证、可信安装/升级/卸载/签名发行与干净机/耐久测试；再做RK3588 Linux ARM64目标端，板卡/系统/桌面会话需实际信息。旧未知工单需各自合法回执恢复方案，不能由新成功覆盖。以上均未宣称完成。当前无需人工登录或加载密钥；本轮只本地提交，不推送。
+
 ## 2026-11-04 r197：分阶段启动与边界实现，准备唯一新鲜包
 
 接续r196，只读确认无上轮重型构建/协调器，工作卷约140GiB可用，无需清理证据。Mac→Windows BatchMode SSH已实际返回REMOTEAPP_SSH_READY。现有remoteapp仍ACTIVE，保持同一个10分钟自动续办，没有新建自动化。
 
 新TEST隧道编译入口使用CoordinatedSessionViaTestTunnel，两端并行provision和ACTIVE watch不变，目标自动准备TLS与监听；控制端等精确start_controller才重新请求session identity与初始ACTIVE state/AttachGate，随后启动payload。待启动期间不缓存3秒identity或gate。固定12秒协调窗口只观察目标target_listening/target_filter_match及仍在运行的TLS子程序，不能当活动验收。普通runner/正式入口不变，原3秒TCP和密钥交换、签名/WhoIs/TLS descriptor及全部有效期门禁不变。
 
-父supervisor从独立Pin后的grant和原signer公钥哈希绑定角色，预provision/错角色/重复及附加选择字段在子程序前拒绝；原生runner复核一次性/角色/watch。坏/未知启动回执封闭重用但保留原owner和独立撤销，不自动重试。新增实际子进程回归覆盖正常/附字段/丢失启动回执、拒绝后owner保留及独立撤销。原生内部软件身份测试把时间推进超过原identity全生命周期，确认只在真正触发时获取新identity与state/gate。Go installeddevice/productmaintenance/supervisedcontrol及两编译入口检查通过；定向installeddevice race也已通过（原生平台编译仅有既有Keychain API弃用警告），尚未发起新鲜工单。Python会话13项、持久owner4项、trace5项、activity5项、awake3项通过。trace仅新增固定阶段与有效整数PONG/布尔证据，不保存私有回复。
+父supervisor从独立Pin后的grant和原signer公钥哈希绑定角色，预provision/错角色/重复及附加选择字段在子程序前拒绝；原生runner复核一次性/角色/watch。坏/未知启动回执封闭重用但保留原owner和独立撤销，不自动重试。新增实际子进程回归覆盖正常/附字段/丢失启动回执、拒绝后owner保留及独立撤销。原生内部软件身份测试把时间推进超过原identity全生命周期，确认只在真正触发时获取新identity与state/gate。Go installeddevice/productmaintenance/supervisedcontrol及两编译入口检查通过；定向installeddevice race也已通过（原生平台编译仅有既有Keychain API弃用警告），随后已启动唯一新鲜工单2a01f13f9a81，exec session96745，日志/tmp/remoteapp-r197-active.log；先承接其阶段，不再开另一组。Python会话13项、持久owner4项、trace5项、activity5项、awake3项通过。trace仅新增固定阶段与有效整数PONG/布尔证据，不保存私有回复。
 
 下一步只启动一份新鲜签名双机包，固定日志/tmp/remoteapp-r197-active.log，用新的启动协调观察持续TLS PONG和正常zero/registered退休；不能把本机fixture或编译通过记为双机验收。r196工单0ae911e3d9bb已严格故障join并退休，不重跑；9610faf58fe6旧Windows owner继续保留，不调用过期停止/退休。不推送。
 

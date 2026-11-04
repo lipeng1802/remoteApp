@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r198 新鲜 Mac↔Windows TEST 双机已观察双方真实 TLS PONG 持续增长超过6秒，正常quiesce/全层join、父进程exit0、独立撤销、registered TEST退休与精确零规则/进程/任务检查通过。证据见[最新交接](docs/HANDOFF.md)。尚需把独立认证卸载器的program-only删除及身份保留接入真实跨机活动工单，不能用TEST整根退休替代；自动续办继续此收口，不无变化重跑。GUI、正式发行与RK3588仍待。
+
 r197 已实现 TEST 分阶段启动：双端并行 provision/ACTIVE watch 保持，目标 TLS 与实际监听就绪后才一次性触发控制端获取新的 session identity/gate。错角色、预 provision、重复/附加字段及未知回执边界已覆盖，独立撤销保留；原3秒 TCP/密钥交换和全部信任截止不变。真机持续 PONG 与正常 zero/registered 退休待新鲜包实测。
 
 r196 专用故障停止已在新鲜双机包中通过两端故障join、registered退休及本轮精确清理。持续TLS PONG与正常活动zero仍未通过。时序记录提示目标TLS/监听就绪可能晚于控制拨号，下一组做分阶段启动协调，保持现有信任和安全截止；自动续办保持开启。
