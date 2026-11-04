@@ -207,7 +207,14 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 					return nil
 				}
 				provision := validProvision(request)
-				if (!validCommand(request) && !(provision && factory != nil)) || (enrolled.attempted && request.Op != "stop") {
+				// This exact private-parent frame is never admitted by the
+				// supervised business policy. The runner returns a fault after
+				// its ordinary joined cleanup, even if the watch is still ACTIVE.
+				faultStop := request == (Request{Op: "stop_fault"})
+				if (!validCommand(request) && !faultStop && !(provision && factory != nil)) || (enrolled.attempted && request.Op != "stop" && !faultStop) {
+					return trustprofile.ErrTrust
+				}
+				if faultStop {
 					return trustprofile.ErrTrust
 				}
 				if request.Op == "stop" {

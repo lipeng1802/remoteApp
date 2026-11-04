@@ -73,8 +73,12 @@ func TestProductProcessFixture(t *testing.T) {
 	if reader.Read(&command) != nil {
 		os.Exit(8)
 	}
-	if command.Op != "stop" && command.Op != "maintenance_finish" {
+	if command.Op != "stop" && command.Op != "stop_fault" && command.Op != "maintenance_finish" {
 		os.Exit(9)
+	}
+	if mode == "fault-race" && command.Op == "stop" {
+		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
+		os.Exit(0)
 	}
 	if strings.HasPrefix(mode, "fault") {
 		if mode == "fault-slow" {
@@ -115,7 +119,7 @@ func TestProductProcessFixture(t *testing.T) {
 func TestProductForwardRejectsLifecycleAndIdentityWithoutRetiring(t *testing.T) {
 	c, _, _ := controllerFixture(t, "forward")
 	c.prepared = false
-	for _, r := range []installeddevice.Request{{Op: "open"}, {Op: "stop"}, {Op: "maintenance_prepare"}, {Op: "maintenance_begin"}, {Op: "maintenance_finish"}, {Op: "product_count"}, {Op: "device", VaultScope: "override", Device: invite.Body{Action: "register"}}, {Op: "device", Device: invite.Body{Action: "register", Nonce: "injected"}}, {Op: "device", Device: invite.Body{Action: "register"}, Network: invite.NetworkRequestBody{Action: "state"}}} {
+	for _, r := range []installeddevice.Request{{Op: "open"}, {Op: "stop"}, {Op: "stop_fault"}, {Op: "maintenance_prepare"}, {Op: "maintenance_begin"}, {Op: "maintenance_finish"}, {Op: "product_count"}, {Op: "device", VaultScope: "override", Device: invite.Body{Action: "register"}}, {Op: "device", Device: invite.Body{Action: "register", Nonce: "injected"}}, {Op: "device", Device: invite.Body{Action: "register"}, Network: invite.NetworkRequestBody{Action: "state"}}} {
 		if _, e := c.Forward(context.Background(), r); e == nil {
 			t.Fatal("unsafe forwarding accepted")
 		}

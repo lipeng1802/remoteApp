@@ -10,6 +10,18 @@ import (
 
 type failedSignerJoin struct{ testSigner }
 
+func TestFaultReleaseCannotRaceWatchIntoOrdinaryZeroExit(t *testing.T) {
+	c, signer, _ := controllerFixture(t, "fault-race")
+	c.prepared = false
+	c.provisioned = true
+	c.revocation = &revokeFixture{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := c.ReleaseFault(ctx); err != nil || !c.child.JoinedFault() || signer.closes.Load() != 1 {
+		t.Fatal("fault release sent an ordinary stop before watch observed revocation", err)
+	}
+}
+
 func (s *failedSignerJoin) CloseJoined() error { s.closes.Add(1); return ErrProduct }
 
 func TestFaultSignerJoinFailureCannotBecomeLateFaultProof(t *testing.T) {

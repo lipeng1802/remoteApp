@@ -239,6 +239,31 @@ func TestProductControlPreservesNormalCommandsAndExit(t *testing.T) {
 	}
 }
 
+func TestPrivateFaultStopWaitsForFaultRunnerBeforeParentEOF(t *testing.T) {
+	o := &controlOwner{}
+	h := &controlHandle{done: make(chan struct{}), err: trustprofile.ErrTrust}
+	requests := make(chan Request, 1)
+	requests <- Request{Op: "stop_fault"}
+	commands := make(chan Request)
+	done := make(chan error, 1)
+	go func() {
+		done <- ControlProduct(context.Background(), o, h, requests, commands, func(any) error { return nil })
+	}()
+	if got := <-commands; got != (Request{Op: "stop_fault"}) {
+		t.Fatal("fault contract changed")
+	}
+	close(requests)
+	select {
+	case <-done:
+		t.Fatal("EOF bypassed joined fault runner")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(h.done)
+	if err := <-done; err != trustprofile.ErrTrust {
+		t.Fatal("runner fault outcome lost", err)
+	}
+}
+
 func TestProductMaintenanceCancellationReleasesHeldHandshake(t *testing.T) {
 	o := &controlOwner{}
 	h := &controlHandle{done: make(chan struct{})}

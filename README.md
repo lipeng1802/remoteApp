@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r195 新鲜缓存包已实际完成双机原生启动，持续PONG仍未通过。修复故障收尾普通stop抢在watch之前产生exit0的竞态，改用仅私有父管道的故障停止，全部撤销/清理证明/exit1门禁保持。相关Go及Windows四组进程回归通过，旧Windows工单回执仍不完整并保留现场。自动续办已开启，下一份新包继续实测。
+
 r194 用户恢复后，Windows SSH实测连通，现有自动续办已恢复ACTIVE。接续缓存传输准备一份新鲜签名双机包，持续TLS PONG与正常收尾仍待实际结果。
 
 r193 增量传输组件已提交，尝试继续新鲜包时Windows SSH再次超时，尚未创建新工单或原生owner。自动续办已暂停，待Windows/Tailscale/SSH恢复后继续；真实持续TLS PONG与正常活动收尾仍未验收。

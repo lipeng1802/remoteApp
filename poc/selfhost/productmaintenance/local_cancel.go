@@ -25,7 +25,7 @@ func (c *Controller) CancelLocalFault(ctx context.Context) error {
 	}
 	c.localCancelRequested = true
 	c.broken = true // no late reply may rearm business or maintenance success
-	_ = c.child.Stop(ctx)
+	_ = c.child.StopFault(ctx)
 	if !c.child.JoinedFault() {
 		return ErrProduct
 	}

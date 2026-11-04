@@ -6,6 +6,18 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r195：真实缓存双机启动通过，修复已复现的故障 stop 竞态
+
+9610faf58fe6 新鲜包实际缓存归档15,142,920字节，Windows成功重组并完成两端原生owner启动。Mac批准后STATUS通过，双端provision，仍无持续PONG。撤销前诊断与独立只读阶段观测均为 controller deadline_controller_syn_observed、target target_filter_match，排除了把撤销后的inactive当作初始故障。独立撤销及Mac故障join已确认。Windows任务Running / result267009、无owner-fault-joined回执，固定原因child_exit_unexpected，精确路径仍有两个进程，保留原owner/signer、根和隧道；不重发停止、不把缺席/非零当join、不退休。原profile窗口已过，拟核对普通quiesce的操作因原窗口不足而未执行，没有调用过期短包。原日志 /tmp/remoteapp-r194-active.log，原fault-state为fault_stop_unknown且仅controller joined。
+
+源码确认 ReleaseFault 在独立确认revoked后调用普通Child.Stop，可能抢在watch收到inactive之前让原生runner合法closed/exit0，随后严格故障验证拒绝。新增fault-race真实子进程回归，旧代码稳定产生child_exit_unexpected，修复后通过。当前现场未提供精确退出数值，不把源码复现当作历史唯一归因。
+
+现改用仅私有父管道的Child.StopFault，原生runner经完整清理返回fault而非普通成功，产品控制在runner实际完成前不让stdin EOF抢先。业务ValidSupervisedCommand仍拒绝stop_fault。ReleaseFault仍先独立确认原绑定请求revoked，本地取消继续不声称远端撤销。nested witness、唯一fault_joined、实际exit1、EOF、reader/stop、父signer实际join的全部门禁不变，普通closed/exit0仍拒绝。没有延长期限或使用强杀。
+
+Mac productmaintenance/processowner/installeddevice相关Go检查通过。Windows四组真实进程/管道回归通过，证据 artifacts/connection-poc/r195-fault-stop/windows-result.json，测试主进程实际exit0、所有同程序进程缺席、精确测试程序删除。它们是内存身份fixture，不涉及原生受保护凭据，也不等于活动双机或旧工单清理验收。
+
+自动续办保持ACTIVE。下一组仅一份新鲜签名包实际验证专用故障停止与收尾，先承接 /tmp/remoteapp-r196-active.log。若仍TCP失败，应在本轮双方provision前开始只读阶段/时序记录，核对目标TLS准备/监听是否早于控制拨号；现有runTargetProduct先等TLS子程序和证书发布、后Listen，而控制端立即Dial，存在待验证的启动时序风险，尚不能唯一归因。不要再用25秒之后的单个阶段推断早期先后。不推送远端。
+
 ## 2026-11-04 r194：用户恢复任务，SSH已通，自动续办恢复
 
 用户要求继续并确认自动任务状态。复测 Mac→Windows BatchMode SSH 实际返回 REMOTEAPP_SSH_READY，既有 remoteapp 已恢复 ACTIVE，仍为同一10分钟续办任务，没有新建重复自动化。Git无新的源码改动，保留docs/archive/；没有上一组重型构建或协调器，磁盘可用约136GiB，不需要清理证据或缓存。

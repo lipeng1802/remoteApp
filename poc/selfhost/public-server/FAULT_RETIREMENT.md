@@ -6,7 +6,7 @@
 
 `processowner.Child.JoinedFault` 仅接受受信产品的专用 `fault_joined` 终态、实际 exit1、stdout EOF、reader/stop 完成；普通 `failed` 一律拒绝。专用终态被在途计数请求读到时保留，封闭后续业务，供同一子进程收尾使用；额外/重复终态、exit0、信号退出或读取错误不能变成故障证明。
 
-`Controller.ReleaseFault` 先作上述只读撤销确认，再停止并等待原来同一个 product；专用终态成立后才关闭独立 client 和实际 join supervisor signer。未知或失败不重建身份、不启动另一个 child。Signer join失败永久拒绝后续故障证明。child stop超时后只允许显式等待原child，不能恢复业务。
+`Controller.ReleaseFault` 先作上述只读撤销确认，再通过仅私有父管道的 `Child.StopFault` / `stop_fault` 停止并等待原来同一个 product；专用终态成立后才关闭独立 client 和实际 join supervisor signer。未知或失败不重建身份、不启动另一个 child。Signer join失败永久拒绝后续故障证明。child stop超时后只允许显式等待原child，不能恢复业务。
 
 TEST supervisor 的继承生命周期流接受无额外字段的 `stop_fault`，业务 socket/pipe 仍拒绝。两个终态阶段解决 stdin EOF 与原生命令 reader 的相互等待：
 
@@ -42,3 +42,9 @@ python3 run_supervised_activity.py WORK fault-retire
 `fault-state.json` 与原 `activity-state.json` 分离；故障回收成功为fault_joined_and_test_roots_retired，不能改称正常活动/PONG/zero成功。部分删除或回执未知必须查看实际保存状态，不能假设所有owner/文件仍存在。Windows release_delete同步不确定仍使用原受限finish-files显式恢复，没有增加删除绕过。
 
 接下来必须fresh重建当前签名TEST包做实际验收，不混用旧holder、不覆盖/复活已退休安装。当前Windows真实进程/同用户pipe/完整PowerShell脚本测试使用内存fixture，不操作原生凭据或Headscale，尚未替代双机原生fault或PONG验收。
+
+## r195：故障停止不借用普通 stop
+
+普通 stop 在 watch 尚未收到撤销状态时可合法产生 closed/exit0，不能用于期待 fault_joined/exit1 的收尾。ReleaseFault 改为专用私有 stop_fault，仍先独立确认原请求 revoked；明确的本地取消也使用同一故障停止类型，但继续不声称远端撤销。业务转发仍拒绝此生命周期操作，私有产品控制等待原 runner 实际结束后才处理 EOF。资源清理错误仍拒绝故障证明。首个停止类型一经选择不可改成另一个类型，超时继续保留同一 child 与 signer，不重启或强杀。
+
+确定性真实子进程回归在旧代码产生与现场相同的 child_exit_unexpected，修复后通过。Windows 四组进程/管道组件检查也通过，含坏终帧/重复终帧/exit0拒绝、超时后同一子进程 join 和本地取消边界；不使用原生受保护凭据，不代表真实双机 TLS/PONG 通过。旧的9610faf58fe6工单仍缺 Windows 父 owner/signer join 回执，不能套用新私有指令重启或修改旧签名程序。

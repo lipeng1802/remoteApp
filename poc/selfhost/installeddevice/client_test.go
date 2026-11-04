@@ -216,6 +216,36 @@ func TestSignerJoinFailureCannotReturnSuccessfulStop(t *testing.T) {
 	}
 }
 
+func TestPrivateFaultStopIsNotBusinessAndStillJoinsSigner(t *testing.T) {
+	if ValidSupervisedCommand(Request{Op: "stop_fault"}) {
+		t.Fatal("private fault stop escaped business policy")
+	}
+	release, profile := serviceFixture(t)
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	join := make(chan struct{})
+	signer := &testSigner{key: key, join: join, joined: make(chan struct{})}
+	commands := make(chan Request, 1)
+	commands <- Request{Op: "stop_fault"}
+	done := make(chan error, 1)
+	go func() {
+		done <- Runner(release, func() (clientruntime.Signer, error) { return signer, nil }, commands, func(any) error { return nil })(context.Background(), profile)
+	}()
+	select {
+	case <-done:
+		t.Fatal("fault stop skipped signer join")
+	case <-time.After(30 * time.Millisecond):
+	}
+	close(join)
+	if err := <-done; err == nil {
+		t.Fatal("fault stop became normal zero outcome")
+	}
+	select {
+	case <-signer.joined:
+	default:
+		t.Fatal("signer not joined")
+	}
+}
+
 func TestIdleCancellationAndDeadlineJoinSigner(t *testing.T) {
 	release, profile := serviceFixture(t)
 	for _, expiry := range []bool{false, true} {

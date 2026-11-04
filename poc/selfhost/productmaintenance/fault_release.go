@@ -58,7 +58,7 @@ func (c *Controller) ReleaseFault(ctx context.Context) error {
 	if !ok || confirm.ConfirmRevoked(ctx) != nil {
 		return errors.Join(ErrProduct, errFaultRevocation)
 	}
-	_ = c.child.Stop(ctx)
+	_ = c.child.StopFault(ctx)
 	if !c.child.JoinedFault() {
 		return errors.Join(ErrProduct, errFaultChild, faultChildEvidence(c.child.FaultJoinFailure()))
 	}

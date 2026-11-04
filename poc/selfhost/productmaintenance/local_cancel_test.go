@@ -8,7 +8,7 @@ import (
 )
 
 func TestLocalCancellationDoesNotRequireOrClaimRemoteRevocation(t *testing.T) {
-	c, s, _ := controllerFixture(t, "fault")
+	c, s, _ := controllerFixture(t, "fault-race")
 	c.prepared = false
 	c.provisioned = true
 	rev := &revokeFixture{unknown: true}

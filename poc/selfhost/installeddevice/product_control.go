@@ -138,7 +138,7 @@ func controlProductObserved(ctx context.Context, owner ProductMaintenanceOwner, 
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-			if request == (Request{Op: "stop"}) {
+			if request == (Request{Op: "stop"}) || request == (Request{Op: "stop_fault"}) {
 				// Parent closes stdin immediately after stop. That EOF must not
 				// race the runner's joined completion into a spurious fault.
 				select {

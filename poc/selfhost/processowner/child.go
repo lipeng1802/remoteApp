@@ -340,6 +340,14 @@ func (c *Child) Stop(ctx context.Context) error {
 	return c.finish(ctx, []byte("{\"Op\":\"stop\"}\n"), 1)
 }
 
+// StopFault selects the private fault contract before closing stdin. Sending
+// ordinary stop here can race the watch's inactive reply into a valid exit0,
+// which must never be reinterpreted as the required fault_joined/exit1 proof.
+// The caller must still verify JoinedFault; this method grants no such proof.
+func (c *Child) StopFault(ctx context.Context) error {
+	return c.finish(ctx, []byte("{\"Op\":\"stop_fault\"}\n"), 3)
+}
+
 // FinishMaintenance is a terminal trusted-pipe command, not an Exchange of a
 // reusable closed reply. It requires exactly one closed frame, EOF, reader join
 // and actual zero exit. A timeout retains this same finish operation; no kill.
@@ -352,7 +360,7 @@ func (c *Child) finish(ctx context.Context, command []byte, mode uint32) error {
 		return ErrProcess
 	}
 	c.stopOnce.Do(func() { c.finishMode.Store(mode); close(c.stopping); go c.stop(command) })
-	if mode == 2 && c.finishMode.Load() != 2 {
+	if (mode == 2 || mode == 3) && c.finishMode.Load() != mode {
 		return ErrProcess
 	}
 	select {
