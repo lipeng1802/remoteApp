@@ -29,7 +29,7 @@ func beginSYNTrace(ctx context.Context, lc *local.Client, controller, target net
 	stop := context.AfterFunc(ctx, closeStream)
 	done := make(chan synEvidence, 1)
 	go func() {
-		done <- readSYNEvidence(stream, controller, target, atTarget, func(e synEvidence) {
+		evidence := readSYNEvidence(stream, controller, target, atTarget, func(e synEvidence) {
 			if atTarget {
 				stage := startuptrace.TargetSYNObserved
 				if e.reply {
@@ -38,6 +38,14 @@ func beginSYNTrace(ctx context.Context, lc *local.Client, controller, target net
 				startuptrace.Emit(ctx, stage)
 			}
 		})
+		if atTarget && !evidence.syn {
+			stage := startuptrace.TargetSYNStreamUnavailable
+			if evidence.validStream {
+				stage = startuptrace.TargetSYNNotObserved
+			}
+			startuptrace.Emit(ctx, stage)
+		}
+		done <- evidence
 	}()
 	return sync.OnceValue(func() synEvidence {
 		cancel()
