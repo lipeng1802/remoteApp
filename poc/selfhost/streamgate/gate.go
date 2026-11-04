@@ -17,6 +17,7 @@ import (
 	"remoteapp.local/selfhost-poc/session"
 	"remoteapp.local/selfhost-poc/startuptrace"
 	"tailscale.com/client/local"
+	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 )
 
@@ -269,6 +270,25 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 		startuptrace.Emit(ctx, startuptrace.ControllerRouteDenied)
 		cancel()
 		return nil, session.ErrDenied
+	}
+	// Bring the already verified peer into the WireGuard engine before the
+	// TCP SYN. This shares the original dial deadline and never admits a peer.
+	if startuptrace.Enabled(ctx) {
+		check, stop := context.WithTimeout(dialCtx, 750*time.Millisecond)
+		pong, pingErr := lc.Ping(check, g.cfg.Binding.TargetIP, tailcfg.PingTSMP)
+		stop()
+		if pingErr != nil || pong == nil || pong.Err != "" || pong.IP != g.binding.TargetIP ||
+			pong.NodeIP != g.binding.TargetIP || !g.active(dialCtx) {
+			startuptrace.Emit(ctx, startuptrace.ControllerPeerWarmupFailed)
+			cancel()
+			return nil, session.ErrDenied
+		}
+		status := nodeproof.ClientRouteStatus(dialCtx, lc, g.binding.TargetNode, g.cfg.Binding.TargetIP)
+		if !status.Ready || !status.InEngine || !g.active(dialCtx) {
+			startuptrace.Emit(ctx, startuptrace.ControllerPeerWarmupFailed)
+			cancel()
+			return nil, session.ErrDenied
+		}
 	}
 	startuptrace.Emit(ctx, startuptrace.ControllerUpgrade)
 	conn, err := dialUntilListening(dialCtx, func(attempt context.Context) (net.Conn, error) {
