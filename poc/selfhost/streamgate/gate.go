@@ -244,8 +244,11 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 		return nil, session.ErrDenied
 	}
 	var sendBaseline overlayCounterSnapshot
+	var finishSYN func() synEvidence
 	if startuptrace.Enabled(ctx) {
 		sendBaseline = readControllerSend(ctx, lc)
+		finishSYN = beginSYNTrace(ctx, lc, g.cfg.Binding.ControllerIP, g.cfg.Binding.TargetIP)
+		defer finishSYN()
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	startuptrace.Emit(ctx, startuptrace.ControllerRouteWait)
@@ -286,7 +289,12 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 					}
 				}
 			}
-			if stage == startuptrace.ControllerSendObserved || stage == startuptrace.ControllerPeerSendObserved {
+			evidence := finishSYN()
+			if evidence.reply {
+				stage = startuptrace.ControllerSYNReplyObserved
+			} else if evidence.syn {
+				stage = startuptrace.ControllerSYNObserved
+			} else if stage == startuptrace.ControllerSendObserved || stage == startuptrace.ControllerPeerSendObserved {
 				stage = discoveryStage(ctx, lc, g.cfg.Binding.TargetIP, g.active)
 			}
 			startuptrace.Emit(ctx, stage)

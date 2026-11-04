@@ -342,13 +342,16 @@ func compileEntry(ctx context.Context, goexe, module, target, dest string, s Spe
 		return e
 	}
 	extra := ""
+	args := []string{"build", "-trimpath"}
 	if len(testTunnel) > 0 {
 		if len(testTunnel) != 1 || testTunnel[0] < 1024 || !s.Test || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" {
 			return trustprofile.ErrTrust
 		}
 		extra = testTunnelFlags(testTunnel[0])
+		args = append(args, "-tags=remoteapp_test_capture")
 	}
-	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags=-X main.embeddedRelease="+encoded+" -X main.embeddedSignerDigest="+signerDigest+" -X main.embeddedProductDigest="+productDigest+extra, "-o", dest, entry)
+	args = append(args, "-ldflags=-X main.embeddedRelease="+encoded+" -X main.embeddedSignerDigest="+signerDigest+" -X main.embeddedProductDigest="+productDigest+extra, "-o", dest, entry)
+	cmd := exec.CommandContext(ctx, goexe, args...)
 	cmd.Dir = module
 	arch := runtime.GOARCH
 	if target == "windows" {

@@ -16,14 +16,26 @@ type synEvidence struct {
 // readSYNEvidence consumes the pinned SDK capture format without recording
 // frames. Its caller owns the stream and bounds its lifetime.
 func readSYNEvidence(r io.Reader, controller, target netip.Addr, atTarget bool) synEvidence {
-	var evidence synEvidence
+	if !readSYNHeader(r) {
+		return synEvidence{}
+	}
+	return readSYNRecords(r, controller, target, atTarget)
+}
+
+func readSYNHeader(r io.Reader) bool {
 	var header [24]byte
 	le := binary.LittleEndian
-	if !controller.Is4() || !target.Is4() || controller == target ||
-		!readFull(r, header[:]) || le.Uint32(header[:4]) != 0xa1b2c3d4 ||
-		le.Uint16(header[4:6]) != 2 || le.Uint16(header[6:8]) != 4 || le.Uint32(header[20:24]) != 147 {
+	return readFull(r, header[:]) && le.Uint32(header[:4]) == 0xa1b2c3d4 &&
+		le.Uint16(header[4:6]) == 2 && le.Uint16(header[6:8]) == 4 && le.Uint32(header[20:24]) == 147
+}
+
+func readSYNRecords(r io.Reader, controller, target netip.Addr, atTarget bool) synEvidence {
+	var evidence synEvidence
+	if !controller.Is4() || !target.Is4() || controller == target {
 		return evidence
 	}
+	le := binary.LittleEndian
+	var header [16]byte
 	synPath, replyPath := packet.FromLocal, packet.FromPeer
 	if atTarget {
 		synPath, replyPath = replyPath, synPath
