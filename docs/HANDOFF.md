@@ -6,6 +6,18 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r192：可核验字节缓存传输与 Windows 组件验证
+
+实现 archive_cache.py 编码、Go archivecache 重组和固定 restore-test-archive 工具，接入新鲜 TEST runner。只读使用4215a4956f08/windows的普通程序文件字节，不读取/执行旧profile、安装、授权或原生身份，不修改旧根或旧Store。32KiB块引用绑定缓存文件完整摘要；字面量与每个新输出均核对完整SHA-256。输出只可新建，拒绝符号链接、越界、路径逃逸、重复/别名文件、设备名、坏源/坏增量和覆盖。恢复归档时另核对固定归档摘要与当前构建全部输入。重组未明确成功之前不启动隧道、Interactive owner 或任何原生安装。原签名/库存/身份/有效期门禁仍在后续原路径执行，原profile不延长。
+
+同一 dbbf202ca6a0 包只作本地传输字节比较，154,872,832字节输出中109,155,840字节可从缓存复制，传输归档为15,143,184字节，对照原50,758,060字节，减少约70.2%。本地增量打包22.07秒。该历史包没有重新执行或安装，不能作为本轮新鲜短包验收。
+
+Windows实际小型组件检查通过，证据 artifacts/connection-poc/r192-byte-transport/mini/windows-check.json，约916KiB新工具归档已传到新建的remoteapp-r192-byte随机目录。重组的产物是不可运行的PE片段加新测试常量，未执行载荷。实际验证字节相同、坏literal拒绝、坏缓存拒绝、已有输出拒绝，各工具调用真实退出，检查进程缺席后精确删除独立重组工具。脚本仅通过SSH做普通文件检查，无原生凭据操作，未改变系统执行策略，测试脚本用单进程ExecutionPolicy Bypass。现保留小型文件现场与本地证据，不计双机/GUI/PONG验收。
+
+大一些的未配置产品字节传输测试在SCP、一次SFTP续传均未完成，SSH随后实际可登录，Windows C盘约210GB可用，归档只有部分字节，未创建该测试输出根或原生owner。记录 /tmp/remoteapp-r192-byte-check.log、/tmp/remoteapp-r192-byte-check-resume.log、r192-byte-transport/remote.json。随后尝试的stdin文件传输未取得明确回执，未合入方案，部分归档保持，不据此推断网络/安全软件唯一原因，不自动重复。小归档实际可传，后续使用更小的缓存包继续，不重复原50MiB整包。
+
+固定遥测另修正泛化 session ended 不再遮盖已缓存的真实TCP失败阶段，具体授权故障仍优先。archivecache/processowner Go检查与38项Python相关检查通过。未推送。下一组只启动一份含本轮改动的新鲜签名双机包，通过撤销前分类定位原始失败，仍必须观察持续TLS PONG和正常join。
+
 ## 2026-11-04 r191：上传超时但未创建原生 owner，下一组先优化传输
 
 dbbf202ca6a0 原 exec session48522 已 exit1，原 SCP/SSH 进程21301/21302均已退出。原600秒SCP上限触发，远端归档只传入42,172,416 / 50,758,060字节。只读实际核对 Windows package、install 根与 owner task 均不存在，Mac 无 setup/manager/bootstrap/tunnel，不存在本轮新增 OS 身份或活动会话。仍保留 startup_outcome_unknown 与归档现场，不把超时当安装失败、撤销或 join。当前没有新的构建或工单运行，不重建同版整轮。

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/privatepipe"
+	"remoteapp.local/selfhost-poc/startuptrace"
 )
 
 // A real child process, not Headscale, native credentials or product TLS.
@@ -408,5 +409,18 @@ func TestLifecycleFailureSurvivesLateCaptureAndGenericSessionStages(t *testing.T
 	<-c.diagnosticDone
 	if c.ProductStage() != "lifecycle_state_rejected" {
 		t.Fatal("lifecycle failure overwritten")
+	}
+}
+
+func TestGenericSessionEndKeepsActualDialFailureVisible(t *testing.T) {
+	c := &Child{}
+	c.stage.Store(string(startuptrace.ControllerSYNObserved))
+	c.lifecycle.Store(string(startuptrace.LifecycleSessionEnded))
+	if c.ProductStage() != string(startuptrace.ControllerSYNObserved) {
+		t.Fatal("generic exit hid dial evidence")
+	}
+	c.lifecycle.Store(string(startuptrace.LifecycleStateFuture))
+	if c.ProductStage() != string(startuptrace.LifecycleStateFuture) {
+		t.Fatal("actual authority failure hidden")
 	}
 }

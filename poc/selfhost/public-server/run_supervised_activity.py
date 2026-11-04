@@ -24,6 +24,9 @@ from supervised_requests import WindowsRelay, reply as strict_reply
 REPO=Path(__file__).resolve().parents[3]
 WIN="jarvis@100.73.4.118"
 SERVER="root@182.92.117.114"
+# Read-only executable byte cache outside every installed/native root. No old
+# profile, authority or identity is admitted or executed from this directory.
+BYTE_CACHE_WORK=REPO/'artifacts/connection-poc/supervised-activity-r75-4215a4956f08'
 OPTIONS=["-o","BatchMode=yes","-o","ConnectTimeout=12","-o","IPQoS=none",
          "-o","ServerAliveInterval=5","-o","ServerAliveCountMax=2"]
 
@@ -259,6 +262,9 @@ def prepare():
     go=REPO/"artifacts/connection-poc/toolchain/go/bin/go"
     current=build_current_helpers(work,go)
     prewarm_product_build(work,go)
+    command(['env','GOOS=windows','GOARCH=amd64','CGO_ENABLED=0','GOPROXY=off',
+             str(go),'-C',str(REPO/'poc/selfhost'),'build','-trimpath','-ldflags=-s -w',
+             '-o',str(work/'compile-preflight/archive-restorer.exe'),'./cmd/restore-test-archive'],120)
     profile=work/"service-profile.json"
     profile.write_bytes(command(["ssh",*OPTIONS,SERVER,"cat /var/lib/remoteapp-prerelease/client-public/service-profile.json"]))
     build_go=test_build_wrapper(work,go)
@@ -332,7 +338,10 @@ try { & (Join-Path $PSScriptRoot 'validate-supervised-install.ps1') -StayReady -
         (work/'windows'/name).write_text(retirement_script(idle))
     archive=work/"windows.tar.xz"
     input_source,inputs=verified_windows_inputs(work)
-    pack_windows(work/"windows",archive,omit={item["relative"] for item in inputs})
+    from archive_cache import pack
+    audit=pack(work/'windows',archive,BYTE_CACHE_WORK/'windows',work/'compile-preflight/archive-restorer.exe',omit={item['relative'] for item in inputs})
+    with (work/'archive-cache.json').open('x') as f:
+        json.dump(audit,f,sort_keys=True);f.flush();os.fsync(f.fileno())
     remote="remoteapp-r75-"+m["nonce"]+".tar.xz"
     # Transfer may be slow over the management overlay. Only this file-copy
     # budget changes; retain a fixed 300s of the original signed profile for
@@ -356,21 +365,25 @@ def resume_transfer(work):
     if archive.is_symlink() or not archive.is_file():raise RuntimeError('activity_transfer_archive_rejected')
     input_source,inputs=verified_windows_inputs(work)
     omitted={x['relative'] for x in inputs}
-    # Check every byte against this fresh package before any resumed upload.
-    files={p.relative_to(work/'windows').as_posix():p for p in (work/'windows').rglob('*') if p.is_file()}
-    expected=set(files)-omitted
-    with tarfile.open(archive,'r:xz') as bundle:
-        seen=set()
-        for entry in bundle:
-            if not entry.isfile() or entry.name not in expected or entry.name in seen:
-                raise RuntimeError('activity_transfer_archive_rejected')
-            source=files[entry.name]
-            if source.is_symlink() or source.stat().st_size!=entry.size:
-                raise RuntimeError('activity_transfer_archive_rejected')
-            if hashlib.sha256(bundle.extractfile(entry).read()).digest()!=hashlib.sha256(source.read_bytes()).digest():
-                raise RuntimeError('activity_transfer_archive_rejected')
-            seen.add(entry.name)
-        if seen!=expected:raise RuntimeError('activity_transfer_archive_rejected')
+    if (work/'archive-cache.json').exists():
+        from archive_cache import verify
+        verify(work/'windows',archive,json.loads((work/'archive-cache.json').read_text()),omitted)
+    else:
+        # Legacy full archives retain the original per-file validation.
+        files={p.relative_to(work/'windows').as_posix():p for p in (work/'windows').rglob('*') if p.is_file()}
+        expected=set(files)-omitted
+        with tarfile.open(archive,'r:xz') as bundle:
+            seen=set()
+            for entry in bundle:
+                if not entry.isfile() or entry.name not in expected or entry.name in seen:
+                    raise RuntimeError('activity_transfer_archive_rejected')
+                source=files[entry.name]
+                if source.is_symlink() or source.stat().st_size!=entry.size:
+                    raise RuntimeError('activity_transfer_archive_rejected')
+                if hashlib.sha256(bundle.extractfile(entry).read()).digest()!=hashlib.sha256(source.read_bytes()).digest():
+                    raise RuntimeError('activity_transfer_archive_rejected')
+                seen.add(entry.name)
+            if seen!=expected:raise RuntimeError('activity_transfer_archive_rejected')
     d=quote(m['win_dir']);root=quote(m['win_root']);task=quote('RemoteApp-R75-'+m['nonce'])
     if ps("$ErrorActionPreference='Stop';if((Test-Path "+d+") -or (Test-Path "+root+") -or (Get-ScheduledTask -TaskName "+task+" -ErrorAction SilentlyContinue)){throw 'Native startup possible'};'UPLOAD_ONLY'")!='UPLOAD_ONLY':
         raise RuntimeError('activity_transfer_native_start_possible')
@@ -394,10 +407,19 @@ def finish_start_after_transfer(work,m,archive,input_source,inputs):
     port=m['forward_port']
     remote='remoteapp-r75-'+m['nonce']+'.tar.xz'
     if expiry(work)-time.time()<300:raise RuntimeError("activity_transfer_consumed_validity_window")
+    audit=None
+    if (work/'archive-cache.json').exists():
+        from archive_cache import verify
+        audit=json.loads((work/'archive-cache.json').read_text())
+        verify(work/'windows',archive,audit,{item['relative'] for item in inputs})
     d=quote(m["win_dir"]);task=quote("RemoteApp-R75-"+m["nonce"])
     digest=quote(hashlib.sha256(archive.read_bytes()).hexdigest())
     ps("$ErrorActionPreference='Stop';$d="+d+";if((Test-Path $d) -or (Test-Path "+quote(m["win_root"])+")){throw 'Fresh roots required'};"
        "$z=Join-Path $env:USERPROFILE "+quote(remote)+";if((Get-FileHash $z).Hash.ToLowerInvariant() -ne "+digest+"){throw 'Package mismatch'};New-Item -ItemType Directory -Path $d | Out-Null;& tar.exe -xf $z -C $d;if($LASTEXITCODE -ne 0){throw 'Package extraction failed'}")
+    if audit is not None:
+        unused,cache=metadata(BYTE_CACHE_WORK)
+        raw=ps("$ErrorActionPreference='Stop';$d=[IO.Path]::GetFullPath("+d+");$wire=Join-Path $d '_transport';$exe=Join-Path $wire 'restore.exe';if((Get-FileHash $exe).Hash.ToLowerInvariant() -ne "+quote(audit['restorer_sha256'])+"){throw 'Restorer changed'};$reply=@(& $exe ([IO.Path]::GetFullPath("+quote(cache['win_dir'])+")) $d $wire);if($LASTEXITCODE -ne 0){throw 'Reconstruction failed'};$reply")
+        if raw!='ARCHIVE_CACHE_RESTORED':raise RuntimeError('activity_archive_reconstruction_unconfirmed')
     for item in inputs:
         ps("$ErrorActionPreference='Stop';$s=Join-Path "+quote(input_source)+" "+quote(item["name"])+";$p=Join-Path "+d+" "+quote(item["relative"].replace('/','\\'))+";if(Test-Path $p){throw 'Input target exists'};"
            "if((Get-FileHash $s).Hash.ToLowerInvariant() -ne "+quote(item["sha256"])+"){throw 'Input changed'};Copy-Item -LiteralPath $s -Destination $p;if((Get-FileHash $p).Hash.ToLowerInvariant() -ne "+quote(item["sha256"])+"){throw 'Copied input mismatch'}")

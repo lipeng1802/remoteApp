@@ -191,11 +191,15 @@ func (c *Child) drainStage(f *os.File) {
 
 // ProductStage is cached telemetry and never sends a new product command.
 func (c *Child) ProductStage() string {
-	if s, ok := c.lifecycle.Load().(string); ok {
-		return s
+	lifecycle, ended := c.lifecycle.Load().(string)
+	if ended && lifecycle != string(startuptrace.LifecycleSessionEnded) {
+		return lifecycle
 	}
 	if s, ok := c.stage.Load().(string); ok {
 		return s
+	}
+	if ended {
+		return lifecycle
 	}
 	return "unreported"
 }

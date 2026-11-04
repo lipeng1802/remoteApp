@@ -14,6 +14,19 @@ import run_supervised_activity as runner
 
 
 class ManagementActivityGates(unittest.TestCase):
+    def test_cached_reconstruction_failure_never_starts_native_owner_or_tunnels(self):
+        with tempfile.TemporaryDirectory() as d:
+            w,m=self.fixture(d,'startup_outcome_unknown');m['forward_port']=18445
+            archive=w/'windows.tar.xz';archive.write_bytes(b'encoded')
+            (w/'archive-cache.json').write_text(json.dumps({'restorer_sha256':'a'*64}))
+            with patch('archive_cache.verify') as verify,patch.object(runner,'metadata',return_value=(w,{'win_dir':'FIXED-BYTE-CACHE'})),patch.object(runner,'ps',side_effect=['','REJECTED']) as ps,patch.object(runner,'command') as command:
+                with self.assertRaisesRegex(RuntimeError,'reconstruction_unconfirmed'):
+                    runner.finish_start_after_transfer(w,m,archive,'immutable-source',[])
+                verify.assert_called_once();command.assert_not_called()
+                self.assertEqual(ps.call_count,2)
+                self.assertTrue(all('Start-ScheduledTask' not in c.args[0] for c in ps.call_args_list))
+                self.assertFalse((w/'tunnels.json').exists())
+
     def test_transfer_never_consumes_native_startup_reservation(self):
         with tempfile.TemporaryDirectory() as d:
             w,m=self.fixture(d,'startup_outcome_unknown',int(time.time())+299)
