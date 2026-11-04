@@ -36,7 +36,7 @@ func readSYNRecords(r io.Reader, controller, target netip.Addr, atTarget bool) s
 	}
 	le := binary.LittleEndian
 	var header [16]byte
-	synPath, replyPath := packet.FromLocal, packet.FromPeer
+	synPath, replyPath := packet.SynthesizedToPeer, packet.FromPeer
 	if atTarget {
 		synPath, replyPath = replyPath, synPath
 	}

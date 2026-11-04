@@ -34,7 +34,7 @@ func TestSYNEvidenceRequiresMatchingReverseTuple(t *testing.T) {
 		ip[32], ip[33] = 0x50, flags
 		capture.Write(record[:])
 	}
-	write(0, controller, target, 50000, 47476, 2)
+	write(3, controller, target, 50000, 47476, 2)
 	write(1, target, controller, 47476, 50001, 18)
 	if got := readSYNEvidence(bytes.NewReader(capture.Bytes()), controller, target, false); !got.syn || got.reply {
 		t.Fatalf("foreign reply admitted: %+v", got)

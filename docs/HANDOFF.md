@@ -6,6 +6,12 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r165：修正 tsnet SYN 捕获方向
+
+abf200d3af27 双端 READY、TCP 仍超时，TSMP 往返成功。独立撤销、双端故障 join 及本轮 TEST 根退休确认。SYN 解析没有命中。
+
+源码进一步确认 tsnet 原生 TCP 经 InjectOutboundPacketBuffer，捕获方向为 SynthesizedToPeer=3，之前解析误按系统 TUN 的 FromLocal=0，导致漏报。已修正并更新对应回归测试，通过。入站仍按 FromPeer。此修复针对诊断，未声称修复 TCP。用新鲜工单实际验证，日志 /tmp/remoteapp-r165-round.log。磁盘余量约 147 GiB。
+
 ## 2026-11-04 r164：双端 SYN 观测接线
 
 目标端在监听就绪时打开同一有界捕获，Accept 失败时仅报告实际读到的匹配 SYN 或反向 SYN-ACK。Close 显式关闭捕获并等待 reader，结束函数幂等。4 秒窗口未捕获不构成未发包证据。控制端同时接入，Go 与 Python 定向测试通过。实际 SDK 流与双机验收日志 /tmp/remoteapp-r164-round.log，下一次先检查工单。
