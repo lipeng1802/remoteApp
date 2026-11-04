@@ -66,6 +66,11 @@ func (w *enrollmentWatch) updateGate(ctx context.Context, query func() (invite.N
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	state, err := query()
+	// Stop cancels an in-flight refresh too. That cancellation is not an
+	// authority failure and must not overwrite the original session outcome.
+	if ctx.Err() != nil {
+		return false
+	}
 	stage := startuptrace.LifecycleStateRejected
 	var failure stateFailure
 	if errors.As(err, &failure) {

@@ -242,3 +242,22 @@ func TestStateTimeDiagnosticRequiresAuthenticityAndNeverAcceptsFutureOrExpired(t
 		})
 	}
 }
+
+func TestWatchCancellationDuringRefreshDoesNotInventAuthorityFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &enrollmentWatch{done: make(chan struct{})}
+	entered := make(chan struct{})
+	finished := make(chan bool, 1)
+	go func() {
+		finished <- w.updateGate(ctx, func() (invite.NetworkState, error) {
+			close(entered)
+			<-ctx.Done()
+			return invite.NetworkState{}, ctx.Err()
+		})
+	}()
+	<-entered
+	cancel()
+	if <-finished || w.Faulted() {
+		t.Fatal("explicit stop fabricated an authorization fault")
+	}
+}
