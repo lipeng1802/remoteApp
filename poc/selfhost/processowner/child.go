@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -53,6 +54,7 @@ type Child struct {
 	diagnosticDone             chan struct{}
 	diagnosticErr              error
 	stage                      atomic.Value
+	lifecycle                  atomic.Value
 }
 
 func Start(s Spec) (*Child, error) {
@@ -158,7 +160,15 @@ func (c *Child) drainStage(f *os.File) {
 			if !overflow && bytes.HasPrefix(line, []byte(prefix)) {
 				s := string(line[len(prefix):])
 				if startuptrace.Valid(s) {
-					c.stage.Store(s)
+					if strings.HasPrefix(s, "lifecycle_") {
+						if s == string(startuptrace.LifecycleSessionEnded) {
+							c.lifecycle.CompareAndSwap(nil, s)
+						} else {
+							c.lifecycle.Store(s)
+						}
+					} else {
+						c.stage.Store(s)
+					}
 				}
 			}
 			line = line[:0]
@@ -173,6 +183,9 @@ func (c *Child) drainStage(f *os.File) {
 
 // ProductStage is cached telemetry and never sends a new product command.
 func (c *Child) ProductStage() string {
+	if s, ok := c.lifecycle.Load().(string); ok {
+		return s
+	}
 	if s, ok := c.stage.Load().(string); ok {
 		return s
 	}

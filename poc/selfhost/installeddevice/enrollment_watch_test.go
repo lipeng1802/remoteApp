@@ -172,7 +172,7 @@ func TestInitialGateQueryCannotOvertakeInflightWatchReply(t *testing.T) {
 	entered, release, refreshed := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(refreshed)
-		w.updateGate(func() (invite.NetworkState, error) {
+		w.updateGate(context.Background(), func() (invite.NetworkState, error) {
 			close(entered)
 			<-release
 			return invite.NetworkState{Claims: invite.NetworkClaims{Active: true}}, nil

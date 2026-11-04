@@ -6,6 +6,12 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r187：保存会话终止原因，避免被捕获收尾覆盖
+
+d0b3eb9e3b67 双端 READY，TCP 仍超时，控制 SYN 与目标 parent ended 重现。独立撤销、双端故障 join、TEST 退休通过。r186 并发修复没有解决该轮 TCP 问题。
+
+新增 TEST 生命周期固定分类，区分状态请求/验签拒绝、明确 inactive、缓存更新拒绝与 session worker 自行结束。supervisor 独立缓存此类终止证据，晚到的捕获关闭阶段不能覆盖原因。installeddevice/processowner/startuptrace 与 Python 诊断回归通过，另有覆盖优先级回归通过。下一轮日志 /tmp/remoteapp-r187-active.log，应据真实生命周期类别定位原因，不据 parent ended 推断网络丢包。
+
 ## 2026-11-04 r186：修复 watch 与初始 gate 状态的并发乱序
 
 源码发现 prepareSessionPeers 的初始 state 请求与 watch 的定期 state 请求可并发。较旧 watch 响应若在较新初始 gate 安装后到达，StateCache 的严格反重放检查会拒绝，并终止整个 owner。新增确定性测试复现旧请求在途时初始查询能越过它的时序。现将查询、gate 初始安装与 watch 更新按同一 mutex 串行，失败在锁内置为终态，缓存反重放与签名/有效期门禁继续严格执行。installeddevice 和 session 回归通过，最终变更后的 watch 定向测试通过。

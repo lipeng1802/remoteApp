@@ -9,6 +9,7 @@ import (
 
 	"remoteapp.local/selfhost-poc/cleanupwitness"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/startuptrace"
 	"remoteapp.local/selfhost-poc/streamgate"
 )
 
@@ -57,15 +58,23 @@ func (w *enrollmentWatch) AttachGate(open func() (*streamgate.Gate, error)) (*st
 	w.gate = g
 	return g, nil
 }
-func (w *enrollmentWatch) updateGate(query func() (invite.NetworkState, error)) bool {
+func (w *enrollmentWatch) updateGate(ctx context.Context, query func() (invite.NetworkState, error)) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	state, err := query()
-	ok := err == nil && state.Claims.Active && (w.gate == nil || w.gate.Update(state))
-	if !ok {
-		w.fault.Store(true)
+	stage := startuptrace.LifecycleStateRejected
+	if err == nil {
+		stage = startuptrace.LifecycleInactive
+		if state.Claims.Active {
+			if w.gate == nil || w.gate.Update(state) {
+				return true
+			}
+			stage = startuptrace.LifecycleGateRejected
+		}
 	}
-	return ok
+	w.fault.Store(true)
+	startuptrace.Emit(ctx, stage)
+	return false
 }
 func (w *enrollmentWatch) denyGate() {
 	w.mu.Lock()
@@ -171,7 +180,7 @@ func (e *enrollment) startWatch(ctx context.Context, g *authorizationGate, clien
 			case <-life.Done():
 				return
 			case <-ticker.C:
-				if !w.updateGate(func() (invite.NetworkState, error) {
+				if !w.updateGate(life, func() (invite.NetworkState, error) {
 					return e.state(life, g, client, &binding)
 				}) {
 					return

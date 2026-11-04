@@ -12,6 +12,7 @@ import (
 	"remoteapp.local/selfhost-poc/clientowner"
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/startuptrace"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
@@ -185,6 +186,7 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		for {
 			select {
 			case <-sessionDone:
+				startuptrace.Emit(ctx, startuptrace.LifecycleSessionEnded)
 				// Product/session exit while the owner is still authorized is a
 				// terminal fault. There is no automatic restart or new scope.
 				return trustprofile.ErrTrust

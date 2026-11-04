@@ -392,3 +392,21 @@ func TestFixedStageCaptureIsOptInAndJoined(t *testing.T) {
 		}
 	}
 }
+
+func TestLifecycleFailureSurvivesLateCaptureAndGenericSessionStages(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Child{diagnosticDone: make(chan struct{})}
+	go c.drainStage(read)
+	_, err = write.WriteString("PRODUCT_STAGE lifecycle_state_rejected\nPRODUCT_STAGE target_syn_parent_ended\nPRODUCT_STAGE lifecycle_session_ended\n")
+	write.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-c.diagnosticDone
+	if c.ProductStage() != "lifecycle_state_rejected" {
+		t.Fatal("lifecycle failure overwritten")
+	}
+}
