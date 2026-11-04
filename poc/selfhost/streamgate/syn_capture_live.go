@@ -16,7 +16,7 @@ func beginSYNTrace(ctx context.Context, lc *local.Client, controller, target net
 	parent := ctx
 	lifetime := 4 * time.Second
 	if atTarget {
-		lifetime = 20 * time.Second
+		lifetime = 60 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(ctx, lifetime)
 	openDeadline := time.AfterFunc(500*time.Millisecond, cancel)

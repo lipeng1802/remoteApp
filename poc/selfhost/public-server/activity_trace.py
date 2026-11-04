@@ -2,6 +2,7 @@
 import json
 import os
 import threading
+import time
 
 
 class RecordedEndpoint:
@@ -9,11 +10,12 @@ class RecordedEndpoint:
         if role not in ('target','controller'):raise RuntimeError('activity_trace_role_rejected')
         self.directory=work/('trace-'+role)
         self.directory.mkdir(mode=0o700)  # Existing evidence must be preserved.
+        self.started = time.monotonic()
         self.endpoint=endpoint;self.sequence=0;self.lock=threading.Lock()
 
     def event(self,phase,op,action,status=None, evidence=None):
         self.sequence+=1
-        value={'version':1,'phase':phase,'op':op,'action':action}
+        value={'version':1,'phase':phase,'op':op,'action':action,'elapsed_ms':int((time.monotonic()-self.started)*1000)}
         if status is not None:value['status']=status
         if evidence is not None:value.update(evidence)
         with (self.directory/('%06d.json'%self.sequence)).open('x') as output:
