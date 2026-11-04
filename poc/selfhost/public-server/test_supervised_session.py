@@ -64,6 +64,20 @@ class ActivePair(Pair):
 
 
 class ActiveSessionBoundaries(unittest.TestCase):
+    def test_failure_snapshot_precedes_revoke_and_cannot_suppress_it(self):
+        for broken in (False,True):
+            p=ActivePair('constant');events=[]
+            def snapshot():
+                self.assertEqual(p.revoke_calls,0)
+                self.assertGreater(p.count_calls,0)
+                events.append('before_revoke')
+                if broken:raise RuntimeError('PRIVATE')
+            with self.assertRaisesRegex(RuntimeError,'session_payload_growth_unconfirmed'):
+                active_round(p.endpoint('target'),p.endpoint('controller'),profile_expires_at=1500,
+                    clock=lambda:1000+p.elapsed,monotonic=lambda:p.elapsed,sleep=p.sleep,on_failure=snapshot)
+            self.assertEqual(events,['before_revoke'])
+            self.assertEqual(p.revoke_calls,1)
+
     def test_normal_quiesce_mode_joins_both_before_exact_revoke(self):
         for fault in (None,"quiesce"):
             p=ActivePair(fault)

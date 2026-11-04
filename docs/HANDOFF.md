@@ -6,6 +6,18 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r189：恢复并合并故障证据与退休传输修复
+
+用户要求恢复并加快，现有 remoteapp 恢复 ACTIVE，不新建自动化。Windows SSH 实际通过，磁盘可用约 137 GiB，无重型构建。旧 39f1e0d8023c、e4cc83467910 的驻留 owner 保留，不强杀、不复用。
+
+4215a4956f08 原诊断为 controller lifecycle_state_rejected、target lifecycle_inactive，但 trace 明确显示采集在 revoke_session 之后，不能据此归因初始故障。现在 attempted 后故障在 finally 撤销前只读采集，诊断失败仍继续独立撤销，独占证据不覆盖。supervisor 保留首个具体生命周期原因，晚到的 inactive 不能覆盖。状态请求、真实签名快照未来/过期、本地身份与绑定拒绝和 session_identity 启动拒绝分开，所有原信任和截止仍拒绝，不以分类取得授权。
+
+只读核对 4215a4956f08 Windows 无 retire-result、无退休任务、无 run-retire.ps1、无精确路径进程，原安装根仍存在，owner 任务 Ready / result1。Mac 已退休，状态仍 retirement_outcome_unknown，不重发旧清理或复用过期短包。新包提前携带两种固定退休脚本，原生退休前核验本地内容和远端摘要，不再在 Mac 退休后依赖 SCP。缺失脚本在任一原生删除前失败，旧工单仍禁止隐式重跑。
+
+Go installeddevice/processowner/startuptrace 与 39 项 Python 定向检查通过，git diff --check 通过。
+
+下一组仅启动一份全新签名双机工单，读取撤销前诊断确定启动失败来源，目标仍为持续 TLS PONG 与正常零退出。未取得实际增长前不标双机或 GUI 验收通过。不推送远端。
+
 ## 2026-11-04 r188：用户要求暂停
 
 现有 remoteapp 自动化已置 PAUSED。4215a4956f08 本轮协调进程已结束，撤销与双端故障 join 已记录；退休状态为 retirement_outcome_unknown，Mac 已确认退休，Windows 退休结果待核对。当前无 Go 构建或 caffeinate。按用户要求暂停后续排查，保留现场，恢复时先读取该工单精确状态，不重发退休或新建工单。

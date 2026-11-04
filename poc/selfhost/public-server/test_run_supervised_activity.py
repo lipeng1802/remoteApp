@@ -14,6 +14,22 @@ import run_supervised_activity as runner
 
 
 class ManagementActivityGates(unittest.TestCase):
+    def test_missing_prestaged_retirement_stops_before_either_native_mutation(self):
+        with tempfile.TemporaryDirectory() as d:
+            w,m=self.fixture(d,'owners_joined_retirement_pending')
+            with patch.object(runner,'command') as command,patch.object(runner,'ps') as ps:
+                with self.assertRaisesRegex(RuntimeError,'wrapper_not_staged'):
+                    runner.retire(w)
+                command.assert_not_called();ps.assert_not_called()
+            self.assertEqual(Activity(w).read()['phase'],'owners_joined_retirement_pending')
+
+    def test_retirement_script_uses_only_exact_native_mode(self):
+        for idle in (False,True):
+            script=runner.retirement_script(idle)
+            self.assertIn('retire-idle-test.exe' if idle else 'retire-node-test.exe',script)
+            self.assertIn('idle_test_retired' if idle else 'registered_test_retired',script)
+            self.assertNotIn('Stop-Process',script)
+
     def test_powershell_declares_utf8_before_public_localized_diagnostics(self):
         with patch.object(runner,'command',return_value='{"status":"已恢复"}'.encode('utf8')) as call:
             self.assertEqual(runner.ps("'PUBLIC'"),'{"status":"已恢复"}')

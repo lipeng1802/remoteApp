@@ -164,7 +164,15 @@ func (c *Child) drainStage(f *os.File) {
 						if s == string(startuptrace.LifecycleSessionEnded) {
 							c.lifecycle.CompareAndSwap(nil, s)
 						} else {
-							c.lifecycle.Store(s)
+							for {
+								old := c.lifecycle.Load()
+								if old != nil && old != string(startuptrace.LifecycleSessionEnded) {
+									break
+								}
+								if c.lifecycle.CompareAndSwap(old, s) {
+									break
+								}
+							}
 						}
 					} else {
 						c.stage.Store(s)

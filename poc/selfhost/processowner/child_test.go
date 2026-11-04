@@ -400,7 +400,7 @@ func TestLifecycleFailureSurvivesLateCaptureAndGenericSessionStages(t *testing.T
 	}
 	c := &Child{diagnosticDone: make(chan struct{})}
 	go c.drainStage(read)
-	_, err = write.WriteString("PRODUCT_STAGE lifecycle_state_rejected\nPRODUCT_STAGE target_syn_parent_ended\nPRODUCT_STAGE lifecycle_session_ended\n")
+	_, err = write.WriteString("PRODUCT_STAGE lifecycle_state_rejected\nPRODUCT_STAGE target_syn_parent_ended\nPRODUCT_STAGE lifecycle_inactive\nPRODUCT_STAGE lifecycle_session_ended\n")
 	write.Close()
 	if err != nil {
 		t.Fatal(err)

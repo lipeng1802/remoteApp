@@ -75,7 +75,7 @@ def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,
 
 
 def active_round(target, controller, *, profile_expires_at, clock=time.time,
-                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False, after_provision=None, before_provision_terminal=None, before_provision=None):
+                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False, after_provision=None, before_provision_terminal=None, before_provision=None, on_failure=None):
     """Fresh explicit approval -> clocks -> concurrent provision -> PONG -> revoke.
 
     A mutation/receipt error fails this episode. It does not stop/delete owners,
@@ -84,6 +84,7 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
     """
     require(after_provision is None or callable(after_provision),'session_observer_invalid')
     require(before_provision is None or callable(before_provision), 'session_provision_callback_invalid')
+    require(on_failure is None or callable(on_failure), 'session_failure_callback_invalid')
     require(before_provision_terminal is None or callable(before_provision_terminal), 'session_terminal_callback_invalid')
     require(type(quiesce_before_revoke) is bool,"session_quiesce_mode_invalid")
     require(type(profile_expires_at) is int and profile_expires_at - clock() >= 240,
@@ -141,6 +142,13 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
                         and receipt["status"]=="session_quiesced" and receipt["joined"] is True
                         and receipt["zero_exit"] is True,"session_quiesce_join_unconfirmed")
             result["products_quiesced_both"]=True
+    except Exception:
+        # Read the original failure before revoke changes the watch to inactive.
+        # Telemetry failure cannot postpone cleanup or replace the work error.
+        if attempted and on_failure is not None:
+            try:on_failure()
+            except Exception:pass
+        raise
     finally:
         if attempted:
             # No grant selector and no child business IPC after provision.

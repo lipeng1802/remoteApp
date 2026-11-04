@@ -3,6 +3,7 @@ package installeddevice
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -46,7 +47,10 @@ func (w *enrollmentWatch) AttachGate(open func() (*streamgate.Gate, error)) (*st
 		return nil, invite.ErrDenied
 	}
 	g, err := open()
-	if err != nil || g == nil {
+	if err != nil {
+		return nil, err
+	}
+	if g == nil {
 		return nil, invite.ErrDenied
 	}
 	select {
@@ -63,6 +67,10 @@ func (w *enrollmentWatch) updateGate(ctx context.Context, query func() (invite.N
 	defer w.mu.Unlock()
 	state, err := query()
 	stage := startuptrace.LifecycleStateRejected
+	var failure stateFailure
+	if errors.As(err, &failure) {
+		stage = startuptrace.Stage(failure)
+	}
 	if err == nil {
 		stage = startuptrace.LifecycleInactive
 		if state.Claims.Active {
@@ -102,10 +110,19 @@ func (e *enrollment) state(ctx context.Context, g *authorizationGate, client net
 	return e.stateRequest(ctx, g, client, expected, false)
 }
 
+// These fixed TEST labels preserve the denial cause without retaining a reply,
+// grant, endpoint or native provider error. All failures still wrap ErrDenied.
+type stateFailure startuptrace.Stage
+
+func (f stateFailure) Error() string { return string(f) }
+func (f stateFailure) Unwrap() error { return invite.ErrDenied }
+
 func (e *enrollment) stateRequest(ctx context.Context, g *authorizationGate, client networkRequester, expected *invite.NetworkBinding, initial bool) (invite.NetworkState, error) {
-	deny := func() (invite.NetworkState, error) { return invite.NetworkState{}, invite.ErrDenied }
+	deny := func(stage startuptrace.Stage) (invite.NetworkState, error) {
+		return invite.NetworkState{}, stateFailure(stage)
+	}
 	if ctx.Err() != nil || g == nil || g.clock == nil || g.signer == nil || client == nil || e.node == nil || e.node.PublicKey() != e.key || !bytes.Equal(g.public, g.signer.PublicKey()) || !g.validGrant(g.grant, g.clock()) {
-		return deny()
+		return deny(startuptrace.LifecycleStateLocalRejected)
 	}
 	action, budget := "state", 5*time.Second
 	if initial {
@@ -115,11 +132,32 @@ func (e *enrollment) stateRequest(ctx context.Context, g *authorizationGate, cli
 	reply, err := client.Request(call, invite.NetworkRequestBody{Action: action, Grant: g.grant})
 	failed := call.Err() != nil
 	cancel()
-	if err != nil || failed || reply.State == nil || reply.Ticket != "" || reply.Credential != nil || reply.Proof != nil || reply.TLS != nil || reply.Session != nil || reply.Verifier != nil || reply.State.Claims.Grant != g.grant || !invite.VerifyNetworkState(g.issuer, *reply.State, g.clock()) || !e.ownBinding(g, reply.State.Claims.Binding) || !g.validGrant(g.grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
-		return deny()
+	if err != nil || failed {
+		return deny(startuptrace.LifecycleStateRequestRejected)
+	}
+	if reply.State == nil || reply.Ticket != "" || reply.Credential != nil || reply.Proof != nil || reply.TLS != nil || reply.Session != nil || reply.Verifier != nil || reply.State.Claims.Grant != g.grant {
+		return deny(startuptrace.LifecycleStateRejected)
+	}
+	now := g.clock()
+	if !invite.VerifyNetworkState(g.issuer, *reply.State, now) {
+		// Classify time only after independently verifying the signed snapshot
+		// at its own issuance. This never authorizes it at the current time.
+		c := reply.State.Claims
+		if invite.VerifyNetworkState(g.issuer, *reply.State, time.Unix(0, c.IssuedAt)) {
+			if now.UnixNano() < c.IssuedAt {
+				return deny(startuptrace.LifecycleStateFuture)
+			}
+			if now.UnixNano() >= c.ExpiresAt {
+				return deny(startuptrace.LifecycleStateExpired)
+			}
+		}
+		return deny(startuptrace.LifecycleStateRejected)
+	}
+	if !e.ownBinding(g, reply.State.Claims.Binding) || !g.validGrant(g.grant, g.clock()) || !bytes.Equal(g.public, g.signer.PublicKey()) || e.node.PublicKey() != e.key {
+		return deny(startuptrace.LifecycleStateLocalRejected)
 	}
 	if expected != nil && reply.State.Claims.Binding != *expected {
-		return deny()
+		return deny(startuptrace.LifecycleStateBindingRejected)
 	}
 	return *reply.State, nil
 }

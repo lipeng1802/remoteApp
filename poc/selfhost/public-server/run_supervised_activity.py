@@ -314,9 +314,9 @@ def monitor(work):
 def start(work):
     work,m=metadata(work);a=Activity(work)
     port=m["forward_port"]
+    if a.read()["phase"]!="built" or expiry(work)-time.time()<600:raise RuntimeError("activity_fresh_build_required")
     require_free_forward_port(port)
     require_windows_forward_port(port)
-    if a.read()["phase"]!="built" or expiry(work)-time.time()<600:raise RuntimeError("activity_fresh_build_required")
     a.save({"version":1,"phase":"startup_outcome_unknown"})
     shutil.copyfile(REPO/"packaging/experimental/validate-supervised-install.ps1",work/"windows/validate-supervised-install.ps1")
     shutil.copyfile(REPO/"packaging/experimental/supervised-fault-stop.ps1",work/"windows/supervised-fault-stop.ps1")
@@ -328,6 +328,8 @@ try { & (Join-Path $PSScriptRoot 'validate-supervised-install.ps1') -StayReady -
  'EXITCODE=0' | Out-File $log -Append -Encoding utf8
 } catch { 'OWNER_FAILED_STATE_PRESERVED' | Out-File $log -Append -Encoding utf8; 'EXITCODE=1' | Out-File $log -Append -Encoding utf8;exit 1 }
 """)
+    for idle,name in ((False,'run-retire-node.ps1'),(True,'run-retire-idle.ps1')):
+        (work/'windows'/name).write_text(retirement_script(idle))
     archive=work/"windows.tar.xz"
     input_source,inputs=verified_windows_inputs(work)
     pack_windows(work/"windows",archive,omit={item["relative"] for item in inputs})
@@ -447,6 +449,7 @@ def exercise(work, preprovision_fault=False):
         from supervised_session import active_round
         from policy_observation import observe
         def episode(t,c,**options):
+            from startup_diagnostic import capture
             def terminal():
                 a=Activity(work)
                 if a.read()['phase']!='exercise_outcome_unknown':
@@ -455,7 +458,7 @@ def exercise(work, preprovision_fault=False):
             def before():
                 if preprovision_fault:
                     raise RuntimeError('test_preprovision_fault')
-            return active_round(t,c,after_provision=lambda:observe(work),before_provision_terminal=terminal,before_provision=before,**options)
+            return active_round(t,c,after_provision=lambda:observe(work),before_provision_terminal=terminal,before_provision=before,on_failure=lambda:capture(work,t,c),**options)
         return Activity(work).exercise(target,controller,expiry(work),episode=episode)
     except Exception:
         # Cache-only native telemetry cannot authorize retries, close the owner,
@@ -499,16 +502,9 @@ def retire(work):
     return retire_pair(work,m,a,state,'preprovision_joined_and_test_roots_retired' if state.get('preprovision') is True else 'normal_activity_joined_and_test_roots_retired')
 
 
-def retire_pair(work,m,a,state,final_phase,before_empty_cleanup=None):
-    # No automatic rerun after uncertain destructive cleanup. Explicit
-    # finish-files/recovery requires the native tool's separate gates.
-    state["phase"]="retirement_outcome_unknown";state["retired"]={};a.save(state)
-    idle=state.get('preprovision') is True
+def retirement_script(idle=False):
     tool='retire-idle-test' if idle else 'retire-node-test'
     expected='idle_test_retired' if idle else 'registered_test_retired'
-    raw=command([str(work/('darwin/'+tool))],60)
-    if json.loads(raw)!={"status":expected} or Path(m["mac_root"]).exists():raise RuntimeError("activity_mac_retirement_unconfirmed")
-    state["retired"]["controller"]=True;a.save(state)
     body="""$ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $log=Join-Path $PSScriptRoot 'retire-result.txt'
@@ -519,11 +515,30 @@ try { $lines=@(& (Join-Path $PSScriptRoot 'retire-node-test.exe'));$code=$LASTEX
 } catch { 'EXITCODE=1' | Out-File $log -Append -Encoding utf8;exit 1 }
 """
     body=body.replace('retire-node-test.exe',tool+'.exe').replace('registered_test_retired',expected)
-    (work/"run-retire.ps1").write_text(body)
-    command(["scp","-q",*OPTIONS,str(work/"run-retire.ps1"),WIN+":"+"remoteapp-r75-package-"+m["nonce"]+"/run-retire.ps1"])
+    return body
+
+
+def retire_pair(work,m,a,state,final_phase,before_empty_cleanup=None):
+    # No automatic rerun after uncertain destructive cleanup. Explicit
+    # finish-files/recovery requires the native tool's separate gates.
+    idle=state.get('preprovision') is True
+    tool='retire-idle-test' if idle else 'retire-node-test'
+    expected='idle_test_retired' if idle else 'registered_test_retired'
+    script=retirement_script(idle)
+    name='run-retire-idle.ps1' if idle else 'run-retire-node.ps1'
+    staged=work/'windows'/name
+    if not staged.is_file() or staged.read_text()!=script:
+        raise RuntimeError('activity_retirement_wrapper_not_staged')
+    digest=hashlib.sha256(staged.read_bytes()).hexdigest()
     d=quote(m["win_dir"]);task=quote("RemoteApp-R75-Retire-"+m["nonce"])
-    ps("$ErrorActionPreference='Stop';$d="+d+";$t="+task+";if(Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue){throw 'Retirement task exists'};"
-       "$a=New-ScheduledTaskAction -Execute powershell.exe -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File '+[char]34+(Join-Path $d 'run-retire.ps1')+[char]34);"
+    if ps("$ErrorActionPreference='Stop';$p=Join-Path "+d+" "+quote(name)+";if((Get-FileHash -LiteralPath $p).Hash.ToLowerInvariant() -eq "+quote(digest)+"){'STAGED'}")!='STAGED':
+        raise RuntimeError('activity_retirement_wrapper_not_staged')
+    state["phase"]="retirement_outcome_unknown";state["retired"]={};a.save(state)
+    raw=command([str(work/('darwin/'+tool))],60)
+    if json.loads(raw)!={"status":expected} or Path(m["mac_root"]).exists():raise RuntimeError("activity_mac_retirement_unconfirmed")
+    state["retired"]["controller"]=True;a.save(state)
+    ps("$ErrorActionPreference='Stop';$d="+d+";$t="+task+";$script=Join-Path $d "+quote(name)+";if((Get-FileHash -LiteralPath $script).Hash.ToLowerInvariant() -ne "+quote(digest)+"){throw 'Retirement wrapper changed'};if(Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue){throw 'Retirement task exists'};"
+       "$a=New-ScheduledTaskAction -Execute powershell.exe -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File '+[char]34+$script+[char]34);"
        "$p=New-ScheduledTaskPrincipal -UserId jarvis -LogonType Interactive -RunLevel Limited;Register-ScheduledTask -TaskName $t -Action $a -Principal $p | Out-Null;Start-ScheduledTask -TaskName $t")
     for unused in range(120):
         value=ps("$d="+d+";$p=Join-Path $d 'retire-result.txt';if(Test-Path $p){$s=Get-Content $p -Raw;if($s -match 'EXITCODE=1'){'FAILED'}elseif(($s -match 'EXITCODE=0') -and (Get-ScheduledTask -TaskName "+task+").State -ne 'Running' -and (Get-ScheduledTaskInfo -TaskName "+task+").LastTaskResult -eq 0 -and -not(Test-Path "+quote(m["win_root"])+")){'RETIRED'}}")

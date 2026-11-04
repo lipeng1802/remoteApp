@@ -6,9 +6,11 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/startuptrace"
 	"remoteapp.local/selfhost-poc/streamgate"
 )
 
@@ -33,7 +35,17 @@ func (p SessionPeers) Binding() invite.NetworkBinding { return p.binding }
 func (p SessionPeers) Grant() invite.Grant            { return p.grant }
 func (p SessionPeers) Server() bool                   { return p.server }
 
-func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGate, client networkRequester) error {
+func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGate, client networkRequester) (result error) {
+	stage := startuptrace.LifecycleIdentityRejected
+	defer func() {
+		if result != nil {
+			var failure stateFailure
+			if errors.As(result, &failure) {
+				stage = startuptrace.Stage(failure)
+			}
+			startuptrace.Emit(ctx, stage)
+		}
+	}()
 	if ctx == nil || ctx.Err() != nil || e.peers != nil || e.watch == nil || e.watch.Faulted() || g == nil || g.clock == nil || client == nil || e.binding == (invite.NetworkBinding{}) {
 		return invite.ErrDenied
 	}
@@ -51,7 +63,11 @@ func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGa
 	reply, err := client.Request(call, invite.NetworkRequestBody{Action: "session_identity", Grant: g.grant, Challenge: challenge})
 	failed := call.Err() != nil
 	cancel()
-	if err != nil || failed || reply.Session == nil || reply.Ticket != "" || reply.Credential != nil || reply.State != nil || reply.Proof != nil || reply.TLS != nil || reply.Verifier != nil ||
+	if err != nil || failed {
+		stage = startuptrace.LifecycleIdentityRequestRejected
+		return invite.ErrDenied
+	}
+	if reply.Session == nil || reply.Ticket != "" || reply.Credential != nil || reply.State != nil || reply.Proof != nil || reply.TLS != nil || reply.Verifier != nil ||
 		!invite.VerifySessionIdentity(g.issuer, *reply.Session, g.grant, e.binding, challenge, g.clock()) || !g.validGrant(g.grant, g.clock()) ||
 		!bytes.Equal(g.public, g.signer.PublicKey()) || e.node == nil || e.node.PublicKey() != e.key {
 		return invite.ErrDenied
@@ -67,13 +83,17 @@ func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGa
 	}
 	payloadGate, err := e.watch.AttachGate(func() (*streamgate.Gate, error) {
 		state, err := e.state(ctx, g, client, &e.binding)
-		if err != nil || !state.Claims.Active {
+		if err != nil {
+			return nil, err
+		}
+		if !state.Claims.Active {
 			return nil, invite.ErrDenied
 		}
 		return streamgate.NewWithSigner(g.issuer, target, controller, g.signer, state, server, g.clock)
 	})
 	if err != nil {
-		return invite.ErrDenied
+		stage = startuptrace.LifecycleIdentityGateRejected
+		return err
 	}
 	e.peers = &SessionPeers{target: append(ed25519.PublicKey(nil), target...), controller: append(ed25519.PublicKey(nil), controller...), binding: e.binding, grant: g.grant, server: server}
 	e.peers.runtime = &SessionRuntime{peers: e.peers, gate: payloadGate, node: enrolledSessionServer(e.node), client: client, issuer: append(ed25519.PublicKey(nil), g.issuer...), clock: g.clock}

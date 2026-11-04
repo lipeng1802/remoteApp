@@ -202,3 +202,43 @@ func TestInitialGateQueryCannotOvertakeInflightWatchReply(t *testing.T) {
 	}
 	<-attached
 }
+
+func TestStateTimeDiagnosticRequiresAuthenticityAndNeverAcceptsFutureOrExpired(t *testing.T) {
+	for _, scenario := range []string{"future", "expired", "forged_future", "request"} {
+		t.Run(scenario, func(t *testing.T) {
+			g, grant, key, e, binding := watchedFixture(t)
+			now := g.clock()
+			g.clock = func() time.Time { return now }
+			want := "lifecycle_state_future"
+			client := requestFunc(func(context.Context, invite.NetworkRequestBody) (invite.NetworkReply, error) {
+				if scenario == "request" {
+					return invite.NetworkReply{}, errors.New("PRIVATE")
+				}
+				issued := now.Add(time.Second)
+				if scenario == "expired" {
+					issued = now.Add(-3 * time.Second)
+				}
+				r := watchState(key, grant, binding, true, issued)
+				if scenario == "forged_future" {
+					r.State.Signature = strings.Repeat("0", 128)
+				}
+				return r, nil
+			})
+			switch scenario {
+			case "expired":
+				want = "lifecycle_state_expired"
+			case "forged_future":
+				want = "lifecycle_state_rejected"
+			case "request":
+				want = "lifecycle_state_request_rejected"
+			}
+			state, err := e.state(context.Background(), g, client, &binding)
+			if !errors.Is(err, invite.ErrDenied) || err.Error() != want || state != (invite.NetworkState{}) {
+				t.Fatalf("denial classification: %v", err)
+			}
+			if e.closeJoined() != nil {
+				t.Fatal("close")
+			}
+		})
+	}
+}
