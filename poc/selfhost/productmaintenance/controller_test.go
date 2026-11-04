@@ -49,6 +49,15 @@ func TestProductProcessFixture(t *testing.T) {
 				}
 				provisioned = true
 				json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "network_watch", "passed": true, "active": true})
+			case "start_controller":
+				if mode == "forward-start-slow" {
+					time.Sleep(150 * time.Millisecond)
+				}
+				if mode == "forward-start-extra" {
+					json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "controller_started", "passed": true, "extra": true})
+				} else {
+					json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "controller_started", "passed": true})
+				}
 			case "product_count":
 				if mode == "forward-fault-count" {
 					json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "fault_joined"})
@@ -460,4 +469,54 @@ func TestPreprovisionTerminalSurvivesBusinessSealButRejectsProvision(t *testing.
 	}
 	c.provisioned = false
 	c.Release(context.Background())
+}
+
+func TestControllerStartRolePhaseOneShotAndUnknownReceipt(t *testing.T) {
+	for _, mode := range []string{"forward", "forward-start-extra", "forward-start-slow"} {
+		t.Run(mode, func(t *testing.T) {
+			c, signer, _ := controllerFixture(t, mode)
+			c.prepared = false
+			revoke := &revokeFixture{}
+			c.revocation = revoke
+			start := installeddevice.Request{Op: "start_controller"}
+			if _, err := c.Forward(context.Background(), start); err == nil || c.controllerStartAttempted {
+				t.Fatal("preprovision start reached child")
+			}
+			own := sha256.Sum256(signer.PublicKey())
+			grant := invite.Grant{Signature: "fixture"}
+			grant.Claims.Controller = hex.EncodeToString(own[:])
+			if _, err := c.Forward(context.Background(), installeddevice.Request{Op: "provision", Network: invite.NetworkRequestBody{Grant: grant}}); err != nil {
+				t.Fatal(err)
+			}
+			c.controllerRole = false
+			if _, err := c.Forward(context.Background(), start); err == nil || c.controllerStartAttempted {
+				t.Fatal("wrong role reached child")
+			}
+			c.controllerRole = true
+			for _, r := range []installeddevice.Request{{Op: "start_controller", VaultScope: "foreign"}, {Op: "start_controller", Network: invite.NetworkRequestBody{Grant: grant}}} {
+				if _, err := c.Forward(context.Background(), r); err == nil || c.controllerStartAttempted || c.broken {
+					t.Fatal("selector admitted or owner poisoned")
+				}
+			}
+			ctx := context.Background()
+			cancel := func() {}
+			if mode == "forward-start-slow" {
+				ctx, cancel = context.WithTimeout(ctx, 20*time.Millisecond)
+			}
+			_, err := c.Forward(ctx, start)
+			cancel()
+			if (err == nil) != (mode == "forward") || !c.controllerStartAttempted {
+				t.Fatal("start receipt", err)
+			}
+			if _, err := c.Forward(context.Background(), start); err == nil {
+				t.Fatal("duplicate start")
+			}
+			if signer.closes.Load() != 0 || revoke.closes != 0 {
+				t.Fatal("start released original owner")
+			}
+			if _, err := c.Forward(context.Background(), installeddevice.Request{Op: "revoke_session"}); err != nil || revoke.revokes != 1 {
+				t.Fatal("independent revoke lost", err)
+			}
+		})
+	}
 }

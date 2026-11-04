@@ -143,3 +143,12 @@ macOS原生验证已证明：epoch2 compiled floor在提交升级前锁闭；可
 TEST release另有受限的中断夹具：只能在创建身份前留下binding pending，且只有精确诊断为pending才能删除该TEST namespace。实测中二次initialize仍被拒，不会静默选择第二个OS身份。production release没有此清理命令，committed或unusable记录也不会被该夹具删除。
 
 此验证在产品真正enroll/连接前发送stop，因此不声称跨机Headscale、overlay、TLS/HMAC或活会话升级已经通过；也没有覆盖真实OS掉电/写入不确定性、Windows Credential Manager、签名安装包及升级安装目录ACL。后续需分别验收显式故障维护和Windows fresh升级，再进入双机活会话升级。
+
+
+### r197 TEST 分阶段启动协调
+
+新鲜 TEST 隧道产品显式调用 `CoordinatedSessionViaTestTunnel`。两端依旧并行 provision 和持续 ACTIVE watch；target 自动准备原生 TLS 程序、证书发布与实际 overlay 监听。controller 此时仅持有原 enrollment/watch，尚无 session identity、初始 stream gate 或 payload worker。管理端在固定12秒协调窗口和原签名有效期内观察 `target_listening`/`target_filter_match`，并确认 TLS 子程序仍在运行，才发送无选择字段的 `start_controller`。这些遥测只协调时序，不能授权连接，也不计持续 PONG 通过。
+
+父 supervisor 从独立 Pin 验证的 grant 与原 OS signer 公钥哈希确认 controller 角色；预 provision、错角色、重复请求及附加身份/授权字段在转交子程序前拒绝。原生 runner 也执行一次性、角色、watch 检查，在实际触发时重新请求3秒签名 session identity 和初始 ACTIVE state，通过原 AttachGate 串行门禁后启动工作。未知或坏启动回执封闭重用，保留原 owner 和独立撤销 signer，不自动重试。正式入口与普通 runner 行为不变。
+
+TCP 拨号和密钥交换仍各3秒，WhoIs、双方签名、issuer TLS descriptor、profile/grant 截止和撤销门禁不变。随后仍要求双方实际 PONG 多次增长且跨越至少6秒；正常 quiesce、独立撤销、全层实际 join 和注册退休仍需真机验收。新增 trace 只保存固定启动标签、布尔结果和整数计数，不保存 grant/签名/凭据或原始回复。

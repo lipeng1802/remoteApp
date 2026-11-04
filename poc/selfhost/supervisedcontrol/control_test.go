@@ -52,6 +52,8 @@ func exercise(t *testing.T, ln net.Listener, dial func() (net.Conn, error)) {
 		{`{"Op":"stop_local_fault","VaultScope":"foreign"}`, "request_rejected", 0},
 		{`{"Op":"stop_fault","VaultScope":"foreign"}`, "request_rejected", 0},
 		{`{"Op":"quiesce_session","VaultScope":"foreign"}`, "request_rejected", 0},
+		{`{"Op":"start_controller","VaultScope":"foreign"}`, "request_rejected", 0},
+		{`{"Op":"start_controller","Device":{"action":"status"}}`, "request_rejected", 0},
 		{`{"Op":"maintenance_prepare"}`, "request_rejected", 0},
 		{`{"Op":"product_count","VaultScope":"override"}`, "request_rejected", 0},
 		{`{"Op":"product_stage","VaultScope":"override"}`, "request_rejected", 0},
@@ -62,6 +64,7 @@ func exercise(t *testing.T, ln net.Listener, dial func() (net.Conn, error)) {
 		{`{"Op":"product_count"}`, "product_count", 2},
 		{`{"Op":"revoke_session"}`, "device_result", 3},
 		{`{"Op":"quiesce_session"}`, "device_result", 4},
+		{`{"Op":"start_controller"}`, "device_result", 5},
 	} {
 		c, e := dial()
 		if e != nil {

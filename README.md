@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r197 已实现 TEST 分阶段启动：双端并行 provision/ACTIVE watch 保持，目标 TLS 与实际监听就绪后才一次性触发控制端获取新的 session identity/gate。错角色、预 provision、重复/附加字段及未知回执边界已覆盖，独立撤销保留；原3秒 TCP/密钥交换和全部信任截止不变。真机持续 PONG 与正常 zero/registered 退休待新鲜包实测。
+
 r196 专用故障停止已在新鲜双机包中通过两端故障join、registered退休及本轮精确清理。持续TLS PONG与正常活动zero仍未通过。时序记录提示目标TLS/监听就绪可能晚于控制拨号，下一组做分阶段启动协调，保持现有信任和安全截止；自动续办保持开启。
 
 r195 新鲜缓存包已实际完成双机原生启动，持续PONG仍未通过。修复故障收尾普通stop抢在watch之前产生exit0的竞态，改用仅私有父管道的故障停止，全部撤销/清理证明/exit1门禁保持。相关Go及Windows四组进程回归通过，旧Windows工单回执仍不完整并保留现场。自动续办已开启，下一份新包继续实测。

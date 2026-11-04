@@ -6,6 +6,16 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r197：分阶段启动与边界实现，准备唯一新鲜包
+
+接续r196，只读确认无上轮重型构建/协调器，工作卷约140GiB可用，无需清理证据。Mac→Windows BatchMode SSH已实际返回REMOTEAPP_SSH_READY。现有remoteapp仍ACTIVE，保持同一个10分钟自动续办，没有新建自动化。
+
+新TEST隧道编译入口使用CoordinatedSessionViaTestTunnel，两端并行provision和ACTIVE watch不变，目标自动准备TLS与监听；控制端等精确start_controller才重新请求session identity与初始ACTIVE state/AttachGate，随后启动payload。待启动期间不缓存3秒identity或gate。固定12秒协调窗口只观察目标target_listening/target_filter_match及仍在运行的TLS子程序，不能当活动验收。普通runner/正式入口不变，原3秒TCP和密钥交换、签名/WhoIs/TLS descriptor及全部有效期门禁不变。
+
+父supervisor从独立Pin后的grant和原signer公钥哈希绑定角色，预provision/错角色/重复及附加选择字段在子程序前拒绝；原生runner复核一次性/角色/watch。坏/未知启动回执封闭重用但保留原owner和独立撤销，不自动重试。新增实际子进程回归覆盖正常/附字段/丢失启动回执、拒绝后owner保留及独立撤销。原生内部软件身份测试把时间推进超过原identity全生命周期，确认只在真正触发时获取新identity与state/gate。Go installeddevice/productmaintenance/supervisedcontrol及两编译入口检查通过；定向installeddevice race也已通过（原生平台编译仅有既有Keychain API弃用警告），尚未发起新鲜工单。Python会话13项、持久owner4项、trace5项、activity5项、awake3项通过。trace仅新增固定阶段与有效整数PONG/布尔证据，不保存私有回复。
+
+下一步只启动一份新鲜签名双机包，固定日志/tmp/remoteapp-r197-active.log，用新的启动协调观察持续TLS PONG和正常zero/registered退休；不能把本机fixture或编译通过记为双机验收。r196工单0ae911e3d9bb已严格故障join并退休，不重跑；9610faf58fe6旧Windows owner继续保留，不调用过期停止/退休。不推送。
+
 ## 2026-11-04 r196：专用故障停止实际双机收口通过，转向启动就绪协调
 
 9f8ae4e 修复后的新鲜工单0ae911e3d9bb已完成，日志 /tmp/remoteapp-r196-active.log，exec session43484实际exit0，阶段观测session71441也已结束。双端原生READY、并行provision，仍无持续TLS PONG。独立撤销、双端严格故障join、两端registered TEST退休及精确本轮任务/隧道/目录收尾均确认，fault-state为fault_joined_and_test_roots_retired，joined/retired两角色均true。这里是预期故障exit1协议和回收成功，不是活动会话正常zero验收。旧9610faf58fe6 Windows现场不混入本轮成功，继续保留，不向过期旧包重发停止。

@@ -49,6 +49,35 @@ def counts(endpoints):
     return output
 
 
+def start_after_target_ready(target, controller, *, expires_at, clock=time.time,
+                             monotonic=time.monotonic, sleep=time.sleep):
+    # TEST telemetry only coordinates timing. The controller obtains a NEW
+    # signed identity and initial gate on admission, then uses the original TCP
+    # and secret-exchange deadlines and every native identity/trust check.
+    deadline = monotonic() + 12
+    while monotonic() < deadline and clock() < expires_at:
+        stage = target({"Op": "product_stage"})
+        require(type(stage) is dict and set(stage) == {"status", "stage"}
+                and stage["status"] == "product_stage" and type(stage["stage"]) is str,
+                "session_target_readiness_reply_rejected")
+        if stage["stage"] in ("target_listening", "target_filter_match"):
+            # The native TLS child must still be live; a cached stage alone
+            # cannot establish even startup readiness, let alone acceptance.
+            if counts((target,))[0] is not None:
+                require(monotonic() < deadline and clock() < expires_at,
+                        "session_target_readiness_expired")
+                ack = controller({"Op": "start_controller"})
+                require(type(ack) is dict and set(ack) == {"status", "passed"}
+                        and ack["status"] == "controller_started" and ack["passed"] is True,
+                        "session_controller_start_unconfirmed_preserve_owner")
+                return
+        require(not stage["stage"].startswith("lifecycle_") and stage["stage"] not in
+                ("target_listen_failed", "target_gate_denied", "target_self_denied", "target_local_failed"),
+                "session_target_readiness_failed")
+        sleep(.25)
+    raise RuntimeError("session_target_readiness_unconfirmed")
+
+
 def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,
                    clock=time.time, expires_at):
     deadline = monotonic() + 25
@@ -133,6 +162,8 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
                     and result["status"] == "network_watch" and result["passed"] is True
                     and result["active"] is True, "session_active_watch_unconfirmed")
         if after_provision is not None:after_provision()
+        start_after_target_ready(target, controller, expires_at=expiry, clock=clock,
+                                 monotonic=monotonic, sleep=sleep)
         result = observe_growth((target, controller), expires_at=expiry, clock=clock,
                                 monotonic=monotonic, sleep=sleep)
         result["active_watch_both"] = True

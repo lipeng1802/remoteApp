@@ -58,3 +58,21 @@ class PublicActivityTrace(unittest.TestCase):
             self.assertEqual(rows[0]["reason"],"grant_observation_rejected")
             self.assertNotIn("reason",rows[1])
             self.assertNotIn("PRIVATE",repr(rows))
+
+    def test_fixed_startup_and_pong_evidence_omits_private_or_invalid_values(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            replies=iter((
+                {"status":"product_stage","stage":"target_filter_match","grant":"PRIVATE"},
+                {"status":"product_stage","stage":"PRIVATE"},
+                {"status":"product_count","pongs":12,"preauth_rejected":True,"ended":False,"pin_rejected":False,"grant":"PRIVATE"},
+                {"status":"controller_started","passed":True},
+            ))
+            traced=RecordedEndpoint(Path(d),"target",lambda _:next(replies))
+            for op in ('product_stage','product_stage','product_count','start_controller'):
+                traced({"Op":op})
+            rows=[json.loads(p.read_text()) for p in sorted(traced.directory.glob('*.json'))][1::2]
+            self.assertEqual(rows[0]['stage'],'target_filter_match')
+            self.assertNotIn('stage',rows[1]);self.assertEqual(rows[2]['pongs'],12)
+            self.assertNotIn('preauth_rejected',rows[2]);self.assertIs(rows[3]['passed'],True)
+            self.assertNotIn('PRIVATE',repr(rows))

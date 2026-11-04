@@ -78,6 +78,9 @@ func ValidPreprovisionTerminal(r Request) bool { return r == (Request{Op: "prepr
 
 func ValidSupervisedQuiesce(r Request) bool { return r == (Request{Op: "quiesce_session"}) }
 
+// Separate same-user supervisor operation; never an ordinary business command.
+func ValidControllerStart(r Request) bool { return r == (Request{Op: "start_controller"}) }
+
 // Runner is started only by clientowner.Open/Start, which supplies the durable
 // current profile and monotonic lifetime. The output is a trusted private pipe,
 // not a log or public peer interface; device results can contain invite/grant.
@@ -120,10 +123,24 @@ func WatchedSessionViaTestTunnel(release trustinstall.Release, open clientruntim
 	if port < 1024 || !release.Specification().Test {
 		return func(context.Context, trustprofile.Profile) error { return trustprofile.ErrTrust }
 	}
-	return runner(release, open, commands, output, factory, true, true, work, port)
+	return runner(release, open, commands, output, factory, true, true, work, runnerOptions{testTunnel: port})
 }
 
-func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork, testTunnel ...uint16) clientowner.Runner {
+// CoordinatedSessionViaTestTunnel defers controller identity/gate preparation
+// until an exact private start. Only this compiled TEST entry opts in.
+func CoordinatedSessionViaTestTunnel(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, work SessionWork, port uint16) clientowner.Runner {
+	if port < 1024 || !release.Specification().Test || work == nil {
+		return func(context.Context, trustprofile.Profile) error { return trustprofile.ErrTrust }
+	}
+	return runner(release, open, commands, output, factory, true, true, work, runnerOptions{testTunnel: port, coordinated: true})
+}
+
+type runnerOptions struct {
+	testTunnel  uint16
+	coordinated bool
+}
+
+func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork, options ...runnerOptions) clientowner.Runner {
 	return func(ctx context.Context, profile trustprofile.Profile) (result error) {
 		w := cleanupwitness.From(ctx)
 		w.Begin(cleanupwitness.Runner)
@@ -150,12 +167,16 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		}()
 		anchor := release.Anchor()
 		createClient := invite.NewProfileNetworkClient
-		if len(testTunnel) == 1 {
+		var option runnerOptions
+		if len(options) == 1 {
+			option = options[0]
+		}
+		if option.testTunnel != 0 {
 			if !release.Specification().Test {
 				return trustprofile.ErrTrust
 			}
 			createClient = func(p trustprofile.Profile, root ed25519.PublicKey, service string, floor uint64, signer invite.DeviceSigner) (*invite.NetworkClient, error) {
-				return invite.NewTestTunnelNetworkClientOnPort(p, root, service, floor, signer, testTunnel[0])
+				return invite.NewTestTunnelNetworkClientOnPort(p, root, service, floor, signer, option.testTunnel)
 			}
 		}
 		client, err := createClient(profile, anchor.Root[:], anchor.Service, anchor.MinimumEpoch, signer)
@@ -165,6 +186,7 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		defer client.Close()
 		gate := newAuthorizationGate(profile, signer)
 		var enrolled enrollment
+		var start controllerStart
 		defer func() {
 			if err := enrolled.closeJoined(); err != nil {
 				result = trustprofile.ErrTrust
@@ -206,6 +228,22 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 				if !exists {
 					return nil
 				}
+				if request.Op == "start_controller" {
+					if !ValidControllerStart(request) || !start.allowed(&enrolled, gate, work) {
+						if err := output(map[string]string{"status": "request_rejected"}); err != nil {
+							return err
+						}
+						continue
+					}
+					if err := start.run(ctx, &enrolled, gate, client, work); err != nil {
+						return trustprofile.ErrTrust
+					}
+					sessionDone = enrolled.session.Done()
+					if err := output(map[string]any{"status": "controller_started", "passed": true}); err != nil {
+						return err
+					}
+					continue
+				}
 				provision := validProvision(request)
 				// This exact private-parent frame is never admitted by the
 				// supervised business policy. The runner returns a fault after
@@ -237,7 +275,8 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 					if err != nil {
 						return trustprofile.ErrTrust
 					}
-					if watched && work != nil {
+					start.pending = option.coordinated && watched && work != nil && gate.self == gate.grant.Claims.Controller
+					if watched && work != nil && !start.pending {
 						if err = enrolled.prepareSessionPeers(ctx, gate, client); err != nil {
 							return trustprofile.ErrTrust
 						}

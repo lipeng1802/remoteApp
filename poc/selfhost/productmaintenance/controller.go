@@ -5,6 +5,7 @@ package productmaintenance
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -63,6 +64,7 @@ type Controller struct {
 	requested, prepared, broken, closed, released bool
 	provisioned                                   bool
 	quiesced                                      bool
+	controllerRole, controllerStartAttempted      bool
 	faultJoined, faultReleaseFailed               bool
 	localCancelRequested, localCancelJoined       bool
 	expected                                      trustprofile.MaintenanceState
@@ -189,6 +191,9 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 	if installeddevice.ValidSupervisedRevocation(request) {
 		return c.revoke(ctx)
 	}
+	if installeddevice.ValidControllerStart(request) {
+		return c.startController(ctx, request)
+	}
 	if !installeddevice.ValidSupervisedCommand(request) {
 		return nil, ErrProduct
 	}
@@ -203,6 +208,8 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 		if e := c.revocation.Pin(request.Network.Grant); e != nil {
 			return nil, e
 		}
+		own := sha256.Sum256(c.signer.PublicKey())
+		c.controllerRole = hex.EncodeToString(own[:]) == request.Network.Grant.Claims.Controller
 		c.provisioned = true // retain revoke ability if the product reply is lost
 	}
 	raw, e := c.child.Exchange(ctx, request)

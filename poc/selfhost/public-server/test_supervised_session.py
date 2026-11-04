@@ -15,6 +15,8 @@ class ActivePair(Pair):
         self.revoke_calls = 0
         self.count_calls = 0
         self.quiesced=set()
+        self.start_calls = 0
+        self.ready_at = 0
 
     def sleep(self, seconds):
         self.elapsed += seconds
@@ -42,6 +44,16 @@ class ActivePair(Pair):
                     raise RuntimeError("PRIVATE-GRANT must not leak")
                 return {"status": "network_watch", "passed": True,
                         "active": 1 if self.session_fault == "integer_active" else True}
+            if frame["Op"] == "product_stage":
+                assert role == "target" and self.provision_finished == {"target", "controller"}
+                ready = self.elapsed >= self.ready_at and self.session_fault != "never_ready"
+                return {"status":"product_stage", "stage":"target_filter_match" if ready else "target_tls"}
+            if frame["Op"] == "start_controller":
+                assert frame == {"Op":"start_controller"} and role == "controller"
+                assert self.elapsed >= self.ready_at and self.count_calls > 0
+                self.start_calls += 1
+                if self.session_fault == "lost_start": raise RuntimeError("PRIVATE-start")
+                return {"status":"controller_started", "passed":1 if self.session_fault == "bad_start" else True}
             if frame["Op"] == "product_count":
                 self.count_calls += 1
                 if self.session_fault == "unavailable" and self.elapsed < 1:
@@ -64,6 +76,19 @@ class ActivePair(Pair):
 
 
 class ActiveSessionBoundaries(unittest.TestCase):
+    def test_start_waits_for_target_tls_listener_without_retrying_unknown_start(self):
+        for fault in (None, "never_ready", "bad_start", "lost_start"):
+            with self.subTest(fault=fault):
+                p=ActivePair(fault); p.ready_at=4
+                if fault:
+                    with self.assertRaises(RuntimeError): self.run_pair(p)
+                else:
+                    self.assertTrue(self.run_pair(p)["payload_increased_both"])
+                    self.assertGreaterEqual(p.elapsed,10)
+                self.assertEqual(p.start_calls,0 if fault=="never_ready" else 1)
+                self.assertEqual(p.revoke_calls,1)
+
+
     def test_failure_snapshot_precedes_revoke_and_cannot_suppress_it(self):
         for broken in (False,True):
             p=ActivePair('constant');events=[]

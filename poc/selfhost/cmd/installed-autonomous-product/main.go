@@ -180,7 +180,7 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 	}
 	if port != 0 {
 		makeRunner = func(r trustinstall.Release, open clientruntime.SignerFactory, commands <-chan installeddevice.Request, output func(any) error, factory installeddevice.EnrollmentFactory, work installeddevice.SessionWork) clientowner.Runner {
-			return installeddevice.WatchedSessionViaTestTunnel(r, open, commands, output, factory, work, port)
+			return installeddevice.CoordinatedSessionViaTestTunnel(r, open, commands, output, factory, work, port)
 		}
 	}
 	runner := makeRunner(
