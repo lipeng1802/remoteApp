@@ -6,6 +6,28 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r201：四组TEST目标全部实际收口，结束本组自动续办
+
+285e789之后的唯一新鲜program-removal工单0e5a1255b517已完整通过，原exec session56322实际exit0，日志/tmp/remoteapp-r201-removal.log为OWNERS_READY → NORMAL_REVOKED → NORMAL_JOINED → NORMAL_RETIRED。未进入故障分支，也未重跑任何已退休安装。activity-state最终normal_activity_joined_and_test_roots_retired，双端joined/retired均true，checks含实际双端PONG增长、6次增长、认证维护退出后独立撤销及正常产品join。独立program-removal-result明确记录两角色files_removed/epoch1/preserved=true/joined=true/zero_exit=true，分别绑定各自原生维护事务，未把普通stop升级为卸载。
+
+真实载荷：Windows target正PONG为6→16→26→34→42→60→68，跨度6725ms；Mac controller为3→11→21→31→39→47→65，跨度6722ms，均跨越多次原3秒状态租约。随后两个独立卸载器各自以原生binding选择的OS signer认证当前维护端点，原同一活动产品/watch/node/signer/reader真实join且exit0后，按该原生事务删除已签名程序文件；核对profile/floor/activation与原binding保持、原身份可重新打开并实际join probe，才返回preserved。原supervisor/独立撤销signer继续驻留，明确签名撤销后再实际零退出。两端专用removed_registered退休工具均成功，不能把此结果扩展为生产卸载或GUI验收。
+
+独立只读postcheck已通过，证据 normal-postcheck.json：Mac本轮安装根、holder和父目录缺席，Windows本轮安装根/bootstrap及owner/retire两个任务缺席；两平台安装根及本轮外部工具路径相关进程数均0（包含独立卸载器及helper）；Windows owner/retire实际zero，Mac mac-exit实际0；两个管理SSH socket缺席；服务policy只读查询payload_rule_count=0/proof_rule_count=0。在线退休先验证本轮精确node回收证明才清理原生TEST记录，没有清空控制面/回写旧Store/删除未知锁。公共执行材料与签名输入保留，45,886,908字节缓存归档重组195,749,888字节输出；磁盘约138GiB可用，无需清理审计/故障材料。
+
+核心证据均在 artifacts/connection-poc/supervised-activity-r75-0e5a1255b517/：active-removal-evidence.json、program-removal-intent.json、program-removal-result.json、activity-state.json、normal-postcheck.json、mac-exit.json、trace-target/、trace-controller/。只保存公共计数/分类/事务，不保存grant、HMAC或私钥。0e5a1255b517和2a01f13f9a81均已退休，严禁复活/重跑。
+
+本组四项范围收口：r67已有两OS signer到真实服务的注册、明确拒绝、自批准拒绝、批准/查询/撤销和正常收尾证据；r184/r196覆盖provision前收尾及provision后独立撤销/严格故障join退休；r198与本轮证明原监督路径的持续真实TLS与正常zero；本轮补齐跨机活动后的独立认证程序-only删除、状态保留、全层join与专用精确TEST退休。没有把fixture/构建/HTTPS或本地TLS当成双机整体验收。按用户“全部上述实际完成后列出剩余事项并结束自动续办”条件，结束现有remoteapp续办，不新建另一任务；既有remoteapp已由应用工具确认置PAUSED，结束本组自动续办，等待用户安排下一批。
+
+### 整体剩余事项（不计本组已验收）
+
+1. 最终GUI与用户流程：设备/邀请/明确同意、连接/停止/失败状态、实际画面键鼠和权限提示接入这条自主身份/连接链；本轮固定TLS载荷不代表GUI远控通过。
+2. 可信安装/升级/卸载与正式发行：Test=false、publisher/OS peer与生产同意策略、签名/公证、失败恢复、干净机器与4小时耐久、生产断电/重启和跨运营商覆盖。当前TEST同用户认证不替代这些边界。
+3. 最终产品脱离SSH测试管理通路的公开bootstrap/服务接入和运行交付；不擅自改业务Nginx/443或扩大已授权服务操作。
+4. RK3588 Linux ARM64被控端：先确认具体板卡、系统镜像和桌面会话，再做网络身份/注册/撤销及屏幕采集/输入/权限/安装包真机验收；Android/无桌面另定。
+5. 历史未闭环工单继续单列：9610faf58fe6等旧Windows owner/根/回执保留，不能用本轮成功覆盖，不能对过期旧包发停止/退休或删未知锁。须按各自证据设计合法恢复，不再重复轮询同一旧阻塞。
+
+本轮无人工登录/SSH密钥阻塞，仅本地提交，不推送远端。
+
 ## 2026-11-04 r200：独立卸载管理接线完成，进入新鲜整链验收
 
 承接r199/82a8d07，Git原仅docs/archive/未跟踪；无前组重型任务，可用约138GiB，不清理证据。Mac→Windows SSH实际REMOTEAPP_SSH_READY。没有复活/重跑已退休2a01f13f9a81，也未触碰旧9610faf58fe6等未知现场。
@@ -20,7 +42,7 @@
 
 验证：相关7个Go包/编译入口检查与Windows vet通过；真实子进程覆盖独立arm/cancel、一次启动、迟到回执等待同一child、额外帧和非零退出拒绝，定向race PASS 8.240s。Python全194项通过（ResourceWarning为error），含PONG→删除回执→撤销顺序和未知删除不触发fault-stop/退休。Windows实际执行8项PowerShell回执组件检查和完整父脚本AST解析通过，证据 artifacts/connection-poc/r200-removal-wiring/{python-checks.txt,race.txt,windows-ps-check.json}；这些未调用原生凭据/产品，只是父管道/严格类型组件。初次脚本调用被当前执行策略拒绝，使用单个子PowerShell -ExecutionPolicy Bypass后通过，没有修改系统执行策略，不是需要用户登录的阻塞。
 
-下一步只开一份新鲜--program-removal双机工单，日志/tmp/remoteapp-r201-removal.log。必须承接其工单/进程状态，不新开重复组。目标证据为持续实际TLS PONG、双端认证维护/独立进程exit0及程序-only删除、身份/trust/activation/floor保持、明确撤销、全层join与专用退休。尚未取得本轮完整真机结果，不把上述组件计作整体通过。自动续办ACTIVE，本地提交不推送。
+已启动唯一新鲜--program-removal工单0e5a1255b517，exec session56322，日志/tmp/remoteapp-r201-removal.log；当前build_outcome_unknown。必须承接其工单/进程状态，不新开重复组。目标证据为持续实际TLS PONG、双端认证维护/独立进程exit0及程序-only删除、身份/trust/activation/floor保持、明确撤销、全层join与专用退休。尚未取得本轮完整真机结果，不把上述组件计作整体通过。自动续办ACTIVE，本地提交不推送。
 
 ## 2026-11-04 r199：待命独立卸载、维护保留与删除后退休门禁组件完成
 

@@ -1,5 +1,7 @@
 # 独立远程桌面产品路线
 
+2026-11-04 r201：新鲜自主OS身份双机工单0e5a1255b517已通过持续真实TLS PONG→独立认证维护/原产品实际zero join→程序-only删除与身份/profile/floor/activation保持→明确撤销→父owner/独立signer零退出→专用registered TEST退休及精确清理。本组自动续办按用户条件结束；这不是GUI、Test=false生产卸载或正式发行通过。下一批为GUI/画面键鼠、可信生产安装更新与发行、脱离SSH测试通路的最终接入、RK3588 Linux ARM64真机；历史未知工单继续保留。详见[最新交接](HANDOFF.md)。
+
 2026-11-04 r198：自主OS身份/并行provision/ACTIVE watch→实际TLS PONG持续增长→正常zero join→独立撤销→registered TEST退休已在新鲜Mac↔Windows工单2a01f13f9a81通过。当前唯一剩余闭环为独立认证卸载器的程序-only删除、身份保留及其后严格TEST退休，不能把整根TEST清理当生产卸载。随后合并GUI/画面键鼠、可信安装更新与正式发行验收，最后扩展RK3588 Linux ARM64真机；历史未闭环工单保留。以[HANDOFF](HANDOFF.md)顶部为准，下方“最新”均为历史记录。
 
 最新 4C-3B：固定操作本机 broker/双向kernel UID与可信设备公钥持久绑定组件完成，Mac race及Linux跨nobody用户拒绝实测通过。尚未做线上Store owner迁移/authority daemon/frontend接入，network仍404。下一步受控迁移/备份回滚，再接verifier/nodeproof/reconcile/fence与真实网络拒绝验收；整体4未完成。

@@ -135,3 +135,10 @@ Mac和隐藏Windows Interactive的单项原生待命/取消检查已真实通过
 协调器必须先观察原双端实际PONG增长，再只启动一次双端独立卸载。完成必须验证专用files_removed/保留状态、无额外帧、EOF及真实exit0；待完成或未知仅保留原操作，不关闭stdin、不重发。arm前/删除后分别比对原生profile/floor/activation及原binding、原身份可重开，输出只含严格公共结果。卸载后仍通过原supervisor确认独立撤销，再最终join/专用removed_registered退休。
 
 删除intent之后的异常不走普通fault-stop/完整安装退休，因为已维护产品的exit0不能转为fault_joined/exit1，未知程序树也不能伪装成完整库存。原所有信任/有效期门禁不变，既有未开始删除的故障路径先精确cancel独立arm并实际join。组件与Windows脚本检查通过；完整跨机结果以新鲜工单证据为准。
+
+
+## r201 真实双机活动后的认证卸载已验收
+
+工单0e5a1255b517只执行一次新鲜--program-removal流程。双方真实TLS PONG分别在约6.7秒内持续增长（Windows6→68、Mac3→65），随后两个独立待命进程认证原supervisor，原产品全部work/watch/node/signer/reader正常join/实际exit0后按原生事务删除程序。两个独立进程均返回严格files_removed/epoch1/preserved/joined/zero_exit，通过EOF/无额外帧/实际exit0检查；原profile/floor/activation及binding保持，原身份可重开。
+
+删除后原supervisor保留独立撤销通路，明确在线撤销后才真实零退出；再经专用removed_registered工具验证当前native profile、签名计划/activation和新鲜在线node退休证明，清理精确TEST记录及空壳。独立postcheck确认本轮两根/相关进程/任务/bootstrap/管理socket缺席、策略payload/proof均零。签名输入和审计保留，旧未知工单未变。完整证据见HANDOFF的r201，不能扩大为生产Test=false、publisher身份、GUI、签名发行或旧故障工单清理成功。
