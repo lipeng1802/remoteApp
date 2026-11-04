@@ -13,6 +13,7 @@ import (
 // beginSYNTrace opens the SDK stream before dialing. The SDK can buffer the
 // capture header until traffic arrives, so a missed frame is inconclusive.
 func beginSYNTrace(ctx context.Context, lc *local.Client, controller, target netip.Addr, atTarget bool) func() synEvidence {
+	parent := ctx
 	lifetime := 4 * time.Second
 	if atTarget {
 		lifetime = 20 * time.Second
@@ -26,7 +27,7 @@ func beginSYNTrace(ctx context.Context, lc *local.Client, controller, target net
 			startuptrace.Emit(ctx, startuptrace.TargetSYNOpenFailed)
 		}
 		cancel()
-		return func() synEvidence { return synEvidence{openFailed: true} }
+		return func() synEvidence { return synEvidence{} }
 	}
 	closeStream := sync.OnceFunc(func() { stream.Close() })
 	stop := context.AfterFunc(ctx, closeStream)
@@ -43,6 +44,11 @@ func beginSYNTrace(ctx context.Context, lc *local.Client, controller, target net
 		})
 		if atTarget && !evidence.syn {
 			stage := startuptrace.TargetSYNHeaderUnavailable
+			if parent.Err() != nil {
+				stage = startuptrace.TargetSYNParentEnded
+			} else if ctx.Err() == context.DeadlineExceeded {
+				stage = startuptrace.TargetSYNWindowEnded
+			}
 			if evidence.validStream {
 				stage = startuptrace.TargetSYNNotObserved
 			}

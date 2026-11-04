@@ -12,7 +12,6 @@ import (
 type synEvidence struct {
 	syn, reply  bool
 	validStream bool
-	openFailed  bool
 }
 
 // readSYNEvidence consumes the pinned SDK capture format without recording

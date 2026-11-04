@@ -100,20 +100,10 @@ func (l *overlayListener) Accept() (net.Conn, error) {
 	}
 	conn, err := l.Listener.Accept()
 	if err != nil {
-		observeTargetReceiveEnd(l.ctx, l.metricsClient, l.receiveBaseline)
 		if l.finishSYN != nil {
-			evidence := l.finishSYN()
-			if evidence.reply {
-				startuptrace.Emit(l.ctx, startuptrace.TargetSYNReplyObserved)
-			} else if evidence.syn {
-				startuptrace.Emit(l.ctx, startuptrace.TargetSYNObserved)
-			} else if evidence.validStream {
-				startuptrace.Emit(l.ctx, startuptrace.TargetSYNNotObserved)
-			} else if evidence.openFailed {
-				startuptrace.Emit(l.ctx, startuptrace.TargetSYNOpenFailed)
-			} else {
-				startuptrace.Emit(l.ctx, startuptrace.TargetSYNHeaderUnavailable)
-			}
+			l.finishSYN()
+		} else {
+			observeTargetReceiveEnd(l.ctx, l.metricsClient, l.receiveBaseline)
 		}
 		return nil, err
 	}
