@@ -6,6 +6,14 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r185：查询与 provision 前收尾通过，正常双机仍卡 TCP
+
+4acdc3306fa3 的 Mac approved STATUS 再次 passed=true，双端进入 provision。控制端虽先取得 TSMP 就绪仍 TCP 超时，诊断为 controller SYN 与 target parent ended；未取得持续 TLS PONG。独立撤销、双端故障 join、注册 TEST 根退休和精确任务/隧道清理均确认。已移除未改善结果的 r181 前置 TSMP 实验，保留既有失败后诊断，streamgate/startuptrace 与 Python 标签回归通过。
+
+本任务已完成已复现 not-before 边界修复和 provision 前独立终态、零退出、idle 退休原生验收。Mac 批准后查询在两份全新签名包中通过。历史 Mac request_rejected 的唯一根因仍缺少当时细分类证据，后续若再现会记录固定 child_exchange/授权观察类别。旧39f1e0d8023c等现场不套用新协议，继续隔离。
+
+下一组聚焦 TCP 数据面。基础 SDK 同机双节点握手已跨平台通过，实际双机控制 SYN 已确认；需核对目标节点是否在控制拨号前/期间仍持有 ACTIVE 与真实网络会话，不再叠加发现预热或重复同版整轮。自动化保持 ACTIVE。本地提交后不推送远端。
+
 ## 2026-11-04 r184：provision 前原生收尾验收通过
 
 7a4fc1af8f54 两端原生 READY，Windows approve 与 Mac approved status 均 passed=true。协调器在 grant_clock 后主动中断，未发 provision。Windows 对原授权明确撤销，Mac status 返回 revoked 且无 grant，双方独立 preprovision_terminal 查询通过。两端正常零退出，idle 原生退休、精确任务与隧道清理通过，记录 preprovision_joined_and_test_roots_retired。该证据不涉及 TCP/TLS 活动会话。
