@@ -6,6 +6,12 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r182：本轮未进入网络，批准后查询被拒
+
+39f1e0d8023c 的 Windows approve 返回 passed=true、approved、有 grant。Mac status 两次返回 request_rejected。Windows 随后对原请求 status 返回 approved，再执行原 grant 撤销，返回 passed=true、revoked、无 grant。因 Mac 最终查询被拒，完整双端终态未确认。外层 fault_revoke_unknown 保留；未 provision，独立撤销通路未 Pin，不据该失败推断真实撤销未发生。原工单现场保留，不重发撤销或停止。
+
+核对 Mac 与服务器时差约 -0.67 秒，Windows 约 +0.71 秒（采样往返小于 0.5 秒），未见较大时钟偏差。源码显示 supervisor 在读取 approved status 后 Observe 原授权时亦可能拒绝并锁闭，下一组应区分该路径与 child Exchange 失败。优先修复真实拒绝原因与 provision 前故障收尾，避免盲目重跑。
+
 ## 2026-11-04 r181：测试先建立加密 IP 就绪再拨号
 
 b36ab7eada5c 双端 provision 约在 14 秒返回，约 40 秒查询目标时捕获父上下文已结束。控制端 SYN 重现。撤销、双端故障 join 与 TEST 退休确认。
