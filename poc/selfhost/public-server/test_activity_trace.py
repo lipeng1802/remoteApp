@@ -44,3 +44,17 @@ class PublicActivityTrace(unittest.TestCase):
             self.assertNotIn('device_state', rows[1])
             self.assertEqual(rows[2]['status'], 'request_rejected')
             self.assertNotIn('PRIVATE', repr(rows))
+
+    def test_rejection_reason_is_fixed_and_private_text_is_discarded(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            replies=iter((
+                {"status":"request_rejected","reason":"grant_observation_rejected"},
+                {"status":"request_rejected","reason":"PRIVATE"},
+            ))
+            traced=RecordedEndpoint(Path(d),"controller",lambda _:next(replies))
+            for _ in range(2):traced({"Op":"device","Device":{"action":"status"}})
+            rows=[json.loads(p.read_text()) for p in sorted(traced.directory.glob("*.json"))][1::2]
+            self.assertEqual(rows[0]["reason"],"grant_observation_rejected")
+            self.assertNotIn("reason",rows[1])
+            self.assertNotIn("PRIVATE",repr(rows))
