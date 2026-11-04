@@ -6,6 +6,10 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r172：确认实际签名产品构建标签
+
+只读检查 92b3f8e196ef 的实际 Windows 载荷 Go build info，包含 remoteapp_test_capture。TEST wrapper 保留该标签，仅附加 stripped linker flags。结合 r171 本机 SDK 验证，下一轮使用 c25fcba 的细分分类确定产品捕获打开失败还是头未收到。Windows SSH 复测通过，启动单一新鲜工单，日志 /tmp/remoteapp-r172-round.log。磁盘可用约 144 GiB。
+
 ## 2026-11-04 r171：Windows 本机 SDK 捕获端点验证通过
 
 增加独立离线 SDK 检查，使用本地临时控制端返回 503，不访问实际授权服务和原生凭据。实际 Mac 与 Windows 均成功打开捕获端点，关闭流后 reader 退出，测试通过。Windows 通过 SSH 运行该无需凭据的检查，未进行 OS signer 操作。随机命名测试程序核对 SHA-256，正常零退出并确认进程缺席后已精确删除。不能据此判定实际产品流量可捕获。
