@@ -6,6 +6,12 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r194：用户恢复任务，SSH已通，自动续办恢复
+
+用户要求继续并确认自动任务状态。复测 Mac→Windows BatchMode SSH 实际返回 REMOTEAPP_SSH_READY，既有 remoteapp 已恢复 ACTIVE，仍为同一10分钟续办任务，没有新建重复自动化。Git无新的源码改动，保留docs/archive/；没有上一组重型构建或协调器，磁盘可用约136GiB，不需要清理证据或缓存。
+
+接续r192已验证的缓存传输与撤销前诊断，仅启动一份新的签名双机工单，日志 /tmp/remoteapp-r194-active.log。构建保持 GOMAXPROCS=2、GOFLAGS=-p=2、nice10 串行，不重复未变更组件回归。新工单生成后优先承接其阶段，不再新开一份。实际持续TLS PONG、正常zero join与registered退休仍待结果，未推送远端。
+
 ## 2026-11-04 r193：缓存组件已提交，Windows SSH再度超时而暂停
 
 r192 已本地提交4c6a88a，38项相关Python与archivecache/processowner Go检查通过，Windows小型实际重组、坏输入拒绝和工具退出删除通过。随后仅启动了一次新鲜包协调器，日志 /tmp/remoteapp-r193-active.log，exec session30577 已exit1。失败发生在选择远端转发端口之前，尚未创建新工单目录、签发新短包或创建两端原生owner。只读确认本机18445至18460全部可用，随后直接 BatchMode / ConnectTimeout=8 的 Mac→jarvis@100.73.4.118 SSH 端口22再次 Operation timed out（exit255）。不再重复同一阻塞轮询，不启动重复构建。
