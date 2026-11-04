@@ -22,8 +22,11 @@ func beginSYNTrace(ctx context.Context, lc *local.Client, controller, target net
 	stream, err := lc.StreamDebugCapture(ctx)
 	openDeadline.Stop()
 	if err != nil {
+		if atTarget {
+			startuptrace.Emit(ctx, startuptrace.TargetSYNOpenFailed)
+		}
 		cancel()
-		return func() synEvidence { return synEvidence{} }
+		return func() synEvidence { return synEvidence{openFailed: true} }
 	}
 	closeStream := sync.OnceFunc(func() { stream.Close() })
 	stop := context.AfterFunc(ctx, closeStream)
@@ -39,7 +42,7 @@ func beginSYNTrace(ctx context.Context, lc *local.Client, controller, target net
 			}
 		})
 		if atTarget && !evidence.syn {
-			stage := startuptrace.TargetSYNStreamUnavailable
+			stage := startuptrace.TargetSYNHeaderUnavailable
 			if evidence.validStream {
 				stage = startuptrace.TargetSYNNotObserved
 			}

@@ -109,8 +109,10 @@ func (l *overlayListener) Accept() (net.Conn, error) {
 				startuptrace.Emit(l.ctx, startuptrace.TargetSYNObserved)
 			} else if evidence.validStream {
 				startuptrace.Emit(l.ctx, startuptrace.TargetSYNNotObserved)
+			} else if evidence.openFailed {
+				startuptrace.Emit(l.ctx, startuptrace.TargetSYNOpenFailed)
 			} else {
-				startuptrace.Emit(l.ctx, startuptrace.TargetSYNStreamUnavailable)
+				startuptrace.Emit(l.ctx, startuptrace.TargetSYNHeaderUnavailable)
 			}
 		}
 		return nil, err
