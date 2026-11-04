@@ -6,6 +6,14 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r196：专用故障停止实际双机收口通过，转向启动就绪协调
+
+9f8ae4e 修复后的新鲜工单0ae911e3d9bb已完成，日志 /tmp/remoteapp-r196-active.log，exec session43484实际exit0，阶段观测session71441也已结束。双端原生READY、并行provision，仍无持续TLS PONG。独立撤销、双端严格故障join、两端registered TEST退休及精确本轮任务/隧道/目录收尾均确认，fault-state为fault_joined_and_test_roots_retired，joined/retired两角色均true。这里是预期故障exit1协议和回收成功，不是活动会话正常zero验收。旧9610faf58fe6 Windows现场不混入本轮成功，继续保留，不向过期旧包重发停止。
+
+本轮在provision前启动只读观察，证据 startup-stage-timeline.json。同一观察起点下，target_tls首次采样在16080–16422ms；控制端overlay_connect_refused在16627ms、deadline_controller_syn_observed在19567ms；首次target_filter_match采样在20093–20430ms。采样只保存阶段变化，不能严格确定监听切换的唯一时刻，但首次监听就绪记录晚于控制拨号截止，与源码目标先等TLS程序/证书发布再Listen的时序风险相容。尚不能用这些采样唯一排除其他网络因素。撤销前终态仍为controller SYN、target filter_match。
+
+下一组优先设计并实现分阶段启动协调，避免控制端在目标TLS/监听准备期间消耗原3秒拨号预算。可在保持双端并行provision和持续ACTIVE watch后，仅对控制端延后会话准备/启动，由本地无选择字段的控制请求在目标实际就绪后触发。必须在真正启动时重新取得并验证session identity和初始gate，不缓存过期许可；预provision、错角色、重复启动、附加字段及未知回执均拒绝/保留原owner。现有TCP/密钥交换期限、WhoIs、双向身份、issuer TLS descriptor与信任/身份/有效期门禁不改。先做必要边界回归，再一份新鲜双机包；不再无变化重跑当前包。自动续办保持ACTIVE，不推送。
+
 ## 2026-11-04 r195：真实缓存双机启动通过，修复已复现的故障 stop 竞态
 
 9610faf58fe6 新鲜包实际缓存归档15,142,920字节，Windows成功重组并完成两端原生owner启动。Mac批准后STATUS通过，双端provision，仍无持续PONG。撤销前诊断与独立只读阶段观测均为 controller deadline_controller_syn_observed、target target_filter_match，排除了把撤销后的inactive当作初始故障。独立撤销及Mac故障join已确认。Windows任务Running / result267009、无owner-fault-joined回执，固定原因child_exit_unexpected，精确路径仍有两个进程，保留原owner/signer、根和隧道；不重发停止、不把缺席/非零当join、不退休。原profile窗口已过，拟核对普通quiesce的操作因原窗口不足而未执行，没有调用过期短包。原日志 /tmp/remoteapp-r194-active.log，原fault-state为fault_stop_unknown且仅controller joined。
