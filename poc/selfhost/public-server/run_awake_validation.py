@@ -22,6 +22,12 @@ def worker(preprovision_fault=False):
     work=r.prepare()
     print('FRESH_WORK '+work.name,flush=True)
     r.start(work);print('OWNERS_READY',flush=True)
+    finish(work,preprovision_fault)
+
+
+def finish(work,preprovision_fault=False):
+    import run_supervised_activity as r
+    import fault_activity as fault
     try:
         if preprovision_fault:r.exercise(work,preprovision_fault=True)
         else:r.exercise(work)

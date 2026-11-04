@@ -14,6 +14,40 @@ import run_supervised_activity as runner
 
 
 class ManagementActivityGates(unittest.TestCase):
+    def test_transfer_never_consumes_native_startup_reservation(self):
+        with tempfile.TemporaryDirectory() as d:
+            w,m=self.fixture(d,'startup_outcome_unknown',int(time.time())+299)
+            m['forward_port']=18445
+            with patch.object(runner,'command') as command,patch.object(runner,'ps') as ps:
+                with self.assertRaisesRegex(RuntimeError,'validity_window'):
+                    runner.finish_start_after_transfer(w,m,w/'windows.tar.xz','fixed',[])
+                with self.assertRaisesRegex(RuntimeError,'recovery_not_admitted'):
+                    runner.resume_transfer(w)
+                command.assert_not_called();ps.assert_not_called()
+
+    def test_transfer_resume_only_before_native_start_and_pins_complete_archive(self):
+        for fault in (None,'native','changed','unknown_attempt'):
+            with self.subTest(fault=fault),tempfile.TemporaryDirectory() as d:
+                w,m=self.fixture(d,'startup_outcome_unknown')
+                m['mac_root']=str(w/'installed');m['holder_dir']=str(w/'holder');Path(m['holder_dir']).mkdir()
+                runner.pack_windows(w/'windows',w/'windows.tar.xz')
+                if fault=='native':(w/'mac-setup-attempt.json').write_text('{}')
+                if fault=='unknown_attempt':(w/'transfer-resume-attempt.json').write_text('{}')
+                def upload(args,timeout):
+                    self.assertEqual(args[0],'sftp');self.assertIn('-b',args)
+                    self.assertLessEqual(timeout,360)
+                    if fault=='changed':(w/'windows.tar.xz').write_bytes(b'changed')
+                    return b''
+                with patch.object(runner,'metadata',return_value=(w,m)),patch.object(runner,'verified_windows_inputs',return_value=('fixed-immutable-source',[])),patch.object(runner,'ps',return_value='UPLOAD_ONLY'),patch.object(runner,'command',side_effect=upload) as command,patch.object(runner,'finish_start_after_transfer') as finish:
+                    if fault:
+                        with self.assertRaises((RuntimeError,FileExistsError)):runner.resume_transfer(w)
+                        finish.assert_not_called()
+                        if fault!='changed':command.assert_not_called()
+                    else:
+                        runner.resume_transfer(w);command.assert_called_once();finish.assert_called_once()
+                        with self.assertRaises(FileExistsError):runner.resume_transfer(w)
+                        self.assertEqual(command.call_count,1)
+
     def test_missing_prestaged_retirement_stops_before_either_native_mutation(self):
         with tempfile.TemporaryDirectory() as d:
             w,m=self.fixture(d,'owners_joined_retirement_pending')

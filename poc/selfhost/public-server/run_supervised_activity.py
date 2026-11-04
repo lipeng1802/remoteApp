@@ -334,8 +334,66 @@ try { & (Join-Path $PSScriptRoot 'validate-supervised-install.ps1') -StayReady -
     input_source,inputs=verified_windows_inputs(work)
     pack_windows(work/"windows",archive,omit={item["relative"] for item in inputs})
     remote="remoteapp-r75-"+m["nonce"]+".tar.xz"
-    command(["scp","-q",*OPTIONS,str(archive),WIN+":"+remote],600)
-    if expiry(work)-time.time()<240:raise RuntimeError("activity_transfer_consumed_validity_window")
+    # Transfer may be slow over the management overlay. Only this file-copy
+    # budget changes; retain a fixed 300s of the original signed profile for
+    # native startup/activity/cleanup. Never restart or extend the profile.
+    budget=min(900,expiry(work)-time.time()-300)
+    if budget<=0:raise RuntimeError('activity_transfer_consumed_validity_window')
+    command(["scp","-q",*OPTIONS,str(archive),WIN+":"+remote],budget)
+    finish_start_after_transfer(work,m,archive,input_source,inputs)
+
+
+def resume_transfer(work):
+    # Only immutable archive bytes may resume, never a native setup or mutation.
+    # The original upload process must already have ended before this explicit
+    # serial operator action. Both native roots/tasks must still be absent.
+    work,m=metadata(work)
+    if Activity(work).read()['phase']!='startup_outcome_unknown' or expiry(work)-time.time()<360:
+        raise RuntimeError('activity_transfer_recovery_not_admitted')
+    if Path(m['mac_root']).exists() or any((work/n).exists() for n in ('mac-setup-attempt.json','mac-manager.json','windows-bootstrap.json','tunnels.json')) or list(Path(m['holder_dir']).iterdir()):
+        raise RuntimeError('activity_transfer_native_start_possible')
+    archive=work/'windows.tar.xz'
+    if archive.is_symlink() or not archive.is_file():raise RuntimeError('activity_transfer_archive_rejected')
+    input_source,inputs=verified_windows_inputs(work)
+    omitted={x['relative'] for x in inputs}
+    # Check every byte against this fresh package before any resumed upload.
+    files={p.relative_to(work/'windows').as_posix():p for p in (work/'windows').rglob('*') if p.is_file()}
+    expected=set(files)-omitted
+    with tarfile.open(archive,'r:xz') as bundle:
+        seen=set()
+        for entry in bundle:
+            if not entry.isfile() or entry.name not in expected or entry.name in seen:
+                raise RuntimeError('activity_transfer_archive_rejected')
+            source=files[entry.name]
+            if source.is_symlink() or source.stat().st_size!=entry.size:
+                raise RuntimeError('activity_transfer_archive_rejected')
+            if hashlib.sha256(bundle.extractfile(entry).read()).digest()!=hashlib.sha256(source.read_bytes()).digest():
+                raise RuntimeError('activity_transfer_archive_rejected')
+            seen.add(entry.name)
+        if seen!=expected:raise RuntimeError('activity_transfer_archive_rejected')
+    d=quote(m['win_dir']);root=quote(m['win_root']);task=quote('RemoteApp-R75-'+m['nonce'])
+    if ps("$ErrorActionPreference='Stop';if((Test-Path "+d+") -or (Test-Path "+root+") -or (Get-ScheduledTask -TaskName "+task+" -ErrorAction SilentlyContinue)){throw 'Native startup possible'};'UPLOAD_ONLY'")!='UPLOAD_ONLY':
+        raise RuntimeError('activity_transfer_native_start_possible')
+    digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+    with (work/'transfer-resume-attempt.json').open('x') as f:
+        json.dump({'version':1,'sha256':digest,'size':archive.stat().st_size},f);f.flush();os.fsync(f.fileno())
+    batch=work/'resume-transfer.sftp'
+    # SFTP quoting, not shell interpolation. Remote name is a fixed nonce path.
+    source=str(archive).replace('\\','\\\\').replace('"','\\"')
+    batch.write_text('put -a "'+source+'" "remoteapp-r75-'+m['nonce']+'.tar.xz"\n')
+    budget=min(360,expiry(work)-time.time()-300)
+    if budget<=0:raise RuntimeError('activity_transfer_consumed_validity_window')
+    command(['sftp',*OPTIONS,'-b',str(batch),WIN],budget)
+    if hashlib.sha256(archive.read_bytes()).hexdigest()!=digest:
+        raise RuntimeError('activity_transfer_archive_changed')
+    # Original full SHA-256 verification still precedes extraction/native setup.
+    finish_start_after_transfer(work,m,archive,input_source,inputs)
+
+
+def finish_start_after_transfer(work,m,archive,input_source,inputs):
+    port=m['forward_port']
+    remote='remoteapp-r75-'+m['nonce']+'.tar.xz'
+    if expiry(work)-time.time()<300:raise RuntimeError("activity_transfer_consumed_validity_window")
     d=quote(m["win_dir"]);task=quote("RemoteApp-R75-"+m["nonce"])
     digest=quote(hashlib.sha256(archive.read_bytes()).hexdigest())
     ps("$ErrorActionPreference='Stop';$d="+d+";if((Test-Path $d) -or (Test-Path "+quote(m["win_root"])+")){throw 'Fresh roots required'};"
