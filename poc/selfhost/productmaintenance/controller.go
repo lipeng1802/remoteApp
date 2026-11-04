@@ -24,6 +24,19 @@ import (
 )
 
 var ErrProduct = errors.New("product_maintenance_denied")
+var errForwardExchange = errors.New("product_exchange_rejected")
+var errGrantObservation = errors.New("product_grant_observation_rejected")
+
+func ForwardRejectionReason(err error) string {
+	switch {
+	case errors.Is(err, errForwardExchange):
+		return "child_exchange_rejected"
+	case errors.Is(err, errGrantObservation):
+		return "grant_observation_rejected"
+	default:
+		return "request_rejected"
+	}
+}
 
 type Signer interface {
 	localmaintenance.Signer
@@ -31,7 +44,9 @@ type Signer interface {
 }
 type OpenSigner func(autonomousbinding.Record) (Signer, error)
 type boundRevocation interface {
-	Observe(string, invite.Grant) error
+	ObserveContext(context.Context, string, invite.Grant) error
+	ObserveRequest(context.Context, string) error
+	ConfirmBeforeProvision(context.Context) error
 	Pin(invite.Grant) error
 	Revoke(context.Context) error
 	Close()
@@ -165,6 +180,9 @@ func (c *Controller) Exited() <-chan struct{} {
 // Successful provision seals this path because the autonomous product owns all
 // subsequent watch/session work; ordinary requests cannot interrupt that owner.
 func (c *Controller) Forward(ctx context.Context, request installeddevice.Request) (json.RawMessage, error) {
+	if installeddevice.ValidPreprovisionTerminal(request) {
+		return c.preprovisionTerminal(ctx)
+	}
 	if installeddevice.ValidSupervisedQuiesce(request) {
 		return c.quiesce(ctx)
 	}
@@ -190,7 +208,7 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 	raw, e := c.child.Exchange(ctx, request)
 	if e != nil {
 		c.broken = true
-		return nil, e
+		return nil, errors.Join(e, errForwardExchange)
 	}
 	if request.Op == "provision" {
 		// Product enrollment is single-use even on failure. Do not resend or
@@ -206,16 +224,33 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 			return nil, ErrProduct
 		}
 	}
-	if c.revocation != nil && request.Op == "device" && (request.Device.Action == "approve" || request.Device.Action == "status") {
+	if c.revocation != nil && request.Op == "device" {
 		var result struct {
 			Status string        `json:"status"`
 			Passed bool          `json:"passed"`
 			Device invite.Result `json:"device"`
 		}
-		if decode(raw, &result) == nil && result.Status == "device_result" && result.Passed && result.Device.Status == "approved" && result.Device.Grant != nil {
-			if result.Device.RequestID != request.Device.RequestID || c.revocation.Observe(result.Device.RequestID, *result.Device.Grant) != nil {
-				c.broken = true
-				return nil, ErrProduct
+		if decode(raw, &result) == nil && result.Status == "device_result" && result.Passed {
+			switch request.Device.Action {
+			case "claim", "incoming", "approve", "status":
+				if result.Device.RequestID != "" {
+					if (request.Device.Action == "approve" || request.Device.Action == "status") &&
+						result.Device.RequestID != request.Device.RequestID {
+						c.broken = true
+						return nil, ErrProduct
+					}
+					if c.revocation.ObserveRequest(ctx, result.Device.RequestID) != nil {
+						c.broken = true
+						return nil, ErrProduct
+					}
+				}
+			}
+			if (request.Device.Action == "approve" || request.Device.Action == "status") &&
+				result.Device.Status == "approved" && result.Device.Grant != nil {
+				if c.revocation.ObserveContext(ctx, result.Device.RequestID, *result.Device.Grant) != nil {
+					c.broken = true
+					return nil, errors.Join(ErrProduct, errGrantObservation)
+				}
 			}
 		}
 	}
@@ -368,3 +403,20 @@ func (c *Controller) Release(ctx context.Context) error {
 }
 
 var _ localmaintenance.Owner = (*Controller)(nil)
+
+// preprovisionTerminal keeps the signer resident while independently proving
+// the exact request ended. Provision attempts, even uncertain ones, reject it.
+func (c *Controller) preprovisionTerminal(ctx context.Context) (json.RawMessage, error) {
+	if err := c.lock(ctx); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+	if c.child == nil || c.revocation == nil || c.provisioned || c.requested || c.prepared ||
+		c.released || c.localCancelRequested || c.faultReleaseFailed {
+		return nil, ErrProduct
+	}
+	if err := c.revocation.ConfirmBeforeProvision(ctx); err != nil {
+		return nil, err
+	}
+	return json.RawMessage(`{"status":"preprovision_terminal","passed":true}`), nil
+}

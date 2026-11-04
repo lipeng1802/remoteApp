@@ -55,7 +55,7 @@ class Activity:
 
     def stop_owners(self,stop_target,stop_controller):
         state=self.read()
-        if state.get("phase") not in ("normal_revoked","owner_stop_outcome_unknown"):
+        if state.get("phase") not in ("normal_revoked","preprovision_terminal","owner_stop_outcome_unknown"):
             raise RuntimeError("activity_revocation_not_verified_preserve_signers")
         joined=state.get("joined",{})
         if not isinstance(joined,dict) or any(k not in ("target","controller") or v is not True for k,v in joined.items()):

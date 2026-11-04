@@ -437,7 +437,7 @@ def resume_windows(work):
     start_mac(work,m)
 
 
-def exercise(work):
+def exercise(work, preprovision_fault=False):
     work,m=metadata(work)
     public=json.loads((work/"windows-bootstrap.json").read_text())
     target=WindowsRelay(WIN,m["win_dir"]+"\\supervised-control-relay.exe",public["control_pipe"])
@@ -447,7 +447,15 @@ def exercise(work):
         from supervised_session import active_round
         from policy_observation import observe
         def episode(t,c,**options):
-            return active_round(t,c,after_provision=lambda:observe(work),**options)
+            def terminal():
+                a=Activity(work)
+                if a.read()['phase']!='exercise_outcome_unknown':
+                    raise RuntimeError('activity_terminal_phase_rejected')
+                a.save({'version':1,'phase':'preprovision_terminal','preprovision':True})
+            def before():
+                if preprovision_fault:
+                    raise RuntimeError('test_preprovision_fault')
+            return active_round(t,c,after_provision=lambda:observe(work),before_provision_terminal=terminal,before_provision=before,**options)
         return Activity(work).exercise(target,controller,expiry(work),episode=episode)
     except Exception:
         # Cache-only native telemetry cannot authorize retries, close the owner,
@@ -488,15 +496,18 @@ def stop(work):
 def retire(work):
     work,m=metadata(work);a=Activity(work);state=a.read()
     if state["phase"]!="owners_joined_retirement_pending":raise RuntimeError("activity_join_before_retirement_required")
-    return retire_pair(work,m,a,state,'normal_activity_joined_and_test_roots_retired')
+    return retire_pair(work,m,a,state,'preprovision_joined_and_test_roots_retired' if state.get('preprovision') is True else 'normal_activity_joined_and_test_roots_retired')
 
 
 def retire_pair(work,m,a,state,final_phase,before_empty_cleanup=None):
     # No automatic rerun after uncertain destructive cleanup. Explicit
     # finish-files/recovery requires the native tool's separate gates.
     state["phase"]="retirement_outcome_unknown";state["retired"]={};a.save(state)
-    raw=command([str(work/"darwin/retire-node-test")],60)
-    if json.loads(raw)!={"status":"registered_test_retired"} or Path(m["mac_root"]).exists():raise RuntimeError("activity_mac_retirement_unconfirmed")
+    idle=state.get('preprovision') is True
+    tool='retire-idle-test' if idle else 'retire-node-test'
+    expected='idle_test_retired' if idle else 'registered_test_retired'
+    raw=command([str(work/('darwin/'+tool))],60)
+    if json.loads(raw)!={"status":expected} or Path(m["mac_root"]).exists():raise RuntimeError("activity_mac_retirement_unconfirmed")
     state["retired"]["controller"]=True;a.save(state)
     body="""$ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
@@ -507,6 +518,7 @@ try { $lines=@(& (Join-Path $PSScriptRoot 'retire-node-test.exe'));$code=$LASTEX
  'EXITCODE=0' | Out-File $log -Append -Encoding utf8
 } catch { 'EXITCODE=1' | Out-File $log -Append -Encoding utf8;exit 1 }
 """
+    body=body.replace('retire-node-test.exe',tool+'.exe').replace('registered_test_retired',expected)
     (work/"run-retire.ps1").write_text(body)
     command(["scp","-q",*OPTIONS,str(work/"run-retire.ps1"),WIN+":"+"remoteapp-r75-package-"+m["nonce"]+"/run-retire.ps1"])
     d=quote(m["win_dir"]);task=quote("RemoteApp-R75-Retire-"+m["nonce"])

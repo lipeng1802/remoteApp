@@ -167,3 +167,79 @@ func TestExpiredClosedControllerAndCancelledContextsCannotSign(t *testing.T) {
 		t.Fatal("production enabled")
 	}
 }
+
+func TestObserveContextWaitsForAuthenticGrantWithoutAdmittingEarly(t *testing.T) {
+	c, g, _, clock := fixture(t)
+	issued := *clock
+	started := time.Now()
+	c.now = func() time.Time {
+		// Move through the not-before boundary using monotonic elapsed time.
+		return issued.Add(-50 * time.Millisecond).Add(time.Since(started))
+	}
+	if e := c.Observe("request", g); !errors.Is(e, errGrantNotYetValid) {
+		t.Fatal("future grant did not remain denied")
+	}
+	if c.request != "" {
+		t.Fatal("grant observed before valid time")
+	}
+	if e := c.ObserveContext(context.Background(), "request", g); e != nil {
+		t.Fatal("authentic grant failed after not-before boundary")
+	}
+}
+
+func TestObserveContextRejectsForgedFutureAndCanceledRequests(t *testing.T) {
+	c, g, _, clock := fixture(t)
+	*clock = clock.Add(-time.Second)
+	g.Signature = strings.Repeat("0", 128)
+	if e := c.ObserveContext(context.Background(), "request", g); e == nil || errors.Is(e, errGrantNotYetValid) {
+		t.Fatal("forged future grant accepted or waited")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if e := c.ObserveContext(ctx, "request", g); e == nil {
+		t.Fatal("canceled observation accepted")
+	}
+}
+
+func TestBeforeProvisionTerminalIsIndependentAndCannotFollowPin(t *testing.T) {
+	c, g, api, _ := fixture(t)
+	if c.ConfirmBeforeProvision(context.Background()) == nil {
+		t.Fatal("unbound request accepted")
+	}
+	if e := c.ObserveRequest(context.Background(), "request"); e != nil {
+		t.Fatal(e)
+	}
+	api.reply = func(b invite.Body) (invite.Result, error) {
+		if b != (invite.Body{Action: "status", RequestID: "request"}) {
+			t.Fatal("query selector changed")
+		}
+		return invite.Result{Status: "revoked", RequestID: "request"}, nil
+	}
+	if e := c.ConfirmBeforeProvision(context.Background()); e != nil {
+		t.Fatal("terminal request not independently confirmed")
+	}
+	if e := c.ObserveContext(context.Background(), "request", g); e != nil {
+		t.Fatal(e)
+	}
+	if e := c.Pin(g); e != nil {
+		t.Fatal(e)
+	}
+	if c.ConfirmBeforeProvision(context.Background()) == nil {
+		t.Fatal("provisioned request entered idle cleanup")
+	}
+}
+
+func TestBeforeProvisionRejectsUnknownForeignAndGrantBearingTerminal(t *testing.T) {
+	for _, reply := range []invite.Result{
+		{Status: "pending", RequestID: "request"},
+		{Status: "revoked", RequestID: "foreign"},
+		{Status: "revoked", RequestID: "request", Grant: &invite.Grant{}},
+	} {
+		c, _, api, _ := fixture(t)
+		c.ObserveRequest(context.Background(), "request")
+		api.reply = func(invite.Body) (invite.Result, error) { return reply, nil }
+		if c.ConfirmBeforeProvision(context.Background()) == nil {
+			t.Fatal("unconfirmed terminal accepted")
+		}
+	}
+}

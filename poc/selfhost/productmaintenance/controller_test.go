@@ -178,8 +178,15 @@ type revokeFixture struct {
 	unknown               bool
 }
 
-func (f *revokeFixture) Observe(string, invite.Grant) error { return nil }
-func (f *revokeFixture) Pin(invite.Grant) error             { f.pins++; return nil }
+func (f *revokeFixture) ObserveRequest(context.Context, string) error { return nil }
+func (f *revokeFixture) ConfirmBeforeProvision(context.Context) error {
+	if f.unknown {
+		return ErrProduct
+	}
+	return nil
+}
+func (f *revokeFixture) ObserveContext(context.Context, string, invite.Grant) error { return nil }
+func (f *revokeFixture) Pin(invite.Grant) error                                     { f.pins++; return nil }
 func (f *revokeFixture) Revoke(context.Context) error {
 	f.revokes++
 	if f.unknown {
@@ -422,4 +429,31 @@ func TestCachedStageDoesNotExchangeOrReopenBrokenProduct(t *testing.T) {
 		t.Fatal("released owner reused")
 	}
 	c.released = false
+}
+
+func TestPreprovisionTerminalSurvivesBusinessSealButRejectsProvision(t *testing.T) {
+	c, signer, _ := controllerFixture(t, "forward")
+	c.prepared = false
+	rev := &revokeFixture{}
+	c.revocation = rev
+	c.broken = true
+	for _, unknown := range []bool{true, false} {
+		rev.unknown = unknown
+		raw, err := c.Forward(context.Background(), installeddevice.Request{Op: "preprovision_terminal"})
+		if unknown && err == nil {
+			t.Fatal("unknown terminal accepted")
+		}
+		if !unknown && (err != nil || string(raw) != `{"status":"preprovision_terminal","passed":true}`) {
+			t.Fatal("independent terminal not confirmed")
+		}
+		if signer.closes.Load() != 0 || rev.closes != 0 {
+			t.Fatal("terminal query released signer")
+		}
+	}
+	c.provisioned = true
+	if _, err := c.Forward(context.Background(), installeddevice.Request{Op: "preprovision_terminal"}); err == nil {
+		t.Fatal("provisioned owner used idle cleanup")
+	}
+	c.provisioned = false
+	c.Release(context.Background())
 }

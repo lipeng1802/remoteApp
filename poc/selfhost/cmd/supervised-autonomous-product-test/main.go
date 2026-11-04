@@ -252,7 +252,7 @@ func run(output func(any) error) (result error) {
 			reply, e := controller.Forward(life, request)
 			stop()
 			if e != nil {
-				if e = output(map[string]string{"status": "request_rejected"}); e != nil {
+				if e = output(map[string]string{"status": "request_rejected", "reason": productmaintenance.ForwardRejectionReason(e)}); e != nil {
 					return e
 				}
 				continue

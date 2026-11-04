@@ -148,4 +148,35 @@ class ActiveSessionBoundaries(unittest.TestCase):
             active_round(p.endpoint('target'),p.endpoint('controller'),profile_expires_at=1500,clock=lambda:1000+p.elapsed,monotonic=lambda:p.elapsed,sleep=p.sleep,after_provision=observer)
         self.assertEqual(observed,[True]);self.assertEqual(p.revoke_calls,1)
 
+
+    def test_preprovision_terminal_uses_independent_queries_after_sealed_business(self):
+        for confirmation in (True, False, 1):
+            p = ActivePair("clock")
+            confirmed = []
+            queried = []
+            def endpoint(role):
+                ordinary = p.endpoint(role)
+                def call(frame):
+                    if frame["Op"] == "preprovision_terminal":
+                        self.assertEqual(p.revoked, ["gr0"])
+                        queried.append(role)
+                        return {"status":"preprovision_terminal","passed":confirmation}
+                    if role == "controller" and p.revoked and frame["Op"] == "device":
+                        return {"status":"request_rejected"}
+                    return ordinary(frame)
+                return call
+            with self.assertRaises(RuntimeError):
+                active_round(endpoint("target"), endpoint("controller"), profile_expires_at=1500,
+                    clock=lambda:1000, before_provision_terminal=lambda:confirmed.append(True))
+            self.assertEqual(set(queried), {"target","controller"})
+            self.assertEqual(confirmed, [True] if confirmation is True else [])
+            self.assertFalse(p.provision_finished)
+
+    def test_provision_attempt_never_uses_idle_confirmation(self):
+        p = ActivePair("provision")
+        with self.assertRaises(RuntimeError):
+            active_round(p.endpoint("target"), p.endpoint("controller"), profile_expires_at=1500,
+                clock=lambda:1000, before_provision_terminal=lambda:self.fail("idle after provision"))
+        self.assertEqual(p.revoke_calls, 1)
+
 if __name__ == "__main__": unittest.main()

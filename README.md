@@ -432,3 +432,5 @@ TEST 的 DERP 发现成功后可对同一已授权目标检查 TSMP 加密 IP �
 离线 SDK 捕获端点检查已在 Mac 和 Windows 本机通过，覆盖打开、关闭和 reader 退出。
 
 可信 TEST 可在原拨号预算内先验证签名目标的加密 IP 就绪，再核对 TCP 握手。
+
+批准观察在原调用预算内等待已验证授权的短暂 not-before 时间边界。provision 前的失败由双端独立原生签名查询确认请求已拒绝或撤销，再正常退出并退休空闲 TEST 安装。可使用可信验证入口的 --preprovision-check 实测该路径。

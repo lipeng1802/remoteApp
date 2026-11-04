@@ -16,6 +16,7 @@ import (
 )
 
 var ErrDenied = errors.New("bound_revocation_unconfirmed")
+var errGrantNotYetValid = errors.New("bound_grant_not_yet_valid")
 
 type API interface {
 	DeviceRequest(context.Context, invite.Body) (invite.Result, error)
@@ -83,15 +84,52 @@ func (c *Channel) valid(g invite.Grant) bool {
 func (c *Channel) Observe(request string, g invite.Grant) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed || c.pinned || request == "" || !c.valid(g) {
+	if c.closed || c.pinned || request == "" {
 		return ErrDenied
 	}
-	if c.request != "" && (c.request != request || c.grant != g) {
+	if c.request != "" && (c.request != request || (c.grant.Claims.ID != "" && c.grant != g)) {
+		return ErrDenied
+	}
+	if !c.valid(g) {
+		now := c.now()
+		// Only an authentic, otherwise admissible future grant can wait.
+		if now.Unix() >= c.issued && now.Unix() < c.expires &&
+			g.Claims.IssuedAt > now.Unix() && g.Claims.IssuedAt-now.Unix() <= 2 &&
+			(g.Claims.Target == c.subject || g.Claims.Controller == c.subject) &&
+			invite.VerifyGrant(c.issuer, g, g.Claims.Target, g.Claims.Controller, time.Unix(g.Claims.IssuedAt, 0)) {
+			return errors.Join(ErrDenied, errGrantNotYetValid)
+		}
 		return ErrDenied
 	}
 	c.request = request
 	c.grant = g
 	return nil
+}
+
+// ObserveContext waits only for an authentic grant's not-before boundary.
+// Every attempt rechecks the profile, signature, participants and expiry.
+func (c *Channel) ObserveContext(ctx context.Context, request string, g invite.Grant) error {
+	if ctx == nil {
+		return ErrDenied
+	}
+	wait, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	for {
+		if wait.Err() != nil {
+			return ErrDenied
+		}
+		err := c.Observe(request, g)
+		if !errors.Is(err, errGrantNotYetValid) {
+			return err
+		}
+		timer := time.NewTimer(20 * time.Millisecond)
+		select {
+		case <-wait.Done():
+			timer.Stop()
+			return ErrDenied
+		case <-timer.C:
+		}
+	}
 }
 
 // Pin happens before the single provision attempt, including uncertain startup.
@@ -160,5 +198,43 @@ func (c *Channel) ConfirmRevoked(ctx context.Context) error {
 		return ErrDenied
 	}
 	c.confirmed = true
+	return nil
+}
+
+// ObserveRequest binds the request returned by the trusted product's claim or
+// incoming reply. It grants no approval, revocation or provisioning authority.
+func (c *Channel) ObserveRequest(ctx context.Context, request string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ctx == nil || ctx.Err() != nil || c.closed || c.pinned || request == "" ||
+		c.now().Unix() < c.issued || c.now().Unix() >= c.expires {
+		return ErrDenied
+	}
+	if c.request != "" && c.request != request {
+		r, err := c.api.DeviceRequest(ctx, invite.Body{Action: "status", RequestID: c.request})
+		if err != nil || (r != (invite.Result{Status: "revoked", RequestID: c.request}) &&
+			r != (invite.Result{Status: "denied", RequestID: c.request})) {
+			return ErrDenied
+		}
+		c.grant = invite.Grant{}
+	}
+	c.request = request
+	return nil
+}
+
+// ConfirmBeforeProvision only queries the exact observed request. It accepts
+// explicit denial/revocation and never substitutes expiry for a terminal state.
+func (c *Channel) ConfirmBeforeProvision(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ctx == nil || ctx.Err() != nil || c.closed || c.pinned || c.request == "" ||
+		c.now().Unix() < c.issued || c.now().Unix() >= c.expires {
+		return ErrDenied
+	}
+	r, err := c.api.DeviceRequest(ctx, invite.Body{Action: "status", RequestID: c.request})
+	if err != nil || (r != (invite.Result{Status: "revoked", RequestID: c.request}) &&
+		r != (invite.Result{Status: "denied", RequestID: c.request})) {
+		return ErrDenied
+	}
 	return nil
 }

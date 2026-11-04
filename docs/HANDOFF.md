@@ -6,6 +6,14 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r183：批准观察时间边界与 provision 前独立收尾
+
+回归测试复现真实签名授权在本机尚未到 IssuedAt 时 Observe 立即拒绝。新增最多 2 秒、受原调用上下文约束的等待，仅对签名、参与者、profile 和 300 秒期限均有效且未来不超过 2 秒的授权进行；每次重新验证，时间到达前不写入观察状态。历史 Mac 拒绝原因尚不能唯一归因，新增固定拒绝原因区分 child Exchange 与授权观察。
+
+原生独立通路从可信产品 claim/incoming 回复绑定请求，批准后绑定同一授权。provision 前可用原 OS signer 查询该请求的明确 denied/revoked，拒绝未知、错请求和含 grant 的终态；任何 Pin/provision 已开始均不能进入空闲收尾。协调器仅在双端独立确认后记录 preprovision_terminal，接续原正常 stop 的真实零退出与 idle 原生退休。业务 STATUS 锁闭不再迫使走未 Pin 的 revoke_session。provision 后保留原故障路径。33 项 Python 检查及定向 Go 包测试通过。
+
+下一步先运行新鲜签名 --preprovision-check 人为在 grant_clock 后、provision 前终止，实际验证双端查询、正常退出和空闲退休，再做正常双机 TLS 验收。不得复用旧故障工单。
+
 ## 2026-11-04 r182：本轮未进入网络，批准后查询被拒
 
 39f1e0d8023c 的 Windows approve 返回 passed=true、approved、有 grant。Mac status 两次返回 request_rejected。Windows 随后对原请求 status 返回 approved，再执行原 grant 撤销，返回 passed=true、revoked、无 grant。因 Mac 最终查询被拒，完整双端终态未确认。外层 fault_revoke_unknown 保留；未 provision，独立撤销通路未 Pin，不据该失败推断真实撤销未发生。原工单现场保留，不重发撤销或停止。

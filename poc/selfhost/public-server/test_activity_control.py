@@ -58,4 +58,17 @@ class ActivityOwnership(unittest.TestCase):
             self.assertEqual(a.read()["joined"],{})
 
 
+
+    def test_preprovision_confirmed_failure_requires_actual_zero_joins(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = self.setup_activity(d)
+            a.save({"version":1,"phase":"preprovision_terminal","preprovision":True})
+            with self.assertRaisesRegex(RuntimeError,"join_unconfirmed"):
+                a.stop_owners(lambda:self.fail(),lambda:{"status":"owner_closed","joined":True,"zero_exit":False})
+            self.assertIs(a.read()["preprovision"],True)
+            a.stop_owners(lambda:{"status":"owner_closed","joined":True,"zero_exit":True},
+                          lambda:{"status":"owner_closed","joined":True,"zero_exit":True})
+            self.assertEqual(a.read()["phase"],"owners_joined_retirement_pending")
+            self.assertEqual(a.read()["joined"],{"target":True,"controller":True})
+
 if __name__=="__main__":unittest.main()

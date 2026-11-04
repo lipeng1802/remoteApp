@@ -75,7 +75,7 @@ def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,
 
 
 def active_round(target, controller, *, profile_expires_at, clock=time.time,
-                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False, after_provision=None):
+                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False, after_provision=None, before_provision_terminal=None, before_provision=None):
     """Fresh explicit approval -> clocks -> concurrent provision -> PONG -> revoke.
 
     A mutation/receipt error fails this episode. It does not stop/delete owners,
@@ -83,6 +83,8 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
     Caller must preserve signer access when revocation remains unconfirmed.
     """
     require(after_provision is None or callable(after_provision),'session_observer_invalid')
+    require(before_provision is None or callable(before_provision), 'session_provision_callback_invalid')
+    require(before_provision_terminal is None or callable(before_provision_terminal), 'session_terminal_callback_invalid')
     require(type(quiesce_before_revoke) is bool,"session_quiesce_mode_invalid")
     require(type(profile_expires_at) is int and profile_expires_at - clock() >= 240,
             "session_profile_window_insufficient")
@@ -121,6 +123,8 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
             require(result == {"status": "network_authorization", "phase": "grant_clock", "passed": True, "active": False}
                     and type(result["passed"]) is bool and type(result["active"]) is bool,
                     "session_native_clock_unconfirmed")
+        if before_provision is not None:
+            before_provision()
         # Mark before submitting either call; a timeout can follow real enroll.
         attempted = True
         for result in parallel((target, controller), {"Op": "provision", "Network": {"grant": grant}}):
@@ -149,6 +153,18 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
                 raise RuntimeError("session_revocation_unconfirmed_preserve_signer") from None
         else:
             # Before any provision, ordinary exact STATUS/revoke is still valid.
-            close_request(target, controller, request_id)
+            if before_provision_terminal is None:
+                close_request(target, controller, request_id)
+            else:
+                try:
+                    close_request(target, controller, request_id)
+                finally:
+                    # The native owners independently query the bound request,
+                    # including when the business STATUS path has sealed.
+                    receipts = parallel((target, controller), {"Op":"preprovision_terminal"})
+                    require(all(type(v) is dict and v == {"status":"preprovision_terminal","passed":True}
+                                and v.get("passed") is True for v in receipts),
+                            "session_preprovision_terminal_unconfirmed")
+                    before_provision_terminal()
     result["owner_revocation_verified"] = True
     return result
