@@ -15,11 +15,11 @@ type synEvidence struct {
 
 // readSYNEvidence consumes the pinned SDK capture format without recording
 // frames. Its caller owns the stream and bounds its lifetime.
-func readSYNEvidence(r io.Reader, controller, target netip.Addr, atTarget bool) synEvidence {
+func readSYNEvidence(r io.Reader, controller, target netip.Addr, atTarget bool, observe func(synEvidence)) synEvidence {
 	if !readSYNHeader(r) {
 		return synEvidence{}
 	}
-	return readSYNRecords(r, controller, target, atTarget)
+	return readSYNRecords(r, controller, target, atTarget, observe)
 }
 
 func readSYNHeader(r io.Reader) bool {
@@ -29,7 +29,7 @@ func readSYNHeader(r io.Reader) bool {
 		le.Uint16(header[4:6]) == 2 && le.Uint16(header[6:8]) == 4 && le.Uint32(header[20:24]) == 147
 }
 
-func readSYNRecords(r io.Reader, controller, target netip.Addr, atTarget bool) synEvidence {
+func readSYNRecords(r io.Reader, controller, target netip.Addr, atTarget bool, observe func(synEvidence)) synEvidence {
 	var evidence synEvidence
 	if !controller.Is4() || !target.Is4() || controller == target {
 		return evidence
@@ -64,10 +64,16 @@ func readSYNRecords(r io.Reader, controller, target netip.Addr, atTarget bool) s
 		if !evidence.syn && path == synPath && flags == packet.TCPSyn &&
 			p.Src.Addr() == controller && p.Src.Port() != 0 && p.Dst == netip.AddrPortFrom(target, 47476) {
 			evidence.syn, sourcePort = true, p.Src.Port()
+			if observe != nil {
+				observe(evidence)
+			}
 		}
 		if evidence.syn && path == replyPath && flags == packet.TCPSynAck &&
 			p.Src == netip.AddrPortFrom(target, 47476) && p.Dst == netip.AddrPortFrom(controller, sourcePort) {
 			evidence.reply = true
+			if observe != nil {
+				observe(evidence)
+			}
 			break
 		}
 	}

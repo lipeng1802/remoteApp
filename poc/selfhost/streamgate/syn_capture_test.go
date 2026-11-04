@@ -36,11 +36,11 @@ func TestSYNEvidenceRequiresMatchingReverseTuple(t *testing.T) {
 	}
 	write(3, controller, target, 50000, 47476, 2)
 	write(1, target, controller, 47476, 50001, 18)
-	if got := readSYNEvidence(bytes.NewReader(capture.Bytes()), controller, target, false); !got.syn || got.reply {
+	if got := readSYNEvidence(bytes.NewReader(capture.Bytes()), controller, target, false, nil); !got.syn || got.reply {
 		t.Fatalf("foreign reply admitted: %+v", got)
 	}
 	write(1, target, controller, 47476, 50000, 18)
-	if got := readSYNEvidence(&capture, controller, target, false); !got.syn || !got.reply {
+	if got := readSYNEvidence(&capture, controller, target, false, nil); !got.syn || !got.reply {
 		t.Fatalf("matching handshake missed: %+v", got)
 	}
 }
