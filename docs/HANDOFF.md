@@ -6,6 +6,24 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r199：待命独立卸载、维护保留与删除后退休门禁组件完成
+
+承接r198，没有重跑已退休2a01f13f9a81。先读Git/交接，保留docs/archive/；无前组重型任务，磁盘可用约138GiB，不清理签名输入或故障现场。Mac→Windows SSH实际返回REMOTEAPP_SSH_READY。当前没有新鲜双机工单或远程授权服务变更，自动续办仍ACTIVE。
+
+关键时序已纠正：活动产品持有binding排他租约，卸载器无法在活动期间再次读原生binding。新ArmedAuthenticatedBoundTest及固定cmd/bound-authenticated-removal-test必须在setup后、产品启动前arm。它仅打开现有原生binding、Check并实际关闭该检查租约，再以绑定记录选择/核对OS signer；不创建身份，不从argv/env/IPC取vault/public/root。待命只保留专用signer，不持binding，不取得或缓存签名许可；收到仅私有父管道精确remove后才发新挑战完成原认证ready/finish/closed，再实际join自身signer并通过原native事务重新取租约删除。原profile绝对截止和取消持续有效，坏帧/取消/到期不能写计划。没有新增绕过原生租约的读取接口，也没有将普通stop升级为维护。
+
+provision后的维护成功不再输出可能污染业务回执的异步maintenance_closed并退出，而是保留原supervisor/独立撤销signer和业务端点。普通idle维护行为保持。维护后最终stop及Release必须独立确认原request revoked；未知/错误/过期仍拒绝正常释放，业务不能重启已维护child。相关真实子进程边界验证了未知回执保留signer、拒绝业务重用及确认撤销后的实际释放。当前Python/PowerShell父层尚未接这个新流程，不能提前发送普通stop来试探未知结果。
+
+新增RemovedRegistered及独立编译removed_registered退休模式，和完整安装Registered分开，禁止该模式使用旧finish-files。只接受原生 **files_removed**（实际enum，并非草稿program_removed）事务/epoch/plan摘要、当前有效且与native完全一致的编译公开profile、绑定的签名checkpoint/原activation、全部计划程序文件已缺席、目录对象身份未变及无额外文件，再取原新鲜issuer node退休证明后清理精确TEST记录与空壳。VerifyRemovedProfile只比较、不返回可用profile或清除maintenance，原OpenInstallation仍拒绝。空壳清理只rmdir已验证的空目录/自身checkpoint，不递归删文件；不确定文件系统回执不自动重试。替换、重出现、未知文件、外来activation、错误计划及生产模式均有拒绝检查。新增固定维护loopback编译入口，供待命客户端不依赖运行时地址/身份选择；旧默认临时端点保持。
+
+证据：9个改动Go包/编译入口检查通过，Windows对应vet通过；新productmaintenance/programremoval定向race通过。Mac真实原生arm组件检查通过，原检查租约关闭后模拟payload实际再取得原生binding，取消后专用signer实际join、原身份可重新打开且binding保持、无删除计划。Windows相同单个原生检查在隐藏Interactive/Limited jarvis任务中实际PASS，无SKIP，actual_exit=0；两个精确测试任务及独立测试exe已删除，两平台相关helper进程数均0。证据 artifacts/connection-poc/r199-bound-removal/{mac-native-arm.txt,windows-native-arm.txt,windows-native-result.json,native-helper-postcheck.json,race.txt}。只复用摘要核验的普通trust-journal/identity-vault helper字节，没有执行旧短包/旧安装；测试内签发新TEST材料并新建/精确清理随机原生身份。它是原生待命/取消组件，不等于新的跨机认证卸载整链、在线退休或GUI验收。
+
+Windows首个包装脚本的VAULT占位符错误替换了环境变量名，任务在第3行解析阶段退出1，未启动测试；原脚本/摘要、Ready/exit1/无进程及AST错误保留在windows-task-diagnostic.json、pre-native-script-rejection.json。明确证实在原生执行前失败后，使用新固定脚本，先校验SHA和AST才创建另一精确Interactive任务；修正后上述原生检查通过。不要重跑两个组件driver，原exe已精确删除。
+
+下一组直接接线并验收，避免重复已通过组件：给product-maintenance-validation-build和fresh runner增加显式program-removal验收模式；为两端先选定/检查编译期维护loopback端口，setup后且supervisor启动前启动独立arm进程，父层保存其PID/私有通路及严格removal_armed回执。保持原并行provision/ACTIVE、目标就绪后控制启动与持续PONG；增长通过后并行触发两个已arm客户端的精确remove，原维护协议必须实际join同一个活动产品/exit0后才删文件。保存files_removed事务及身份/信任/activation/floor保持证据，保留原supervisor直到独立撤销确认，然后实际join这些parent/signer/arm进程，再调用专用removed_registered工具精确退休。未知任一步都保留原owner/原回执，不重发remove/批准/provision；父层不应在未知状态关闭stdin。只有这些新接线边界通过后才创建一份新鲜双机包。
+
+尚缺的是上述管理接线与真实完整工单，不能把当前组件通过提前计作原四组全部完成。GUI、正式发行、RK3588与旧未知工单仍按r198单列。9610faf58fe6旧Windows owner及其它历史根/锁不动，不向过期包重发停止/删除。未推送远端。
+
 ## 2026-11-04 r198：真实持续TLS PONG、正常zero join与registered退休通过
 
 8df6831后的唯一新鲜工单2a01f13f9a81已完成，原exec session96745实际exit0，日志/tmp/remoteapp-r197-active.log。阶段为OWNERS_READY → NORMAL_REVOKED → NORMAL_JOINED → NORMAL_RETIRED，没有进入故障分支。activity-state最终normal_activity_joined_and_test_roots_retired，两角色joined/retired均true；checks为双方ACTIVE watch、真实payload增长、7次增长样本、双方正常quiesce和独立撤销已确认。

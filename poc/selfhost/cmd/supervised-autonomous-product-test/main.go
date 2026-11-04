@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -28,7 +29,19 @@ import (
 )
 
 var embeddedRelease, embeddedProductPath, embeddedProductDigest, embeddedSignerDigest string
-var embeddedTestTunnel string
+var embeddedTestTunnel, embeddedMaintenanceAddress string
+
+func maintenanceAddress(encoded string) (string, error) {
+	if encoded == "" {
+		return "127.0.0.1:0", nil
+	}
+	raw, e := base64.RawURLEncoding.DecodeString(encoded)
+	address, e2 := netip.ParseAddrPort(string(raw))
+	if e != nil || e2 != nil || base64.RawURLEncoding.EncodeToString(raw) != encoded || address.String() != string(raw) || address.Addr().String() != "127.0.0.1" || address.Port() < 1024 {
+		return "", trustprofile.ErrTrust
+	}
+	return string(raw), nil
+}
 
 func run(output func(any) error) (result error) {
 	if len(os.Args) != 1 {
@@ -94,7 +107,11 @@ func run(output func(any) error) (result error) {
 	if e = controller.ConfigureRevocation(ctx, port); e != nil {
 		return e
 	}
-	l, e := net.Listen("tcp4", "127.0.0.1:0")
+	address, e := maintenanceAddress(embeddedMaintenanceAddress)
+	if e != nil {
+		return e
+	}
+	l, e := net.Listen("tcp4", address)
 	if e != nil {
 		return e
 	}
@@ -161,6 +178,13 @@ func run(output func(any) error) (result error) {
 		case value := <-completed:
 			completed = nil
 			if value.err == nil {
+				// A provisioned maintenance endpoint may have joined/deleted
+				// the payload, but the original independent revoke signer is
+				// still needed. Keep the same supervisor/business endpoint.
+				// Do not inject an unsolicited reply into its parent pipe.
+				if controller.RetainAfterMaintenance(ctx) {
+					continue
+				}
 				if e = output(map[string]any{"status": "maintenance_closed", "epoch": value.state.Epoch, "transaction": value.state.Transaction}); e != nil {
 					return e
 				}
@@ -176,6 +200,15 @@ func run(output func(any) error) (result error) {
 				return trustprofile.ErrTrust
 			}
 			if request == (installeddevice.Request{Op: "stop"}) {
+				life, stop := context.WithTimeout(ctx, 10*time.Second)
+				err := controller.AllowRetainedStop(life)
+				stop()
+				if err != nil {
+					if err = output(map[string]string{"status": "request_rejected"}); err != nil {
+						return err
+					}
+					continue
+				}
 				return nil
 			}
 			if request == (installeddevice.Request{Op: "stop_local_fault"}) {

@@ -38,7 +38,23 @@ func Registered(ctx context.Context, r trustinstall.Release, root, helper, vault
 	})
 }
 
+// RemovedRegistered is a separate fixed TEST composition after authenticated
+// program-only removal. It accepts only a native files_removed transaction,
+// exact signed checkpoint/activation and fresh issuer node-retirement proof.
+// It never treats an arbitrary incomplete release as a retired program.
+func RemovedRegistered(ctx context.Context, r trustinstall.Release, root, helper, vault, vaultDigest string, port uint16) error {
+	if ctx == nil || ctx.Err() != nil {
+		return errOnlineRetirement
+	}
+	return retireMode(r, root, helper, vault, vaultDigest, func(profile trustprofile.Profile, identity autonomousbinding.Record, node enrollmentstore.Record) error {
+		return confirmNodeRetirement(ctx, r, profile, identity, node, vault, vaultDigest, port)
+	}, true)
+}
+
 func retire(r trustinstall.Release, root, helper, vault, vaultDigest string, confirm func(trustprofile.Profile, autonomousbinding.Record, enrollmentstore.Record) error) (result error) {
+	return retireMode(r, root, helper, vault, vaultDigest, confirm, false)
+}
+func retireMode(r trustinstall.Release, root, helper, vault, vaultDigest string, confirm func(trustprofile.Profile, autonomousbinding.Record, enrollmentstore.Record) error, removed bool) (result error) {
 	stage := "preflight"
 	defer func() {
 		if result != nil {
@@ -68,7 +84,16 @@ func retire(r trustinstall.Release, root, helper, vault, vaultDigest string, con
 		return e
 	}
 	defer trust.Close()
-	installation, e := trustprofile.OpenInstallation(r.Anchor(), trust, time.Now)
+	var installation *trustprofile.Installation
+	var removalState trustprofile.MaintenanceState
+	if removed {
+		if confirm == nil || trustprofile.VerifyRemovedProfile(r.Anchor(), trust, r.Specification().Bundled, time.Now) != nil {
+			return trustprofile.ErrTrust
+		}
+		removalState, e = trustprofile.ReadMaintenance(r.Anchor(), trust, time.Now)
+	} else {
+		installation, e = trustprofile.OpenInstallation(r.Anchor(), trust, time.Now)
+	}
 	if e != nil {
 		return e
 	}
@@ -113,23 +138,41 @@ func retire(r trustinstall.Release, root, helper, vault, vaultDigest string, con
 		return e
 	}
 	defer activation.Close()
-	release, e := installrelease.OpenActive(activation, filepath.Join(root, "releases"), pub, s.Channel, runtime.GOOS, s.MinimumEpoch)
-	if e != nil {
-		return e
-	}
-	bootstrap, e := installrelease.OpenBootstrap(root, pub, s.Channel, runtime.GOOS, s.MinimumEpoch, true)
-	if e != nil {
-		return e
-	}
-	for path, count := range map[string]int{root: 2, filepath.Join(root, "releases"): 1, filepath.Join(root, "bootstrap"): 2, filepath.Join(root, "bootstrap", "sets"): 1} {
-		entries, e := os.ReadDir(path)
-		if e != nil || len(entries) != count {
+	var release installrelease.Verified
+	var bootstrap installrelease.VerifiedBootstrap
+	var plan installrelease.RemovalPlan
+	if removed {
+		plan, _, e = installrelease.LoadRemovalTest(root, removalState.PlanSHA256, true)
+		if e != nil || plan.Transaction != removalState.Transaction || plan.Epoch != removalState.Epoch {
 			return trustprofile.ErrTrust
+		}
+		if e = installrelease.ValidateRemovedActivationTest(root, plan, activation, pub, s.Channel, runtime.GOOS, s.MinimumEpoch, true); e != nil {
+			return e
+		}
+	} else {
+		release, e = installrelease.OpenActive(activation, filepath.Join(root, "releases"), pub, s.Channel, runtime.GOOS, s.MinimumEpoch)
+		if e != nil {
+			return e
+		}
+		bootstrap, e = installrelease.OpenBootstrap(root, pub, s.Channel, runtime.GOOS, s.MinimumEpoch, true)
+		if e != nil {
+			return e
+		}
+		for path, count := range map[string]int{root: 2, filepath.Join(root, "releases"): 1, filepath.Join(root, "bootstrap"): 2, filepath.Join(root, "bootstrap", "sets"): 1} {
+			entries, e := os.ReadDir(path)
+			if e != nil || len(entries) != count {
+				return trustprofile.ErrTrust
+			}
 		}
 	}
 	if confirm != nil {
 		stage = "online_node_retirement"
-		profile, _, e := installation.Current()
+		profile := r.Specification().Bundled
+		if !removed {
+			profile, _, e = installation.Current()
+		} else {
+			e = trustprofile.VerifyRemovedProfile(r.Anchor(), trust, profile, time.Now)
+		}
 		if e != nil {
 			return e
 		}
@@ -162,13 +205,15 @@ func retire(r trustinstall.Release, root, helper, vault, vaultDigest string, con
 	if e = cleanup(activationScope); e != nil {
 		return e
 	}
-	stage = "release_delete"
-	if e = installrelease.CleanupVerifiedTestRelease(release.Directory, root, release.ManifestDigest, release.Manifest.Epoch, pub, s.Channel, runtime.GOOS, s.MinimumEpoch, true); e != nil {
-		return e
-	}
-	stage = "bootstrap_delete"
-	if e = installrelease.CleanupBootstrapTestState(root, []installrelease.VerifiedBootstrap{bootstrap}, pub, s.Channel, runtime.GOOS); e != nil {
-		return e
+	if !removed {
+		stage = "release_delete"
+		if e = installrelease.CleanupVerifiedTestRelease(release.Directory, root, release.ManifestDigest, release.Manifest.Epoch, pub, s.Channel, runtime.GOOS, s.MinimumEpoch, true); e != nil {
+			return e
+		}
+		stage = "bootstrap_delete"
+		if e = installrelease.CleanupBootstrapTestState(root, []installrelease.VerifiedBootstrap{bootstrap}, pub, s.Channel, runtime.GOOS); e != nil {
+			return e
+		}
 	}
 	stage = "trust_delete"
 	if e = trust.Close(); e != nil {
@@ -176,6 +221,10 @@ func retire(r trustinstall.Release, root, helper, vault, vaultDigest string, con
 	}
 	if e = cleanup(r.Scope()); e != nil {
 		return e
+	}
+	if removed {
+		stage = "removed_empty_shells"
+		return installrelease.CleanupRemovedTestShells(root, plan, pub, s.Channel, runtime.GOOS, true)
 	}
 	// Only empty known shells: unknown files prevent removal, never recurse.
 	stage = "empty_shells"

@@ -189,6 +189,17 @@ func CompileAuthenticatedRemovalTest(ctx context.Context, goexe, module, target,
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/authenticated-removal-test", extra, now)
 }
 
+// CompileBoundAuthenticatedRemovalTest fixes TEST root/loopback endpoint and
+// helper pin while leaving identity selection exclusively to native binding.
+func CompileBoundAuthenticatedRemovalTest(ctx context.Context, goexe, module, target, dest string, s Specification, installRoot, address, signerDigest string, now time.Time) error {
+	endpoint, e := netip.ParseAddrPort(address)
+	if !s.Test || !validInstallRoot(target, installRoot) || e != nil || !endpoint.Addr().IsLoopback() || endpoint.Port() == 0 || endpoint.String() != address || !canonical(signerDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(installRoot)) + " -X main.embeddedAddress=" + base64.RawURLEncoding.EncodeToString([]byte(address)) + " -X main.embeddedSignerDigest=" + signerDigest
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/bound-authenticated-removal-test", extra, now)
+}
+
 // CompileTestProductSetup pins a fresh isolated TEST installation root.
 func CompileTestProductSetup(ctx context.Context, goexe, module, target, dest string, s Specification, root string, now time.Time) error {
 	if !s.Test || !validInstallRoot(target, root) {
@@ -219,13 +230,38 @@ func CompileNodeTestRetirement(ctx context.Context, goexe, module, target, dest 
 	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/retire-idle-test", extra, now)
 }
 
+// CompileRemovedNodeTestRetirement is deliberately distinct from the intact
+// installation retirement tool. There is no runtime fallback between modes.
+func CompileRemovedNodeTestRetirement(ctx context.Context, goexe, module, target, dest string, s Specification, root, signerDigest string, now time.Time, port uint16) error {
+	if !s.Test || !validInstallRoot(target, root) || !canonical(signerDigest, 32) || (port != 0 && (port < 1024 || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444")) {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedInstallRoot=" + base64.RawURLEncoding.EncodeToString([]byte(root)) + " -X main.embeddedSignerDigest=" + signerDigest + " -X main.embeddedMode=removed_registered" + testTunnelFlags(port)
+	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/retire-idle-test", extra, now)
+}
+
 // CompileProductSupervisorTest fixes the product executable/digests at build
 // time. Runtime starts only an existing native binding; it cannot choose keys.
 func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, testTunnel ...uint16) error {
+	return compileProductSupervisorTest(ctx, goexe, module, target, dest, s, productPath, productDigest, signerDigest, now, "", testTunnel...)
+}
+
+// CompileRemovalProductSupervisorTest fixes a TEST loopback address before
+// either native owner starts, allowing the independently armed client to use
+// a compiled destination rather than an IPC-supplied address or identity.
+func CompileRemovalProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest, address string, now time.Time, port uint16) error {
+	endpoint, e := netip.ParseAddrPort(address)
+	if e != nil || endpoint.Addr().String() != "127.0.0.1" || endpoint.Port() < 1024 || endpoint.String() != address {
+		return trustprofile.ErrTrust
+	}
+	extra := " -X main.embeddedMaintenanceAddress=" + base64.RawURLEncoding.EncodeToString([]byte(address))
+	return compileProductSupervisorTest(ctx, goexe, module, target, dest, s, productPath, productDigest, signerDigest, now, extra, port)
+}
+func compileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, maintenanceFlags string, testTunnel ...uint16) error {
 	if !s.Test || !validInstallRoot(target, productPath) || !canonical(productDigest, 32) || !canonical(signerDigest, 32) {
 		return trustprofile.ErrTrust
 	}
-	extra := " -X main.embeddedProductPath=" + base64.RawURLEncoding.EncodeToString([]byte(productPath)) + " -X main.embeddedProductDigest=" + productDigest + " -X main.embeddedSignerDigest=" + signerDigest
+	extra := " -X main.embeddedProductPath=" + base64.RawURLEncoding.EncodeToString([]byte(productPath)) + " -X main.embeddedProductDigest=" + productDigest + " -X main.embeddedSignerDigest=" + signerDigest + maintenanceFlags
 	if len(testTunnel) > 0 {
 		if len(testTunnel) != 1 || testTunnel[0] < 1024 || s.Bundled.Claims.Endpoint != "https://mk.fengmap.com:8444" {
 			return trustprofile.ErrTrust

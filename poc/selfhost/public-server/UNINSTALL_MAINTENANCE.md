@@ -115,3 +115,14 @@ macOS还实际编译并执行固定客户端，验证运行时覆盖拒绝、独
 下一组需要固定TEST客户端从原生binding选择身份、通过当前受保护bootstrap联系既有维护端点，不能接受运行时vault/key/root覆盖。当前supervisor在maintenance_closed后立即返回并Release独立signer，需要先明确保留已provision撤销owner的生命周期和未知回执处理，避免删除前的正常维护退出使撤销通路丢失。原3秒安全截止及所有信任门禁保持。
 
 program-only完成后的release已不完整，不能直接调用当前要求完整签名库存的Registered退休工具。必须专门核验原生program_removed事务、固定签名删除计划/原binding、未知文件拒绝和新鲜在线node退休证明，才可精确清理剩余TEST记录和壳；未知结果保留原owner/现场。边界验证后才新增一份包含此接线的真机验收包，禁止重启已经退休的本轮根。
+
+
+## r199 实现：启动前 arm，维护后保留撤销
+
+活动原生产品始终持有binding排他租约，不能让独立客户端在活动期间用另一个Open读取身份。新增固定TEST `bound-authenticated-removal-test` 在setup完成、产品启动前接收私有 `arm`，通过现有原生binding的Check/Close选择并核对专用OS signer，才返回 `removal_armed`。待命不持binding、不缓存签名授权；它继承原profile截止，收到精确无选择字段的 `remove` 后才发新的认证挑战并沿现有ready/finish/closed和原事务删除。取消/坏帧/到期join signer且不写计划。没有放宽租约，也不能在普通quiesce之后追认旧stop为维护。
+
+仅provision过且维护成功的supervisor继续驻留，保留原独立撤销通路，不向共享父管道插入异步maintenance_closed；idle兼容路径保持原退出。最终stop/Release先独立确认原request revoked，未知则不释放最后signer。父管理层必须先取得明确撤销回执再发stop，不能在未知状态关闭stdin或用子进程缺席代替证明。
+
+删除后的退休由专门的 `RemovedRegistered` / `removed_registered` 编译模式处理，不调用要求完整库存的旧Registered，不接受旧finish-files。门禁包括原生files_removed事务、绑定的签名计划/目录对象身份/原activation、编译公开profile与原生记录完全相等且当前有效、全部程序文件已缺席和无未知文件，再加原短期在线node退休证明。比较API不返回可用profile、不解锁maintenance；原身份/trust/floor在program-only阶段保持。只在独立TEST退休时才清理记录及已验证空壳，未知回执没有自动恢复或递归清理。
+
+Mac和隐藏Windows Interactive的单项原生待命/取消检查已真实通过，原生身份可重开、binding保持、专用signer/helper均join，Windows实际exit0并精确删除测试exe和任务。软件拒绝项/实际子进程与race、Windows vet通过。当前尚待fresh builder及双平台父管理器接线，不能据组件结果宣称跨机活动→认证卸载整链通过。下一次真机仅可用新签发包，不重跑已退休r198。

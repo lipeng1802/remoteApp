@@ -137,3 +137,15 @@ func TestBootstrapBuildRejectsSelectableRootOrPointer(t *testing.T) {
 		t.Fatalf("invalid dispatcher root accepted: %v", err)
 	}
 }
+
+func TestCompileBoundRemovalRejectsSelectorsAndProductionBeforeBuild(t *testing.T) {
+	for _, address := range []string{"", "example.com:42", "192.0.2.1:42", "127.0.0.1:0", "127.0.0.1:00042"} {
+		err := CompileBoundAuthenticatedRemovalTest(context.Background(), "/unused/go", "/unused/module", "darwin", filepath.Join(t.TempDir(), "entry"), Specification{Test: true}, "/tmp/fixed", address, strings.Repeat("a", 64), time.Now())
+		if !errors.Is(err, trustprofile.ErrTrust) {
+			t.Fatal("unsafe endpoint reached builder", address, err)
+		}
+	}
+	if err := CompileBoundAuthenticatedRemovalTest(context.Background(), "/unused/go", "/unused/module", "darwin", filepath.Join(t.TempDir(), "entry"), Specification{}, "/tmp/fixed", "127.0.0.1:19445", strings.Repeat("a", 64), time.Now()); !errors.Is(err, trustprofile.ErrTrust) {
+		t.Fatal("production enabled")
+	}
+}

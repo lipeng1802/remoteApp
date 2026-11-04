@@ -520,3 +520,38 @@ func TestControllerStartRolePhaseOneShotAndUnknownReceipt(t *testing.T) {
 		})
 	}
 }
+
+func TestMaintainedProvisionRetainsRevocationUntilConfirmedBeforeRelease(t *testing.T) {
+	c, signer, _ := controllerFixture(t, "normal")
+	if e := c.child.Stop(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	c.prepared = true
+	c.closed = true
+	c.provisioned = true
+	proof := &revokeFixture{unknown: true}
+	c.revocation = proof
+	if !c.RetainAfterMaintenance(context.Background()) {
+		t.Fatal("last revoke owner discarded")
+	}
+	if c.AllowRetainedStop(context.Background()) == nil || c.Release(context.Background()) == nil {
+		t.Fatal("unknown revocation released maintained owner")
+	}
+	if signer.closes.Load() != 0 || proof.closes != 0 || c.released {
+		t.Fatal("unknown proof closed signer")
+	}
+	// Read-only diagnostics/ordinary business cannot restart the closed child.
+	if _, e := c.Forward(context.Background(), installeddevice.Request{Op: "device", Device: invite.Body{Action: "register"}}); e == nil {
+		t.Fatal("maintained product rearmed")
+	}
+	proof.unknown = false
+	if _, e := c.Forward(context.Background(), installeddevice.Request{Op: "revoke_session"}); e != nil || proof.revokes != 1 {
+		t.Fatal("retained revoke lost", e)
+	}
+	if c.AllowRetainedStop(context.Background()) != nil || c.Release(context.Background()) != nil || signer.closes.Load() != 1 || proof.closes != 1 {
+		t.Fatal("confirmed same owner not joined")
+	}
+	if c.RetainAfterMaintenance(context.Background()) {
+		t.Fatal("released owner retained")
+	}
+}

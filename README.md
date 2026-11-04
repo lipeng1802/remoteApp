@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r199 已实现待命独立卸载客户端、维护后撤销owner保留与program-only删除后的严格TEST退休门禁。待命/取消已在Mac和Windows Interactive原生检查通过，相关Go/race及Windows静态检查通过。下一组接新鲜包的双端arm→持续PONG→认证维护/程序删除→撤销/退休管理流程；组件通过尚不代表此整链验收。
+
 r198 新鲜 Mac↔Windows TEST 双机已观察双方真实 TLS PONG 持续增长超过6秒，正常quiesce/全层join、父进程exit0、独立撤销、registered TEST退休与精确零规则/进程/任务检查通过。证据见[最新交接](docs/HANDOFF.md)。尚需把独立认证卸载器的program-only删除及身份保留接入真实跨机活动工单，不能用TEST整根退休替代；自动续办继续此收口，不无变化重跑。GUI、正式发行与RK3588仍待。
 
 r197 已实现 TEST 分阶段启动：双端并行 provision/ACTIVE watch 保持，目标 TLS 与实际监听就绪后才一次性触发控制端获取新的 session identity/gate。错角色、预 provision、重复/附加字段及未知回执边界已覆盖，独立撤销保留；原3秒 TCP/密钥交换和全部信任截止不变。真机持续 PONG 与正常 zero/registered 退休待新鲜包实测。

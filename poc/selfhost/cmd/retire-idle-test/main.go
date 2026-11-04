@@ -17,7 +17,7 @@ var embeddedMode, embeddedTestTunnel string
 
 func run() error {
 	port, portErr := trustinstall.ParseTestTunnelPort(embeddedTestTunnel)
-	if (embeddedMode != "" && embeddedMode != "registered") || portErr != nil || (port != 0 && embeddedMode != "registered") {
+	if (embeddedMode != "" && embeddedMode != "registered" && embeddedMode != "removed_registered") || portErr != nil || (port != 0 && embeddedMode == "") {
 		return os.ErrInvalid
 	}
 	finish := len(os.Args) == 2 && os.Args[1] == "finish-files"
@@ -41,8 +41,16 @@ func run() error {
 	if runtime.GOOS == "windows" {
 		suffix = ".exe"
 	}
+	if finish && embeddedMode == "removed_registered" {
+		return os.ErrInvalid
+	}
 	if finish {
 		return testretirement.FinishFiles(r, string(raw), filepath.Join(dir, "trust-journal"+suffix))
+	}
+	if embeddedMode == "removed_registered" {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		return testretirement.RemovedRegistered(ctx, r, string(raw), filepath.Join(dir, "trust-journal"+suffix), filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, port)
 	}
 	if embeddedMode == "registered" {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -59,6 +67,9 @@ func main() {
 	status := "idle_test_retired"
 	if embeddedMode == "registered" {
 		status = "registered_test_retired"
+	}
+	if embeddedMode == "removed_registered" {
+		status = "removed_registered_test_retired"
 	}
 	json.NewEncoder(os.Stdout).Encode(map[string]string{"status": status})
 }

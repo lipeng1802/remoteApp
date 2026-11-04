@@ -388,6 +388,9 @@ func (c *Controller) Release(ctx context.Context) error {
 	if c.released {
 		return nil
 	}
+	if e := c.confirmMaintainedRevocation(ctx); e != nil {
+		return e
+	}
 	var result error
 	if c.child != nil && !c.closed && !c.quiesced {
 		result = c.child.Stop(ctx)
