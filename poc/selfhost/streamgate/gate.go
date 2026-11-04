@@ -90,6 +90,7 @@ type overlayListener struct {
 	closeErr        error
 	receiveBaseline overlayCounterSnapshot
 	metricsClient   *local.Client
+	finishSYN       func() synEvidence
 }
 
 func (l *overlayListener) Accept() (net.Conn, error) {
@@ -100,6 +101,14 @@ func (l *overlayListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
 		observeTargetReceiveEnd(l.ctx, l.metricsClient, l.receiveBaseline)
+		if l.finishSYN != nil {
+			evidence := l.finishSYN()
+			if evidence.reply {
+				startuptrace.Emit(l.ctx, startuptrace.TargetSYNReplyObserved)
+			} else if evidence.syn {
+				startuptrace.Emit(l.ctx, startuptrace.TargetSYNObserved)
+			}
+		}
 		return nil, err
 	}
 	startuptrace.Emit(l.ctx, startuptrace.TargetTCPAccepted)
@@ -114,6 +123,9 @@ func (l *overlayListener) Accept() (net.Conn, error) {
 
 func (l *overlayListener) Close() error {
 	l.closeInternal()
+	if l.finishSYN != nil {
+		l.finishSYN()
+	}
 	if l.workerDone != nil {
 		<-l.workerDone
 	}
@@ -226,6 +238,7 @@ func (g *Gate) ListenOverlay(ctx context.Context, s *tsnet.Server) (net.Listener
 	if startuptrace.Enabled(ctx) {
 		wrapped.metricsClient = lc
 		wrapped.receiveBaseline = readTargetReceive(ctx, lc)
+		wrapped.finishSYN = beginSYNTrace(ctx, lc, g.cfg.Binding.ControllerIP, g.cfg.Binding.TargetIP, true)
 	}
 	return wrapped, nil
 }
@@ -247,7 +260,7 @@ func (g *Gate) DialOverlay(ctx context.Context, s *tsnet.Server) (net.Conn, erro
 	var finishSYN func() synEvidence
 	if startuptrace.Enabled(ctx) {
 		sendBaseline = readControllerSend(ctx, lc)
-		finishSYN = beginSYNTrace(ctx, lc, g.cfg.Binding.ControllerIP, g.cfg.Binding.TargetIP)
+		finishSYN = beginSYNTrace(ctx, lc, g.cfg.Binding.ControllerIP, g.cfg.Binding.TargetIP, false)
 		defer finishSYN()
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
