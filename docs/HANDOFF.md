@@ -6,6 +6,12 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r186：修复 watch 与初始 gate 状态的并发乱序
+
+源码发现 prepareSessionPeers 的初始 state 请求与 watch 的定期 state 请求可并发。较旧 watch 响应若在较新初始 gate 安装后到达，StateCache 的严格反重放检查会拒绝，并终止整个 owner。新增确定性测试复现旧请求在途时初始查询能越过它的时序。现将查询、gate 初始安装与 watch 更新按同一 mutex 串行，失败在锁内置为终态，缓存反重放与签名/有效期门禁继续严格执行。installeddevice 和 session 回归通过，最终变更后的 watch 定向测试通过。
+
+这是源码确认的并发问题，尚不能唯一归因此前 TCP 失败。新鲜双机验证日志 /tmp/remoteapp-r186-active.log。下次先承接工单。时钟毫秒采样另见本轮终端，服务器相对 Mac 为 +98 至 +538ms，Windows 为 +565 至 +1228ms；载荷使用已有校准时钟，不直接据此更改系统时间或放宽签名截止。
+
 ## 2026-11-04 r185：查询与 provision 前收尾通过，正常双机仍卡 TCP
 
 4acdc3306fa3 的 Mac approved STATUS 再次 passed=true，双端进入 provision。控制端虽先取得 TSMP 就绪仍 TCP 超时，诊断为 controller SYN 与 target parent ended；未取得持续 TLS PONG。独立撤销、双端故障 join、注册 TEST 根退休和精确任务/隧道清理均确认。已移除未改善结果的 r181 前置 TSMP 实验，保留既有失败后诊断，streamgate/startuptrace 与 Python 标签回归通过。

@@ -65,15 +65,14 @@ func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGa
 	if !server && !bytes.Equal(g.public, controller) {
 		return invite.ErrDenied
 	}
-	state, err := e.state(ctx, g, client, &e.binding)
-	if err != nil || !state.Claims.Active {
-		return invite.ErrDenied
-	}
-	payloadGate, err := streamgate.NewWithSigner(g.issuer, target, controller, g.signer, state, server, g.clock)
-	if err != nil || !e.watch.AttachGate(payloadGate) {
-		if payloadGate != nil {
-			payloadGate.Deny()
+	payloadGate, err := e.watch.AttachGate(func() (*streamgate.Gate, error) {
+		state, err := e.state(ctx, g, client, &e.binding)
+		if err != nil || !state.Claims.Active {
+			return nil, invite.ErrDenied
 		}
+		return streamgate.NewWithSigner(g.issuer, target, controller, g.signer, state, server, g.clock)
+	})
+	if err != nil {
 		return invite.ErrDenied
 	}
 	e.peers = &SessionPeers{target: append(ed25519.PublicKey(nil), target...), controller: append(ed25519.PublicKey(nil), controller...), binding: e.binding, grant: g.grant, server: server}

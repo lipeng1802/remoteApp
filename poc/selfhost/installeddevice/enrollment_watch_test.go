@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/streamgate"
 )
 
 func watchState(k ed25519.PrivateKey, g invite.Grant, b invite.NetworkBinding, active bool, now time.Time) invite.NetworkReply {
@@ -164,4 +165,40 @@ func TestEnrollmentWatchInitialInactiveHasBoundedContext(t *testing.T) {
 	if e.closeJoined() != nil {
 		t.Fatal("fixture close")
 	}
+}
+
+func TestInitialGateQueryCannotOvertakeInflightWatchReply(t *testing.T) {
+	w := &enrollmentWatch{done: make(chan struct{})}
+	entered, release, refreshed := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(refreshed)
+		w.updateGate(func() (invite.NetworkState, error) {
+			close(entered)
+			<-release
+			return invite.NetworkState{Claims: invite.NetworkClaims{Active: true}}, nil
+		})
+	}()
+	<-entered
+	initial := make(chan struct{})
+	attached := make(chan struct{})
+	go func() {
+		defer close(attached)
+		w.AttachGate(func() (*streamgate.Gate, error) {
+			close(initial)
+			return nil, invite.ErrDenied
+		})
+	}()
+	select {
+	case <-initial:
+		t.Fatal("initial state query overtook pending watch reply")
+	case <-time.After(30 * time.Millisecond):
+	}
+	close(release)
+	<-refreshed
+	select {
+	case <-initial:
+	case <-time.After(time.Second):
+		t.Fatal("initial query failed to resume")
+	}
+	<-attached
 }

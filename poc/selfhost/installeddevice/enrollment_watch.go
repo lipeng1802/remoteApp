@@ -29,27 +29,43 @@ func (w *enrollmentWatch) Faulted() bool         { return w.fault.Load() }
 func (w *enrollmentWatch) Stop() {
 	w.once.Do(func() { w.cancel(); <-w.done })
 }
-func (w *enrollmentWatch) AttachGate(g *streamgate.Gate) bool {
-	if g == nil {
-		return false
-	}
+
+// AttachGate serializes the initial signed state request with watch refreshes.
+// Otherwise an older in-flight watch reply could arrive after a newer initial
+// state and correctly trip the cache's anti-replay rejection.
+func (w *enrollmentWatch) AttachGate(open func() (*streamgate.Gate, error)) (*streamgate.Gate, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	select {
 	case <-w.done:
-		return false
+		return nil, invite.ErrDenied
 	default:
 	}
-	if w.fault.Load() || w.gate != nil {
-		return false
+	if w.fault.Load() || w.gate != nil || open == nil {
+		return nil, invite.ErrDenied
+	}
+	g, err := open()
+	if err != nil || g == nil {
+		return nil, invite.ErrDenied
+	}
+	select {
+	case <-w.done:
+		g.Deny()
+		return nil, invite.ErrDenied
+	default:
 	}
 	w.gate = g
-	return true
+	return g, nil
 }
-func (w *enrollmentWatch) updateGate(state invite.NetworkState) bool {
+func (w *enrollmentWatch) updateGate(query func() (invite.NetworkState, error)) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.gate == nil || w.gate.Update(state)
+	state, err := query()
+	ok := err == nil && state.Claims.Active && (w.gate == nil || w.gate.Update(state))
+	if !ok {
+		w.fault.Store(true)
+	}
+	return ok
 }
 func (w *enrollmentWatch) denyGate() {
 	w.mu.Lock()
@@ -155,9 +171,9 @@ func (e *enrollment) startWatch(ctx context.Context, g *authorizationGate, clien
 			case <-life.Done():
 				return
 			case <-ticker.C:
-				state, err := e.state(life, g, client, &binding)
-				if err != nil || !state.Claims.Active || !w.updateGate(state) {
-					w.fault.Store(true)
+				if !w.updateGate(func() (invite.NetworkState, error) {
+					return e.state(life, g, client, &binding)
+				}) {
 					return
 				}
 			}
