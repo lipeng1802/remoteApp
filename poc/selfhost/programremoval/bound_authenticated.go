@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"time"
 
 	"remoteapp.local/selfhost-poc/autonomousbinding"
@@ -12,6 +13,8 @@ import (
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
+
+var ErrArmedCancelled = errors.New("armed_removal_cancelled")
 
 type BoundSigner interface {
 	localmaintenance.Signer
@@ -25,7 +28,7 @@ type OpenBoundSigner func(autonomousbinding.Record) (BoundSigner, error)
 // authenticated request can join the live owner. No deletion precedes actual
 // signer join and the independently reacquired exact maintenance transaction.
 func AuthenticatedBoundTest(ctx context.Context, r trustinstall.Release, factory trustinstall.Factory, records autonomousbinding.JournalFactory, root, address string, open OpenBoundSigner) (result trustprofile.MaintenanceState, err error) {
-	return authenticatedBoundTest(ctx, r, factory, records, root, address, open, func(context.Context) error { return nil })
+	return authenticatedBoundTest(ctx, r, factory, records, root, address, open, func(context.Context) error { return nil }, false)
 }
 
 // ArmedAuthenticatedBoundTest selects the immutable native binding and opens
@@ -36,9 +39,18 @@ func ArmedAuthenticatedBoundTest(ctx context.Context, r trustinstall.Release, fa
 	if await == nil {
 		return trustprofile.MaintenanceState{}, trustprofile.ErrTrust
 	}
-	return authenticatedBoundTest(ctx, r, factory, records, root, address, open, await)
+	return authenticatedBoundTest(ctx, r, factory, records, root, address, open, await, false)
 }
-func authenticatedBoundTest(ctx context.Context, r trustinstall.Release, factory trustinstall.Factory, records autonomousbinding.JournalFactory, root, address string, open OpenBoundSigner, await func(context.Context) error) (result trustprofile.MaintenanceState, err error) {
+
+// ArmedVerifiedRemovalTest additionally proves native identity/profile/floor
+// and activation preservation before returning files_removed.
+func ArmedVerifiedRemovalTest(ctx context.Context, r trustinstall.Release, factory trustinstall.Factory, records autonomousbinding.JournalFactory, root, address string, open OpenBoundSigner, await func(context.Context) error) (trustprofile.MaintenanceState, error) {
+	if await == nil {
+		return trustprofile.MaintenanceState{}, trustprofile.ErrTrust
+	}
+	return authenticatedBoundTest(ctx, r, factory, records, root, address, open, await, true)
+}
+func authenticatedBoundTest(ctx context.Context, r trustinstall.Release, factory trustinstall.Factory, records autonomousbinding.JournalFactory, root, address string, open OpenBoundSigner, await func(context.Context) error, verified bool) (result trustprofile.MaintenanceState, err error) {
 	if ctx == nil || ctx.Err() != nil || !r.Specification().Test || factory == nil || records == nil || open == nil {
 		return result, trustprofile.ErrTrust
 	}
@@ -56,7 +68,17 @@ func authenticatedBoundTest(ctx context.Context, r trustinstall.Release, factory
 	if _, e := installrelease.ValidateProtectedBootstrapLayout(root, true); e != nil {
 		return result, e
 	}
-	signer, e := openBoundRemovalSigner(r, records, open)
+	var snapshot preservationSnapshot
+	if verified {
+		var e error
+		snapshot, e = capturePreservation(r, factory, records, false)
+		if e != nil {
+			return result, e
+		}
+	}
+	var original autonomousbinding.Record
+	boundOpen := func(record autonomousbinding.Record) (BoundSigner, error) { original = record; return open(record) }
+	signer, e := openBoundRemovalSigner(r, records, boundOpen)
 	if e != nil {
 		return result, e
 	}
@@ -67,7 +89,11 @@ func authenticatedBoundTest(ctx context.Context, r trustinstall.Release, factory
 			}
 		}
 	}()
-	if await(ctx) != nil || ctx.Err() != nil || fresh() != nil {
+	awaited := await(ctx)
+	if awaited == ErrArmedCancelled && ctx.Err() == nil && fresh() == nil {
+		return result, ErrArmedCancelled
+	}
+	if awaited != nil || ctx.Err() != nil || fresh() != nil {
 		return result, trustprofile.ErrTrust
 	}
 	public := append([]byte(nil), signer.PublicKey()...)
@@ -80,7 +106,27 @@ func authenticatedBoundTest(ctx context.Context, r trustinstall.Release, factory
 	if closeSigner.CloseJoined() != nil || fresh() != nil || ctx.Err() != nil {
 		return expected, trustprofile.ErrTrust
 	}
-	return RunExpectedTest(ctx, r, factory, root, expected)
+	result, err = RunExpectedTest(ctx, r, factory, root, expected)
+	if err != nil || !verified {
+		return result, err
+	}
+	after, e := capturePreservation(r, factory, records, true)
+	if e != nil || after != snapshot {
+		return result, trustprofile.ErrTrust
+	}
+	probe, e := openBoundRemovalSigner(r, records, func(record autonomousbinding.Record) (BoundSigner, error) {
+		if record != original {
+			return nil, trustprofile.ErrTrust
+		}
+		return open(record)
+	})
+	if e != nil {
+		return result, e
+	}
+	if probe.CloseJoined() != nil {
+		return result, trustprofile.ErrTrust
+	}
+	return result, nil
 }
 
 func openBoundRemovalSigner(r trustinstall.Release, records autonomousbinding.JournalFactory, open OpenBoundSigner) (BoundSigner, error) {

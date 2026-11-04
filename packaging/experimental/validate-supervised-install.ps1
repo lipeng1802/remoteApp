@@ -1,4 +1,4 @@
-param([switch]$ResumeFiles, [switch]$StayReady, [switch]$RetainUntilStop)
+param([switch]$ResumeFiles, [switch]$StayReady, [switch]$RetainUntilStop, [switch]$ProgramRemoval)
 $ErrorActionPreference = 'Stop'
 if ($RetainUntilStop -and -not $StayReady) { throw 'Retained owner requires StayReady' }
 # Run in the logged-in desktop (or an Interactive scheduled task). This only
@@ -14,6 +14,13 @@ $faultModule = Join-Path $PSScriptRoot 'supervised-fault-stop.ps1'
 $faultAvailable = Test-Path -LiteralPath $faultModule
 if ($faultAvailable) { . $faultModule }
 if ($StayReady -and (@($publicReady,$stopRequest,$faultRequest,$faultRetry,$faultReceipt,$localCancelRequest,$localCancelReceipt) | Where-Object {Test-Path -LiteralPath $_}).Count) { throw 'Fresh owner metadata required' }
+$removalRequest=Join-Path $PSScriptRoot 'remove-program.request'
+$removalReceipt=Join-Path $PSScriptRoot 'program-removal.json'
+$removalState=$null
+if($ProgramRemoval){
+    if(-not $RetainUntilStop -or (Test-Path $removalRequest) -or (Test-Path $removalReceipt)){throw 'Fresh retained removal required'}
+    . (Join-Path $PSScriptRoot 'supervised-removal.ps1')
+}
 $faultState=$null
 $faultLastPhase=''
 $faultRetryUsed=$false
@@ -45,6 +52,10 @@ try {
     $process.StandardInput.WriteLine('{"Op":"open"}')
     $ready = Read-Reply
     if ($ready.status -ne 'ready' -or $ready.control_pipe -notmatch '^\\\\\.\\pipe\\remoteapp-session-[0-9a-f]{32}$') { throw 'Invalid desktop supervisor readiness' }
+    if($ProgramRemoval){
+        if($ready.removal_protocol -ne 1 -or $ready.uninstaller_process_id -le 0){throw 'Armed removal bootstrap missing'}
+        $removalState=New-SupervisedRemovalState $process
+    }
     $name = $ready.control_pipe.Substring(9)
     $pipe = New-Object System.IO.Pipes.NamedPipeClientStream('.', $name, [System.IO.Pipes.PipeDirection]::InOut)
     try {
@@ -61,6 +72,7 @@ try {
         # Public discovery only. Invitations/grants never enter this file.
         $public=@{version=1;process_id=$process.Id;control_pipe=$ready.control_pipe;vault_scope=$ready.vault_scope;public_key=$ready.public_key}
         if($RetainUntilStop -and $faultAvailable){$public.fault_protocol=1;$public.local_cancel_protocol=1}
+        if($ProgramRemoval){$public.removal_protocol=1;$public.uninstaller_process_id=$ready.uninstaller_process_id}
         $published = ($public | ConvertTo-Json -Compress)
         $pendingReady = $publicReady + '.' + $process.Id + '.new'
         $file = [System.IO.File]::Open($pendingReady, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
@@ -77,6 +89,17 @@ try {
         }
         $deadline = [DateTime]::UtcNow.AddMinutes(10)
         while ($true) {
+            if($ProgramRemoval -and (Test-Path $removalRequest)){
+                try {
+                    if(-not $removalState.Attempted){
+                        if(-not (Test-EmptyOwnerRequest $removalRequest)){throw 'Unknown removal marker'}
+                        Start-SupervisedRemoval $removalState
+                    }
+                    if($removalState.Phase -eq 'pending'){Receive-SupervisedRemoval $removalState}
+                    if($removalState.Phase -eq 'files_removed' -and -not(Test-Path $removalReceipt)){Publish-SupervisedRemoval $removalState $removalReceipt}
+                }catch{$removalState.Attempted=$true;$removalState.Phase='unknown'}
+                if($removalState.Phase -ne 'files_removed'){Start-Sleep -Milliseconds 200;continue}
+            }
             # A completed explicit rejection has no pending read. Only then may
             # the trusted parent switch to its distinct local cancellation path.
             if ($null -ne $faultState -and $faultState.Phase -eq 'rejected' -and -not $faultState.LocalCancel -and (Test-EmptyOwnerRequest $localCancelRequest)) {
@@ -135,7 +158,7 @@ try {
     if ($process.ExitCode -ne 0 -or $null -ne $process.StandardOutput.ReadLine()) { throw 'Failed or extra terminal receipt' }
     Write-Output 'VALIDATION PASSED: fresh TEST signed installation + native initialization + actual desktop supervisor/product + business pipe + zero exit. NOT online consent, Headscale or payload acceptance. TEST identity/root retained for explicit maintenance.'
 } finally {
-    if ($null -eq $faultState -and -not $process.HasExited) {
+    if ($null -eq $faultState -and ($null -eq $removalState -or -not $removalState.Attempted -or $removalState.Phase -eq 'files_removed') -and -not $process.HasExited) {
         try { $process.StandardInput.WriteLine('{"Op":"stop"}'); $process.StandardInput.Close() } catch {}
         if (-not $process.WaitForExit(45000)) { Write-Output 'JOIN PENDING: no force kill; retain test root and native state.' }
     }

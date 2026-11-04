@@ -46,11 +46,14 @@ def require_windows_forward_port(port):
         raise RuntimeError("activity_windows_forward_port_unavailable")
 
 
-def select_forward_port():
+def select_forward_port(program_removal=False):
     for port in range(18445, 18461):
         try:
             require_free_forward_port(port)
             require_windows_forward_port(port)
+            if program_removal:
+                require_free_forward_port(port+1000)
+                require_windows_forward_port(port+1000)
         except RuntimeError as error:
             if str(error) not in ("activity_local_forward_port_unavailable", "activity_windows_forward_port_unavailable"):
                 raise
@@ -225,6 +228,7 @@ def metadata(work):
         raise RuntimeError("activity_fixed_roots_invalid")
     port=m.setdefault("forward_port",18444)
     if type(port) is not int or not 18444<=port<=18460:raise RuntimeError("activity_forward_port_invalid")
+    if type(m.get('program_removal',False)) is not bool:raise RuntimeError('activity_removal_mode_invalid')
     return work,m
 
 
@@ -240,8 +244,9 @@ def record_build_failure(work,target,raw):
         json.dump(record,out,sort_keys=True);out.flush();os.fsync(out.fileno())
 
 
-def prepare():
-    port=select_forward_port()
+def prepare(program_removal=False):
+    if type(program_removal) is not bool:raise RuntimeError('activity_removal_mode_invalid')
+    port=select_forward_port(True) if program_removal else select_forward_port()
     n=secrets.token_hex(6)
     work=REPO/"artifacts/connection-poc"/("supervised-activity-r75-"+n)
     work.mkdir(mode=0o700)
@@ -249,6 +254,7 @@ def prepare():
     (parent/"holder").mkdir(mode=0o700)
     m=dict(nonce=n,forward_port=port,win_dir="C:\\Users\\jarvis\\remoteapp-r75-package-"+n,
            win_root="C:\\Users\\jarvis\\remoteapp-r75-"+n,mac_root=str(parent/"installed"),holder_dir=str(parent/"holder"))
+    if program_removal:m['program_removal']=True
     (work/"management.json").write_text(json.dumps(m,sort_keys=True))
     a=Activity(work);a.save({"version":1,"phase":"build_outcome_unknown"})
     prior=REPO/"artifacts/connection-poc/supervised-consent-r67-156f90fb5c70"
@@ -279,6 +285,7 @@ def prepare():
         helpers.append(str(tls[target]))
         args=[str(go),"run","./cmd/product-maintenance-validation-build",str(build_go),str(REPO/"poc/selfhost"),target,str(work/target),*helpers,
               "--verified-live-profile",str(profile),f"--test-tunnel={port}","--test-install-root",m["win_root"] if target=="windows" else m["mac_root"]]
+        if program_removal:args.append('--program-removal')
         # Go's cwd is fixed without changing this process's working directory.
         try:r=subprocess.run(limited_build_command(args),cwd=REPO/"poc/selfhost",stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=240)
         except Exception:raise RuntimeError("activity_build_outcome_unknown") from None
@@ -326,6 +333,9 @@ def start(work):
     a.save({"version":1,"phase":"startup_outcome_unknown"})
     shutil.copyfile(REPO/"packaging/experimental/validate-supervised-install.ps1",work/"windows/validate-supervised-install.ps1")
     shutil.copyfile(REPO/"packaging/experimental/supervised-fault-stop.ps1",work/"windows/supervised-fault-stop.ps1")
+    if m.get('program_removal'):
+        require_free_forward_port(port+1000);require_windows_forward_port(port+1000)
+        shutil.copyfile(REPO/'packaging/experimental/supervised-removal.ps1',work/'windows/supervised-removal.ps1')
     # Wrapper contains no grant/key and preserves actual desktop script errors.
     (work/"windows/run-owner.ps1").write_text("""$ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
@@ -334,6 +344,10 @@ try { & (Join-Path $PSScriptRoot 'validate-supervised-install.ps1') -StayReady -
  'EXITCODE=0' | Out-File $log -Append -Encoding utf8
 } catch { 'OWNER_FAILED_STATE_PRESERVED' | Out-File $log -Append -Encoding utf8; 'EXITCODE=1' | Out-File $log -Append -Encoding utf8;exit 1 }
 """)
+    if m.get('program_removal'):
+        owner=work/'windows/run-owner.ps1'
+        owner.write_text(owner.read_text().replace('-StayReady -RetainUntilStop','-StayReady -RetainUntilStop -ProgramRemoval'))
+        (work/'windows/run-retire-removed.ps1').write_text(retirement_script(removed=True))
     for idle,name in ((False,'run-retire-node.ps1'),(True,'run-retire-idle.ps1')):
         (work/'windows'/name).write_text(retirement_script(idle))
     archive=work/"windows.tar.xz"
@@ -487,6 +501,10 @@ def start_mac(work,m):
         time.sleep(.2)
     else:raise RuntimeError("activity_mac_ready_unconfirmed")
     public=json.loads(ready.read_text());(work/"mac-bootstrap.json").write_text(json.dumps(public))
+    if m.get('program_removal'):
+        from supervised_removal import checked_bootstrap
+        checked_bootstrap(public)
+        checked_bootstrap(json.loads((work/'windows-bootstrap.json').read_text()))
     if Endpoint(m["holder_dir"])({"Op":"owner_status"})!={"status":"owner_status","joined":False}:raise RuntimeError("activity_mac_owner_not_resident")
     a.save({"version":1,"phase":"owners_ready"})
 
@@ -538,6 +556,17 @@ def exercise(work, preprovision_fault=False):
             def before():
                 if preprovision_fault:
                     raise RuntimeError('test_preprovision_fault')
+            if m.get('program_removal'):
+                from supervised_removal import pair
+                def target_start():
+                    d=quote(m['win_dir']);path="(Join-Path "+d+" 'remove-program.request')"
+                    ps("$ErrorActionPreference='Stop';$p="+path+";if(Test-Path $p){throw 'Removal already requested'};New-Item -ItemType File -Path $p | Out-Null")
+                    return {'status':'removal_pending'}
+                def target_status():
+                    raw=ps("$p=Join-Path "+quote(m['win_dir'])+" 'program-removal.json';if(Test-Path $p){[IO.File]::ReadAllText($p)}else{'PENDING'}")
+                    return {'status':'removal_pending'} if raw=='PENDING' else json.loads(raw)
+                holder=Endpoint(m['holder_dir'])
+                options['after_growth']=lambda:pair(work,(target_start,target_status),(lambda:holder({'Op':'owner_remove_program'}),lambda:holder({'Op':'owner_program_removal_status'})),expires_at=expiry(work))
             return active_round(t,c,after_provision=lambda:observe(work),before_provision_terminal=terminal,before_provision=before,on_failure=lambda:capture(work,t,c),**options)
         return Activity(work).exercise(target,controller,expiry(work),episode=episode)
     except Exception:
@@ -582,7 +611,7 @@ def retire(work):
     return retire_pair(work,m,a,state,'preprovision_joined_and_test_roots_retired' if state.get('preprovision') is True else 'normal_activity_joined_and_test_roots_retired')
 
 
-def retirement_script(idle=False):
+def retirement_script(idle=False, removed=False):
     tool='retire-idle-test' if idle else 'retire-node-test'
     expected='idle_test_retired' if idle else 'registered_test_retired'
     body="""$ErrorActionPreference='Stop'
@@ -594,6 +623,9 @@ try { $lines=@(& (Join-Path $PSScriptRoot 'retire-node-test.exe'));$code=$LASTEX
  'EXITCODE=0' | Out-File $log -Append -Encoding utf8
 } catch { 'EXITCODE=1' | Out-File $log -Append -Encoding utf8;exit 1 }
 """
+    if removed:
+        if idle:raise RuntimeError('activity_removal_retirement_mode_invalid')
+        tool='retire-removed-node-test';expected='removed_registered_test_retired'
     body=body.replace('retire-node-test.exe',tool+'.exe').replace('registered_test_retired',expected)
     return body
 
@@ -604,8 +636,15 @@ def retire_pair(work,m,a,state,final_phase,before_empty_cleanup=None):
     idle=state.get('preprovision') is True
     tool='retire-idle-test' if idle else 'retire-node-test'
     expected='idle_test_retired' if idle else 'registered_test_retired'
-    script=retirement_script(idle)
-    name='run-retire-idle.ps1' if idle else 'run-retire-node.ps1'
+    removed=(work/'program-removal-intent.json').exists()
+    if removed:
+        from supervised_removal import checked_receipt
+        proof=json.loads((work/'program-removal-result.json').read_text())
+        if idle or type(proof.get('version')) is not int or proof['version']!=1 or set(proof)!={'version','roles'} or set(proof['roles'])!={'target','controller'}:raise RuntimeError('activity_removed_retirement_unconfirmed')
+        for v in proof['roles'].values():checked_receipt(v)
+        tool='retire-removed-node-test';expected='removed_registered_test_retired'
+    script=retirement_script(idle,removed)
+    name='run-retire-removed.ps1' if removed else ('run-retire-idle.ps1' if idle else 'run-retire-node.ps1')
     staged=work/'windows'/name
     if not staged.is_file() or staged.read_text()!=script:
         raise RuntimeError('activity_retirement_wrapper_not_staged')

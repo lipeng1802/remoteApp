@@ -29,7 +29,7 @@ import (
 )
 
 var embeddedRelease, embeddedProductPath, embeddedProductDigest, embeddedSignerDigest string
-var embeddedTestTunnel, embeddedMaintenanceAddress string
+var embeddedTestTunnel, embeddedMaintenanceAddress, embeddedRemovalDigest string
 
 func maintenanceAddress(encoded string) (string, error) {
 	if encoded == "" {
@@ -83,20 +83,38 @@ func run(output func(any) error) (result error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	controller, e := productmaintenance.StartTest(ctx, r, processowner.Spec{Executable: string(product), SHA256: embeddedProductDigest, CaptureProductStage: true}, factory, bf, func(record autonomousbinding.Record) (productmaintenance.Signer, error) {
+	var remover *productmaintenance.ArmedRemoval
+	var controller *productmaintenance.Controller
+	defer func() {
+		if remover != nil {
+			if err := remover.Close(context.Background()); err != nil {
+				result = err
+			}
+		}
+		if controller != nil {
+			if err := controller.Release(context.Background()); err != nil {
+				result = err
+			}
+		}
+	}()
+	if embeddedRemovalDigest != "" {
+		if embeddedMaintenanceAddress == "" {
+			return trustprofile.ErrTrust
+		}
+		arm, stop := context.WithTimeout(ctx, 20*time.Second)
+		remover, e = productmaintenance.StartArmedRemoval(arm, processowner.Spec{Executable: filepath.Join(dir, "bound-authenticated-removal-test"+suffix), SHA256: embeddedRemovalDigest})
+		stop()
+		if e != nil {
+			return e
+		}
+	}
+	controller, e = productmaintenance.StartTest(ctx, r, processowner.Spec{Executable: string(product), SHA256: embeddedProductDigest, CaptureProductStage: true}, factory, bf, func(record autonomousbinding.Record) (productmaintenance.Signer, error) {
 		s, e := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, record.VaultScope, record.PublicKey)()
 		if e != nil {
 			return nil, e
 		}
 		return s.(*privatepipe.Signer), nil
 	})
-	if controller != nil {
-		defer func() {
-			if e := controller.Release(context.Background()); e != nil {
-				result = e
-			}
-		}()
-	}
 	if e != nil {
 		return e
 	}
@@ -160,6 +178,10 @@ func run(output func(any) error) (result error) {
 	}()
 	identity := controller.Identity()
 	metadata := map[string]any{"status": "ready", "maintenance_address": l.Addr().String(), "vault_scope": identity.VaultScope, "public_key": identity.PublicKey}
+	if remover != nil {
+		metadata["removal_protocol"] = 1
+		metadata["uninstaller_process_id"] = remover.PID()
+	}
 	if controlPipe != "" {
 		if runtime.GOOS == "windows" {
 			metadata["control_pipe"] = controlPipe
@@ -198,6 +220,27 @@ func run(output func(any) error) (result error) {
 		case request, ok := <-requests:
 			if !ok {
 				return trustprofile.ErrTrust
+			}
+			if request == (installeddevice.Request{Op: "remove_program"}) {
+				if remover == nil || controller.AllowProgramRemoval(ctx) != nil || remover.Begin() != nil {
+					if e = output(map[string]string{"status": "request_rejected"}); e != nil {
+						return e
+					}
+				} else if e = output(map[string]string{"status": "removal_pending"}); e != nil {
+					return e
+				}
+				continue
+			}
+			if request == (installeddevice.Request{Op: "program_removal_status"}) {
+				if remover == nil {
+					e = output(map[string]string{"status": "request_rejected"})
+				} else {
+					e = output(remover.Status())
+				}
+				if e != nil {
+					return e
+				}
+				continue
 			}
 			if request == (installeddevice.Request{Op: "stop"}) {
 				life, stop := context.WithTimeout(ctx, 10*time.Second)

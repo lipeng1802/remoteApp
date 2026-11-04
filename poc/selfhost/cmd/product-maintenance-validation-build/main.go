@@ -44,6 +44,10 @@ func run() error {
 	if len(os.Args) == 3 && os.Args[1] == "--check-offline-install-root" {
 		return installrelease.CheckFreshTestInstallRoot(os.Args[2])
 	}
+	removal := len(os.Args) == 14 && os.Args[13] == "--program-removal"
+	if removal {
+		os.Args = os.Args[:13]
+	}
 	offlineInstall := len(os.Args) == 10 && os.Args[8] == "--offline-install-root"
 	if !offlineInstall && len(os.Args) != 8 && ((len(os.Args) != 10 && len(os.Args) != 11 && len(os.Args) != 13) || os.Args[8] != "--verified-live-profile") {
 		return os.ErrInvalid
@@ -83,6 +87,9 @@ func run() error {
 	}
 	if len(os.Args) == 13 {
 		installRoot = os.Args[12]
+	}
+	if removal && (!live || !tunnel || installRoot == "" || port > 64535) {
+		return os.ErrInvalid
 	}
 	var liveClaims trustprofile.Claims
 	var liveSource []byte
@@ -298,7 +305,21 @@ func run() error {
 			return e
 		}
 		if !offlineInstall {
-			if e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now, port); e != nil {
+			if removal {
+				address := fmt.Sprintf("127.0.0.1:%d", port+1000)
+				client := filepath.Join(dest, "bound-authenticated-removal-test"+suffix)
+				if e = trustinstall.CompileBoundAuthenticatedRemovalTest(ctx, goexe, module, target, client, spec, installRoot, address, digest(vaultRaw), now); e != nil {
+					return e
+				}
+				clientRaw, e := readBuildInput(client, maximumBuildInput)
+				if e != nil {
+					return e
+				}
+				e = trustinstall.CompileRemovalProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), address, digest(clientRaw), now, port)
+			} else {
+				e = trustinstall.CompileProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), now, port)
+			}
+			if e != nil {
 				return e
 			}
 		}
@@ -308,6 +329,11 @@ func run() error {
 		if !offlineInstall {
 			if e = trustinstall.CompileNodeTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-node-test"+suffix), spec, installRoot, digest(vaultRaw), now, port); e != nil {
 				return e
+			}
+			if removal {
+				if e = trustinstall.CompileRemovedNodeTestRetirement(ctx, goexe, module, target, filepath.Join(dest, "retire-removed-node-test"+suffix), spec, installRoot, digest(vaultRaw), now, port); e != nil {
+					return e
+				}
 			}
 			arch := runtime.GOARCH
 			if target == "windows" {

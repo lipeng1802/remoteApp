@@ -218,4 +218,17 @@ class ActiveSessionBoundaries(unittest.TestCase):
                 clock=lambda:1000, before_provision_terminal=lambda:self.fail("idle after provision"))
         self.assertEqual(p.revoke_calls, 1)
 
+
+    def test_independent_removal_runs_only_after_growth_and_before_revoke(self):
+        from test_supervised_removal import receipt
+        p=ActivePair();calls=[]
+        def removed():
+            self.assertGreaterEqual(p.elapsed,6);self.assertEqual(p.revoke_calls,0)
+            calls.append(1);return {'target':receipt(),'controller':receipt()}
+        result=active_round(p.endpoint('target'),p.endpoint('controller'),profile_expires_at=1500,
+            clock=lambda:1000+p.elapsed,monotonic=lambda:p.elapsed,sleep=p.sleep,
+            quiesce_before_revoke=True,after_growth=removed)
+        self.assertTrue(result['products_quiesced_both']);self.assertEqual(calls,[1]);self.assertFalse(p.quiesced)
+        self.assertEqual(p.revoke_calls,1)
+
 if __name__ == "__main__": unittest.main()

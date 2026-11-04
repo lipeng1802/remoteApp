@@ -6,6 +6,22 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-04 r200：独立卸载管理接线完成，进入新鲜整链验收
+
+承接r199/82a8d07，Git原仅docs/archive/未跟踪；无前组重型任务，可用约138GiB，不清理证据。Mac→Windows SSH实际REMOTEAPP_SSH_READY。没有复活/重跑已退休2a01f13f9a81，也未触碰旧9610faf58fe6等未知现场。
+
+新增fresh builder显式--program-removal模式，编译并检查固定维护loopback端口（所选TEST forward port+1000）、绑定身份卸载器及专用retire-removed-node-test。可信supervisor启动管理段在实际StartTest产品监督之前启动hash-pinned独立arm子进程并确认removal_armed；它继承现有Windows隐藏Interactive父任务，不另建一套驻留任务。只读检查租约释放和身份选择仍由原生binding完成；没有放宽租约，也不从父帧选择身份/root/程序。READY额外发布版本1及原独立子进程PID，协调前两端必须严格验证该能力。
+
+新增ArmedRemoval持有同一独立进程，私有父管道remove_program只启动一次，随后program_removal_status仅读本次工作缓存。普通业务socket/pipe不准入这两个维护操作；Mac私有holder与Windows可信空marker分别转交继承管道。后台Exchange不使用会关闭stdin的业务超时；未知/待完成读取不重发、不换进程。终态先严格验证files_removed/epoch/transaction/preserved，再使用专门JoinAfterReceipt要求无额外帧、stdout EOF、reader/diagnostic实际join和真实exit0；不能借为普通closed。未开始删除的独立arm可通过精确cancel退出，仅在实际signer join成功才给专用cancelled/exit0。
+
+卸载器新增强检查：arm前取得并关闭当前native profile/floor及activation快照，必须与编译profile一致；认证维护实际退出原产品后按同一native事务删除，再核对files_removed后的profile/floor/activation未变、binding完整相同、原OS身份仍可重开且probe signer实际join，才报告preserved=true。无私钥/授权回执落盘。保持原PONG门槛后才触发双端独立删除，认证维护替代本轮普通quiesce，随后原独立通路明确撤销、父owner零退出，最后只有双方严格删除回执成立才调用专用removed_registered退休，不回退旧完整库存工具/finish-files。
+
+新program-removal-intent/result仅保存公共工作阶段和类型严格的终态。intent出现后的任何异常一律保留原owner/回执/通路，awake入口不得把已维护exit0转成fault-stop或整根退休，不重发remove/批准/provision；原ACTIVE/PONG前故障仍走既有严格故障收尾（先cancel未开始的arm）。原TCP/密钥交换3秒、watch/签名/WhoIs/TLS descriptor/profile截止均保持。
+
+验证：相关7个Go包/编译入口检查与Windows vet通过；真实子进程覆盖独立arm/cancel、一次启动、迟到回执等待同一child、额外帧和非零退出拒绝，定向race PASS 8.240s。Python全194项通过（ResourceWarning为error），含PONG→删除回执→撤销顺序和未知删除不触发fault-stop/退休。Windows实际执行8项PowerShell回执组件检查和完整父脚本AST解析通过，证据 artifacts/connection-poc/r200-removal-wiring/{python-checks.txt,race.txt,windows-ps-check.json}；这些未调用原生凭据/产品，只是父管道/严格类型组件。初次脚本调用被当前执行策略拒绝，使用单个子PowerShell -ExecutionPolicy Bypass后通过，没有修改系统执行策略，不是需要用户登录的阻塞。
+
+下一步只开一份新鲜--program-removal双机工单，日志/tmp/remoteapp-r201-removal.log。必须承接其工单/进程状态，不新开重复组。目标证据为持续实际TLS PONG、双端认证维护/独立进程exit0及程序-only删除、身份/trust/activation/floor保持、明确撤销、全层join与专用退休。尚未取得本轮完整真机结果，不把上述组件计作整体通过。自动续办ACTIVE，本地提交不推送。
+
 ## 2026-11-04 r199：待命独立卸载、维护保留与删除后退休门禁组件完成
 
 承接r198，没有重跑已退休2a01f13f9a81。先读Git/交接，保留docs/archive/；无前组重型任务，磁盘可用约138GiB，不清理签名输入或故障现场。Mac→Windows SSH实际返回REMOTEAPP_SSH_READY。当前没有新鲜双机工单或远程授权服务变更，自动续办仍ACTIVE。

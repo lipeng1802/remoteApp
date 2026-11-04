@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -77,7 +78,7 @@ func run() (trustprofile.MaintenanceState, error) {
 	if e != nil {
 		return none, e
 	}
-	return programremoval.ArmedAuthenticatedBoundTest(life, r, factory, func(scope string, create, test bool) (autonomousbinding.Journal, error) {
+	return programremoval.ArmedVerifiedRemovalTest(life, r, factory, func(scope string, create, test bool) (autonomousbinding.Journal, error) {
 		return records(scope, create, test)
 	}, root, address, func(record autonomousbinding.Record) (programremoval.BoundSigner, error) {
 		s, e := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, record.VaultScope, record.PublicKey)()
@@ -93,7 +94,11 @@ func run() (trustprofile.MaintenanceState, error) {
 			return e
 		}
 		var request struct{ Op string }
-		if reader.Read(&request) != nil || request.Op != "remove" || ctx.Err() != nil {
+		readErr := reader.Read(&request)
+		if readErr == nil && request.Op == "cancel" && ctx.Err() == nil {
+			return programremoval.ErrArmedCancelled
+		}
+		if readErr != nil || request.Op != "remove" || ctx.Err() != nil {
 			return trustprofile.ErrTrust
 		}
 		return nil
@@ -101,6 +106,10 @@ func run() (trustprofile.MaintenanceState, error) {
 }
 func main() {
 	s, e := run()
+	if errors.Is(e, programremoval.ErrArmedCancelled) {
+		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "removal_cancelled"})
+		return
+	}
 	if e != nil {
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "failed", "reason": "bound_authenticated_removal_rejected"})
 		os.Exit(1)
@@ -109,5 +118,6 @@ func main() {
 		Status      string `json:"status"`
 		Epoch       uint64 `json:"epoch"`
 		Transaction string `json:"transaction"`
-	}{s.State, s.Epoch, s.Transaction})
+		Preserved   bool   `json:"preserved"`
+	}{s.State, s.Epoch, s.Transaction, true})
 }

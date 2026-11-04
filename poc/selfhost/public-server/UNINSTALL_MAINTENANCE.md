@@ -126,3 +126,12 @@ program-only完成后的release已不完整，不能直接调用当前要求完�
 删除后的退休由专门的 `RemovedRegistered` / `removed_registered` 编译模式处理，不调用要求完整库存的旧Registered，不接受旧finish-files。门禁包括原生files_removed事务、绑定的签名计划/目录对象身份/原activation、编译公开profile与原生记录完全相等且当前有效、全部程序文件已缺席和无未知文件，再加原短期在线node退休证明。比较API不返回可用profile、不解锁maintenance；原身份/trust/floor在program-only阶段保持。只在独立TEST退休时才清理记录及已验证空壳，未知回执没有自动恢复或递归清理。
 
 Mac和隐藏Windows Interactive的单项原生待命/取消检查已真实通过，原生身份可重开、binding保持、专用signer/helper均join，Windows实际exit0并精确删除测试exe和任务。软件拒绝项/实际子进程与race、Windows vet通过。当前尚待fresh builder及双平台父管理器接线，不能据组件结果宣称跨机活动→认证卸载整链通过。下一次真机仅可用新签发包，不重跑已退休r198。
+
+
+## r200 fresh 管理接线
+
+显式 `run_awake_validation.py --program-removal` 使用新鲜builder的同名模式。维护端口在签发前检查两端空闲并编译固定；可信管理入口在实际产品监督开始前创建独立hash-pinned arm子进程，沿现有隐藏Interactive/私有holder生命周期持有，不引入运行时身份或地址选择。普通业务IPC仍拒绝维护触发，只有可信父管道可发送精确remove_program及只读program_removal_status。
+
+协调器必须先观察原双端实际PONG增长，再只启动一次双端独立卸载。完成必须验证专用files_removed/保留状态、无额外帧、EOF及真实exit0；待完成或未知仅保留原操作，不关闭stdin、不重发。arm前/删除后分别比对原生profile/floor/activation及原binding、原身份可重开，输出只含严格公共结果。卸载后仍通过原supervisor确认独立撤销，再最终join/专用removed_registered退休。
+
+删除intent之后的异常不走普通fault-stop/完整安装退休，因为已维护产品的exit0不能转为fault_joined/exit1，未知程序树也不能伪装成完整库存。原所有信任/有效期门禁不变，既有未开始删除的故障路径先精确cancel独立arm并实际join。组件与Windows脚本检查通过；完整跨机结果以新鲜工单证据为准。

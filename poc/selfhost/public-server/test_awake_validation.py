@@ -28,3 +28,11 @@ class AwakeValidationTests(unittest.TestCase):
             retire.assert_called_once_with(work)
             revoke.assert_not_called()
             fault_stop.assert_not_called()
+
+    def test_uncertain_removal_never_becomes_fault_stop_or_intact_retirement(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            work=Path(directory);(work/'program-removal-intent.json').write_text('{}')
+            with patch.object(r,'exercise',side_effect=RuntimeError('unknown')),patch.object(r,'stop') as stop,patch.object(r,'retire') as retire,patch.object(fault_activity,'revoke') as revoke,patch.object(fault_activity,'stop') as fault_stop:
+                with self.assertRaisesRegex(RuntimeError,'program_removal_unknown_preserve_original_owners'):awake.finish(work)
+                stop.assert_not_called();retire.assert_not_called();revoke.assert_not_called();fault_stop.assert_not_called()

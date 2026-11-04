@@ -104,13 +104,14 @@ def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,
 
 
 def active_round(target, controller, *, profile_expires_at, clock=time.time,
-                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False, after_provision=None, before_provision_terminal=None, before_provision=None, on_failure=None):
+                 monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False, after_provision=None, before_provision_terminal=None, before_provision=None, on_failure=None, after_growth=None):
     """Fresh explicit approval -> clocks -> concurrent provision -> PONG -> revoke.
 
     A mutation/receipt error fails this episode. It does not stop/delete owners,
     retry an uncertain revoke, or claim all network resources have been joined.
     Caller must preserve signer access when revocation remains unconfirmed.
     """
+    require(after_growth is None or callable(after_growth),'session_removal_callback_invalid')
     require(after_provision is None or callable(after_provision),'session_observer_invalid')
     require(before_provision is None or callable(before_provision), 'session_provision_callback_invalid')
     require(on_failure is None or callable(on_failure), 'session_failure_callback_invalid')
@@ -167,7 +168,13 @@ def active_round(target, controller, *, profile_expires_at, clock=time.time,
         result = observe_growth((target, controller), expires_at=expiry, clock=clock,
                                 monotonic=monotonic, sleep=sleep)
         result["active_watch_both"] = True
-        if quiesce_before_revoke:
+        if after_growth is not None:
+            from supervised_removal import checked_receipt
+            removed=after_growth()
+            require(type(removed) is dict and set(removed)=={'target','controller'},'session_removal_join_unconfirmed')
+            for receipt in removed.values():checked_receipt(receipt)
+            result['products_quiesced_both']=True
+        elif quiesce_before_revoke:
             for receipt in parallel((target,controller), {"Op":"quiesce_session"}):
                 require(isinstance(receipt,dict) and set(receipt)=={"status","joined","zero_exit"}
                         and receipt["status"]=="session_quiesced" and receipt["joined"] is True

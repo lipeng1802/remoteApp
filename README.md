@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+r200 已把独立待命卸载器接入新鲜TEST构建及双平台父管理：PONG持续增长后才认证退出并删除程序，未知保留原owner；严格exit0/EOF后验证身份、profile/floor、activation保持，再独立撤销并专用退休。Go/race、Windows静态及8项父管道检查、194项Python检查通过。下一份新鲜包验证完整双机卸载整链，尚未计整体验收。
+
 r199 已实现待命独立卸载客户端、维护后撤销owner保留与program-only删除后的严格TEST退休门禁。待命/取消已在Mac和Windows Interactive原生检查通过，相关Go/race及Windows静态检查通过。下一组接新鲜包的双端arm→持续PONG→认证维护/程序删除→撤销/退休管理流程；组件通过尚不代表此整链验收。
 
 r198 新鲜 Mac↔Windows TEST 双机已观察双方真实 TLS PONG 持续增长超过6秒，正常quiesce/全层join、父进程exit0、独立撤销、registered TEST退休与精确零规则/进程/任务检查通过。证据见[最新交接](docs/HANDOFF.md)。尚需把独立认证卸载器的program-only删除及身份保留接入真实跨机活动工单，不能用TEST整根退休替代；自动续办继续此收口，不无变化重跑。GUI、正式发行与RK3588仍待。

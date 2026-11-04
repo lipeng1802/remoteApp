@@ -33,3 +33,16 @@ func (c *Controller) confirmMaintainedRevocation(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Only the trusted inherited parent can start its already-armed independent
+// client. This is never admitted by the ordinary supervised business policy.
+func (c *Controller) AllowProgramRemoval(ctx context.Context) error {
+	if e := c.lock(ctx); e != nil {
+		return e
+	}
+	defer c.unlock()
+	if c.child == nil || c.revocation == nil || !c.provisioned || c.requested || c.prepared || c.broken || c.closed || c.quiesced || c.released {
+		return ErrProduct
+	}
+	return nil
+}

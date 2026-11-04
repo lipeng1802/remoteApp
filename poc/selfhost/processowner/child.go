@@ -360,7 +360,7 @@ func (c *Child) finish(ctx context.Context, command []byte, mode uint32) error {
 		return ErrProcess
 	}
 	c.stopOnce.Do(func() { c.finishMode.Store(mode); close(c.stopping); go c.stop(command) })
-	if (mode == 2 || mode == 3) && c.finishMode.Load() != mode {
+	if ((mode == 2 || mode == 3 || mode == 4) && c.finishMode.Load() != mode) || (mode != 4 && c.finishMode.Load() == 4) {
 		return ErrProcess
 	}
 	select {
@@ -372,14 +372,20 @@ func (c *Child) finish(ctx context.Context, command []byte, mode uint32) error {
 }
 func (c *Child) stop(command []byte) {
 	c.mu.Lock()
-	if !c.fault.Load() {
+	receiptOnly := c.finishMode.Load() == 4
+	if !c.fault.Load() && len(command) > 0 {
 		if _, e := c.in.Write(command); e != nil {
 			c.fault.Store(true)
 		}
 	}
 	c.in.Close()
-	closed := false
+	closed := receiptOnly
 	for r := range c.replies {
+		if receiptOnly {
+			c.fault.Store(true)
+			c.terminalFrames++
+			continue
+		}
 		c.terminalFrames++
 		var v struct {
 			Status string `json:"status"`

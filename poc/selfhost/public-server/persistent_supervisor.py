@@ -48,11 +48,32 @@ class Owner:
         self.joined = False
         self.fault = False
         self.local_cancel = False
+        self.removal_enabled = False
+        self.removal_requested = False
+        self.removal_completed = False
+        self.lifecycle = self.endpoint if isinstance(self.endpoint,LocalSupervisor) else LocalSupervisor(child)
 
     def call(self, request):
         if request == {"Op": "owner_status"}:
             return {"status": "owner_status", "joined": self.joined}
+        if request == {"Op":"owner_remove_program"}:
+            if not self.removal_enabled or self.removal_requested or self.joined:
+                raise RuntimeError('holder_removal_not_admitted')
+            self.removal_requested=True
+            result=self.lifecycle({'Op':'remove_program'})
+            if result!={'status':'removal_pending'}:raise RuntimeError('holder_removal_start_unknown')
+            return result
+        if request == {"Op":"owner_program_removal_status"}:
+            if not self.removal_enabled or not self.removal_requested or self.joined:
+                raise RuntimeError('holder_removal_status_rejected')
+            result=self.lifecycle({'Op':'program_removal_status'})
+            from supervised_removal import checked_receipt
+            if result.get('status')=='files_removed':
+                checked_receipt(result);self.removal_completed=True
+            return result
         if request == {"Op": "owner_stop"}:
+            if self.removal_requested and (not self.removal_completed or self.lifecycle.pending or self.lifecycle.poisoned):
+                raise RuntimeError('holder_removal_unknown_preserve_owner')
             if getattr(self.child,'fault_stop_sent',False) or getattr(self.child,'local_cancel_sent',False) or self.fault or self.local_cancel:
                 raise RuntimeError('holder_fault_stop_not_normal_close')
             if not self.joined:
@@ -77,6 +98,7 @@ class Owner:
                 self.joined=True;self.local_cancel=True
             return {'status':'owner_local_cancel_closed','joined':True,'fault':True,'exit_code':1,'remote_revocation_verified':False}
         if request == {"Op":"owner_stop_fault"}:
+            if self.removal_requested:raise RuntimeError('holder_removal_not_fault_stop')
             if self.local_cancel:raise RuntimeError("holder_local_cancel_not_remote_fault")
             if self.joined and not self.fault:raise RuntimeError('holder_normal_close_not_fault')
             if not self.joined:
@@ -117,12 +139,15 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
             raise RuntimeError("holder_owner_not_ready_preserve_state")
         native = NativeUnix(ready["control_socket"]) if require_native else None
         owner = Owner(child, native)
+        removal=type(ready.get('removal_protocol')) is int and ready.get('removal_protocol')==1 and type(ready.get('uninstaller_process_id')) is int and ready['uninstaller_process_id']>0
+        owner.removal_enabled=removal
         # Publish public discovery only; authority material and application
         # keys never enter this file. Exclusive file remains after unjoined exit.
         metadata = {"version": 1, "process_id": os.getpid(),
                     "vault_scope": ready["vault_scope"], "public_key": ready["public_key"]}
         if require_native:
             metadata.update(control_socket=ready["control_socket"], supervisor_process_id=child.proc.pid,fault_protocol=1,local_cancel_protocol=1)
+        if removal:metadata.update(removal_protocol=1,uninstaller_process_id=ready['uninstaller_process_id'])
         published = json.dumps(metadata, separators=(",", ":")).encode()
         pending_file=directory/("owner.json."+str(os.getpid())+".new")
         with pending_file.open("xb") as output:

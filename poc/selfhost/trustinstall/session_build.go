@@ -249,12 +249,12 @@ func CompileProductSupervisorTest(ctx context.Context, goexe, module, target, de
 // CompileRemovalProductSupervisorTest fixes a TEST loopback address before
 // either native owner starts, allowing the independently armed client to use
 // a compiled destination rather than an IPC-supplied address or identity.
-func CompileRemovalProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest, address string, now time.Time, port uint16) error {
+func CompileRemovalProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest, address, removalDigest string, now time.Time, port uint16) error {
 	endpoint, e := netip.ParseAddrPort(address)
-	if e != nil || endpoint.Addr().String() != "127.0.0.1" || endpoint.Port() < 1024 || endpoint.String() != address {
+	if !canonical(removalDigest, 32) || e != nil || endpoint.Addr().String() != "127.0.0.1" || endpoint.Port() < 1024 || endpoint.String() != address {
 		return trustprofile.ErrTrust
 	}
-	extra := " -X main.embeddedMaintenanceAddress=" + base64.RawURLEncoding.EncodeToString([]byte(address))
+	extra := " -X main.embeddedMaintenanceAddress=" + base64.RawURLEncoding.EncodeToString([]byte(address)) + " -X main.embeddedRemovalDigest=" + removalDigest
 	return compileProductSupervisorTest(ctx, goexe, module, target, dest, s, productPath, productDigest, signerDigest, now, extra, port)
 }
 func compileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, maintenanceFlags string, testTunnel ...uint16) error {
