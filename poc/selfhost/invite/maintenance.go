@@ -40,7 +40,7 @@ func (m *Maintenance) Stop(ctx context.Context) error {
 // Retries never mint credentials: only reconcile durable intents/policy. Work
 // does not overlap, and delays start after completion (not ticker catch-up).
 func (b *ProvisionBackend) StartMaintenance(ctx context.Context, interval, maxBackoff time.Duration) (*Maintenance, error) {
-	if ctx.Err() != nil || interval < 100*time.Millisecond || interval > time.Minute || maxBackoff < interval || maxBackoff > time.Minute || !b.maintenance.CompareAndSwap(false, true) {
+	if ctx == nil || ctx.Err() != nil || !b.networkMode() || interval < 100*time.Millisecond || interval > time.Minute || maxBackoff < interval || maxBackoff > time.Minute || !b.maintenance.CompareAndSwap(false, true) {
 		return nil, ErrDenied
 	}
 	b.fence()
@@ -96,7 +96,7 @@ func (b *ProvisionBackend) fence() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.ready = false
-	if b.Store != nil {
+	if b.Store != nil && b.networkMode() {
 		b.Store.provisionOps.Lock()
 		b.Store.provisionReady = false
 		b.Store.provisionOps.Unlock()

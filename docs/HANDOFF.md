@@ -6,6 +6,20 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r206：明确scope服务端网络后端与严格恢复组合
+
+承接r205/869d369，先读Git/交接，无前组重型构建，磁盘约136GiB可用。此轮仅本机源码/测试，没有SSH、远程部署、profile/旧Store修改或新双机工单，历史未知现场/已退休安装不动。
+
+新增显式NewDesktopProvisionBackend，必须是OpenDesktopAuthorization的Store，私有指针绑定同一个Store，公开Store字段重绑不能转移opt-in。默认backend在desktop Store上的mint/bind/state/clock/verifier/reconcile/maintenance/fence均拒绝，不触碰driver/共享readiness/规则，也不消费另一正确backend的网络nonce。旧Store及原公开正向方法保持fixed模式；无peer可选scope mode/root/issuer/endpoint字段。
+
+服务端策略从权威自己保存的同一申请/完整grant提取，不只信任peer字段或“issuer签名有效”。显式组合贯通Plan/Issued/Bound、最小投影、ACTIVE、校时、TLS possession/descriptor、注册公钥session identity、verifier permit与未知Mint/撤销清理，支持view/control/fixed共存但按精确grant回收；原双端live-proof后投影、固定47476规则、共享锁/driver-fault fence、nonce、120/300秒与3秒proof门禁未改。重开新增拒绝浮动/错scope provision，不回写/清理未知记录；正常approved多范围重开不改issuer、不重Mint、不丢其它投影，revoked不复活。
+
+invite回归PASS26.946s；新增六类backend边界定向race PASS5.068s（内含两scope HTTPS链）；deviceservice13.172s/headscale1.071s消费方回归PASS。最后新增完整RTT起点与approved混合范围重开核对定向PASS3.054s，exec25795实际exit0。首轮编译遇私有方法名与现有规则缓存字段重名，已改名provisionRulesForMode后完成上述验证，没有运行任何服务。全程GOMAXPROCS=2/GOFLAGS=-p=2/nice10/离线cache，重型串行，未重复整项目无变化回归。
+
+收尾无重型构建驻留，工作卷约135GiB可用，保留受信cache，无清理必要。材料已归档artifacts/connection-poc/r206-desktop-backend/{invite.txt,scope-race.txt,server-consumers.txt,final-boundaries.txt}。测试是内存issuer与driver，实际本机HTTPS和Store/protocol/lifecycle实现；Mint/Observe/Verify/Cleanup/规则均为fixture，不能计真实Headscale/OS signer/屏幕输入/GUI双机通过。证明了错mode无driver/fence/nonce副作用、未入账issuer-signed scope拒绝、凭据不落盘、无关模拟资源保留、未知Mint重开只cleanup不重Mint、scope watch观察撤销与精确退休证明。
+
+下一组接trusted broker/headscale/native服务入口的显式backend与新鲜namespace，而不是让旧default backend自动采用模式；当前broker/headscale.go、deviceservice/service.go及cmd/native-enrollment-authority仍默认构造。并须先为grantrevocation/revoke.go的独立撤销增加同一明确本机scope（目前仍VerifyGrant fixed默认），然后接限定desktop owner/产品构建与GUI pre-arm；没有独立撤销和故障join就不启动真实desktop provision。原3秒TCP/密钥交换/8秒TLS启动保持，人工同意放在启动预算之前。当前自动续办ACTIVE，无人工阻塞，仅本地提交不推送。
+
 ## 2026-11-05 r205：明确scope贯穿客户端证明、watch/gate与私有产品handoff
 
 承接r204/7fc9e7a，先读Git/交接，无前组重型构建；磁盘约137GiB可用，无需清理。此组只做本机源码/组件验证，没有SSH、远程服务变更或新鲜双机产品工单，历史未知现场和已退休安装均未动。

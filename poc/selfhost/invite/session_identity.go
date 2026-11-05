@@ -48,7 +48,7 @@ func (b *ProvisionBackend) SessionIdentity(g Grant, challenge string) (SessionId
 	s := b.Store
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.broken || !s.authorizedLocked(g, g.Claims.Target, g.Claims.Controller) {
+	if s.broken || !s.authorizedNetworkLocked(g, b.desktopNetwork()) {
 		return SessionIdentity{}, ErrDenied
 	}
 	target, err := registeredPublic(s, g.Claims.Target)

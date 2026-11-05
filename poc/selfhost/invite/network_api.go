@@ -48,10 +48,17 @@ func SignNetworkRequest(k ed25519.PrivateKey, b NetworkRequestBody) NetworkReque
 // Consume a valid device signature durably before privileged effects, including
 // denied requests. Grant possession alone is not a caller credential.
 func (s *Store) authorizeNetworkRequest(e NetworkRequest) error {
+	return s.authorizeNetworkRequestForMode(e, false)
+}
+
+func (s *Store) authorizeNetworkRequestForMode(e NetworkRequest, desktop bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.broken {
 		return ErrStorage
+	}
+	if !s.networkModeLocked(desktop) {
+		return ErrDenied
 	}
 	raw, _ := json.Marshal(e)
 	if len(raw) > 8192 || len(e.PublicKey) != 64 || len(e.Signature) != 128 || len(e.Body.Nonce) != 32 || len(e.Body.Action) > 32 || len(e.Body.Ticket) > 32 || len(e.Body.Challenge) > 64 {
@@ -112,7 +119,7 @@ func (s *Store) authorizeNetworkRequest(e NetworkRequest) error {
 	if len(e.Body.Certificate) > 5500 || len(e.Body.CertificateProof) > 1024 || (e.Body.Action != "publish_tls" && (e.Body.Certificate != "" || e.Body.CertificateProof != "")) {
 		return ErrDenied
 	}
-	if denied || id != g.Claims.Target && id != g.Claims.Controller || !VerifyGrant(s.publicKeyLocked(), g, g.Claims.Target, g.Claims.Controller, time.Unix(now, 0)) {
+	if denied || id != g.Claims.Target && id != g.Claims.Controller || !s.verifyNetworkGrantLocked(g, desktop, time.Unix(now, 0)) {
 		return ErrDenied
 	}
 	known := false
@@ -167,10 +174,10 @@ func (s *Store) publicKeyLocked() ed25519.PublicKey {
 	return ed25519.PrivateKey(k).Public().(ed25519.PublicKey)
 }
 func (b *ProvisionBackend) ExecuteNetworkRequest(ctx context.Context, e NetworkRequest) (NetworkReply, error) {
-	if b.Store == nil || b.Driver == nil || ctx.Err() != nil {
+	if b.Store == nil || b.Driver == nil || ctx == nil || ctx.Err() != nil || !b.networkMode() {
 		return NetworkReply{}, ErrDenied
 	}
-	if err := b.Store.authorizeNetworkRequest(e); err != nil {
+	if err := b.Store.authorizeNetworkRequestForMode(e, b.desktopNetwork()); err != nil {
 		return NetworkReply{}, err
 	}
 	switch e.Body.Action {

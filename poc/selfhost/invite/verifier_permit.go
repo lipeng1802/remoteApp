@@ -52,7 +52,7 @@ func VerifyVerifierPermitForPolicy(policy GrantPolicy, pub ed25519.PublicKey, p 
 func (b *ProvisionBackend) VerifierPermit(ctx context.Context, g Grant, device, ticket, challenge string) (VerifierPermit, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.Store == nil || b.Driver == nil || !b.ready || b.VerifierSource == nil || ctx.Err() != nil || !canonicalHex(challenge, 32) {
+	if b.Store == nil || b.Driver == nil || !b.networkMode() || !b.ready || b.VerifierSource == nil || ctx.Err() != nil || !canonicalHex(challenge, 32) {
 		return VerifierPermit{}, ErrDenied
 	}
 	verifier, e := b.VerifierSource(ctx)
@@ -64,7 +64,7 @@ func (b *ProvisionBackend) VerifierPermit(ctx context.Context, g Grant, device, 
 	defer s.mu.Unlock()
 	r, ok := s.state.Provisions[ticket]
 	now := s.clock().Unix()
-	if s.broken || !s.provisionReady || !ok || r.Status != "issued" || r.Device != device || r.Grant != g || r.NodeKey == verifier || r.Expires <= now || !s.authorizedLocked(g, g.Claims.Target, g.Claims.Controller) {
+	if s.broken || !s.provisionReady || !ok || r.Status != "issued" || r.Device != device || r.Grant != g || r.NodeKey == verifier || r.Expires <= now || !s.authorizedNetworkLocked(g, b.desktopNetwork()) {
 		return VerifierPermit{}, ErrDenied
 	}
 	expires := now + 30

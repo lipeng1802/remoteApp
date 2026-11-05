@@ -119,8 +119,15 @@ func (s *Store) provisionCommit(n snapshot) error {
 // PlanProvision commits intent BEFORE any provider side effect. The device must
 // sign the expected node key and own one subject of a currently approved grant.
 func (s *Store) PlanProvision(g Grant, e ProvisionEnvelope) (ProvisionRecord, error) {
+	return s.planProvision(g, e, false)
+}
+
+func (s *Store) planProvision(g Grant, e ProvisionEnvelope, desktop bool) (ProvisionRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.networkModeLocked(desktop) {
+		return ProvisionRecord{}, ErrDenied
+	}
 	if s.broken {
 		return ProvisionRecord{}, ErrStorage
 	}
@@ -136,7 +143,7 @@ func (s *Store) PlanProvision(g Grant, e ProvisionEnvelope) (ProvisionRecord, er
 		return ProvisionRecord{}, ErrDenied
 	}
 	device := deviceID(pub)
-	if device != g.Claims.Target && device != g.Claims.Controller || !s.authorizedLocked(g, g.Claims.Target, g.Claims.Controller) {
+	if device != g.Claims.Target && device != g.Claims.Controller || !s.authorizedNetworkLocked(g, desktop) {
 		return ProvisionRecord{}, ErrDenied
 	}
 	replay := "provision:" + device + ":" + b.Nonce
@@ -181,8 +188,15 @@ func (s *Store) PlanProvision(g Grant, e ProvisionEnvelope) (ProvisionRecord, er
 // These completion calls are private trusted-adapter operations, not endpoints
 // accepting user claims. Tokens never enter the durable ledger.
 func (s *Store) ProvisionIssued(id, user, key string) error {
+	return s.provisionIssued(id, user, key, false)
+}
+
+func (s *Store) provisionIssued(id, user, key string, desktop bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.networkModeLocked(desktop) {
+		return ErrDenied
+	}
 	if s.broken {
 		return ErrStorage
 	}
@@ -194,7 +208,7 @@ func (s *Store) ProvisionIssued(id, user, key string) error {
 	r.UserID = user
 	r.KeyID = key
 	r.Status = "issued"
-	if s.clock().Unix() >= r.Expires || !s.authorizedLocked(r.Grant, r.Grant.Claims.Target, r.Grant.Claims.Controller) {
+	if s.clock().Unix() >= r.Expires || !s.authorizedNetworkLocked(r.Grant, desktop) {
 		r.Status = "cleanup_pending"
 	}
 	n.Provisions[id] = r
@@ -207,13 +221,20 @@ func (s *Store) ProvisionIssued(id, user, key string) error {
 	return nil
 }
 func (s *Store) ProvisionBound(id string, o ProvisionObservation, verified bool) error {
+	return s.provisionBound(id, o, verified, false)
+}
+
+func (s *Store) provisionBound(id string, o ProvisionObservation, verified bool, desktop bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.networkModeLocked(desktop) {
+		return ErrDenied
+	}
 	if s.broken {
 		return ErrStorage
 	}
 	r, ok := s.state.Provisions[id]
-	if !ok || r.Status != "issued" || !verified || o.NodeKey != r.NodeKey || o.UserID != r.UserID || !safeHandle(o.NodeID) || !validOverlay(o.IP) || s.clock().Unix() >= r.Expires || !s.authorizedLocked(r.Grant, r.Grant.Claims.Target, r.Grant.Claims.Controller) {
+	if !ok || r.Status != "issued" || !verified || o.NodeKey != r.NodeKey || o.UserID != r.UserID || !safeHandle(o.NodeID) || !validOverlay(o.IP) || s.clock().Unix() >= r.Expires || !s.authorizedNetworkLocked(r.Grant, desktop) {
 		return ErrDenied
 	}
 	for k, v := range s.state.Provisions {
@@ -264,8 +285,15 @@ func (s *Store) ProvisionRecords() []ProvisionRecord {
 // Deny by default. A rule exists only for BOTH verified subjects of the exact
 // current grant, with controller->target fixed-port direction and no wildcard.
 func (s *Store) ProvisionRules() ([]NetworkRule, error) {
+	return s.provisionRulesForMode(false)
+}
+
+func (s *Store) provisionRulesForMode(desktop bool) ([]NetworkRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.networkModeLocked(desktop) {
+		return nil, ErrDenied
+	}
 	if s.broken {
 		return nil, ErrStorage
 	}
@@ -274,7 +302,7 @@ func (s *Store) ProvisionRules() ([]NetworkRule, error) {
 	}
 	var rules []NetworkRule
 	for _, target := range s.state.Provisions {
-		if target.Status != "bound" || target.Device != target.Grant.Claims.Target || !s.authorizedLocked(target.Grant, target.Grant.Claims.Target, target.Grant.Claims.Controller) {
+		if target.Status != "bound" || target.Device != target.Grant.Claims.Target || !s.authorizedNetworkLocked(target.Grant, desktop) {
 			continue
 		}
 		for _, client := range s.state.Provisions {

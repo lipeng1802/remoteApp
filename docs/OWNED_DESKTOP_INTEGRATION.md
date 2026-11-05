@@ -1,6 +1,6 @@
 # 自主连接链与桌面界面接入
 
-2026-11-05 r205（承接 r203/r204）。当前是桌面协议与签名权限组件接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
+2026-11-05 r206（承接 r203–r205）。当前是桌面协议与签名权限组件接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
 
 ## 已落实的边界
 
@@ -18,9 +18,9 @@ Windows 新增 `TlsProbeServer.RunOwnedDesktopOnceAsync`，固定监听/peer 为
 
 独立 `OpenDesktopAuthorization` 仅供显式的新设备授权 Store 组合使用，目前没有线上入口调用。目标邀请、控制端 claim、目标 Allow 批准均签入相同 permission；incoming/status 返回原申请范围，省略或错范围的 Allow、自批准、第三端批准、签名后改范围均拒绝。Decline 可以不声明正向范围；不会产生 grant。原120秒邀请、300秒授权、nonce、持久速率预算、同目标单活动授权、撤销规则保持。
 
-Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重新打开校验 scope 与同一申请/签名 grant 一致。默认 Open 不接受新模式，新构造器也不能打开已有 fixed-only Store，失败不改快照或重建 issuer。没有线上 Store 迁移或任何旧文件回写。现有 Authorized、网络 provision/ACTIVE/TLS、业务 IPC 仍拒绝桌面授权；新的 AuthorizedDesktop 只核查设备授权账本，不开启这些网络能力。
+Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重新打开校验 scope 与同一申请/签名 grant 一致。默认 Open 不接受新模式，新构造器也不能打开已有 fixed-only Store，失败不改快照或重建 issuer。没有线上 Store 迁移或任何旧文件回写。既有 Authorized、默认网络后端与业务 IPC 继续拒绝桌面授权；r206 的显式桌面后端另行接通如下。AuthorizedDesktop 本身仍只核查设备授权账本。
 
-**r205 已补客户端验证与私有产品 handoff 的 scope 接线；下一组先补服务端网络授权及限定 owner 入口，再做 GUI pre-arm。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
+**r206 已补显式服务端网络授权组合；下一组接受信 broker/native 入口、独立撤销的 scope 和限定 desktop owner，再做 GUI pre-arm。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
 
 ## r205：客户端明确策略、watch 与私有载荷接线
 
@@ -30,7 +30,17 @@ Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重
 
 新增独立 `StartBoundDesktopProduct`，要求本机 expected scope，先核验 grant 与签名 TLS 描述符，再经同一匿名管道交付五字段 bootstrap。控制端和目标端 ready 均须回显完全一致的 Permission，旧 PONG ready、未知字段或错范围拒绝；目标错范围在发布证书/会话 secret 前拒绝。它不接受旧 PONG Observation 作为桌面遥测。失败仍返回同一已启动 child 供原 owner join，不另开进程、不强杀、不把超时当退出。
 
-installeddevice 的内部授权/节点 verifier/session identity 验证点保留同一策略，当前既有 runner 仍构造 fixed 默认策略。尚未导出新的桌面 runner 或打通实际 GUI/原生载荷入口；原 RunProduct 也仍是 fixed 默认。**服务端 PlanProvision/NetworkState 等仍拒绝 desktop grant**，没有部署新 backend，没有改现有 Store、profile 或控制面。不能据此宣称已取得桌面网络身份或真实画面/输入。
+installeddevice 的内部授权/节点 verifier/session identity 验证点保留同一策略，当前既有 runner 仍构造 fixed 默认策略。尚未导出新的桌面 runner 或打通实际 GUI/原生载荷入口；原 RunProduct 也仍是 fixed 默认。**既有默认服务端仍拒绝 desktop grant**；r206 增加显式后端支持，但尚未部署新 backend，没有改现有 Store、profile 或控制面。不能据此宣称已取得桌面网络身份或真实画面/输入。
+
+## r206：显式服务端 scope 后端
+
+`NewDesktopProvisionBackend` 仅接显式 desktop Store，私有指针绑定同一个 Store。普通 backend 在 desktop Store 上拒绝网络 mint/bind/state/校时/verifier/reconcile/maintenance/fence，不消费另一个 backend 的有效网络请求或触碰其 driver、全局 readiness、规则。公开 Store 既有正向网络方法也保留 fixed 模式；trusted backend 使用独立私有 mode 组合。修改公开 Store 字段不能把已授予的 opt-in 转移到另一 Store；没有新增 peer 可选 mode、地址、root 或 issuer 字段。
+
+新后端从权威自身持久的**同一申请与完整 grant**选择范围，再核验原签名、nonce、身份、TTL 和批准状态。只有有效 issuer 签名但未入账的 scope 不获得凭据或证明。它接通 enroll/bind、共享最小规则投影、ACTIVE、grant clock、TLS possession/descriptor、registered session identity、verifier permit、撤销/未知 Mint 收尾及精确 node retirement。view/control/fixed 三类已批准 grant 可以共存于一个显式 Store；只撤销其中一个只回收对应两端。原共享串行锁、未知 Mint 不重发、两阶段 cleanup、driver 失败 fence、绝对过期和固定端口规则保持。
+
+重开检查新增：非 fixed provision 必须仍关联同一持久已签 scope 申请；浮动/错 scope 记录拒绝打开，不重写或清理未知记录。正常已批准的混合范围重开后保持 issuer 与投影且不重新 Mint；已撤销记录不能复活。默认 Open 或旧 Store 不自动迁移为新模式。
+
+此后端目前仅由组件测试显式构造。实际 broker/headscale 组合、deviceservice 与 native-enrollment-authority 入口仍用默认构造；尚未部署或提供 GUI 新包。下一组检查并接这些 trusted 入口，以及仍使用 VerifyGrant fixed 默认的 `grantrevocation/revoke.go`；独立撤销必须先支持同一明确本机 scope，才能启动 desktop owner 的实际 provision。不要为接线直接放宽默认函数，或在已部署旧 Store 上开启新模式。
 
 ## 下一组管理与界面接线
 
@@ -60,3 +70,9 @@ Go invite/installeddevice 相关包回归通过，最终新桌面范围检查与
 相关 invite/session/streamgate/clientruntime/installeddevice 五包检查通过；新范围的 HTTPS watch、双向 secret/本地 TCP opaque worker、state cache 与 ManagedGate 定向 race 检查通过。随后针对最后加严的混合回执拒绝复验既有 StateWatch/Managed/Profile 默认路径，并覆盖桌面私有 child 的明确范围/ready/正常退出与拒绝 PONG Observation。证据在 `artifacts/connection-poc/r205-client-policy/`。全部本机 Go 使用既有限额与离线缓存，重型检查串行；没有重新构建 Swift/Windows 组件或重开新鲜双机工单。
 
 这些是内存 issuer/signers、私有 HTTPS fixture、本地 TCP 固定字节及 Go fixture child 的协议/生命周期检查；不是 OS signer 到线上服务、Headscale/WhoIs、实际 Swift/C# 桌面程序、真实屏幕键鼠或 GUI 整体验收。下一步按上面的服务端授权与限定 owner 入口继续，不得对旧 fixed Store 直接开启 desktop 模式，也不得复活已退休安装。
+
+### r206 验证增量
+
+invite 包回归通过；六个新后端边界（含两范围的实际本机 HTTPS/API 组合）定向 race 通过；deviceservice/headscale 消费方回归通过。增加 approved 混合范围重开及完整 RTT 起点检查后的定向复验通过。测试 driver 在内存中模拟 Mint/Observe/live-proof/Cleanup/投影，绝不代表实际 Headscale、节点持有证明、OS signer、画面键鼠或跨机 GUI 已验收。
+
+覆盖包括：scope 批准→HTTPS enroll/verifier/bind→signed ACTIVE→TLS certificate possession/descriptor 与 registered session identity→scope watch 观察 revoke→精确 cleanup/node retirement→重开不复活；凭据不落盘；无关模拟资源保留。另覆盖错 mode/backend Store 重绑完全无 driver/fence/nonce 副作用、未入账 issuer-signed scope 拒绝、未知 Mint 后重开仅 cleanup 不 remint、三范围共存与单范围撤销、未知 scoped record 打开失败不回写。证据 `artifacts/connection-poc/r206-desktop-backend/`，全部限额本机检查，无 SSH、服务部署或新双机工单。

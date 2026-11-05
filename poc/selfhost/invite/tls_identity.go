@@ -74,7 +74,7 @@ func (b *ProvisionBackend) publishTLS(e NetworkRequest) error {
 	s := b.Store
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.broken || !s.authorizedLocked(e.Body.Grant, e.Body.Grant.Claims.Target, e.Body.Grant.Claims.Controller) {
+	if s.broken || !s.authorizedNetworkLocked(e.Body.Grant, b.desktopNetwork()) {
 		return ErrDenied
 	}
 	now := s.clock()
@@ -117,7 +117,7 @@ func (b *ProvisionBackend) TLSIdentity(g Grant, challenge string) (TLSIdentity, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, exists := s.state.TLSIdentities[g.Claims.ID]
-	if s.broken || !exists || !s.authorizedLocked(g, g.Claims.Target, g.Claims.Controller) {
+	if s.broken || !exists || !s.authorizedNetworkLocked(g, b.desktopNetwork()) {
 		return TLSIdentity{}, ErrDenied
 	}
 	_, fp, err := tlsCertificate(r.Certificate, s.clock())

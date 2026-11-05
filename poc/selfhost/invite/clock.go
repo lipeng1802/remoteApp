@@ -44,9 +44,12 @@ func (b *ProvisionBackend) GrantClockProof(g Grant, nonce string) (ClockProof, e
 		return ClockProof{}, ErrDenied
 	}
 	s := b.Store
+	if s == nil || !b.networkMode() {
+		return ClockProof{}, ErrDenied
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.broken || !s.authorizedLocked(g, g.Claims.Target, g.Claims.Controller) {
+	if s.broken || !s.authorizedNetworkLocked(g, b.desktopNetwork()) {
 		return ClockProof{}, ErrDenied
 	}
 	c := ClockClaims{1, g.Claims.ID, nonce, s.clock().UnixNano()}

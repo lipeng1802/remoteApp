@@ -104,5 +104,25 @@ func validDesktopRecords(st snapshot) bool {
 			return false
 		}
 	}
+	// A scoped provision must still name that exact persisted signed request
+	// after restart. Unknown/floating records cannot be treated as cleanup work
+	// by a differently scoped backend or silently adopted as a live binding.
+	for _, record := range st.Provisions {
+		if record.Grant.Claims.Permission == permission {
+			continue
+		}
+		known := false
+		if st.DesktopAuthorization {
+			for _, req := range st.Requests {
+				if req.Permission.valid() && req.Grant != nil && *req.Grant == record.Grant {
+					known = true
+					break
+				}
+			}
+		}
+		if !known {
+			return false
+		}
+	}
 	return true
 }

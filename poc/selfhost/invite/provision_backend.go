@@ -26,8 +26,9 @@ type ProvisionDriver interface {
 	ReplaceRules(context.Context, []NetworkRule) error
 }
 type ProvisionBackend struct {
-	Store  *Store
-	Driver ProvisionDriver
+	desktopStore *Store // immutable trusted desktop opt-in, pinned to the same Store
+	Store        *Store
+	Driver       ProvisionDriver
 	// Trusted server-owned live runtime only. Nil disables permit issuance.
 	VerifierSource func(context.Context) (string, error)
 	mu             sync.Mutex
@@ -41,7 +42,7 @@ func bounded(ctx context.Context) (context.Context, context.CancelFunc) {
 func (b *ProvisionBackend) Enroll(ctx context.Context, g Grant, e ProvisionEnvelope) (string, RegistrationCredential, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.Store == nil || b.Driver == nil || !b.ready {
+	if b.Store == nil || b.Driver == nil || !b.networkMode() || !b.ready {
 		return "", RegistrationCredential{}, ErrDenied
 	}
 	b.Store.provisionOps.Lock()
@@ -51,7 +52,7 @@ func (b *ProvisionBackend) Enroll(ctx context.Context, g Grant, e ProvisionEnvel
 	}
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	r, err := b.Store.PlanProvision(g, e)
+	r, err := b.Store.planProvision(g, e, b.desktopNetwork())
 	if err != nil {
 		return "", RegistrationCredential{}, err
 	}
@@ -64,7 +65,7 @@ func (b *ProvisionBackend) Enroll(ctx context.Context, g Grant, e ProvisionEnvel
 		}
 		return r.ID, RegistrationCredential{}, ErrDenied
 	}
-	if err = b.Store.ProvisionIssued(r.ID, c.UserID, c.KeyID); err != nil {
+	if err = b.Store.provisionIssued(r.ID, c.UserID, c.KeyID, b.desktopNetwork()); err != nil {
 		// Intent was already durable; best-effort scoped cleanup even if the
 		// completion commit poisoned the store. Startup must reconcile again.
 		b.ready = false
@@ -79,7 +80,7 @@ func (b *ProvisionBackend) Enroll(ctx context.Context, g Grant, e ProvisionEnvel
 func (b *ProvisionBackend) Bind(ctx context.Context, id string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.Store == nil || b.Driver == nil || !b.ready {
+	if b.Store == nil || b.Driver == nil || !b.networkMode() || !b.ready {
 		return ErrDenied
 	}
 	b.Store.provisionOps.Lock()
@@ -98,7 +99,7 @@ func (b *ProvisionBackend) Bind(ctx context.Context, id string) error {
 			r = v
 		}
 	}
-	if r.Status != "issued" {
+	if r.Status != "issued" || !b.Store.authorizedNetwork(r.Grant, b.desktopNetwork()) {
 		return ErrDenied
 	}
 	o, err := b.Driver.Observe(ctx, r)
@@ -114,7 +115,7 @@ func (b *ProvisionBackend) Bind(ctx context.Context, id string) error {
 	if ctx.Err() != nil {
 		return ErrDenied
 	}
-	return b.Store.ProvisionBound(id, o, verified)
+	return b.Store.provisionBound(id, o, verified, b.desktopNetwork())
 }
 
 // Reconcile is called on startup BEFORE serving credentials, and periodically.
@@ -124,7 +125,7 @@ func (b *ProvisionBackend) Reconcile(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.ready = false
-	if b.Store == nil || b.Driver == nil {
+	if b.Store == nil || b.Driver == nil || !b.networkMode() {
 		return ErrDenied
 	}
 	b.Store.provisionOps.Lock()
@@ -132,7 +133,7 @@ func (b *ProvisionBackend) Reconcile(ctx context.Context) error {
 	b.Store.provisionReady = false
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	rules, err := b.Store.ProvisionRules()
+	rules, err := b.Store.provisionRulesForMode(b.desktopNetwork())
 	if err != nil {
 		b.Driver.ReplaceRules(ctx, nil)
 		return err
@@ -144,7 +145,7 @@ func (b *ProvisionBackend) Reconcile(ctx context.Context) error {
 		if r.Status == "cleaned" {
 			continue
 		}
-		cleanup := r.Status == "planned" || r.Status == "cleanup_pending" || !b.Store.Authorized(r.Grant, r.Grant.Claims.Target, r.Grant.Claims.Controller)
+		cleanup := r.Status == "planned" || r.Status == "cleanup_pending" || !b.Store.authorizedNetwork(r.Grant, b.desktopNetwork())
 		if r.Status == "issued" && b.Store.clock().Unix() >= r.Expires {
 			cleanup = true
 		}
@@ -161,7 +162,7 @@ func (b *ProvisionBackend) Reconcile(ctx context.Context) error {
 			return err
 		}
 	}
-	rules, err = b.Store.ProvisionRules()
+	rules, err = b.Store.provisionRulesForMode(b.desktopNetwork())
 	if err != nil {
 		b.Driver.ReplaceRules(ctx, nil)
 		return err
@@ -218,7 +219,7 @@ var errBindingPending = errors.New("verified_peer_binding_pending")
 func (b *ProvisionBackend) networkState(g Grant, waiting bool) (NetworkState, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.Store == nil || b.Driver == nil {
+	if b.Store == nil || b.Driver == nil || !b.networkMode() {
 		return NetworkState{}, ErrDenied
 	}
 	s := b.Store
@@ -230,7 +231,7 @@ func (b *ProvisionBackend) networkState(g Grant, waiting bool) (NetworkState, er
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if waiting && (!b.ready || !s.provisionReady || !s.authorizedLocked(g, g.Claims.Target, g.Claims.Controller)) {
+	if waiting && (!b.ready || !s.provisionReady || !s.authorizedNetworkLocked(g, b.desktopNetwork())) {
 		return NetworkState{}, ErrDenied
 	}
 	var binding NetworkBinding
@@ -259,5 +260,5 @@ func (b *ProvisionBackend) networkState(g Grant, waiting bool) (NetworkState, er
 			applied = true
 		}
 	}
-	return s.networkStateLocked(g, binding, b.ready && s.provisionReady && applied)
+	return s.networkStateForModeLocked(g, binding, b.ready && s.provisionReady && applied, b.desktopNetwork())
 }
