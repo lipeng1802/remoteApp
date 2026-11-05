@@ -22,7 +22,7 @@ internal static class OwnedDesktopTests
                 try
                 {
                     _ = TlsProbeServer.RunOwnedDesktopOnceAsync(certificate, new byte[32], new byte[16],
-                        sharingAllowed, () => throw new Exception("Capture constructed without consent."),
+                        DesktopSessionPermission.Control, sharingAllowed, () => throw new Exception("Capture constructed without consent."),
                         CancellationToken.None, sharingAllowed
                             ? new InputSimulationOptions(() => throw new Exception("Input constructed without consent."))
                             : null);
@@ -43,6 +43,7 @@ internal static class OwnedDesktopTests
         var sourceOpened = false;
         var sinkOpened = false;
         var server = TlsProbeServer.RunOwnedDesktopOnceAsync(certificate, new byte[32], new byte[16],
+            DesktopSessionPermission.Control,
             localSharingAllowed: true,
             createJpegSource: () => { sourceOpened = true; throw new Exception("Unauthenticated capture."); },
             deadline.Token,
@@ -81,5 +82,54 @@ internal static class OwnedDesktopTests
             deadline.Cancel();
             try { await server; } catch { }
         }
+    }
+
+    public static void ViewGrantCannotEnableInput()
+    {
+        using var certificate = AgentCertificateFactory.CreateSelfSigned();
+        var reservation = new TcpListener(IPAddress.Loopback, 47478);
+        reservation.Start();
+        try
+        {
+            foreach (var scope in new[] { DesktopSessionPermission.View, (DesktopSessionPermission)0, (DesktopSessionPermission)3 })
+            {
+                try
+                {
+                    _ = TlsProbeServer.RunOwnedDesktopOnceAsync(certificate, new byte[32], new byte[16], scope,
+                        localSharingAllowed: true, () => throw new Exception("Unauthorized capture."), CancellationToken.None,
+                        new InputSimulationOptions(() => throw new Exception("Unauthorized input."), LocalControlAllowed: true));
+                    throw new Exception("Scope escalation was accepted.");
+                }
+                catch (InvalidOperationException) { }
+            }
+        }
+        finally { reservation.Stop(); }
+    }
+
+    public static void DesktopGrantCannotEnableClipboard()
+    {
+        using var certificate = AgentCertificateFactory.CreateSelfSigned();
+        var reservation = new TcpListener(IPAddress.Loopback, 47478);
+        reservation.Start();
+        try
+        {
+            foreach (var options in new[] {
+                new InputSimulationOptions(() => throw new Exception("Unauthorized input."), LocalControlAllowed: true,
+                    ReadClipboardText: _ => throw new Exception("Unauthorized clipboard read.")),
+                new InputSimulationOptions(() => throw new Exception("Unauthorized input."), LocalControlAllowed: true,
+                    WriteClipboardText: (_, _) => throw new Exception("Unauthorized clipboard write.")),
+            })
+            {
+                try
+                {
+                    _ = TlsProbeServer.RunOwnedDesktopOnceAsync(certificate, new byte[32], new byte[16],
+                        DesktopSessionPermission.Control, localSharingAllowed: true,
+                        () => throw new Exception("Unauthorized capture."), CancellationToken.None, options);
+                    throw new Exception("Clipboard permission was inferred from desktop control.");
+                }
+                catch (InvalidOperationException) { }
+            }
+        }
+        finally { reservation.Stop(); }
     }
 }

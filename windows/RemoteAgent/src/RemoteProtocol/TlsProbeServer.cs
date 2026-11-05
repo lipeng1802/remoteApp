@@ -7,6 +7,11 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace RemoteProtocol;
 
+// Trusted owner composition maps its issuer-verified exact grant scope here.
+// No fixed-payload, clipboard or unattended value exists. This is not itself
+// cryptographic verification or a substitute for the live owner/watch.
+public enum DesktopSessionPermission { View = 1, Control = 2 }
+
 public static class TlsProbeServer
 {
     // Dedicated single-session desktop endpoint behind the owner-managed overlay
@@ -14,12 +19,17 @@ public static class TlsProbeServer
     // neither a peer nor the private bootstrap can supply that consent. Keep the
     // fixed-payload TEST bridge below incapable of creating capture/input objects.
     public static Task RunOwnedDesktopOnceAsync(X509Certificate2 certificate,
-        byte[] deviceKey, byte[] agentIdentifier, bool localSharingAllowed,
+        byte[] deviceKey, byte[] agentIdentifier, DesktopSessionPermission permission, bool localSharingAllowed,
         Func<IJpegFrameSource> createJpegSource, CancellationToken cancellationToken,
         InputSimulationOptions? inputSession = null,
         Action<string>? reportStatus = null, Action<JpegTransferMetrics>? reportMetrics = null)
     {
         ArgumentNullException.ThrowIfNull(createJpegSource);
+        if (permission is not (DesktopSessionPermission.View or DesktopSessionPermission.Control) ||
+            inputSession is not null && permission != DesktopSessionPermission.Control)
+            throw new InvalidOperationException("Desktop grant scope does not permit this session.");
+        if (inputSession?.ReadClipboardText is not null || inputSession?.WriteClipboardText is not null)
+            throw new InvalidOperationException("Desktop grants do not include clipboard permission.");
         if (!localSharingAllowed || inputSession is { LocalControlAllowed: false })
             throw new InvalidOperationException("Explicit local desktop consent is required before listening.");
         return RunCoreAsync(IPAddress.Loopback, IPAddress.Loopback, 47478, certificate,

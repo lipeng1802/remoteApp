@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 public enum OwnedDesktopHandoffError: Error, Equatable {
-    case invalidBootstrap, consumed, localControlRequired
+    case invalidBootstrap, consumed, localControlRequired, controlNotGranted
 }
 
 /// One controller session delivered by the pinned local owner over its inherited
@@ -15,6 +15,7 @@ public final class OwnedDesktopHandoff: CustomStringConvertible, CustomDebugStri
         let Key: String
         let Fingerprint: String
         let Target: String
+        let Permission: String
     }
 
     private let lock = NSLock()
@@ -23,7 +24,8 @@ public final class OwnedDesktopHandoff: CustomStringConvertible, CustomDebugStri
     public var description: String { "OwnedDesktopHandoff(private)" }
     public var debugDescription: String { description }
 
-    /// Matches Go's four-field json.Marshal bootstrap, without the trailing LF.
+    /// Requires a desktop-specific owner bootstrap, without the trailing LF.
+    /// A legacy four-field fixed-payload bootstrap is deliberately insufficient.
     /// Exact canonical bytes reject duplicate/unknown fields, alternate types and
     /// endpoint selectors rather than letting a general JSON decoder ignore them.
     public init(privateBootstrap data: Data) throws {
@@ -33,9 +35,11 @@ public final class OwnedDesktopHandoff: CustomStringConvertible, CustomDebugStri
               let key = Data(base64Encoded: value.Key), key.count == 32,
               key.base64EncodedString() == value.Key,
               Self.hex(value.Fingerprint), Self.hex(value.Target),
+              ["desktop-view", "desktop-control"].contains(value.Permission),
               let canonical = try? JSONSerialization.data(withJSONObject: [
                 "Port": Int(value.Port), "Key": value.Key,
-                "Fingerprint": value.Fingerprint, "Target": value.Target
+                "Fingerprint": value.Fingerprint, "Target": value.Target,
+                "Permission": value.Permission
               ], options: [.sortedKeys, .withoutEscapingSlashes]),
               canonical == data else {
             throw OwnedDesktopHandoffError.invalidBootstrap
@@ -49,7 +53,7 @@ public final class OwnedDesktopHandoff: CustomStringConvertible, CustomDebugStri
         }
     }
 
-    private func take() throws -> (UInt16, Data, CertificateFingerprint, String) {
+    private func take() throws -> (UInt16, Data, CertificateFingerprint, String, String) {
         lock.lock()
         defer { lock.unlock() }
         guard let value = launch else { throw OwnedDesktopHandoffError.consumed }
@@ -61,7 +65,7 @@ public final class OwnedDesktopHandoff: CustomStringConvertible, CustomDebugStri
             return UInt8(value.Fingerprint[start..<end], radix: 16)!
         }
         return (value.Port, Data(base64Encoded: value.Key)!,
-                try CertificateFingerprint(bytes: Data(bytes)), value.Target)
+                try CertificateFingerprint(bytes: Data(bytes)), value.Target, value.Permission)
     }
 
     /// Drops an unused handoff on owner cancellation; it can never be reopened.
@@ -77,7 +81,7 @@ public final class OwnedDesktopHandoff: CustomStringConvertible, CustomDebugStri
     public func startReadOnly(onJpegFrame: @escaping (ScreenInfoPayload, CGImage) -> Void,
                               onStatus: @escaping (String) -> Void,
                               completion: @escaping TLSControllerClient.Completion) throws -> () -> Void {
-        let (port, key, fingerprint, target) = try take()
+        let (port, key, fingerprint, target, _) = try take()
         let client = TLSControllerClient(trustStore: SessionPin(fingerprint, target: target))
         return client.runProbe(host: "127.0.0.1", port: port, deviceIdentifier: target,
             deviceKey: key, onJpegFrame: onJpegFrame, onStatus: onStatus,
@@ -85,12 +89,13 @@ public final class OwnedDesktopHandoff: CustomStringConvertible, CustomDebugStri
     }
 
     /// Consumes the handoff even on refusal. The UI must obtain fresh local
-    /// consent for control; a parent bootstrap contains no control/clipboard bit.
+    /// consent for control, in addition to the owner's exact signed grant scope.
     public func makeControlClient(localControlAllowed: Bool,
                                   onJpegFrame: @escaping (ScreenInfoPayload, Data) -> Void,
                                   onAuthenticated: @escaping () -> Void,
                                   completion: @escaping (Result<Void, InputSimulationError>) -> Void) throws -> TLSInputSimulationClient {
-        let (port, key, fingerprint, _) = try take()
+        let (port, key, fingerprint, _, permission) = try take()
+        guard permission == "desktop-control" else { throw OwnedDesktopHandoffError.controlNotGranted }
         guard localControlAllowed else { throw OwnedDesktopHandoffError.localControlRequired }
         return try TLSInputSimulationClient(port: port, expectedFingerprint: fingerprint,
             deviceKey: key, localControlAllowed: true, onJpegFrame: onJpegFrame,

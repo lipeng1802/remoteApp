@@ -7,8 +7,9 @@ final class OwnedDesktopHandoffTests: XCTestCase {
     private let target = String(repeating: "cd", count: 32)
 
     private func bootstrap(port: String = "47479", key: String? = nil,
-                           fingerprint: String? = nil, target: String? = nil) -> String {
-        "{\"Fingerprint\":\"\(fingerprint ?? self.fingerprint)\",\"Key\":\"\(key ?? self.key)\",\"Port\":\(port),\"Target\":\"\(target ?? self.target)\"}"
+                           fingerprint: String? = nil, target: String? = nil,
+                           permission: String = "desktop-control") -> String {
+        "{\"Fingerprint\":\"\(fingerprint ?? self.fingerprint)\",\"Key\":\"\(key ?? self.key)\",\"Permission\":\"\(permission)\",\"Port\":\(port),\"Target\":\"\(target ?? self.target)\"}"
     }
 
     func testCanonicalOwnerHandoffSingleUseAndRedacted() throws {
@@ -38,6 +39,18 @@ final class OwnedDesktopHandoffTests: XCTestCase {
         }
     }
 
+    func testViewGrantCannotEnableInputEvenWithLocalConsent() throws {
+        let handoff = try OwnedDesktopHandoff(privateBootstrap: Data(bootstrap(permission: "desktop-view").utf8))
+        XCTAssertThrowsError(try handoff.makeControlClient(localControlAllowed: true,
+            onJpegFrame: { _, _ in }, onAuthenticated: {}, completion: { _ in })) {
+            XCTAssertEqual($0 as? OwnedDesktopHandoffError, .controlNotGranted)
+        }
+        XCTAssertThrowsError(try handoff.makeControlClient(localControlAllowed: true,
+            onJpegFrame: { _, _ in }, onAuthenticated: {}, completion: { _ in })) {
+            XCTAssertEqual($0 as? OwnedDesktopHandoffError, .consumed)
+        }
+    }
+
     func testRefusesSelectorsDuplicateFieldsAndNoncanonicalValues() {
         let good = bootstrap()
         let invalid = [
@@ -54,6 +67,9 @@ final class OwnedDesktopHandoffTests: XCTestCase {
             bootstrap(key: Data(count: 31).base64EncodedString()),
             bootstrap(fingerprint: fingerprint.uppercased()), bootstrap(fingerprint: "ab"),
             bootstrap(target: "hostname"), bootstrap(target: target.uppercased()),
+            bootstrap(permission: "fixed-payload"), bootstrap(permission: ""),
+            bootstrap(permission: "desktop-control "), bootstrap(permission: "clipboard"),
+            good.replacingOccurrences(of: "\"Permission\":\"desktop-control\",", with: ""),
             String(repeating: " ", count: 8192) + good
         ]
         for raw in invalid {

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r204：已补设备授权层明确签名的桌面查看/控制范围，并加严 Mac/Windows 组件的权限匹配；旧 fixed-payload 不授予桌面能力。新的网络 scope 与 GUI 接线尚待，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
+
 2026-11-05 r203：自主桌面接入组件已通过——Mac 一次性私有 handoff、Windows 固定本地桌面端点及认证/同意/资源释放边界。GUI 与真实画面键鼠整链仍在接线，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
 
 2026-11-05：用户已恢复现有自动续办；当前批次转入 Mac GUI → Windows 明确同意 → 自主连接链上的真实画面/键鼠与正常停止验收。r201 四组 TEST 已完成，不重复执行；正式发行与 RK3588 尚待后续。详见 [最新交接](docs/HANDOFF.md)。

@@ -14,7 +14,9 @@ internal static class DuplexSessionTests
     public static void ControlEnabledAgentAcceptsReadOnlyController() => RunReadOnlyAsync().GetAwaiter().GetResult();
     public static void DisconnectKeepsSharingAvailable() => RunContinuousAsync().GetAwaiter().GetResult();
 
-    private static async Task RunReadOnlyAsync()
+    public static void OwnedDesktopViewDoesNotAdvertiseInput() => RunReadOnlyAsync(ownedDesktop: true).GetAwaiter().GetResult();
+
+    private static async Task RunReadOnlyAsync(bool ownedDesktop = false)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(12));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
@@ -22,15 +24,18 @@ internal static class DuplexSessionTests
         var key = RandomNumberGenerator.GetBytes(32);
         var reservation = new TcpListener(IPAddress.Loopback, 0);
         reservation.Start();
-        var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
+        var port = ownedDesktop ? 47478 : ((IPEndPoint)reservation.LocalEndpoint).Port;
         reservation.Stop();
         var sourceConstructed = false;
         var sinkConstructed = false;
-        var server = TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback, port,
-            certificate, key, new byte[16], stop.Token,
-            createJpegSource: () => { sourceConstructed = true; return new FakeSource(); },
-            inputSession: new InputSimulationOptions(
-                () => { sinkConstructed = true; return new FakeSink(); }, LocalControlAllowed: true));
+        Func<IJpegFrameSource> createSource = () => { sourceConstructed = true; return new FakeSource(); };
+        var server = ownedDesktop
+            ? TlsProbeServer.RunOwnedDesktopOnceAsync(certificate, key, new byte[16], DesktopSessionPermission.View,
+                localSharingAllowed: true, createSource, stop.Token)
+            : TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback, port,
+                certificate, key, new byte[16], stop.Token, createJpegSource: createSource,
+                inputSession: new InputSimulationOptions(
+                    () => { sinkConstructed = true; return new FakeSink(); }, LocalControlAllowed: true));
 
         try
         {
@@ -47,8 +52,8 @@ internal static class DuplexSessionTests
             var wire = new ProbeFrameStream(tls);
             var read = CreateVideoReader(tls, deadline.Token);
             var hello = HelloPayload.Decode((await read()).Payload);
-            Check(hello.Capabilities == (Capabilities.Jpeg | Capabilities.Input),
-                "Control-enabled agent did not advertise both capabilities.");
+            Check(hello.Capabilities == (ownedDesktop ? Capabilities.Jpeg : Capabilities.Jpeg | Capabilities.Input),
+                "Agent advertised capabilities outside its selected scope.");
             var nonce = RandomNumberGenerator.GetBytes(32);
             await wire.WriteAsync(MessageType.Hello, new HelloPayload(PeerRole.Controller, 1, 1,
                 Capabilities.Jpeg, nonce).Encode(), deadline.Token);
@@ -178,7 +183,7 @@ internal static class DuplexSessionTests
             LocalControlAllowed: true, ReadTimeout: TimeSpan.FromSeconds(5));
         var server = ownedDesktop
             ? TlsProbeServer.RunOwnedDesktopOnceAsync(certificate, key, new byte[16],
-                localSharingAllowed: true, createSource, timeout.Token, input)
+                DesktopSessionPermission.Control, localSharingAllowed: true, createSource, timeout.Token, input)
             : TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback, port,
                 certificate, key, new byte[16], timeout.Token,
                 createJpegSource: createSource, inputSession: input);

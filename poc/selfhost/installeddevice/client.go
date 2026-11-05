@@ -51,7 +51,9 @@ func validCommand(r Request) bool {
 	if r.Network != (invite.NetworkRequestBody{}) {
 		return false
 	}
-	if r.Op != "device" || r.Device.Nonce != "" || r.Device.IssuedAt != 0 {
+	// Desktop scope needs its own compiled GUI/consent entry. Adding the signed
+	// Body field must not silently expand this existing fixed-payload IPC schema.
+	if r.Op != "device" || r.Device.Nonce != "" || r.Device.IssuedAt != 0 || r.Device.Permission != "" {
 		return false
 	}
 	switch r.Device.Action {

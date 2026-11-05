@@ -10,6 +10,9 @@ using RemoteProtocol;
 var tests = new (string Name, Action Run)[]
 {
     ("owned desktop requires local consent before listening", OwnedDesktopTests.ConsentBeforeListen),
+    ("owned desktop view and unknown scopes cannot enable input", OwnedDesktopTests.ViewGrantCannotEnableInput),
+    ("owned desktop view shares JPEG without input capability", DuplexSessionTests.OwnedDesktopViewDoesNotAdvertiseInput),
+    ("owned desktop control does not grant clipboard access", OwnedDesktopTests.DesktopGrantCannotEnableClipboard),
     ("owned desktop bad HMAC never opens capture or input", OwnedDesktopTests.WrongKey),
     ("owned desktop authenticated video input and joined cleanup", DuplexSessionTests.OwnedDesktopUsesAuthenticatedDuplex),
     ("TLS JPEG and input share one authenticated duplex session", DuplexSessionTests.VideoAndInputShareOneAuthenticatedConnection),

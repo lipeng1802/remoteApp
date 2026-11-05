@@ -30,17 +30,18 @@ const permission = "fixed-payload"
 
 // Signed requests bind every field, action, timestamp and nonce to a device key.
 type Body struct {
-	Action     string `json:"action"`
-	Nonce      string `json:"nonce"`
-	IssuedAt   int64  `json:"issued_at"`
-	TargetCode string `json:"target_code"`
-	InviteID   string `json:"invite_id"`
-	Code       string `json:"code"`
-	RequestID  string `json:"request_id"`
-	GrantID    string `json:"grant_id"`
-	Allow      bool   `json:"allow"`
-	NodeKey    string `json:"node_key,omitempty"`
-	Challenge  string `json:"retirement_challenge,omitempty"`
+	Action     string            `json:"action"`
+	Nonce      string            `json:"nonce"`
+	IssuedAt   int64             `json:"issued_at"`
+	TargetCode string            `json:"target_code"`
+	InviteID   string            `json:"invite_id"`
+	Code       string            `json:"code"`
+	RequestID  string            `json:"request_id"`
+	GrantID    string            `json:"grant_id"`
+	Allow      bool              `json:"allow"`
+	NodeKey    string            `json:"node_key,omitempty"`
+	Challenge  string            `json:"retirement_challenge,omitempty"`
+	Permission DesktopPermission `json:"permission,omitempty"`
 }
 type Envelope struct {
 	PublicKey string `json:"public_key"`
@@ -61,15 +62,16 @@ type Grant struct {
 	Signature string `json:"signature"`
 }
 type Result struct {
-	DeviceID     string          `json:"device_id,omitempty"`
-	DeviceCode   string          `json:"device_code,omitempty"`
-	InviteID     string          `json:"invite_id,omitempty"`
-	Code         string          `json:"code,omitempty"` // returned only once to the owning device
-	RequestID    string          `json:"request_id,omitempty"`
-	Status       string          `json:"status"`
-	Grant        *Grant          `json:"grant,omitempty"`
-	ControllerID string          `json:"controller_id,omitempty"`
-	Retirement   *NodeRetirement `json:"node_retirement,omitempty"`
+	DeviceID     string            `json:"device_id,omitempty"`
+	DeviceCode   string            `json:"device_code,omitempty"`
+	InviteID     string            `json:"invite_id,omitempty"`
+	Code         string            `json:"code,omitempty"` // returned only once to the owning device
+	RequestID    string            `json:"request_id,omitempty"`
+	Status       string            `json:"status"`
+	Grant        *Grant            `json:"grant,omitempty"`
+	ControllerID string            `json:"controller_id,omitempty"`
+	Retirement   *NodeRetirement   `json:"node_retirement,omitempty"`
+	Permission   DesktopPermission `json:"permission,omitempty"`
 }
 type device struct {
 	Code, ActiveInvite string
@@ -78,27 +80,30 @@ type device struct {
 type invitation struct {
 	Owner, CodeHash, RequestID string
 	Expires                    int64
+	Permission                 DesktopPermission `json:",omitempty"`
 }
 type request struct {
 	Owner, Controller, Status string
 	Expires                   int64
 	Grant                     *Grant
+	Permission                DesktopPermission `json:",omitempty"`
 }
 type bucket struct {
 	Count   int
 	Expires int64
 }
 type snapshot struct {
-	Version       int
-	PrivateKey    string
-	LastTime      int64
-	Devices       map[string]device
-	Invites       map[string]invitation
-	Requests      map[string]request
-	Replay        map[string]int64
-	Attempts      map[string]bucket
-	Provisions    map[string]ProvisionRecord   `json:",omitempty"`
-	TLSIdentities map[string]TLSIdentityRecord `json:",omitempty"`
+	Version              int
+	DesktopAuthorization bool `json:",omitempty"`
+	PrivateKey           string
+	LastTime             int64
+	Devices              map[string]device
+	Invites              map[string]invitation
+	Requests             map[string]request
+	Replay               map[string]int64
+	Attempts             map[string]bucket
+	Provisions           map[string]ProvisionRecord   `json:",omitempty"`
+	TLSIdentities        map[string]TLSIdentityRecord `json:",omitempty"`
 }
 type Store struct {
 	provisionOps   sync.Mutex    // serialize privileged side effects across backend wrappers
@@ -135,6 +140,10 @@ func Sign(key ed25519.PrivateKey, body Body) Envelope {
 // A crashed writer leaves a lease: recovery needs an explicit operator check;
 // never silently delete a lock, reset identities, or open a second writer.
 func Open(root string, clock func() time.Time) (*Store, error) {
+	return openAuthorization(root, clock, false)
+}
+
+func openAuthorization(root string, clock func() time.Time, desktop bool) (*Store, error) {
 	if !filepath.IsAbs(root) || clock == nil {
 		return nil, ErrStorage
 	}
@@ -168,7 +177,7 @@ func Open(root string, clock func() time.Time) (*Store, error) {
 		if err != nil {
 			return fail()
 		}
-		s.state = snapshot{Version: 1, PrivateKey: hex.EncodeToString(priv), Devices: map[string]device{}, Invites: map[string]invitation{}, Requests: map[string]request{}, Replay: map[string]int64{}, Attempts: map[string]bucket{}}
+		s.state = snapshot{Version: 1, DesktopAuthorization: desktop, PrivateKey: hex.EncodeToString(priv), Devices: map[string]device{}, Invites: map[string]invitation{}, Requests: map[string]request{}, Replay: map[string]int64{}, Attempts: map[string]bucket{}}
 		if s.save(s.state) != nil {
 			return fail()
 		}
@@ -196,6 +205,11 @@ func Open(root string, clock func() time.Time) (*Store, error) {
 		return fail()
 	}
 	if subtle.ConstantTimeCompare(key, ed25519.NewKeyFromSeed(key[:32])) != 1 {
+		return fail()
+	}
+	// The explicit authority mode is durable. Opening an existing fixed-only
+	// Store is not an implicit upgrade; legacy Open cannot reopen a desktop Store.
+	if s.state.DesktopAuthorization != desktop || !validDesktopRecords(s.state) {
 		return fail()
 	}
 	for id, d := range s.state.Devices {
@@ -327,7 +341,7 @@ func (s *Store) Execute(e Envelope) (Result, error) {
 		return Result{}, ErrStorage
 	}
 	// Bound all caller-controlled strings before serialization or hex decoding.
-	if len(e.PublicKey) != 64 || len(e.Signature) != 128 || len(e.Body.Nonce) != 32 || len(e.Body.Action) > 32 || len(e.Body.TargetCode) > 12 || len(e.Body.InviteID) > 32 || len(e.Body.RequestID) > 32 || len(e.Body.GrantID) > 32 || len(e.Body.Code) > 8 || len(e.Body.NodeKey) > 72 || len(e.Body.Challenge) > 64 {
+	if len(e.PublicKey) != 64 || len(e.Signature) != 128 || len(e.Body.Nonce) != 32 || len(e.Body.Action) > 32 || len(e.Body.TargetCode) > 12 || len(e.Body.InviteID) > 32 || len(e.Body.RequestID) > 32 || len(e.Body.GrantID) > 32 || len(e.Body.Code) > 8 || len(e.Body.NodeKey) > 72 || len(e.Body.Challenge) > 64 || len(e.Body.Permission) > 32 {
 		return Result{}, ErrDenied
 	}
 	raw, _ := json.Marshal(e)
@@ -410,6 +424,10 @@ func (s *Store) Execute(e Envelope) (Result, error) {
 }
 func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error) {
 	denied := func() (Result, error) { return Result{}, ErrDenied }
+	if b.Permission != "" && (!st.DesktopAuthorization || !b.Permission.valid() ||
+		!validDesktopBody(b)) {
+		return denied()
+	}
 	if b.Action != "node_retirement" && (b.NodeKey != "" || b.Challenge != "") {
 		return denied()
 	}
@@ -456,7 +474,7 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 		if !exists || !found || req.Owner != id || req.Status != "pending" || req.Expires <= now {
 			return Result{Status: "idle"}, nil
 		}
-		return Result{RequestID: inv.RequestID, ControllerID: req.Controller, Status: "pending"}, nil
+		return Result{RequestID: inv.RequestID, ControllerID: req.Controller, Status: "pending", Permission: req.Permission}, nil
 	case "invite":
 		if len(st.Invites) >= 512 {
 			return denied()
@@ -481,8 +499,8 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 		}
 		d.ActiveInvite = inviteID
 		st.Devices[id] = d
-		st.Invites[inviteID] = invitation{Owner: id, CodeHash: s.codeHash(inviteID, code), Expires: now + 120}
-		return Result{InviteID: inviteID, Code: code, Status: "inviting"}, nil
+		st.Invites[inviteID] = invitation{Owner: id, CodeHash: s.codeHash(inviteID, code), Expires: now + 120, Permission: b.Permission}
+		return Result{InviteID: inviteID, Code: code, Status: "inviting", Permission: b.Permission}, nil
 	case "claim":
 		// Users supply just device code + verification code. Invite IDs remain
 		// internal; an optional ID must match the owner's current invitation.
@@ -524,7 +542,7 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 		}
 		inv, exists := st.Invites[inviteID]
 		expected := s.codeHash(inviteID, b.Code)
-		if !exists || (b.InviteID != "" && b.InviteID != inviteID) || inv.Owner == id || inv.Expires <= now || inv.RequestID != "" || target.Code != b.TargetCode || len(b.Code) != 8 || strings.Trim(b.Code, "0123456789") != "" || subtle.ConstantTimeCompare([]byte(expected), []byte(inv.CodeHash)) != 1 || len(st.Requests) >= 512 {
+		if !exists || b.Permission != inv.Permission || (b.InviteID != "" && b.InviteID != inviteID) || inv.Owner == id || inv.Expires <= now || inv.RequestID != "" || target.Code != b.TargetCode || len(b.Code) != 8 || strings.Trim(b.Code, "0123456789") != "" || subtle.ConstantTimeCompare([]byte(expected), []byte(inv.CodeHash)) != 1 || len(st.Requests) >= 512 {
 			return denied()
 		}
 		requestID, err := randomHex(16)
@@ -533,11 +551,13 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 		}
 		inv.RequestID = requestID
 		st.Invites[inviteID] = inv
-		st.Requests[requestID] = request{Owner: inv.Owner, Controller: id, Status: "pending", Expires: inv.Expires}
-		return Result{RequestID: requestID, Status: "pending"}, nil
+		st.Requests[requestID] = request{Owner: inv.Owner, Controller: id, Status: "pending", Expires: inv.Expires, Permission: inv.Permission}
+		return Result{RequestID: requestID, Status: "pending", Permission: inv.Permission}, nil
 	case "approve":
 		req, exists := st.Requests[b.RequestID]
-		if !exists || req.Owner != id || req.Status != "pending" || req.Expires <= now {
+		if !exists || req.Owner != id || req.Status != "pending" || req.Expires <= now ||
+			(req.Permission != "" && !validDesktopBody(b)) ||
+			(b.Allow && b.Permission != req.Permission) || (b.Permission != "" && b.Permission != req.Permission) {
 			return denied()
 		}
 		if !b.Allow {
@@ -552,14 +572,14 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 			if err != nil {
 				return Result{}, ErrStorage
 			}
-			claims := Claims{1, grantID, req.Owner, req.Controller, permission, now, now + 300}
+			claims := Claims{1, grantID, req.Owner, req.Controller, grantPermission(req.Permission), now, now + 300}
 			key, _ := hex.DecodeString(st.PrivateKey)
 			grant := Grant{claims, hex.EncodeToString(ed25519.Sign(key, grantBytes(claims)))}
 			req.Grant = &grant
 			req.Status = "approved"
 		}
 		st.Requests[b.RequestID] = req
-		return Result{RequestID: b.RequestID, Status: req.Status, Grant: req.Grant}, nil
+		return Result{RequestID: b.RequestID, Status: req.Status, Grant: req.Grant, Permission: req.Permission}, nil
 	case "status":
 		req, exists := st.Requests[b.RequestID]
 		if !exists || (req.Owner != id && req.Controller != id) {
@@ -573,7 +593,7 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 		if status != "approved" {
 			grant = nil
 		}
-		return Result{RequestID: b.RequestID, Status: status, Grant: grant}, nil
+		return Result{RequestID: b.RequestID, Status: status, Grant: grant, Permission: req.Permission}, nil
 	case "revoke":
 		for requestID, req := range st.Requests {
 			if req.Grant != nil && req.Grant.Claims.ID == b.GrantID {
@@ -592,9 +612,13 @@ func (s *Store) apply(st *snapshot, id string, b Body, now int64) (Result, error
 // VerifyGrant is offline cryptographic verification, not a revocation check.
 // The issuer key is supplied from trusted provisioning, never from the grant.
 func VerifyGrant(pub ed25519.PublicKey, g Grant, target, controller string, now time.Time) bool {
+	return verifyGrantPermission(pub, g, target, controller, permission, now)
+}
+
+func verifyGrantPermission(pub ed25519.PublicKey, g Grant, target, controller, expected string, now time.Time) bool {
 	sig, err := hex.DecodeString(g.Signature)
 	c := g.Claims
-	return err == nil && len(pub) == ed25519.PublicKeySize && c.Version == 1 && len(c.ID) == 32 && c.Target == target && c.Controller == controller && c.Permission == permission && c.IssuedAt <= now.Unix() && c.ExpiresAt > now.Unix() && c.ExpiresAt-c.IssuedAt == 300 && ed25519.Verify(pub, grantBytes(c), sig)
+	return err == nil && len(pub) == ed25519.PublicKeySize && c.Version == 1 && len(c.ID) == 32 && c.Target == target && c.Controller == controller && c.Permission == expected && c.IssuedAt <= now.Unix() && c.ExpiresAt > now.Unix() && c.ExpiresAt-c.IssuedAt == 300 && ed25519.Verify(pub, grantBytes(c), sig)
 }
 func (s *Store) Authorized(g Grant, target, controller string) bool {
 	s.mu.Lock()

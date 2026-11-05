@@ -6,6 +6,20 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r204：明确桌面签名权限与跨平台载荷能力边界
+
+承接r203/863f649，先读交接/Git，无前组重型构建；磁盘约138GiB可用，无清理需要。源码排查发现原authority与会话仅签发/接受fixed-payload，不能仅把PONG二进制换成真实capture/input产品。此轮先补明确授权边界，没有启动真实输入或新双机工单，也没有部署服务/改线上Store。
+
+新增设备授权层DesktopPermission（desktop-view、desktop-control），仅新OpenDesktopAuthorization显式启用。目标invite、控制端claim、目标Allow批准必须签同一精确scope；incoming/status保留请求范围。错范围、隐式Allow、自批准/第三端批准、签名后改scope、额外动作选择字段拒绝；Decline无正向scope也可拒绝且不可复活。默认VerifyGrant/Authorized仍只接受fixed-payload，新VerifyDesktopGrant/AuthorizedDesktop独立要求可信本机expected scope和同一批准账本；不把两范围互相替换，不包括剪贴板/无人值守。原120/300秒、nonce、持久限流、单活动授权、撤销不变。
+
+新模式bit与邀请/申请scope持久化，重开核对同一申请/签名grant；默认Open拒绝desktop模式，新构造器拒绝已有fixed-only Store，错误模式不改快照/issuer。旧业务IPC显式拒绝新非空Permission（共享Body增字段不能隐式拓宽原协议）；旧网络PlanProvision/NetworkState及watch/TLS默认验证保持拒绝桌面grant。没有线上入口调用新构造器，不代表网络scope已接通。下一组先贯通独立、明确scope的可信网络/会话/产品路径，再接人工GUI pre-arm，禁止全局宽化VerifyGrant或用peer声明推导expected scope。
+
+r203载荷组件同步加严：Mac handoff改为Fingerprint/Key/Permission/Port/Target五字段规范私有bootstrap，旧四字段及fixed-payload拒绝。view即使用户本机allow=true也不能创建控制客户端；拒绝消耗本次handoff。Windows固定端点必须提供合法DesktopSessionPermission，view/未知范围不能开启input，control也不能附带剪贴板读/写回调；均bind前拒绝。保留TLS/HMAC之后才构造source/sink和全部原join门禁。新字段只应从owner核验后的授权产生，解析本身不认证管道来源；当前GUI尚未接入。
+
+验证：invite与installeddevice相关包回归通过，最终新范围/旧IPC拒绝/旧签名字节golden定向检查通过；Swift增量nice10/jobs2，4项通过；Windows最终当前源码0warning/0error、6项组件通过，含view实际TLS只发布JPEG、control不含clipboard、错HMAC绝不创建source/sink、duplex fixture释放与监听回收。Go全程GOMAXPROCS=2/GOFLAGS=-p=2/nice10与既有离线cache，重型组串行。新增负向形状测试最初撞原邀请轮换预算，已用测试时钟隔离每项，未放宽产品限流；原macOS原生helper弃用警告仍属既有编译信息。
+
+收尾磁盘仍约137GiB可用，无需清理。两次Windows组件（后一次为新增clipboard门禁后的定向复验）实际exit0，各自唯一临时源码根/上传已精确删除，相关进程0、47478空闲；不重发已清理操作。材料 artifacts/connection-poc/r204-owned-desktop/ 与 r204-desktop-final-owned-desktop/，含Go/Swift/Windows日志、component-owner和postcheck；详见docs/OWNED_DESKTOP_INTEGRATION.md。只用了fixture JPEG/sink和内存证书，不计真实画面/输入/GUI或原生凭据整体验收。历史未知owner/根/锁与r201退休安装未动；自动续办ACTIVE，无人工阻塞，本地提交不推送。
+
 ## 2026-11-05 r203：桌面协议的一次性私有handoff与固定本地端点组件通过
 
 承接r202/31437b3，先读交接/Git，无前组重型构建；磁盘约138GiB可用，无清理需要。Mac→Windows SSH单次返回REMOTEAPP_SSH_READY，47478原空闲；未启动新鲜产品工单或重跑已退休工单。历史未知owner未动。
