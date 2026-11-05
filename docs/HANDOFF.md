@@ -6,6 +6,22 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r211：独立Mac查看器、连接按钮与正常子进程收尾
+
+承接r210/8f8f37f，先读交接/Git，确认无前组重型构建；磁盘约133GiB可用。没有SSH、新签名包、服务部署、OS凭据、真实授权/屏幕/输入操作；已退休与历史未知现场未动，docs/archive/继续未跟踪。保留缓存和全部验收材料，无清理必要。
+
+新增Swift可执行OwnedDesktopController，继承匿名stdin/stdout仅作固定摘要owner协议。无argv模式/host/密钥、旧Keychain、TOFU或剪贴板入口。本机连接按钮输入设备码/验证码，再交由Go PreparedDesktop.ConnectIntent单次120秒等待；返回私有诊断脱敏、不可JSON序列化的intent，Claim仅构造待真实OS signer发送的同scope请求，不是grant。角色/错scope/取消/重放封闭，Decide也拒绝已有在途私有操作。原scope/授权有效期和3秒TCP/密钥交换、8秒TLS启动截止保持。
+
+同一GUI显示请求与范围，明确确认后才一次消费五字段handoff，接既有只读TLS/JPEG或控制TLS输入客户端。最多一个待显示帧，不积压大图；原canvas移入共享RemoteCanvas，旧App默认行为保持，新App Command-C/V在读本机pasteboard前被消费，submit也拒绝clipboard。帧数与输入提交数只作遥测，后者不是远端注入成功证明；desktop_state短回复尚未接native轮询。
+
+单一实际内容窗口的委托负责关闭，避免启动时NSApp.windows.first尚无窗口漏接。关闭/退出/停止先释放按住输入、取消待决定/连接意图、锁闭新输入和显示，再记录stop_requested；保留原child/连接等outer owner观察并quiesce/revoke。父stop/EOF才取消客户端，等待网络completion与stdin reader终止后发closed并自然exit0，不强杀、不新建替代child、不把GUI退出当整个owner join。App工厂throw时未创建网络也可正常收尾，不留虚假未join标志。
+
+验证：Swift 41项定向预备/handoff/输入捕获/输入驱动PASS，exec88931实际exit0；窗口接线修改后6项预备复验PASS，exec58367实际exit0。实际App两范围组件driver最终SHA256=3ab3133182c090da8ad3ab55085ffd6bb5b8f3de18d0cfd2ee4a414f8a3961a5，view PID48728/control PID48731，均预备成功/未激活时无网络端点/closed/EOF/实际exit0，exec11322实际exit0。初版App相同预备检查也通过，窗口时序修改后才重验；没有点击同意、交付bootstrap或捕获/注入，不能计GUI双机通过。
+
+Go intent初轮定向PASS2.631s；所有PreparedDesktop定向race最终PASS24.851s，exec43637实际exit0，含既有同PID激活、取消/未知API与实际join。Windows amd64交叉vet clientruntime PASS，exec58045实际exit0，日志为空。所有Go GOMAXPROCS=2/GOFLAGS=-p=2/nice10/离线cache；Swift nice10/jobs2；任务串行，无无变化全项目回归。材料artifacts/connection-poc/r211-owned-controller/{connect.txt,connect-race.txt,windows-vet.txt,swift-fixed.txt,swift-window.txt,gui-preparation.json,gui-window.json}；validation/owned_preparation.py未知join会保留同一driver/进程等待，无terminate/kill或重跑。收尾无本轮App/driver/构建/测试进程。
+
+下一组直接接Windows独立固定摘要GUI：prepare/本机请求显示/明确同意/activate/证书proof/短状态及本机停止，复用PrimaryScreenCapture、SessionNativeInputSink与物理紧急停止能力；不能复用旧连续自动重连/配对入口。随后native main/runner异步持有Prepared（当前仍未设置Product.Prepared）、ConnectIntent→真实claim、incoming→本机决定→明确Allow/Deny→精确approve/status关联，所有preprovision失败也先join同一GUI，再关node/signer。旧管理Exchange20秒不承载120秒人等待，需短轮询/可取消同一owner操作；App状态也不能替代真实注入/画面证据。之后再接fresh builder及r207唯一writer/verifier服务组合，只开一份新鲜双机包实测。当前无人工阻塞，现有自动续办ACTIVE，本地提交不推送。
+
 ## 2026-11-05 r210：同一child的预备/同意/批准绑定/激活与Mac协议模型
 
 承接r209/a3af113，先读交接/Git，确认无前组重型构建；磁盘约133GiB可用。仅本机源码/组件检查，无SSH、新签名包、服务部署、OS凭据、真实GUI或画面输入操作；已退休与历史未知现场未动，docs/archive/继续未跟踪。

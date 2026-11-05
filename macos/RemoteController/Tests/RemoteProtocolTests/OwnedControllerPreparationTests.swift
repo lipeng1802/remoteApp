@@ -68,4 +68,23 @@ final class OwnedControllerPreparationTests: XCTestCase {
             XCTAssertThrowsError(try OwnedControllerPreparation(privatePreparation: Data(raw.utf8)))
         }
     }
+    func testConnectIntentRequiresLocalCodesAndCannotReplay() throws {
+        let p = try prepare()
+        XCTAssertThrowsError(try p.connectIntent(targetCode: "123456abcdef", verificationCode: "12345678"))
+        try p.beginConnectIntent(privateCommand: Data("{\"Op\":\"connect_intent\"}".utf8))
+        for (target, code) in [("100.73.4.118", "12345678"), ("123456ABCDEF", "12345678"), ("123456abcdef", "12abcdef")] {
+            XCTAssertThrowsError(try p.connectIntent(targetCode: target, verificationCode: code))
+        }
+        let raw = try p.connectIntent(targetCode: "123456abcdef", verificationCode: "12345678")
+        XCTAssertEqual(String(data: raw, encoding: .utf8), "{\"Code\":\"12345678\",\"Permission\":\"desktop-control\",\"status\":\"desktop_connect\",\"TargetCode\":\"123456abcdef\"}")
+        XCTAssertThrowsError(try p.beginConnectIntent(privateCommand: Data("{\"Op\":\"connect_intent\"}".utf8)))
+        _ = try p.beginRequest(privateRequest: request())
+    }
+    func testConnectIntentCancellationIsTerminal() throws {
+        let p = try prepare()
+        try p.beginConnectIntent(privateCommand: Data("{\"Op\":\"connect_intent\"}".utf8))
+        XCTAssertEqual(String(data: try p.cancelConnectIntent(), encoding: .utf8), "{\"Permission\":\"desktop-control\",\"status\":\"desktop_connect_cancelled\"}")
+        XCTAssertThrowsError(try p.connectIntent(targetCode: "123456abcdef", verificationCode: "12345678"))
+        XCTAssertThrowsError(try p.beginRequest(privateRequest: request()))
+    }
 }

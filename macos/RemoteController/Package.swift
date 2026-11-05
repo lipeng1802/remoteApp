@@ -8,6 +8,7 @@ let package = Package(
     products: [
         .library(name: "RemoteProtocol", targets: ["RemoteProtocol"]),
         .executable(name: "RemoteController", targets: ["RemoteController"]),
+        .executable(name: "OwnedDesktopController", targets: ["OwnedDesktopController"]),
         .executable(name: "TLSProbeClient", targets: ["TLSProbeClient"]),
         .executable(name: "TLSBridgeProbe", targets: ["TLSBridgeProbe"]),
         .executable(name: "ConnectionIdentityVault", targets: ["ConnectionIdentityVault"]),
@@ -16,11 +17,13 @@ let package = Package(
     ],
     targets: [
         .target(name: "RemoteProtocol"),
+        .target(name: "RemoteCanvas", dependencies: ["RemoteProtocol"]),
+        .executableTarget(name: "OwnedDesktopController", dependencies: ["RemoteProtocol", "RemoteCanvas"]),
         .executableTarget(name: "ConnectionIdentityVault", dependencies: ["RemoteProtocol"]),
         .executableTarget(name: "TLSBridgeProbe", dependencies: ["RemoteProtocol"]),
         .executableTarget(
             name: "RemoteController",
-            dependencies: ["RemoteProtocol"]
+            dependencies: ["RemoteProtocol", "RemoteCanvas"]
         ),
         .executableTarget(
             name: "TLSProbeClient",

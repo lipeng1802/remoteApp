@@ -3,6 +3,7 @@ package clientruntime
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -259,5 +260,45 @@ func TestPreparedDesktopStopWaitsForActivationPrivateOperation(t *testing.T) {
 	}
 	if p.Stop(context.Background()) != nil {
 		t.Fatal("same GUI and operation not joined")
+	}
+}
+
+func TestPreparedDesktopConnectIntentIsLocalScopedPrivateAndSingleUse(t *testing.T) {
+	for _, flag := range []string{"connect", "connectcancel", "connectwrong"} {
+		p, _, a := prepareFixture(t, invite.DesktopControl, false, flag)
+		intent, e := p.ConnectIntent(context.Background())
+		if flag == "connect" {
+			if e != nil || intent == nil || intent.Claim() != (invite.Body{Action: "claim", Permission: invite.DesktopControl, TargetCode: "123456abcdef", Code: "12345678"}) {
+				t.Fatal("invalid GUI intent")
+			}
+			if strings.Contains(fmt.Sprintf("%#v", intent), "12345678") {
+				t.Fatal("intent leaked to diagnostics")
+			}
+			if _, e = json.Marshal(intent); e == nil {
+				t.Fatal("intent became a config/JSON record")
+			}
+			if _, e = p.Decide(context.Background(), strings.Repeat("e", 32), a.c.Grant.Claims.Controller); e != nil {
+				t.Fatal("consent after intent")
+			}
+		} else if flag == "connectcancel" {
+			if e != nil || intent != nil {
+				t.Fatal("cancelled intent became request")
+			}
+			if _, e = p.Decide(context.Background(), strings.Repeat("e", 32), a.c.Grant.Claims.Controller); e == nil {
+				t.Fatal("cancelled UI rearmed")
+			}
+		} else if e == nil || intent != nil {
+			t.Fatal("peer selected another scope")
+		}
+		if _, e = p.ConnectIntent(context.Background()); e == nil {
+			t.Fatal("intent request repeated")
+		}
+		if p.Stop(context.Background()) != nil {
+			t.Fatal("intent child not normally joined")
+		}
+	}
+	target, _, _ := prepareFixture(t, invite.DesktopView, true, "")
+	if _, e := target.ConnectIntent(context.Background()); e == nil {
+		t.Fatal("target became connection initiator")
 	}
 }

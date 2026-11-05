@@ -35,7 +35,7 @@ func TestTLSProductFixture(t *testing.T) {
 	preparationMode := ""
 	if prepared {
 		mode = strings.TrimPrefix(mode, "prepared-")
-		for _, flag := range []string{"deny", "wrong", "missing", "slow", "readywrong"} {
+		for _, flag := range []string{"deny", "wrong", "missing", "slow", "readywrong", "connect", "connectcancel", "connectwrong"} {
 			if strings.HasPrefix(mode, flag+"-") {
 				preparationMode, mode = flag, strings.TrimPrefix(mode, flag+"-")
 				break
@@ -67,6 +67,20 @@ func TestTLSProductFixture(t *testing.T) {
 			ackScope = "fixed-payload"
 		}
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "desktop_prepared", "Permission": ackScope, "Role": role})
+		if strings.HasPrefix(preparationMode, "connect") {
+			var intent struct{ Op string }
+			if reader.Read(&intent) != nil || intent.Op != "connect_intent" {
+				os.Exit(7)
+			}
+			r := map[string]string{"status": "desktop_connect", "Permission": scope, "TargetCode": "123456abcdef", "Code": "12345678"}
+			if preparationMode == "connectcancel" {
+				r = map[string]string{"status": "desktop_connect_cancelled", "Permission": scope}
+			}
+			if preparationMode == "connectwrong" {
+				r["Permission"] = "fixed-payload"
+			}
+			json.NewEncoder(os.Stdout).Encode(r)
+		}
 		var consent struct{ Op, RequestID, Controller string }
 		if reader.Read(&consent) != nil || consent.Op == "stop" {
 			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})

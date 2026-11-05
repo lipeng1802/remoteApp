@@ -1,6 +1,6 @@
 # 自主连接链与桌面界面接入
 
-2026-11-05 r210（承接 r203–r209）。当前是桌面预备/同意协议与 owner 接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
+2026-11-05 r211（承接 r203–r210）。独立 Mac 查看器已接入预备/同意与桌面适配，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
 
 ## 已落实的边界
 
@@ -154,3 +154,15 @@ supervisedcontrol 默认路由回归通过；新桌面管理路由、取消后�
 clientruntime/installeddevice包回归通过；prepared/desktop产品定向race通过。真实固定摘要Go子进程覆盖两scope×双角色：prepare→模拟决定→批准绑定→同一PID激活→certificate proof/descriptor/private handoff→正常Stop/实际exit/reader join；拒绝、缺Allow、错scope/请求/Spec、未知描述符不能发布或重试。对话取消的迟退出与描述符操作阻塞均测试了超时保留、原child/原操作完成后才join，无强杀。
 
 Mac Swift增量nice10/jobs2编译现有GUI及协议模块，4项OwnedControllerPreparation检查通过；只创建未联网状态/handoff，不点击GUI、不读Keychain、不采集/注入。Go子进程的同意回复与issuer/API均为fixture，不能当真实人工许可或画面键鼠验收。Windows交叉vet通过，材料 `artifacts/connection-poc/r210-desktop-preparation/`，没有SSH或新双机包。
+
+## r211：独立 Mac 查看器与私有连接意图
+
+新增可执行目标 `OwnedDesktopController`，只从固定摘要 owner 的继承 stdin 收取预备、连接意图、同意和 bootstrap；不接受 argv 的 host/模式/配对密钥，不读旧 Keychain，不提供首次信任或剪贴板 UI。连接界面由本机用户输入设备码和本次验证码，再按连接按钮；Go `PreparedDesktop.ConnectIntent` 只在 controller 同一 child 上单次等待120秒，返回私有、不可 JSON 序列化且诊断脱敏的 intent。`Claim()` 只生成待 OS signer 发送的精确 claim，不授予网络权限；真实 claim/approve/status 关联、签名 grant 和当前 ACTIVE/watch/角色/有效期门禁仍须通过。
+
+同一 App 另显示经 owner 关联的请求与精确范围，由本机确认或拒绝；bootstrap 只能在明确允许后一次消费。查看器接现有只读 TLS/JPEG 或控制 TLS 输入客户端，最多保留一张待显示画面，避免持续帧在 UI 队列积压；显示帧数与输入提交数只作遥测，后者不是 Windows 注入成功证明。`desktop_state` 仅作私有短状态回复，尚未接 native owner 的状态轮询。
+
+原 `RemoteInputCanvas` 拆入共享 RemoteCanvas，旧 App 保留原默认行为。新查看器显式禁用剪贴板：Command-C/V 在读取本机 pasteboard 前被消费，不下发剪贴板操作；Go scope 和 Windows 服务端仍独立禁止剪贴板。窗口固定为一个，通过实际内容窗口挂接关闭委托；关闭窗口、退出菜单或停止按钮先释放本机按住输入、锁闭后续操作并记录停止意图，保留进程等 outer owner 观察后 quiesce/revoke/join。父 stop/EOF 才取消客户端，并等待网络 completion 和管道 reader 结束后发 closed、自然 exit；未知不强杀或重开。该子进程的 exit 不能替代 watch/node/signer/outer owner join。
+
+验证：Swift 41项定向检查（预备、handoff、输入捕获、输入连接驱动）通过；窗口挂接修改后的6项预备复验及实际 App 两范围预备/正常收尾通过。真实 App SHA-256 `3ab3133182c090da8ad3ab55085ffd6bb5b8f3de18d0cfd2ee4a414f8a3961a5`，view PID48728/control PID48731，均在未激活时无网络端点，closed/EOF/实际exit0。脚本 `validation/owned_preparation.py` 没有点击确认、交付 bootstrap 或模拟键鼠；未知 join 会保留原 driver/进程，无 terminate/kill。Go prepared/intent定向race通过24.851秒，Windows vet为交叉静态检查。材料 `artifacts/connection-poc/r211-owned-controller/`。
+
+本轮没有 SSH、真实授权、屏幕或输入操作，不计 GUI 双机验收。后续必须把新 App 接入 native Prepared 产品与异步本机等待，接 Windows 明确确认界面；短管理交换不能等待120秒人工决定，关闭/拒绝/启动失败须先 join 同一 prepared child，再释放 node/signer。真实服务与 fresh builder 接线仍遵守 r207 唯一规则 writer/verifier 所有权约束，原服务时效及3秒 TCP/密钥交换和8秒 TLS启动截止不变。

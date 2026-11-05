@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r211：独立 Mac OwnedDesktopController 已接连接按钮、明确确认、真实 JPEG/键鼠适配与窗口停止意图；两范围 App 预备→未联网→停止→实际 exit0 通过。Go 单次私有连接意图、取消/race 和 Swift 输入边界通过；Windows GUI/native 协调及真实双机画面输入仍待接线，见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
+
 2026-11-05 r210：已支持同一固定摘要child的预备、请求同意、批准绑定与单次激活；原TLS启动截止保持。Go生命周期/race与Mac协议模型检查通过，真实GUI按钮和native协调仍待接入。见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
 
 2026-11-05 r209：桌面 native owner/监督器已可按编译期 view/control 常量独立构建，并修复私有管理通道提前拒绝桌面 scope 的接线缺口。相关边界、race 与双范围 Windows 静态检查通过；GUI 预备/明确同意仍待接入，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。

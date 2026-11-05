@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 import RemoteProtocol
+import RemoteCanvas
 
 @main
 struct RemoteControllerApp: App {

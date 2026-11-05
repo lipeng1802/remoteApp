@@ -3,12 +3,13 @@ import SwiftUI
 import RemoteProtocol
 
 @MainActor
-final class RemoteInputCanvas: NSView {
-    var onInputs: (@MainActor ([CapturedInput]) -> Bool)?
-    var onPaused: (@MainActor () -> Void)?
-    var onFocusSuspended: (@MainActor () -> Void)?
-    var onFocusResumed: (@MainActor () -> Void)?
-    var onLocalClipboardIssue: (@MainActor (ClipboardTextStatus) -> Void)?
+public final class RemoteInputCanvas: NSView {
+    public var allowsClipboard = true
+    public var onInputs: (@MainActor ([CapturedInput]) -> Bool)?
+    public var onPaused: (@MainActor () -> Void)?
+    public var onFocusSuspended: (@MainActor () -> Void)?
+    public var onFocusResumed: (@MainActor () -> Void)?
+    public var onLocalClipboardIssue: (@MainActor (ClipboardTextStatus) -> Void)?
     private var capture = ControllerInputCapture()
     private var modifiers = MacModifierEventState()
     private var tracking: NSTrackingArea?
@@ -21,12 +22,12 @@ final class RemoteInputCanvas: NSView {
     private var pendingCommandKeyCodes: Set<UInt16> = []
     private var consumedCommandKeyCodes: Set<UInt16> = []
 
-    override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
-    override func hitTest(_ point: NSPoint) -> NSView? { capture.isActive ? super.hitTest(point) : nil }
+    public override var isFlipped: Bool { true }
+    public override var acceptsFirstResponder: Bool { true }
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
+    public override func hitTest(_ point: NSPoint) -> NSView? { capture.isActive ? super.hitTest(point) : nil }
 
-    override init(frame frameRect: NSRect) {
+    public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         NotificationCenter.default.addObserver(self, selector: #selector(focusLost(_:)),
             name: NSApplication.didResignActiveNotification, object: nil)
@@ -34,13 +35,13 @@ final class RemoteInputCanvas: NSView {
             name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
-    required init?(coder: NSCoder) { nil }
+    public required init?(coder: NSCoder) { nil }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
 
-    override func viewDidMoveToWindow() {
+    public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
@@ -56,14 +57,14 @@ final class RemoteInputCanvas: NSView {
     @objc private func focusLost(_ notification: Notification) { suspendForFocusLoss() }
     @objc private func focusRegained(_ notification: Notification) { resumeAfterFocusLoss() }
 
-    func update(screen: ScreenInfoPayload?, enabled: Bool) {
+    public func update(screen: ScreenInfoPayload?, enabled: Bool) {
         self.screen = screen
         self.enabled = enabled
         if !enabled, capture.isActive { pause() }
     }
 
     @discardableResult
-    func start() -> Bool {
+    public func start() -> Bool {
         guard screen != nil, window?.isKeyWindow == true,
               window?.makeFirstResponder(self) == true else { return false }
         resumeWhenFocused = false
@@ -77,7 +78,7 @@ final class RemoteInputCanvas: NSView {
     }
 
     @discardableResult
-    func pause() -> [CapturedInput] {
+    public func pause() -> [CapturedInput] {
         resumeWhenFocused = false
         let releases = capture.stop()
         modifiers.reset()
@@ -90,7 +91,7 @@ final class RemoteInputCanvas: NSView {
         return releases
     }
 
-    func stopForDisconnect() -> [CapturedInput] {
+    public func stopForDisconnect() -> [CapturedInput] {
         resumeWhenFocused = false
         let releases = capture.stop()
         modifiers.reset()
@@ -102,7 +103,7 @@ final class RemoteInputCanvas: NSView {
         return releases
     }
 
-    func abandon() {
+    public func abandon() {
         resumeWhenFocused = false
         _ = capture.stop()
         modifiers.reset()
@@ -113,7 +114,7 @@ final class RemoteInputCanvas: NSView {
         onPaused?()
     }
 
-    override func resignFirstResponder() -> Bool {
+    public override func resignFirstResponder() -> Bool {
         suspendForFocusLoss()
         return true
     }
@@ -145,7 +146,7 @@ final class RemoteInputCanvas: NSView {
         onFocusResumed?()
     }
 
-    override func updateTrackingAreas() {
+    public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
         let area = NSTrackingArea(rect: .zero,
@@ -186,7 +187,7 @@ final class RemoteInputCanvas: NSView {
         }
     }
 
-    override func flagsChanged(with event: NSEvent) {
+    public override func flagsChanged(with event: NSEvent) {
         guard capture.isActive, let flag = aggregateFlag(for: event.keyCode) else { return }
         let previous = modifiers.pressedKeyCodes
         let held = modifiers.update(keyCode: event.keyCode,
@@ -222,9 +223,13 @@ final class RemoteInputCanvas: NSView {
             suppressing: pendingCommandKeyCodes.union(consumedCommandKeyCodes)))
     }
 
-    override func keyDown(with event: NSEvent) {
+    public override func keyDown(with event: NSEvent) {
         guard capture.isActive else { return }
         if event.keyCode == 53 { pause(); return }
+        if !allowsClipboard, event.modifierFlags.contains(.command), [UInt16(8), UInt16(9)].contains(event.keyCode) {
+            consumeClipboardCommand()
+            return
+        }
         if event.keyCode == 8, event.modifierFlags.contains(.command) {
             guard !event.isARepeat, !clipboardShortcutKeyDown else { return }
             clipboardShortcutKeyDown = true
@@ -251,7 +256,7 @@ final class RemoteInputCanvas: NSView {
         send(capture.key(keyCode: event.keyCode, action: .down, isRepeat: event.isARepeat))
     }
 
-    override func keyUp(with event: NSEvent) {
+    public override func keyUp(with event: NSEvent) {
         guard capture.isActive else { return }
         if event.keyCode == 8, clipboardShortcutKeyDown {
             clipboardShortcutKeyDown = false
@@ -264,7 +269,7 @@ final class RemoteInputCanvas: NSView {
         send(capture.key(keyCode: event.keyCode, action: .up))
     }
 
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard capture.isActive, window?.firstResponder === self, event.type == .keyDown,
               MacKeyboardMapper.event(keyCode: event.keyCode, action: .down) != nil else {
             return super.performKeyEquivalent(with: event)
@@ -273,25 +278,25 @@ final class RemoteInputCanvas: NSView {
         return true
     }
 
-    override func mouseMoved(with event: NSEvent) { send(capture.move(to: point(event))) }
-    override func mouseDragged(with event: NSEvent) { mouseMoved(with: event) }
-    override func rightMouseDragged(with event: NSEvent) { mouseMoved(with: event) }
-    override func otherMouseDragged(with event: NSEvent) { mouseMoved(with: event) }
+    public override func mouseMoved(with event: NSEvent) { send(capture.move(to: point(event))) }
+    public override func mouseDragged(with event: NSEvent) { mouseMoved(with: event) }
+    public override func rightMouseDragged(with event: NSEvent) { mouseMoved(with: event) }
+    public override func otherMouseDragged(with event: NSEvent) { mouseMoved(with: event) }
 
     private func button(_ event: NSEvent, _ button: MouseButton, _ action: ButtonAction) {
         send(capture.button(button, action: action, at: point(event)))
     }
-    override func mouseDown(with event: NSEvent) { flushPendingCommands(); button(event, .left, .down) }
-    override func mouseUp(with event: NSEvent) { button(event, .left, .up) }
-    override func rightMouseDown(with event: NSEvent) { flushPendingCommands(); button(event, .right, .down) }
-    override func rightMouseUp(with event: NSEvent) { button(event, .right, .up) }
-    override func otherMouseDown(with event: NSEvent) {
+    public override func mouseDown(with event: NSEvent) { flushPendingCommands(); button(event, .left, .down) }
+    public override func mouseUp(with event: NSEvent) { button(event, .left, .up) }
+    public override func rightMouseDown(with event: NSEvent) { flushPendingCommands(); button(event, .right, .down) }
+    public override func rightMouseUp(with event: NSEvent) { button(event, .right, .up) }
+    public override func otherMouseDown(with event: NSEvent) {
         if event.buttonNumber == 2 { flushPendingCommands(); button(event, .middle, .down) }
     }
-    override func otherMouseUp(with event: NSEvent) {
+    public override func otherMouseUp(with event: NSEvent) {
         if event.buttonNumber == 2 { button(event, .middle, .up) }
     }
-    override func scrollWheel(with event: NSEvent) {
+    public override func scrollWheel(with event: NSEvent) {
         let scale = event.hasPreciseScrollingDeltas ? 1.0 : 120.0
         send(capture.wheel(horizontal: -Double(event.scrollingDeltaX) * scale,
                            vertical: Double(event.scrollingDeltaY) * scale,
@@ -300,9 +305,10 @@ final class RemoteInputCanvas: NSView {
 }
 
 @MainActor
-struct RemoteInputOverlay: NSViewRepresentable {
+public struct RemoteInputOverlay: NSViewRepresentable {
     let screen: ScreenInfoPayload?
     let enabled: Bool
+    let allowsClipboard: Bool
     let register: @MainActor (RemoteInputCanvas) -> Void
     let submit: @MainActor ([CapturedInput]) -> Bool
     let paused: @MainActor () -> Void
@@ -310,8 +316,22 @@ struct RemoteInputOverlay: NSViewRepresentable {
     let focusResumed: @MainActor () -> Void
     let localClipboardIssue: @MainActor (ClipboardTextStatus) -> Void
 
-    func makeNSView(context: Context) -> RemoteInputCanvas {
+    public init(screen: ScreenInfoPayload?, enabled: Bool, allowsClipboard: Bool = true,
+                register: @escaping @MainActor (RemoteInputCanvas) -> Void,
+                submit: @escaping @MainActor ([CapturedInput]) -> Bool,
+                paused: @escaping @MainActor () -> Void,
+                focusSuspended: @escaping @MainActor () -> Void,
+                focusResumed: @escaping @MainActor () -> Void,
+                localClipboardIssue: @escaping @MainActor (ClipboardTextStatus) -> Void) {
+        self.screen = screen; self.enabled = enabled; self.allowsClipboard = allowsClipboard
+        self.register = register; self.submit = submit; self.paused = paused
+        self.focusSuspended = focusSuspended; self.focusResumed = focusResumed
+        self.localClipboardIssue = localClipboardIssue
+    }
+
+    public func makeNSView(context: Context) -> RemoteInputCanvas {
         let view = RemoteInputCanvas()
+        view.allowsClipboard = allowsClipboard
         view.onInputs = submit
         view.onPaused = paused
         view.onFocusSuspended = focusSuspended
@@ -321,7 +341,8 @@ struct RemoteInputOverlay: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: RemoteInputCanvas, context: Context) {
+    public func updateNSView(_ view: RemoteInputCanvas, context: Context) {
+        view.allowsClipboard = allowsClipboard
         view.onInputs = submit
         view.onPaused = paused
         view.onFocusSuspended = focusSuspended

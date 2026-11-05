@@ -26,6 +26,7 @@ type PreparedDesktop struct {
 	server                                              bool
 	request, controller                                 string
 	decisionStarted, allowed, consumed, closing, broken bool
+	connectStarted                                      bool
 	approved                                            invite.Grant
 	issuer                                              ed25519.PublicKey
 	opCancel                                            context.CancelFunc
@@ -87,7 +88,7 @@ func (p *PreparedDesktop) Decide(ctx context.Context, request, controller string
 		return false, session.ErrDenied
 	}
 	p.mu.Lock()
-	if p.child == nil || p.broken || p.closing || p.decisionStarted || p.consumed || (!p.server && controller != p.self) || (p.server && controller == p.self) {
+	if p.child == nil || p.broken || p.closing || p.decisionStarted || p.consumed || p.opCancel != nil || (!p.server && controller != p.self) || (p.server && controller == p.self) {
 		p.mu.Unlock()
 		return false, session.ErrDenied
 	}

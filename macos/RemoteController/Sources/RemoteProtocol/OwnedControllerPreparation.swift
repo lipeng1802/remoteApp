@@ -19,12 +19,13 @@ public final class OwnedControllerPreparation: CustomStringConvertible, CustomDe
     }
     private struct Request: Decodable { let Op, RequestID, Controller: String }
     private struct Scope: Decodable { let Permission, Target: String }
-    private enum Phase { case prepared, deciding, allowed, closed }
+    private enum Phase { case prepared, connecting, deciding, allowed, closed }
     private let lock = NSLock()
     private let ownID: String
-    private let permission: String
+    public let permission: String
     private var phase = Phase.prepared
     private var requestID: String?
+    private var connectRequested = false
 
     public var description: String { "OwnedControllerPreparation(private)" }
     public var debugDescription: String { description }
@@ -45,6 +46,37 @@ public final class OwnedControllerPreparation: CustomStringConvertible, CustomDe
 
     public func preparedReply() -> Data {
         Self.canonical(["status": "desktop_prepared", "Permission": permission, "Role": "controller"])!
+    }
+
+    public func beginConnectIntent(privateCommand data: Data) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard phase == .prepared, !connectRequested else { throw OwnedControllerPreparationError.invalidState }
+        connectRequested = true
+        guard data == Data("{\"Op\":\"connect_intent\"}".utf8) else {
+            phase = .closed; throw OwnedControllerPreparationError.invalidFrame
+        }
+        phase = .connecting
+    }
+
+    /// Called by the local Connect button, never prefilled from a peer frame.
+    /// Codes stay on the trusted inherited pipe, not stdout logging or argv.
+    public func connectIntent(targetCode: String, verificationCode: String) throws -> Data {
+        lock.lock(); defer { lock.unlock() }
+        guard phase == .connecting else { throw OwnedControllerPreparationError.invalidState }
+        guard Self.hex(targetCode, count: 12), verificationCode.utf8.count == 8,
+              verificationCode.utf8.allSatisfy({ (48...57).contains($0) }) else {
+            throw OwnedControllerPreparationError.invalidFrame
+        }
+        phase = .prepared
+        return Self.canonical(["status": "desktop_connect", "Permission": permission,
+                               "TargetCode": targetCode, "Code": verificationCode])!
+    }
+
+    public func cancelConnectIntent() throws -> Data {
+        lock.lock(); defer { lock.unlock() }
+        guard phase == .connecting else { throw OwnedControllerPreparationError.invalidState }
+        phase = .closed
+        return Self.canonical(["status": "desktop_connect_cancelled", "Permission": permission])!
     }
 
     public func beginRequest(privateRequest data: Data) throws -> RequestPreview {
