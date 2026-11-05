@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/nodeidentity"
 	"sync"
 	"testing"
 	"time"
@@ -126,6 +127,47 @@ func TestPersistentVerifierResumeAndScopedRetire(t *testing.T) {
 		t.Fatal("recreated existing state")
 	}
 }
+func TestDesktopTestVerifierRejectsCrossPlaneResumeAndRetire(t *testing.T) {
+	ctx := context.Background()
+	f := func(_ string, key string) Node { return &node{key: key} }
+	legacy, desktop := path(t), path(t)
+	legacyDriver, desktopDriver := &driver{}, &driver{}
+	legacyOwner, err := Open(ctx, legacy, true, legacyDriver, f)
+	if err != nil || legacyOwner.DesktopTest() {
+		t.Fatal("legacy verifier", err)
+	}
+	stop(t, legacyOwner)
+	control := nodeidentity.DesktopControlURL
+	r, err := openReported(ctx, desktop, true, desktopDriver, f, nil, control)
+	if err != nil || !r.DesktopTest() {
+		t.Fatal("desktop verifier", err)
+	}
+	first := r.Info()
+	if RetireDesktopTest(ctx, desktop, desktopDriver) == nil {
+		t.Fatal("retired live desktop verifier")
+	}
+	stop(t, r)
+	if _, err := Open(ctx, desktop, false, desktopDriver, f); err == nil ||
+		Retire(ctx, desktop, desktopDriver) == nil || CheckResumeJournal(desktop) == nil {
+		t.Fatal("legacy API accepted desktop state")
+	}
+	if _, err := openReported(ctx, legacy, false, legacyDriver, f, nil, control); err == nil ||
+		RetireDesktopTest(ctx, legacy, legacyDriver) == nil {
+		t.Fatal("desktop API accepted legacy state")
+	}
+	if legacyDriver.cleanups != 0 || desktopDriver.cleanups != 0 {
+		t.Fatal("cross-plane retirement reached provider")
+	}
+	r, err = openReported(ctx, desktop, false, desktopDriver, f, nil, control)
+	if err != nil || r.Info() != first || desktopDriver.mints != 1 {
+		t.Fatal("desktop resume lost identity", err)
+	}
+	stop(t, r)
+	if RetireDesktopTest(ctx, desktop, desktopDriver) != nil || desktopDriver.cleanups != 1 {
+		t.Fatal("scoped desktop retirement failed")
+	}
+}
+
 func containsSecret(b []byte) bool {
 	for i := 0; i+len("TEST_REGISTRATION_SECRET") <= len(b); i++ {
 		if string(b[i:i+len("TEST_REGISTRATION_SECRET")]) == "TEST_REGISTRATION_SECRET" {
@@ -147,7 +189,7 @@ func TestUnknownMintIsNotRetriedAndRetirePreservesUncertainty(t *testing.T) {
 	if Retire(context.Background(), dir, d) != nil {
 		t.Fatal("retire unknown")
 	}
-	s, e := load(dir)
+	s, e := load(dir, Control)
 	if e != nil || s.Phase != "retired" || s.Record.UserID != "" || s.Record.KeyID != "" {
 		t.Fatal("invented handles", e)
 	}

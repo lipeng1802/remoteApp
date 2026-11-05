@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r216 已完成隔离桌面 TEST 的 Headscale 配置、管理通道与 verifier 接线。Headscale 0.29.4 配置预检和跨控制面拒绝测试通过。下一组接入独立 authority 的启动、签名 profile 和退出收尾。[接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)
+
 2026-11-05 r215 已接入独立桌面 TEST 签名包构建。两端以同一编译期权限绑定 GUI、产品和监督器，注册节点只使用隔离控制面。正式发行先完成真实 GUI 双机验收，再验收正式签名安装、升级、卸载和跨网运行。见[桌面接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
 
 2026-11-05 r214 已接入桌面双端计划停止。Mac 本机停止意图确认后，Windows 确认预期断流，随后控制端和目标端依次实际 join，保留独立撤销。双端发布产物已核对摘要与组件启动退出。下一组接隔离 TEST 控制面与新鲜签名工单。[接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)

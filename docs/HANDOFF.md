@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-05 r216 隔离 Headscale、verifier 与策略驱动
+
+用户明确要求继续并恢复自动续办。已将现有 `remoteapp` 更新为 ACTIVE，保持原线程及 10 分钟节奏。提示承接最新交接，先推进可离线完成的隔离准备。GUI 验收后继续已授权的正式发行准备。等待外部变化时保留一次预检与暂停规则。
+
+承接 782d354。确认无上一组重型进程，工作卷约 129 GiB。Go 构建和测试沿用 GOMAXPROCS=2、GOFLAGS=-p=2、nice10 及可信离线缓存，未启动或修改任何远端服务，未重探测 19443。
+
+隔离 Headscale 配置限定在同用户私有空根。生成独立 TLS、Noise、DERP、数据库和 socket 路径，启用 database 策略。CLI 仅使用该根内的确切配置和私有 socket，每次调用复核内容与所有权，清除继承环境覆盖。该配置使用 19443/TCP、3479/UDP，metrics 和 gRPC 绑定独立回环端口。沿用原应用门禁所需的隔离 IPv4 前缀，在不同 Headscale 实例各自分配。没有修改默认 Headscale 配置和数据。
+
+新增桌面 verifier 的显式创建、恢复和退休入口，使用同一固定桌面控制地址核对节点状态与 journal。默认与桌面 verifier 双向拒绝跨控制面恢复和退休。隔离 broker 组合要求桌面 TEST verifier 和专用 CLI，默认组合拒绝桌面 TEST verifier。
+
+verifier、broker、nodeidentity 和 productprofile 定向 race 通过。首次 headscale 测试的 macOS 临时目录路径超过 Unix socket 长度，改用唯一短临时根后重跑该包，race 通过，可信本机 Headscale 0.29.4 的真实 `configtest` 同时通过。证据 artifacts/connection-poc/r216-isolated-desktop/。未启动本地监听、实际注册节点或签发双机 profile。
+
+下一组实现独立桌面 authority 的显式 prepare/serve/retire，绑定该 stage 的 TLS、Store、verifier、broker，第一条注册前确认独立 DB 空 ACL，签发供 r215 builder 验证的公开 profile，验证依赖的实际退出和故障保留。先做可离线验证的准备。待 Mac 和 Windows 均可达隔离入口后，执行一次预检并开一份新鲜 GUI 双机工单。历史工单保持封存，正式发布和签名账户操作需另行安排。
+
 ## 2026-11-05 r215 独立桌面 TEST 签名包与发行关键路径
 
 承接 21fab67。用户要求尽快推进正式发行，先完成可离线验证的双端构建和桌面协调。工作卷检查约 132 GiB，构建期间最低观测约 129 GiB。所有 Go 构建和测试采用 GOMAXPROCS=2、GOFLAGS=-p=2、nice10、可信离线缓存，重型任务串行。

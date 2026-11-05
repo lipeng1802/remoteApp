@@ -11,8 +11,9 @@ import (
 
 // DesktopService is the separately anchored service used by desktop TEST builds.
 const (
-	DesktopService  = "remoteapp-desktop-test"
-	DesktopEndpoint = "https://mk.fengmap.com:8444"
+	DesktopService    = "remoteapp-desktop-test"
+	DesktopEndpoint   = "https://mk.fengmap.com:8444"
+	DesktopControlURL = "https://mk.fengmap.com:19443"
 )
 
 const releaseRoot = "5b74a1a3b2b6c477b81016d71c38275d9fdd17d01e6c33ec7847dcd892a5198f"

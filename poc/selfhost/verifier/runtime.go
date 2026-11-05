@@ -53,6 +53,7 @@ type Runtime struct {
 	cancel  context.CancelFunc
 	done    chan struct{}
 	live    atomic.Bool
+	control string
 	mu      sync.Mutex
 	err     error
 	info    Info
@@ -69,6 +70,11 @@ func (r *Runtime) Info() Info {
 	return i
 }
 func (r *Runtime) Done() <-chan struct{} { return r.done }
+
+// DesktopTest reports the fixed control plane bound when opening this owner.
+func (r *Runtime) DesktopTest() bool {
+	return r != nil && r.control == nodeidentity.DesktopControlURL
+}
 
 // Verify uses this runtime's isolated overlay and a trusted Store-bound key.
 // Caller must not use control-plane rows or client-selected keys as proof.
@@ -145,7 +151,7 @@ func save(dir string, s snapshot) error {
 	}
 	return nil
 }
-func load(dir string) (snapshot, error) {
+func load(dir, control string) (snapshot, error) {
 	var s snapshot
 	path := filepath.Join(dir, "journal.json")
 	i, e := os.Lstat(path)
@@ -162,7 +168,7 @@ func load(dir string) (snapshot, error) {
 		return s, ErrVerifier
 	}
 	id, e := hex.DecodeString(s.Record.ID)
-	if e != nil || len(id) != 16 || hex.EncodeToString(id) != s.Record.ID || s.Version != 1 || s.Control != Control || !strings.HasPrefix(s.Record.NodeKey, "nodekey:") || len(s.Record.NodeKey) != 72 || s.Record.Expires <= 0 {
+	if e != nil || len(id) != 16 || hex.EncodeToString(id) != s.Record.ID || s.Version != 1 || s.Control != control || !strings.HasPrefix(s.Record.NodeKey, "nodekey:") || len(s.Record.NodeKey) != 72 || s.Record.Expires <= 0 {
 		return s, ErrVerifier
 	}
 	key, e := hex.DecodeString(s.Record.NodeKey[8:])
@@ -208,7 +214,7 @@ func handle(s string) bool {
 // CheckResumeJournal is read-only. It neither acquires ownership nor contacts
 // the provider. A passing snapshot is not proof of a live node or successful Up.
 func CheckResumeJournal(dir string) error {
-	s, err := load(dir)
+	s, err := load(dir, Control)
 	if err != nil || (s.Phase != "issued" && s.Phase != "ready") {
 		return ErrVerifier
 	}
@@ -276,6 +282,18 @@ func Open(ctx context.Context, dir string, create bool, d Driver, f Factory) (*R
 // OpenReported emits fixed failure stages only, never identities, credentials
 // or provider error strings. Nil preserves the original quiet API.
 func OpenReported(ctx context.Context, dir string, create bool, d Driver, f Factory, report func(string)) (*Runtime, error) {
+	return openReported(ctx, dir, create, d, f, report, Control)
+}
+
+// OpenDesktopTest owns a separate TEST node, journal and fixed control plane.
+// The caller supplies its isolated server-local registration driver.
+func OpenDesktopTest(ctx context.Context, dir string, create bool, d Driver, report func(string)) (*Runtime, error) {
+	return openReported(ctx, dir, create, d, func(nodeDir, _ string) Node {
+		return newOverlay(nodeDir, nodeidentity.DesktopControlURL, report)
+	}, report, nodeidentity.DesktopControlURL)
+}
+
+func openReported(ctx context.Context, dir string, create bool, d Driver, f Factory, report func(string), control string) (*Runtime, error) {
 	fail := func(stage string) {
 		if report != nil {
 			report(stage)
@@ -297,7 +315,7 @@ func OpenReported(ctx context.Context, dir string, create bool, d Driver, f Fact
 	}()
 	var s snapshot
 	if !create {
-		s, e = load(dir)
+		s, e = load(dir, control)
 		if e != nil || s.Phase != "issued" && s.Phase != "ready" {
 			fail("verifier_journal_failed")
 			return nil, ErrVerifier
@@ -309,7 +327,12 @@ func OpenReported(ctx context.Context, dir string, create bool, d Driver, f Fact
 			return nil, ErrVerifier
 		}
 	}
-	key, e := nodeidentity.Prepare(nodeDir, Control)
+	var key string
+	if control == nodeidentity.DesktopControlURL {
+		key, e = nodeidentity.PrepareDesktopTest(nodeDir)
+	} else {
+		key, e = nodeidentity.Prepare(nodeDir, control)
+	}
 	if e != nil {
 		fail("verifier_node_state_failed")
 		return nil, ErrVerifier
@@ -320,7 +343,7 @@ func OpenReported(ctx context.Context, dir string, create bool, d Driver, f Fact
 		if _, e = rand.Read(id); e != nil {
 			return nil, ErrVerifier
 		}
-		s = snapshot{Version: 1, Control: Control, Phase: "planned", Record: invite.ProvisionRecord{ID: hex.EncodeToString(id), NodeKey: key, Expires: time.Now().Unix() + 120}}
+		s = snapshot{Version: 1, Control: control, Phase: "planned", Record: invite.ProvisionRecord{ID: hex.EncodeToString(id), NodeKey: key, Expires: time.Now().Unix() + 120}}
 		if save(dir, s) != nil {
 			return nil, ErrVerifier
 		}
@@ -372,7 +395,7 @@ func OpenReported(ctx context.Context, dir string, create bool, d Driver, f Fact
 		return nil, ErrVerifier
 	}
 	run, stop := context.WithCancel(ctx)
-	r := &Runtime{cancel: stop, done: make(chan struct{}), info: info, ctx: run, node: n}
+	r := &Runtime{cancel: stop, done: make(chan struct{}), control: control, info: info, ctx: run, node: n}
 	r.live.Store(true)
 	owned = false
 	closeNode = false
@@ -424,7 +447,16 @@ func OpenReported(ctx context.Context, dir string, create bool, d Driver, f Fact
 // Retire requires exclusive ownership and reclaims only the durable ticket.
 // Existing network backends must be fenced/stopped BEFORE retiring a verifier.
 // Missing/corrupt journals are not authority to delete any provider resource.
-func Retire(ctx context.Context, dir string, d Driver) (result error) {
+func Retire(ctx context.Context, dir string, d Driver) error {
+	return retire(ctx, dir, d, Control)
+}
+
+// RetireDesktopTest reclaims only the ticket in the isolated TEST journal.
+func RetireDesktopTest(ctx context.Context, dir string, d Driver) error {
+	return retire(ctx, dir, d, nodeidentity.DesktopControlURL)
+}
+
+func retire(ctx context.Context, dir string, d Driver, control string) (result error) {
 	if d == nil || ctx.Err() != nil {
 		return ErrVerifier
 	}
@@ -437,7 +469,7 @@ func Retire(ctx context.Context, dir string, d Driver) (result error) {
 			result = ErrVerifier
 		}
 	}()
-	s, e := load(dir)
+	s, e := load(dir, control)
 	if e != nil {
 		return e
 	}

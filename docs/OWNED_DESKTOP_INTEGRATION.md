@@ -199,3 +199,9 @@ Mac 本机停止意图和活动 GUI 状态通过同一 native owner 核对。Win
 新包有效期最多 20 分钟，编译上限 8 分钟，产出时复核签名 profile 仍有效。真机工单使用新生成的源 profile 与新安装根，构建审计使用的合成 profile 不参与部署。现有 Headscale 实例由既有服务持有。部署前需要独立的数据库、管理 socket、策略、authority 和 verifier，并验证客户端可达的 TLS 入口。GUI 验收需要观察 Mac 显示的真实 Windows 画面、Windows 对键鼠的实际响应，以及撤销和双端正常退出。
 
 真机验收后，复用已有安装事务、稳定启动器和维护收尾，完成正式 Mac 与 Windows 包的签名、干净机器安装、保留身份升级、降级拒绝和活动卸载。发行前还需验证脱离 SSH 的长期入口、跨网和耐久运行。
+
+## r216 隔离控制面准备
+
+`headscale.PrepareDesktopTest` 仅在当前用户拥有的空私有测试目录生成固定配置和策略目录。实例使用本目录的数据库、Noise/DERP 密钥、TLS 文件和管理 socket。CLI 每次操作前复核配置及私有 socket，清除继承的配置覆盖环境。现有控制面的配置和 CLI 路径保持原行为。
+
+桌面 TEST verifier 绑定 TCP 19443 的独立控制地址。恢复与退休均核对同一 journal 的控制面归属。隔离 broker 组合只接收桌面 TEST verifier，并通过专用实例应用数据库策略。配置已通过本机 Headscale 0.29.4 `configtest`。后续由独立 authority 在第一条注册前确认空 ACL，并在退出时依次等待 HTTP、策略监督器和 verifier 完成收尾。

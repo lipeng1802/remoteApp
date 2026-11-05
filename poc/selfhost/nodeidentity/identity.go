@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"remoteapp.local/selfhost-poc/productprofile"
 	"tailscale.com/ipn"
 	"tailscale.com/ipn/store"
 	"tailscale.com/types/key"
@@ -17,7 +18,7 @@ import (
 )
 
 // DesktopControlURL is the separate desktop TEST control plane.
-const DesktopControlURL = "https://mk.fengmap.com:19443"
+const DesktopControlURL = productprofile.DesktopControlURL
 
 var ErrIdentity = errors.New("private node identity unavailable")
 

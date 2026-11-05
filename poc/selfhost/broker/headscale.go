@@ -15,7 +15,7 @@ import (
 // and caller must Stop supervisor BEFORE stopping runtime or closing Store.
 // The fixed local CLI and runtime-owned overlay never use installed Tailscale.
 func StartHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, policyDir string, interval time.Duration) (*NetworkSupervisor, error) {
-	return startHeadscaleNetworkSupervisor(ctx, st, v, policyDir, interval, false)
+	return startLocalHeadscaleNetworkSupervisor(ctx, st, v, policyDir, interval, false)
 }
 
 // StartDesktopHeadscaleNetworkSupervisor opts a new trusted server composition
@@ -23,11 +23,18 @@ func StartHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *v
 // existing daemon config or frontend IPC; it does not create/upgrade a Store or
 // acquire another verifier's ownership. The caller owns the same Stop ordering.
 func StartDesktopHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, policyDir string, interval time.Duration) (*NetworkSupervisor, error) {
-	return startHeadscaleNetworkSupervisor(ctx, st, v, policyDir, interval, true)
+	return startLocalHeadscaleNetworkSupervisor(ctx, st, v, policyDir, interval, true)
 }
 
-func startHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, policyDir string, interval time.Duration, desktop bool) (*NetworkSupervisor, error) {
-	if ctx == nil || ctx.Err() != nil || st == nil || v == nil || !v.Live() {
+func startLocalHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, policyDir string, interval time.Duration, desktop bool) (*NetworkSupervisor, error) {
+	if v.DesktopTest() {
+		return nil, ErrBroker
+	}
+	return startHeadscaleNetworkSupervisor(ctx, st, v, headscale.LocalRunner(), policyDir, interval, desktop)
+}
+
+func startHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, run headscale.Run, policyDir string, interval time.Duration, desktop bool) (*NetworkSupervisor, error) {
+	if ctx == nil || ctx.Err() != nil || st == nil || v == nil || !v.Live() || run == nil {
 		return nil, ErrBroker
 	}
 	if !filepath.IsAbs(policyDir) || filepath.Clean(policyDir) != policyDir {
@@ -38,7 +45,7 @@ func startHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *v
 	if e != nil || real != policyDir || se != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
 		return nil, ErrBroker
 	}
-	d := &headscale.Driver{Run: headscale.LocalRunner(), VerifierIP: v.Info().IP, PolicyDir: policyDir, PolicyMode: "database"}
+	d := &headscale.Driver{Run: run, VerifierIP: v.Info().IP, PolicyDir: policyDir, PolicyMode: "database"}
 	d.Proof = func(ctx context.Context, r invite.ProvisionRecord, o invite.ProvisionObservation) bool {
 		pub, e := st.DevicePublicKey(r.Device)
 		return e == nil && v.Verify(ctx, r, o, pub)

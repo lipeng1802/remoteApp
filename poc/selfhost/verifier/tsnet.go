@@ -22,8 +22,12 @@ func NewOverlay(dir, key string) Node {
 	return NewOverlayReported(dir, key, nil)
 }
 func NewOverlayReported(dir, key string, report func(string)) Node {
+	return newOverlay(dir, Control, report)
+}
+
+func newOverlay(dir, control string, report func(string)) Node {
 	nodeidentity.ConfigureOnline()
-	return &overlay{s: &tsnet.Server{Dir: dir, Hostname: "remoteapp-verifier", ControlURL: Control, Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}, report: report}
+	return &overlay{s: &tsnet.Server{Dir: dir, Hostname: "remoteapp-verifier", ControlURL: control, Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}, report: report}
 }
 func status(st *ipnstate.Status) Info {
 	if st == nil || st.Self == nil {
