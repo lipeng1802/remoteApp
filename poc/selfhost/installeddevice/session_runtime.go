@@ -33,6 +33,7 @@ func enrolledSessionServer(node EnrollmentNode) *tsnet.Server {
 // local node identity/address and remote WhoIs identity before returning a
 // connection.
 type SessionRuntime struct {
+	policy invite.GrantPolicy
 	peers  *SessionPeers
 	gate   *streamgate.Gate
 	node   *tsnet.Server
@@ -88,19 +89,50 @@ func ProductSession(product clientruntime.Product) SessionWork {
 	}
 }
 
+// DesktopProductSession is separate trusted wiring for one exact local scope.
+// It cannot upgrade a fixed runtime, consume PONG telemetry, or choose scope
+// from a peer grant. The same process owner still joins every partial child.
+func DesktopProductSession(expected invite.DesktopPermission, product clientruntime.Product) SessionWork {
+	return func(ctx context.Context, runtime *SessionRuntime) error {
+		return runtime.RunDesktopProduct(ctx, expected, product)
+	}
+}
+
+func (r *SessionRuntime) RunDesktopProduct(ctx context.Context, expected invite.DesktopPermission, product clientruntime.Product) error {
+	policy, err := invite.DesktopGrantPolicy(expected)
+	if err != nil || product.Observation != nil {
+		return invite.ErrDenied
+	}
+	return r.runProduct(ctx, product, policy)
+}
+
 // RunProduct starts the fixed-digest product for this signed role. The target
 // publishes certificate possession, then delivers its fresh HMAC and exact
 // fingerprint over a one-shot mutually authenticated overlay exchange. The
 // controller independently verifies the issuer TLS descriptor before its
 // product receives the secret over the private child pipe.
 func (r *SessionRuntime) RunProduct(ctx context.Context, product clientruntime.Product) error {
+	return r.runProduct(ctx, product, invite.GrantPolicy{})
+}
+
+func (r *SessionRuntime) runProduct(ctx context.Context, product clientruntime.Product, policy invite.GrantPolicy) error {
 	if ctx == nil || r == nil || r.peers == nil || r.gate == nil || r.node == nil || r.client == nil || len(r.issuer) != ed25519.PublicKeySize || r.clock == nil || product.ControllerKey != "" || product.TargetReady != nil {
+		return invite.ErrDenied
+	}
+	if r.policy != policy || !policy.Verify(r.issuer, r.peers.grant, r.peers.grant.Claims.Target, r.peers.grant.Claims.Controller, r.clock()) {
 		return invite.ErrDenied
 	}
 	if r.peers.server {
 		return r.runTargetProduct(ctx, product)
 	}
 	return r.runControllerProduct(ctx, product)
+}
+
+func (r *SessionRuntime) startProduct(ctx context.Context, p clientruntime.Product, server bool, port int, fingerprint string) (*processowner.Child, error) {
+	if r.policy.IsDesktop() {
+		return clientruntime.StartBoundDesktopProduct(ctx, invite.DesktopPermission(r.policy.Permission()), p, r.client, r.issuer, r.peers.grant, r.peers.binding, server, r.clock, port, fingerprint)
+	}
+	return clientruntime.StartBoundProduct(ctx, p, r.client, r.issuer, r.peers.grant, r.peers.binding, server, r.clock, port, fingerprint)
 }
 
 func (r *SessionRuntime) runTargetProduct(ctx context.Context, product clientruntime.Product) error {
@@ -112,7 +144,7 @@ func (r *SessionRuntime) runTargetProduct(ctx context.Context, product clientrun
 		}
 	}
 	startuptrace.Emit(ctx, startuptrace.TargetTLS)
-	child, err := clientruntime.StartBoundProduct(ctx, product, r.client, r.issuer, r.peers.grant, r.peers.binding, true, r.clock, 0, "")
+	child, err := r.startProduct(ctx, product, true, 0, "")
 	if err != nil || child == nil || !called {
 		return stopPartialProduct(child, err)
 	}
@@ -171,7 +203,7 @@ func (r *SessionRuntime) runControllerProduct(ctx context.Context, product clien
 	product.ControllerKey = key
 	port := listener.Addr().(*net.TCPAddr).Port
 	startuptrace.Emit(ctx, startuptrace.ControllerTLS)
-	child, err := clientruntime.StartBoundProduct(ctx, product, r.client, r.issuer, r.peers.grant, r.peers.binding, false, r.clock, port, fingerprint)
+	child, err := r.startProduct(ctx, product, false, port, fingerprint)
 	key, fingerprint = "", ""
 	product.ControllerKey = ""
 	if err != nil || child == nil {

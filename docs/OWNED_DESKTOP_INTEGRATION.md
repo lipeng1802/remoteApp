@@ -1,6 +1,6 @@
 # 自主连接链与桌面界面接入
 
-2026-11-05 r207（承接 r203–r206）。当前是桌面协议与签名权限组件接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
+2026-11-05 r208（承接 r203–r207）。当前是桌面 owner/runner 与协议接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
 
 ## 已落实的边界
 
@@ -20,7 +20,7 @@ Windows 新增 `TlsProbeServer.RunOwnedDesktopOnceAsync`，固定监听/peer 为
 
 Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重新打开校验 scope 与同一申请/签名 grant 一致。默认 Open 不接受新模式，新构造器也不能打开已有 fixed-only Store，失败不改快照或重建 issuer。没有线上 Store 迁移或任何旧文件回写。既有 Authorized、默认网络后端与业务 IPC 继续拒绝桌面授权；r206 的显式桌面后端另行接通如下。AuthorizedDesktop 本身仍只核查设备授权账本。
 
-**r207 已补精确 scope 的独立撤销、provision 前终态确认与显式 broker/headscale 组合；下一组接限定 desktop owner/runner、native 新鲜服务组合，再做 GUI pre-arm。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
+**r208 已接精确 scope 的桌面 owner/runner 和载荷分派；下一组接独立固定摘要的 native 构建入口、GUI pre-arm 与新鲜服务组合。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
 
 ## r205：客户端明确策略、watch 与私有载荷接线
 
@@ -30,7 +30,7 @@ Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重
 
 新增独立 `StartBoundDesktopProduct`，要求本机 expected scope，先核验 grant 与签名 TLS 描述符，再经同一匿名管道交付五字段 bootstrap。控制端和目标端 ready 均须回显完全一致的 Permission，旧 PONG ready、未知字段或错范围拒绝；目标错范围在发布证书/会话 secret 前拒绝。它不接受旧 PONG Observation 作为桌面遥测。失败仍返回同一已启动 child 供原 owner join，不另开进程、不强杀、不把超时当退出。
 
-installeddevice 的内部授权/节点 verifier/session identity 验证点保留同一策略，当前既有 runner 仍构造 fixed 默认策略。尚未导出新的桌面 runner 或打通实际 GUI/原生载荷入口；原 RunProduct 也仍是 fixed 默认。**既有默认服务端仍拒绝 desktop grant**；r206 增加显式后端支持，但尚未部署新 backend，没有改现有 Store、profile 或控制面。不能据此宣称已取得桌面网络身份或真实画面/输入。
+installeddevice 的内部授权/节点 verifier/session identity 验证点保留同一策略，既有 runner 继续构造 fixed 默认策略。r208 另行导出下述桌面组合；原 RunProduct 仍 fixed 默认。**既有默认服务端仍拒绝 desktop grant**；r206 增加显式后端支持，但尚未部署新 backend，没有改现有 Store、profile 或控制面。不能据此宣称已取得桌面网络身份或真实画面/输入。
 
 ## r206：显式服务端 scope 后端
 
@@ -54,6 +54,16 @@ revoke mutation 的服务端正常回执仍只有 `status=revoked`，不添加�
 
 **线上接入前的约束**：现有 `cmd/native-enrollment-authority` 是旧维护验收专用，绑定旧维护 Store 摘要、candidate 路径和持久 verifier；不能通过去掉其 hash/lock/paused 检查或改旧 Store 模式来复用。应给桌面准备明确的新鲜 TEST 服务根/profile，并先核对现有测试服务的规则 writer 与 verifier 实际所有权。Headscale driver 对隔离 PoC 的策略执行全量替换，另起不同 policy 目录并不自动隔离同一控制面的规则，禁止让两个 writer 并行争抢。此次没有 SSH 或修改远端服务，尚未验证新的线上组合。
 
+## r208：独立桌面 runner 与维护 owner
+
+新增 `CoordinatedDesktopSession` 与显式 TEST tunnel 版本，进入 runner 前固定 expected scope，生产/不完整组合拒绝，不能通过私有 open 帧选择策略。原默认 runner 保持 fixed。desktop runner 的 ready 必须回显同一 Permission；业务只允许该范围的邀请、claim、Allow，Decline 可不声明正向范围。身份/签名时刻/nonce/证明选择字段、错范围网络 grant 和生命周期命令不进入业务路径。成功回复按动作、同 RequestID、完整 grant 范围及精确结果字段校验，approved grant 还须签名/角色合法；pending/idle/expired 可作界面状态，不被当作活动或收尾证明。
+
+相同私有策略贯穿校时、节点 verifier、ACTIVE watch、session identity、streamgate 和 `SessionRuntime`。新增 `DesktopProductSession` / `RunDesktopProduct`，只能消费同一 runner 的策略；默认 RunProduct 不能升级桌面，桌面不能消费旧 PONG Observation。双角色仍经相同 StartBoundDesktopProduct 完成签名 TLS 描述符/证书持有证明、单次 HMAC 交付与五字段 handoff，原监听/拨号/WhoIs/secret 截止及全部资源 join 顺序保留。双端并行 provision/ACTIVE 与“目标就绪后控制端新 identity/gate”协调不变。
+
+`productmaintenance.StartDesktopTest` 在打开原生身份租约前固定本机范围，只重开既有 binding，核对原公钥，固定摘要 child 的 ready 必须回显范围。ConfigureRevocation 从该不可变策略建立独立 NewDesktop 通路，建立前拒绝业务；默认 StartTest/ConfigureRevocation 不升级。未知 provision 仍先 Pin 原 grant、锁住单次尝试并保留 child/signer；错误/混合业务回复锁闭但不提前丢失撤销 owner。维护器的 privatepipe 解码同步拒绝重复/未知字段，多余或错范围 ready 不成为可用 owner。
+
+当前仅导出受信库组合，`cmd/installed-autonomous-product`、现有构建器与两个正式 GUI 可执行入口仍走 fixed/旧路径，不能用旧二进制装入桌面 grant。下一组需新增独立编译的桌面 native 产品/监督器和签名构建接线，把本机 expected scope 固定在构建中，不能加 parent/peer 的 mode 选择字段。
+
 ## 下一组管理与界面接线
 
 1. 选择独立、固定摘要的桌面产品构建入口。不得用公开 IPC 的 `mode/native/host/path` 字段把旧 PONG fixture 或业务命令升级为画面/原生输入能力。
@@ -61,6 +71,8 @@ revoke mutation 的服务端正常回执仍只有 `status=revoked`，不添加�
 3. 人工等待安排在已有 `StartBoundProduct` 的 8 秒 TLS 产品启动预算**之前**。优先研究预启动并保持同一个固定摘要桌面 child 的准备/许可阶段，后续仍由 owner 交付原 bootstrap、发布证书证明并拥有该 child。不能为了等待弹窗而延长原 3 秒 TCP/密钥交换或有效期，不能将未知状态换进程重试。预启动失败、拒绝或过期也必须实际 join。
 4. Windows 复用每次共享许可、物理 Ctrl+Alt+Esc 和本机停止；后台管理保持隐藏 Interactive。真实 capture/input 只在允许的用户桌面执行，默认只读。Mac 复用现有画面 canvas/焦点输入释放，使用新的一次性 handoff，禁止旧地址/配对密钥回退。
 5. 接线后验证取消/断网/撤销/窗口关闭与 owner 的正常及故障收尾，严格等待同一 child、watch/node/signer/reader 实际 join。再启动一份全新签名双机工单，记录实际画面增长、输入事件与本机可见效果、拒绝不产生输入，以及双端停止/撤销。组件 JPEG/sink fixture 与 PONG 都不是这些效果的替代。
+
+GUI 的停止/窗口关闭还须先通知同一 owner 进入 quiesce/revoke/join；不能让 GUI child 自行退出后，把监督器检测到的意外进程结束改称正常成功。pre-arm 必须保留同一固定摘要 child，人工同意、拒绝、超时均要由该 owner 实际 join，不能另起替代进程。
 
 ## 当前验证与证据
 
@@ -94,3 +106,11 @@ invite 包回归通过；六个新后端边界（含两范围的实际本机 HTT
 grantrevocation/broker 包检查通过；新增 scope 边界、本机实际 HTTPS（含故意丢失撤销回执）及 kernel peer broker/HTTPS 接线定向 race 通过。覆盖 view/control/fixed 独立传输、原客户端关闭后同一授权撤销仅一次、双方只读终态确认、provision 前明确拒绝；授权 scope 互斥、混合 approved 回执不得引发重发、默认客户端不得接受 scoped 收尾证明。productmaintenance/installeddevice 消费方回归通过，保持原 lifecycle 与默认固定策略。
 
 证据 `artifacts/connection-poc/r207-scoped-revocation/{revocation.txt,broker.txt,scope-race.txt,consumers.txt,final-boundaries.txt}`。内存 issuer/signers 与 fixture driver，真实本机 HTTPS/Unix socket/Store/监督线程 join；没有 Headscale CLI、OS signer、真实画面或键鼠，也没有新双机包。现有四组 TEST 完成证据不变，尚未完成本批 GUI 验收。
+
+### r208 验证增量
+
+installeddevice/productmaintenance 包回归与新桌面边界 race 通过。真实本机 HTTPS 下，两种范围均完成 runner ready→注册→邀请/claim/incoming→自批准拒绝→明确 Allow→批准后 status；runner/signer 实际结束后，同身份的独立租约/传输仍能撤销，两参与者可只读确认。签名者为内存 fixture，不是 OS signer。
+
+另验证 scope 经 ACTIVE watch→新 session identity→streamgate/runtime 保留、控制端仅一次触发；同一固定 SHA-256 Go child 实际接收 scoped 私有 handoff 并正常 Stop/exit/reader join；默认产品/错 scope/PONG Observation 在网络前拒绝。维护 owner 测试只读既有内存 binding，检查 lease 先关闭，拒绝旧/重复 ready，独立撤销建好前拒绝业务，错 scope/混合回执锁闭，以及未知 provision 仍已 Pin 且保留 signer，显式 Release 等同一 child 退出。
+
+材料 `artifacts/connection-poc/r208-desktop-runner/`。真实本机 HTTPS、签名协议、Go 子进程/监督器和 join，node/issuer/credential/capture/input 均为 fixture；没有真实 Headscale、Swift/C# 桌面载荷、画面键鼠或双机 GUI 验收，没有远程部署/新包或历史现场操作。全部本机构建和测试采用原限额、离线缓存与串行任务组，Windows vet 为交叉静态检查。

@@ -140,6 +140,7 @@ func CoordinatedSessionViaTestTunnel(release trustinstall.Release, open clientru
 type runnerOptions struct {
 	testTunnel  uint16
 	coordinated bool
+	policy      invite.GrantPolicy
 }
 
 func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork, options ...runnerOptions) clientowner.Runner {
@@ -187,6 +188,7 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		}
 		defer client.Close()
 		gate := newAuthorizationGate(profile, signer)
+		gate.policy = option.policy
 		var enrolled enrollment
 		var start controllerStart
 		defer func() {
@@ -203,7 +205,11 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 				expiry.Stop()
 			}
 		}()
-		if err := output(map[string]string{"status": "ready"}); err != nil {
+		ready := map[string]string{"status": "ready"}
+		if option.policy.IsDesktop() {
+			ready["Permission"] = option.policy.Permission()
+		}
+		if err := output(ready); err != nil {
 			return err
 		}
 		w.Arm(release.Specification().Test)
@@ -251,7 +257,10 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 				// supervised business policy. The runner returns a fault after
 				// its ordinary joined cleanup, even if the watch is still ACTIVE.
 				faultStop := request == (Request{Op: "stop_fault"})
-				if (!validCommand(request) && !faultStop && !(provision && factory != nil)) || (enrolled.attempted && request.Op != "stop" && !faultStop) {
+				if option.policy.IsDesktop() && provision && request.Network.Grant.Claims.Permission != option.policy.Permission() {
+					return trustprofile.ErrTrust
+				}
+				if (!validCommandForPolicy(request, option.policy) && !faultStop && !(provision && factory != nil)) || (enrolled.attempted && request.Op != "stop" && !faultStop) {
 					return trustprofile.ErrTrust
 				}
 				if faultStop {
@@ -306,6 +315,10 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 				call, cancel := context.WithTimeout(ctx, 15*time.Second)
 				value, err := client.DeviceRequest(call, request.Device)
 				cancel()
+				if err == nil && option.policy.IsDesktop() && (!ValidDesktopDeviceResult(invite.DesktopPermission(option.policy.Permission()), request.Device, value) ||
+					(value.Grant != nil && !gate.validGrant(*value.Grant, time.Unix(value.Grant.Claims.IssuedAt, 0)))) {
+					return trustprofile.ErrTrust
+				}
 				reply := map[string]any{"status": "device_result", "passed": err == nil}
 				if err == nil {
 					reply["device"] = value

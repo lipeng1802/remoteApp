@@ -6,6 +6,24 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r208：独立桌面runner、同策略维护owner与载荷分派
+
+承接r207/24ec209，首读交接/Git，无前组重型构建；磁盘约135GiB可用。仅本机代码/组件检查，没有SSH、新服务/双机包、OS凭据或真实GUI操作，不触碰历史未知/已退休工单。docs/archive/继续为原未跟踪材料，未纳入提交。
+
+新增installeddevice.CoordinatedDesktopSession及单独TEST tunnel组合：trusted expected scope在打开signer前固定，生产/非法scope/不完整work或factory拒绝，open帧没有mode。私有ready回显相同Permission；业务按动作收窄字段，invite/claim/Allow要求相同scope，Decline允许无正向范围。成功结果校验动作、scope、同申请和精确字段，批准grant另验签名/角色；错范围、混合/额外回执不得成为可用结果。原runner保持fixed默认。
+
+相同私有策略已从授权gate贯穿节点verifier/ACTIVE watch、新session identity/streamgate到SessionRuntime。新增DesktopProductSession/RunDesktopProduct，校验本机策略一致后调用StartBoundDesktopProduct；旧RunProduct不能升级桌面，桌面拒绝PONG Observation。原双端并行provision/ACTIVE、目标就绪后控制端一次触发fresh identity/gate、单次HMAC/签名TLS描述符及全部3秒/8秒截止不改，仍按原processowner.Own和session→watch→proof/node→signer顺序实际join。
+
+productmaintenance新增StartDesktopTest：只读重开原binding，先关闭inspection lease再取同一公钥signer，固定摘要child ready必须同范围。ConfigureRevocation从这个私有策略建立r207 NewDesktop，建立前不发业务。未知provision先Pin再发送，仍锁住单次尝试、保留独立撤销owner，错范围/混合回执锁闭但不释放signer。维护解码使用原privatepipe严格reader，重复/未知字段及多回执拒绝；默认StartTest/ConfigureRevocation继续fixed。Release和维护/故障/程序删除原门禁未放宽。
+
+最终两包回归PASS（installeddevice9.217s/productmaintenance15.661s）；新桌面边界定向race PASS（5.592s/11.440s），exec88296实际exit0。Windows amd64交叉vet两包PASS，exec88948实际exit0、日志为空。此前初轮默认回归和桌面增量也PASS；最后源码修改后的最终结果为上述packages.txt/scope-race.txt。原nativejournal macOS弃用警告为既有信息，无新增构建错误。所有Go采用GOMAXPROCS=2/GOFLAGS=-p=2/nice10/受信离线cache，重型任务组串行，无整项目无变化回归。
+
+实际本机HTTPS证据：view/control两组runner ready→注册→邀请/claim/incoming→自批准拒绝→明确Allow→批准后status成功；runner与其signer实际结束后，同设备身份的独立内存signer租约/HTTPS通路仍可撤销，两角色可只读确认。另测范围经mock ACTIVE→fresh session identity→真实streamgate/runtime保存；固定SHA-256 Go child实际接收scoped五字段handoff并Stop/exit/reader join；默认/错scope/PONG观察器在网络前拒绝。维护fixture证明旧/重复ready失败保留partial owner、独立通路先于业务、错scope封闭、未知provision仍已Pin且保留signer，明确Release等原child退出。issuer/signers/node/画面输入均为fixture，不能计Headscale/OS signer/Swift/C#原生远控或GUI双机通过。
+
+材料artifacts/connection-poc/r208-desktop-runner/{initial.txt,desktop-boundaries.txt,desktop-integration.txt,packages.txt,scope-race.txt,windows-vet.txt}。收尾无新重型进程驻留，磁盘约134GiB可用，保留增量缓存，无清理必要。
+
+下一组优先把库组合接独立固定摘要native desktop产品/监督器与签名构建入口，并做同一个GUI child的pre-arm/人工同意/取消接线：现cmd/installed-autonomous-product、对应trustinstall builder、supervisor main与两GUI可执行入口仍是fixed/旧路径，不应直接用旧二进制消费desktop grant。新增构建把expected scope固定在trusted build中，禁止运行时parent mode/native/host选择。人工同意应在原8秒TLS启动前，准备成功后保留同一个child，目标TLS实际就绪后才触发控制身份/载荷；GUI停止/关闭须先通知原owner quiesce/revoke/join，不能把child自行意外结束改报正常成功。真实画面/输入遥测须单独定义，不能复用PONG计数冒充。新鲜服务器根/profile仍须遵守r207唯一policy writer与verifier所有权约束，不能删旧维护hash/paused/lock门禁、改旧Store或并行争抢策略。当前无人工阻塞，现有自动续办ACTIVE，本地提交不推送。
+
 ## 2026-11-05 r207：同scope独立撤销、provision前终态与broker监督组合
 
 承接r206/6313990，先读交接/Git，确认无前组重型构建。工作卷约135GiB可用，无需清理，继续复用离线缓存。此轮仅本机源码/组件检查，没有SSH、服务部署、新双机工单或GUI/OS凭据操作；r201已退休与历史未知现场均未动。

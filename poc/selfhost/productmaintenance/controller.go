@@ -19,6 +19,7 @@ import (
 	"remoteapp.local/selfhost-poc/installeddevice"
 	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/localmaintenance"
+	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
@@ -54,6 +55,7 @@ type boundRevocation interface {
 }
 
 type Controller struct {
+	policy                                        invite.GrantPolicy
 	r                                             trustinstall.Release
 	trust                                         trustinstall.Factory
 	records                                       autonomousbinding.JournalFactory
@@ -80,7 +82,13 @@ func (c *Controller) ConfigureRevocation(ctx context.Context, port uint16) error
 	if c.revocation != nil || c.child == nil || c.requested || c.broken || c.provisioned || c.released {
 		return ErrProduct
 	}
-	r, e := grantrevocation.New(c.r.Specification(), c.signer, port)
+	var r *grantrevocation.Channel
+	var e error
+	if c.policy.IsDesktop() {
+		r, e = grantrevocation.NewDesktop(c.r.Specification(), c.signer, port, invite.DesktopPermission(c.policy.Permission()))
+	} else {
+		r, e = grantrevocation.New(c.r.Specification(), c.signer, port)
+	}
 	if e != nil {
 		return e
 	}
@@ -109,6 +117,21 @@ func (c *Controller) revoke(ctx context.Context) (json.RawMessage, error) {
 // initializes identities/stores. Failure can return a partial Controller;
 // callers must Release and join it, not discard ownership on a deadline.
 func StartTest(ctx context.Context, r trustinstall.Release, spec processowner.Spec, trust trustinstall.Factory, records autonomousbinding.JournalFactory, open OpenSigner) (*Controller, error) {
+	return startTest(ctx, r, spec, trust, records, open, invite.GrantPolicy{})
+}
+
+// StartDesktopTest fixes the local scope before acquiring any native lease or
+// starting the pinned child. The ready reply must echo it; ConfigureRevocation
+// must then establish the same independent channel before business requests.
+func StartDesktopTest(ctx context.Context, r trustinstall.Release, spec processowner.Spec, trust trustinstall.Factory, records autonomousbinding.JournalFactory, open OpenSigner, expected invite.DesktopPermission) (*Controller, error) {
+	policy, e := invite.DesktopGrantPolicy(expected)
+	if e != nil {
+		return nil, ErrProduct
+	}
+	return startTest(ctx, r, spec, trust, records, open, policy)
+}
+
+func startTest(ctx context.Context, r trustinstall.Release, spec processowner.Spec, trust trustinstall.Factory, records autonomousbinding.JournalFactory, open OpenSigner, policy invite.GrantPolicy) (*Controller, error) {
 	if ctx == nil || ctx.Err() != nil || !r.Specification().Test || trust == nil || records == nil || open == nil {
 		return nil, ErrProduct
 	}
@@ -124,7 +147,7 @@ func StartTest(ctx context.Context, r trustinstall.Release, spec processowner.Sp
 	if e = b.Close(); e != nil {
 		return nil, e
 	}
-	c := &Controller{r: r, trust: trust, records: records, binding: record, serial: make(chan struct{}, 1)}
+	c := &Controller{policy: policy, r: r, trust: trust, records: records, binding: record, serial: make(chan struct{}, 1)}
 	c.signer, e = open(record)
 	if e != nil || c.signer == nil {
 		return c, ErrProduct
@@ -139,9 +162,14 @@ func StartTest(ctx context.Context, r trustinstall.Release, spec processowner.Sp
 	}
 	ready, e := c.child.Exchange(ctx, map[string]string{"Op": "open"})
 	var initial struct {
-		Status string `json:"status"`
+		Status     string `json:"status"`
+		Permission string `json:"Permission"`
 	}
-	if e != nil || decode(ready, &initial) != nil || initial.Status != "ready" {
+	expected := ""
+	if policy.IsDesktop() {
+		expected = policy.Permission()
+	}
+	if e != nil || decode(ready, &initial) != nil || initial.Status != "ready" || initial.Permission != expected {
 		c.broken = true
 		return c, ErrProduct
 	}
@@ -149,9 +177,8 @@ func StartTest(ctx context.Context, r trustinstall.Release, spec processowner.Sp
 }
 
 func decode(raw []byte, target any) error {
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.DisallowUnknownFields()
-	if d.Decode(target) != nil || d.Decode(new(any)) != io.EOF {
+	d := privatepipe.NewReader(bytes.NewReader(append(append([]byte(nil), raw...), '\n')))
+	if d.Read(target) != nil || d.Read(new(any)) != io.EOF {
 		return ErrProduct
 	}
 	return nil
@@ -194,7 +221,11 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 	if installeddevice.ValidControllerStart(request) {
 		return c.startController(ctx, request)
 	}
-	if !installeddevice.ValidSupervisedCommand(request) {
+	valid := installeddevice.ValidSupervisedCommand(request)
+	if c.policy.IsDesktop() {
+		valid = installeddevice.ValidDesktopSupervisedCommand(request, invite.DesktopPermission(c.policy.Permission()))
+	}
+	if !valid {
 		return nil, ErrProduct
 	}
 	if e := c.lock(ctx); e != nil {
@@ -202,6 +233,9 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 	}
 	defer c.unlock()
 	if c.child == nil || c.requested || c.provisioned || c.broken || c.closed || c.released {
+		return nil, ErrProduct
+	}
+	if c.policy.IsDesktop() && c.revocation == nil {
 		return nil, ErrProduct
 	}
 	if request.Op == "provision" && c.revocation != nil {
@@ -237,7 +271,13 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 			Passed bool          `json:"passed"`
 			Device invite.Result `json:"device"`
 		}
-		if decode(raw, &result) == nil && result.Status == "device_result" && result.Passed {
+		decoded := decode(raw, &result) == nil && result.Status == "device_result"
+		if c.policy.IsDesktop() && (!decoded || (!result.Passed && result.Device != (invite.Result{})) ||
+			(result.Passed && !installeddevice.ValidDesktopDeviceResult(invite.DesktopPermission(c.policy.Permission()), request.Device, result.Device))) {
+			c.broken = true
+			return nil, ErrProduct
+		}
+		if decoded && result.Passed {
 			switch request.Device.Action {
 			case "claim", "incoming", "approve", "status":
 				if result.Device.RequestID != "" {
