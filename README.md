@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05：用户已恢复现有自动续办；当前批次转入 Mac GUI → Windows 明确同意 → 自主连接链上的真实画面/键鼠与正常停止验收。r201 四组 TEST 已完成，不重复执行；正式发行与 RK3588 尚待后续。详见 [最新交接](docs/HANDOFF.md)。
+
 r201 本组四项TEST目标已实际收口：新鲜Mac↔Windows持续TLS PONG、独立认证程序-only删除及身份/profile/floor/activation保留、明确撤销、全部正常join/exit0、专用退休及本轮根/进程/任务/规则清理均通过。见[交接与整体剩余事项](docs/HANDOFF.md)。按用户约定结束本组自动续办；GUI、生产发行、RK3588及历史未知工单不计为已完成。
 
 r200 已把独立待命卸载器接入新鲜TEST构建及双平台父管理：PONG持续增长后才认证退出并删除程序，未知保留原owner；严格exit0/EOF后验证身份、profile/floor、activation保持，再独立撤销并专用退休。Go/race、Windows静态及8项父管道检查、194项Python检查通过。下一份新鲜包验证完整双机卸载整链，尚未计整体验收。

@@ -6,6 +6,16 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r202：用户恢复现有自动续办，转入GUI真实远控接入
+
+用户明确要求恢复自动任务并开启执行。应用工具已确认现有remoteapp状态ACTIVE，沿用原10分钟间隔与当前对话，没有新建自动化。已替换旧的四组TEST执行提示，承接r201完成证据，下一批目标为Mac GUI发起连接→Windows明确确认→自主身份/连接链上的真实画面与键鼠→双端停止、撤销及正常join。完成该批真实闭环后暂停，生产发行/最终服务接入/RK3588等仍列后续，不把TEST成功扩大为正式发行通过。
+
+首轮只读盘点：Git基于f258866，无前组Go compile/link或fresh runner重型构建；磁盘约138GiB可用，不清理审计与故障材料。存在历史39f1e0d8023c及e4cc83467910的supervisor/identity-vault驻留，未操作其stdin、根或进程，不当作新鲜工单重启。9610faf58fe6等旧未知现场同样保留。
+
+现有GUI接口差距已定位：macos/RemoteController/Sources/RemoteController/RemoteControllerApp.swift的ViewerModel仍以Tailscale地址、Keychain配对密钥/旧证书指纹进入TLSControllerClient或TLSInputSimulationClient；windows/RemoteAgent/src/RemoteAgent/MainWindow.xaml.cs的Start_Click仍由TailscaleEndpoints/AgentCertificateStore/AgentCredentialStore建立旧共享服务。Windows已具有每次共享明确同意及物理紧急停止约束，必须复用保留，不用后台脚本代替用户同意。下一组先厘清poc/selfhost已验收的supervisor会话/身份/载荷接线与Swift/C#客户端的最小受信边界，再实现可验证接口；不把固定PONG或旧GUI各自通过记为新整链通过。本轮尚未修改产品代码或启动新鲜双机工单。
+
+继续遵守GOMAXPROCS=2、GOFLAGS=-p=2、nice10及重型任务串行，原信任和截止不变；Windows管理隐藏Interactive。真实工单前单次SSH连通检查，遇人工权限、登录或密钥阻塞保存精确证据后暂停。未推送远端。
+
 ## 2026-11-04 r201：四组TEST目标全部实际收口，结束本组自动续办
 
 285e789之后的唯一新鲜program-removal工单0e5a1255b517已完整通过，原exec session56322实际exit0，日志/tmp/remoteapp-r201-removal.log为OWNERS_READY → NORMAL_REVOKED → NORMAL_JOINED → NORMAL_RETIRED。未进入故障分支，也未重跑任何已退休安装。activity-state最终normal_activity_joined_and_test_roots_retired，双端joined/retired均true，checks含实际双端PONG增长、6次增长、认证维护退出后独立撤销及正常产品join。独立program-removal-result明确记录两角色files_removed/epoch1/preserved=true/joined=true/zero_exit=true，分别绑定各自原生维护事务，未把普通stop升级为卸载。
