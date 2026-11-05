@@ -9,6 +9,24 @@ namespace RemoteProtocol;
 
 public static class TlsProbeServer
 {
+    // Dedicated single-session desktop endpoint behind the owner-managed overlay
+    // gate. Only trusted GUI composition may call this after local sharing consent;
+    // neither a peer nor the private bootstrap can supply that consent. Keep the
+    // fixed-payload TEST bridge below incapable of creating capture/input objects.
+    public static Task RunOwnedDesktopOnceAsync(X509Certificate2 certificate,
+        byte[] deviceKey, byte[] agentIdentifier, bool localSharingAllowed,
+        Func<IJpegFrameSource> createJpegSource, CancellationToken cancellationToken,
+        InputSimulationOptions? inputSession = null,
+        Action<string>? reportStatus = null, Action<JpegTransferMetrics>? reportMetrics = null)
+    {
+        ArgumentNullException.ThrowIfNull(createJpegSource);
+        if (!localSharingAllowed || inputSession is { LocalControlAllowed: false })
+            throw new InvalidOperationException("Explicit local desktop consent is required before listening.");
+        return RunCoreAsync(IPAddress.Loopback, IPAddress.Loopback, 47478, certificate,
+            deviceKey, agentIdentifier, cancellationToken, createJpegSource: createJpegSource,
+            inputSimulation: inputSession, reportStatus: reportStatus, reportMetrics: reportMetrics);
+    }
+
     // Development-only product protocol bridge: loopback, fixed PING/PONG,
     // no JPEG source, input sink or clipboard callbacks can be supplied.
     public static async Task RunFixedPayloadBridgeAsync(int port, X509Certificate2 certificate,

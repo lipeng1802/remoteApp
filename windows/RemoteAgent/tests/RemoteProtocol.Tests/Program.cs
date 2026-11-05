@@ -9,6 +9,9 @@ using RemoteProtocol;
 
 var tests = new (string Name, Action Run)[]
 {
+    ("owned desktop requires local consent before listening", OwnedDesktopTests.ConsentBeforeListen),
+    ("owned desktop bad HMAC never opens capture or input", OwnedDesktopTests.WrongKey),
+    ("owned desktop authenticated video input and joined cleanup", DuplexSessionTests.OwnedDesktopUsesAuthenticatedDuplex),
     ("TLS JPEG and input share one authenticated duplex session", DuplexSessionTests.VideoAndInputShareOneAuthenticatedConnection),
     ("control-enabled agent accepts a read-only controller", DuplexSessionTests.ControlEnabledAgentAcceptsReadOnlyController),
     ("Mac disconnect keeps Windows sharing available", DuplexSessionTests.DisconnectKeepsSharingAvailable),
@@ -82,9 +85,14 @@ var failures = 0;
 // Default runs still include this unchanged credential-store test.
 if (args.Length > 0)
 {
-    if (args.Length != 1 || args[0] != "--bridge-validation") return 2;
-    Console.WriteLine("SKIP Windows credential persistence and cleanup: bridge SSH profile; run default suite interactively for DPAPI.");
-    tests = tests.Where(t => t.Name != "Windows credential persistence and cleanup").ToArray();
+    if (args.Length == 1 && args[0] == "--owned-desktop-validation")
+        tests = tests.Where(t => t.Name.StartsWith("owned desktop ", StringComparison.Ordinal)).ToArray();
+    else
+    {
+        if (args.Length != 1 || args[0] != "--bridge-validation") return 2;
+        Console.WriteLine("SKIP Windows credential persistence and cleanup: bridge SSH profile; run default suite interactively for DPAPI.");
+        tests = tests.Where(t => t.Name != "Windows credential persistence and cleanup").ToArray();
+    }
 }
 foreach (var test in tests)
 {

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r203：自主桌面接入组件已通过——Mac 一次性私有 handoff、Windows 固定本地桌面端点及认证/同意/资源释放边界。GUI 与真实画面键鼠整链仍在接线，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
+
 2026-11-05：用户已恢复现有自动续办；当前批次转入 Mac GUI → Windows 明确同意 → 自主连接链上的真实画面/键鼠与正常停止验收。r201 四组 TEST 已完成，不重复执行；正式发行与 RK3588 尚待后续。详见 [最新交接](docs/HANDOFF.md)。
 
 r201 本组四项TEST目标已实际收口：新鲜Mac↔Windows持续TLS PONG、独立认证程序-only删除及身份/profile/floor/activation保留、明确撤销、全部正常join/exit0、专用退休及本轮根/进程/任务/规则清理均通过。见[交接与整体剩余事项](docs/HANDOFF.md)。按用户约定结束本组自动续办；GUI、生产发行、RK3588及历史未知工单不计为已完成。

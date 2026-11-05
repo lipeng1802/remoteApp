@@ -2,9 +2,21 @@
 
 ## 后续平台切片：RK3588 ARM64 真机
 
-用户指定 RK3588 主板作为后续运行目标。暂以 Linux ARM64 被控端作为首个验收方向，板卡型号、系统镜像、桌面会话和首发角色待确认。当前优先完成 Mac ↔ Windows 载荷与正常收尾验收。
+用户指定 RK3588 主板作为后续运行目标。暂以 Linux ARM64 被控端作为首个验收方向，板卡型号、系统镜像、桌面会话和首发角色待确认。r201 已完成 Mac ↔ Windows TEST 载荷与正常收尾，当前优先接入 GUI 真实画面与键鼠。
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
+
+## 2026-11-05 r203：桌面协议的一次性私有handoff与固定本地端点组件通过
+
+承接r202/31437b3，先读交接/Git，无前组重型构建；磁盘约138GiB可用，无清理需要。Mac→Windows SSH单次返回REMOTEAPP_SSH_READY，47478原空闲；未启动新鲜产品工单或重跑已退休工单。历史未知owner未动。
+
+新增Mac OwnedDesktopHandoff，按原Go四字段规范bootstrap仅一次消费，拒绝重复/未知字段、host/root/控制/剪贴板选择、非规范key/pin/target/数值；固定loopback，复用原TLS/JPEG与输入驱动，内存pin拒绝TOFU和持久化，默认可只读，控制另需本机许可。公开打印脱敏，未用handoff可discard；解析不认证管道来源，不改变原owner的双向身份/ACTIVE/描述符/截止校验，也不把网络callback当进程join。
+
+新增Windows RunOwnedDesktopOnceAsync固定loopback:47478，必须在bind前已有共享及可选输入同意，仅一场会话。TLS/HMAC/capability通过后才创建source/sink，复用原按键按钮释放和capture disposal。旧固定PONG入口与GUI入口均未切换，不能由私有JSON随意启用原生输入。下一组必须接可信GUI申请/同意、固定摘要desktop产品及owner生命周期；人工等待置于原8秒TLS启动之前，不放宽原3秒TCP/密钥交换/信任或有效期。详见docs/OWNED_DESKTOP_INTEGRATION.md。
+
+验证：Mac Swift nice10/jobs2，3项handoff边界通过，原GUI与模块一并编译；未启动网络客户端或读取Keychain。Windows唯一随机临时目录、BelowNormal/双核、dotnet单并发/无共享编译服务构建，0warning/0error；3项实际TLS组件检查PASS：未同意bind前拒绝、错误HMAC绝不构造受保护source/sink、认证fixture JPEG+键鼠/Disconnect释放与监听回收。命令实际exit0；均为组件fixture，不代表真实屏幕/输入/GUI双机通过，不操作持久凭据或DPAPI。
+
+Windows测试相关进程0、唯一源码临时根和两个上传文件已精确删除、47478空闲。首次清理客户端受PowerShell非UTF8 progress解码异常影响，未重复发送删除；独立只读核对确认所有上述对象已缺席，证据保留。材料 artifacts/connection-poc/r203-owned-desktop/{swift-component.txt,windows-component.txt,component-owner.json,windows-component-postcheck.json}。Swift新缓存保留供后续增量复用，无Go构建/完整回归。自动续办ACTIVE，无需人工介入，仅本地提交不推送。
 
 ## 2026-11-05 r202：用户恢复现有自动续办，转入GUI真实远控接入
 

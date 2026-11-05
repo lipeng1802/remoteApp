@@ -144,7 +144,9 @@ internal static class DuplexSessionTests
         }
     }
 
-    private static async Task RunAsync()
+    public static void OwnedDesktopUsesAuthenticatedDuplex() => RunAsync(ownedDesktop: true).GetAwaiter().GetResult();
+
+    private static async Task RunAsync(bool ownedDesktop = false)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(12));
         using var certificate = AgentCertificateFactory.CreateSelfSigned();
@@ -155,7 +157,7 @@ internal static class DuplexSessionTests
         var sourceConstructed = false;
         var reservation = new TcpListener(IPAddress.Loopback, 0);
         reservation.Start();
-        var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
+        var port = ownedDesktop ? 47478 : ((IPEndPoint)reservation.LocalEndpoint).Port;
         reservation.Stop();
         using (var rejectDeadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(250)))
         {
@@ -171,11 +173,15 @@ internal static class DuplexSessionTests
         }
         Check(!sourceConstructed && !sinkConstructed,
             "Rejected duplex consent constructed protected resources.");
-        var server = TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback, port,
-            certificate, key, new byte[16], timeout.Token,
-            createJpegSource: () => { sourceConstructed = true; return source; },
-            inputSession: new InputSimulationOptions(() => { sinkConstructed = true; return sink; }, LocalControlAllowed: true,
-                ReadTimeout: TimeSpan.FromSeconds(5)));
+        Func<IJpegFrameSource> createSource = () => { sourceConstructed = true; return source; };
+        var input = new InputSimulationOptions(() => { sinkConstructed = true; return sink; },
+            LocalControlAllowed: true, ReadTimeout: TimeSpan.FromSeconds(5));
+        var server = ownedDesktop
+            ? TlsProbeServer.RunOwnedDesktopOnceAsync(certificate, key, new byte[16],
+                localSharingAllowed: true, createSource, timeout.Token, input)
+            : TlsProbeServer.RunOnceAsync(IPAddress.Loopback, IPAddress.Loopback, port,
+                certificate, key, new byte[16], timeout.Token,
+                createJpegSource: createSource, inputSession: input);
 
         using var client = new TcpClient { NoDelay = true };
         try
