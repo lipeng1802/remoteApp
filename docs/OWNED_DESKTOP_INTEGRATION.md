@@ -180,3 +180,9 @@ Windows 显示本次设备码/验证码及当前请求，控制范围必须另�
 Mac 最终6项预备检查通过；实际 App 待确认错误帧组件 PID49263 单次 failed 后正常 stop/EOF/exit0，未联网/无 bootstrap。注意此组件的最终 exit0 只证明 child 收尾，原 owner 仍必须保留失败结果，不能改报整个会话成功。Windows 初轮驱动因默认 CRLF 被严格协议拒绝，改为 LF；另修正新任务脚本路径。旧尝试均已退出且证据保留，未重发同意/激活或复用未知工单。最终精确检查为零组件进程/任务、测试程序根与上传归档均已删除，历史现场未动。材料 `artifacts/connection-poc/r212-owned-agent/`，验证脚本 `windows/RemoteAgent/validation/owned-preparation.ps1` 未知 join 会保留同一 driver，不强杀或替换。
 
 下一组应直接实现 native owner 可取消的异步准备/连接意图/本机决定与短状态轮询，把双方 `Product.Prepared` 接上：Mac ConnectIntent →真实 claim，Windows show_invite/incoming →本机决定→明确 Allow/Deny，approve/status 成功关联才 ObserveApproved。20秒管理交换不承载120秒人等待；拒绝、过期、窗口关闭与任何 provision 前失败也须先 join GUI，再 node/signer；已 provision 后保留独立撤销。随后接新 fresh builder/唯一 writer-verifier 服务组合和真实画面键鼠双机，不复用已退休 fixed TEST 工单、不放宽原截止。
+
+## r213 native 异步授权
+
+Mac 作为控制端，Windows 作为目标端。编译期桌面范围与安装摘要绑定同一 GUI。私有管理使用单次 `desktop_begin` 和短 `desktop_status` 查询。原 native owner 持有可取消的本机等待，从签名邀请、claim、incoming 到明确决定和同请求状态核对。授权成功后，同一个 GUI 通过 `Product.Prepared` 进入现有 ACTIVE 和 TLS 路径。取消先等待异步工作及 GUI 收尾，再释放 signer。目标可以在尚未 provision 时用独立通路撤销已观测批准，等待精确终态后再停止。
+
+`desktop_state` 提供角色限定的帧数、输入计数与停止状态。授权及活性门禁仍来自原签名和 watch。验收将观察真实可见画面与键鼠效果，并确认两端停止、撤销和进程实际退出。当前本机 HTTPS 与子进程 race 检查已经覆盖允许、拒绝与取消。活动停止需要双端计划收尾协调，之后接新鲜 TEST 签名包与隔离 authority。

@@ -286,3 +286,40 @@ func TestDesktopOwnerMalformedReplyAndUnknownProvisionRetainSameSigner(t *testin
 		t.Fatal("late reply pretended zero success / signer not joined")
 	}
 }
+
+func TestDesktopApprovedCancellationPinsWithoutProvision(t *testing.T) {
+	c, signer, key, err := startDesktopOwnerFixture(t, invite.DesktopControl, "normal", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	revoke := &revokeFixture{unknown: true}
+	c.revocation = revoke
+	g := desktopFixtureGrant(c, key, invite.DesktopControl)
+	request := strings.Repeat("c", 32)
+	progress := installeddevice.DesktopProgress{Status: "desktop_status", Phase: "approved", RequestID: request, Grant: &g}
+	if err := c.observeDesktopProgress(ctx, progress); err != nil {
+		t.Fatal(err)
+	}
+	progress.RequestID = strings.Repeat("d", 32)
+	if c.observeDesktopProgress(ctx, progress) == nil {
+		t.Fatal("desktop request switched after the first observation")
+	}
+	if _, err := c.Forward(ctx, installeddevice.Request{Op: "revoke_session"}); err == nil ||
+		revoke.pins != 1 || !c.desktopPreprovisionPinned || c.provisioned || signer.closed.Load() != 0 {
+		t.Fatal("unknown pre-provision revoke was treated as joined or lost")
+	}
+	if _, err := c.Forward(ctx, installeddevice.Request{Op: "provision", Network: invite.NetworkRequestBody{Grant: g}}); err == nil {
+		t.Fatal("revocation attempt allowed provision")
+	}
+	if c.AllowRetainedStop(ctx) == nil {
+		t.Fatal("unknown revocation allowed stop")
+	}
+	revoke.unknown = false
+	if _, err := c.Forward(ctx, installeddevice.Request{Op: "revoke_session"}); err != nil || revoke.pins != 1 {
+		t.Fatal("explicit recovery repinned or lost its channel")
+	}
+	if _, err := c.Forward(ctx, installeddevice.Request{Op: "preprovision_terminal"}); err != nil || c.AllowRetainedStop(ctx) != nil {
+		t.Fatal("independent terminal verification failed")
+	}
+}

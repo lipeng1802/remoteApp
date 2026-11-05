@@ -188,12 +188,11 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 	}
 	work := installeddevice.ProductSession(product)
 	if compiledDesktopPermission != "" {
-		work = installeddevice.DesktopProductSession(compiledDesktopPermission, product)
-		makeRunner = func(r trustinstall.Release, open clientruntime.SignerFactory, commands <-chan installeddevice.Request, output func(any) error, factory installeddevice.EnrollmentFactory, work installeddevice.SessionWork) clientowner.Runner {
-			if port != 0 {
-				return installeddevice.CoordinatedDesktopSessionViaTestTunnel(r, open, commands, output, factory, work, compiledDesktopPermission, port)
-			}
-			return installeddevice.CoordinatedDesktopSession(r, open, commands, output, factory, work, compiledDesktopPermission)
+		if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+			return trustprofile.ErrTrust
+		}
+		makeRunner = func(r trustinstall.Release, open clientruntime.SignerFactory, commands <-chan installeddevice.Request, output func(any) error, factory installeddevice.EnrollmentFactory, _ installeddevice.SessionWork) clientowner.Runner {
+			return installeddevice.OwnedDesktopSession(r, open, commands, output, factory, product, compiledDesktopPermission, runtime.GOOS == "windows", port)
 		}
 	}
 	runner := makeRunner(

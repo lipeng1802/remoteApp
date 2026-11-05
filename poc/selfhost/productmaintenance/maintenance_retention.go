@@ -21,6 +21,16 @@ func (c *Controller) AllowRetainedStop(ctx context.Context) error {
 		return e
 	}
 	defer c.unlock()
+	if c.policy.IsDesktop() && !c.provisioned && c.desktopApproved != nil && !c.released {
+		if c.desktopPreprovisionPinned {
+			proof, ok := c.revocation.(interface{ ConfirmRevoked(context.Context) error })
+			if !ok {
+				return ErrProduct
+			}
+			return proof.ConfirmRevoked(ctx)
+		}
+		return c.revocation.ConfirmBeforeProvision(ctx)
+	}
 	return c.confirmMaintainedRevocation(ctx)
 }
 func (c *Controller) confirmMaintainedRevocation(ctx context.Context) error {

@@ -6,6 +6,20 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r213：native owner 接入同一 GUI 的异步授权
+
+承接 r212/1c55782。开始前确认无前组构建，磁盘约133GiB，使用原可信离线 Go 缓存和 GOMAXPROCS=2、GOFLAGS=-p=2、nice10 串行任务组。本轮只在本机运行源码与组件检查，历史工单和远端保持原状态，docs/archive/ 仍未跟踪。
+
+desktop 标签的 native main 现通过 OwnedDesktopSession 固定 Mac 控制端和 Windows 目标端。继承管道与同用户私有管理端接受 exact desktop_begin、desktop_status 和 desktop_state。单次 begin 立即回 pending，原 owner 持有可取消工作。Windows 预备同一固定摘要 child，经原 signer 注册和创建邀请，验证码只交给 GUI，再读取本机邀请的 incoming，按真实本机决定签 Allow/Deny，核对同请求 status 与完整 grant。Mac 从 ConnectIntent 取得本机输入，经 signer claim，由同一 GUI 明确确认，再读取同请求的 status。人工等待保留原120秒，Windows 从创建邀请前起计，profile 与 authority 截止仍先行。管理帧直接提交 device 决定会被拒绝。
+
+同一完整 grant 经 ObserveApproved 绑定后，才把该 Prepared child 放入 Product.Prepared。grant_clock 与 provision 前复核确切 grant 和 GUI 活性。provision、ACTIVE、watch、目标准备后控制端 start_controller 继续走既有身份、TCP/密钥交换和 TLS 截止。desktop_state 只转交角色限定的聚合计数和停止/结束/失败标志。决策或激活交流进行中回 unavailable，短查询与激活串行，不消费同意回执。
+
+取消时等待原异步工作和 GUI child 的 Stop/EOF/实际 exit，再关闭 watch、node 和 signer。会话已启动时先 join SessionRuntime。打断在途私有交换即使 GUI 已退出也按原故障语义处理。监督器观察同一 RequestID 与已签 grant，保留独立撤销通路。已观测批准但尚未 provision 时，目标可显式 pin 并撤销原 grant，随后封住 provision。停止和 preprovision_terminal 仍需独立确认终态，未知撤销保留同一通路，重试由既有撤销协议先查状态。
+
+验证材料在 artifacts/connection-poc/r213-owned-coordinator/。packages.txt 中 clientruntime 10.894s、installeddevice 8.924s、productmaintenance 14.508s、supervisedcontrol 1.330s 和两 native 命令包均通过，exec82310 exit0。新增真实本机 HTTPS + 固定摘要 Go 子进程检查允许、拒绝、重复 begin、外部代选拒绝、错 grant 拒绝、异步查询与取消。final-race.txt 三包 14.122s/11.165s/2.052s 通过，exec17107 exit0。取消用例等待原 GUI 看到 EOF，刻意延迟退出并核对 signer 保持打开。preprovision-revoke.txt 的监督器撤销边界 race 通过3.572s，exec63261 exit0。Windows 两 scope tagged vet 证据见同目录。此前 GUI 组件检查继续有效，本组的签名者和本机决定由 fixture 提供。
+
+后续先解决活动停止竞态。两端传输应在同一原 owner 之间确认计划收尾，再让控制端先正常 quiesce，目标随后 quiesce，避免预期 EOF 被另一端误报故障。实际 Windows 本机紧急停止仍立即停止采集和输入，非计划断流继续走故障处理。随后接新鲜固定范围签名包和隔离 service。Windows 单文件 GUI 要实际核对100MiB pin 限额。真实工单前单次 SSH 连通确认，查清 Headscale policy 唯一 writer 和 verifier 所有权，按 r207 新鲜根规则，目标真实 listener 就绪后才启动控制端。真实可见画面、键鼠实际效果和全层正常 join 仍待验收。自动续办 ACTIVE，目前无人工阻塞。
+
 ## 2026-11-05 r212：独立Windows确认界面与双端待确认故障收尾
 
 承接r211/b72c87f，确认无前组重型构建，磁盘约133GiB；Mac→Windows SSH单次复测成功。仅本机/Windows组件构建和明确无激活的GUI预备检查，未连接预发布、创建新签名TEST工单、操作OS signer、产生真实桌面授权或采集/注入。r201退休及历史未知现场未动；docs/archive/未跟踪。

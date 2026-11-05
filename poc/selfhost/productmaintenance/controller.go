@@ -71,6 +71,9 @@ type Controller struct {
 	localCancelRequested, localCancelJoined       bool
 	expected                                      trustprofile.MaintenanceState
 	revocation                                    boundRevocation
+	desktopRequest                                string
+	desktopApproved                               *invite.Grant
+	desktopPreprovisionPinned                     bool
 }
 
 // ConfigureRevocation is trusted compiled wiring, never a pipe-supplied switch.
@@ -103,8 +106,20 @@ func (c *Controller) revoke(ctx context.Context) (json.RawMessage, error) {
 	defer c.unlock()
 	// Product/watch failure may already have sealed business IPC; retain the
 	// independent signer for this exact decrease-of-authority operation.
-	if c.revocation == nil || !c.provisioned || c.released {
+	if c.revocation == nil || c.released {
 		return nil, ErrProduct
+	}
+	if !c.provisioned {
+		if !c.policy.IsDesktop() || c.desktopApproved == nil || c.requested || c.prepared || c.closed ||
+			!c.desktopTarget(*c.desktopApproved) {
+			return nil, ErrProduct
+		}
+		if !c.desktopPreprovisionPinned {
+			if e := c.revocation.Pin(*c.desktopApproved); e != nil {
+				return nil, e
+			}
+			c.desktopPreprovisionPinned = true
+		}
 	}
 	if e := c.revocation.Revoke(ctx); e != nil {
 		return nil, e
@@ -218,6 +233,9 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 	if installeddevice.ValidSupervisedRevocation(request) {
 		return c.revoke(ctx)
 	}
+	if installeddevice.ValidDesktopLifecycle(request) {
+		return c.desktopForward(ctx, request)
+	}
 	if installeddevice.ValidControllerStart(request) {
 		return c.startController(ctx, request)
 	}
@@ -235,7 +253,7 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 	if c.child == nil || c.requested || c.provisioned || c.broken || c.closed || c.released {
 		return nil, ErrProduct
 	}
-	if c.policy.IsDesktop() && c.revocation == nil {
+	if c.policy.IsDesktop() && (c.revocation == nil || c.desktopPreprovisionPinned) {
 		return nil, ErrProduct
 	}
 	if request.Op == "provision" && c.revocation != nil {
@@ -250,6 +268,14 @@ func (c *Controller) Forward(ctx context.Context, request installeddevice.Reques
 	if e != nil {
 		c.broken = true
 		return nil, errors.Join(e, errForwardExchange)
+	}
+	if c.policy.IsDesktop() && request.Op == "device" {
+		var rejection struct {
+			Status string `json:"status"`
+		}
+		if decode(raw, &rejection) == nil && rejection.Status == "request_rejected" {
+			return nil, ErrProduct
+		}
 	}
 	if request.Op == "provision" {
 		// Product enrollment is single-use even on failure. Do not resend or
@@ -470,7 +496,12 @@ func (c *Controller) preprovisionTerminal(ctx context.Context) (json.RawMessage,
 		c.released || c.localCancelRequested || c.faultReleaseFailed {
 		return nil, ErrProduct
 	}
-	if err := c.revocation.ConfirmBeforeProvision(ctx); err != nil {
+	if c.desktopPreprovisionPinned {
+		proof, ok := c.revocation.(interface{ ConfirmRevoked(context.Context) error })
+		if !ok || proof.ConfirmRevoked(ctx) != nil {
+			return nil, ErrProduct
+		}
+	} else if err := c.revocation.ConfirmBeforeProvision(ctx); err != nil {
 		return nil, err
 	}
 	return json.RawMessage(`{"status":"preprovision_terminal","passed":true}`), nil

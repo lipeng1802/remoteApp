@@ -141,6 +141,7 @@ type runnerOptions struct {
 	testTunnel  uint16
 	coordinated bool
 	policy      invite.GrantPolicy
+	desktop     *desktopProduct
 }
 
 func runner(release trustinstall.Release, open clientruntime.SignerFactory, commands <-chan Request, output func(any) error, factory EnrollmentFactory, binding, watched bool, work SessionWork, options ...runnerOptions) clientowner.Runner {
@@ -191,6 +192,14 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 		gate.policy = option.policy
 		var enrolled enrollment
 		var start controllerStart
+		var desktop *desktopFlow
+		if option.desktop != nil {
+			desktop = &desktopFlow{desktopProduct: *option.desktop}
+			desktop.set("idle", "", nil)
+			enrolled.closePrepared = desktop.closeJoined
+		}
+		// Each invocation owns its work. The configured runner itself is reusable.
+		work := work
 		defer func() {
 			if err := enrolled.closeJoined(); err != nil {
 				result = trustprofile.ErrTrust
@@ -235,6 +244,29 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 			case request, exists := <-commands:
 				if !exists {
 					return nil
+				}
+				if desktop != nil {
+					if ValidDesktopLifecycle(request) {
+						if err := desktop.control(ctx, request, gate, client, output); err != nil {
+							return err
+						}
+						continue
+					}
+					if request.Op == "device" {
+						if err := output(map[string]string{"status": "request_rejected"}); err != nil {
+							return err
+						}
+						continue
+					}
+					if !enrolled.attempted && (request.Op == "network" || request.Op == "provision") {
+						work = desktop.workFor(invite.DesktopPermission(option.policy.Permission()), request.Network.Grant)
+						if work == nil || desktop.guiPhase(ctx) != "" {
+							if err := output(map[string]string{"status": "request_rejected"}); err != nil {
+								return err
+							}
+							continue
+						}
+					}
 				}
 				if request.Op == "start_controller" {
 					if !ValidControllerStart(request) || !start.allowed(&enrolled, gate, work) {

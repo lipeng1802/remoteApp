@@ -39,7 +39,7 @@ func desktopRunner(release trustinstall.Release, open clientruntime.SignerFactor
 // observed grant, role, time, current state and consent remain separate gates.
 func ValidDesktopSupervisedCommand(r Request, expected invite.DesktopPermission) bool {
 	p, err := invite.DesktopGrantPolicy(expected)
-	return err == nil && r.Op != "stop" && (validCommandForPolicy(r, p) || validProvision(r) && r.Network.Grant.Claims.Permission == p.Permission())
+	return err == nil && r.Op != "stop" && (ValidDesktopLifecycle(r) || validCommandForPolicy(r, p) || validProvision(r) && r.Network.Grant.Claims.Permission == p.Permission())
 }
 
 func validCommandForPolicy(r Request, p invite.GrantPolicy) bool {

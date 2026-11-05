@@ -2,8 +2,6 @@ package clientruntime
 
 import (
 	"context"
-	"encoding/hex"
-	"strings"
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
@@ -61,8 +59,7 @@ func (p *PreparedDesktop) ConnectIntent(ctx context.Context) (*DesktopConnectInt
 		p.broken = true
 		return nil, nil
 	}
-	target, e := hex.DecodeString(r.TargetCode)
-	if r.Status != "desktop_connect" || e != nil || len(target) != 6 || hex.EncodeToString(target) != r.TargetCode || len(r.Code) != 8 || strings.Trim(r.Code, "0123456789") != "" {
+	if r.Status != "desktop_connect" || !validDesktopCode(r.TargetCode, r.Code) {
 		p.broken = true
 		return nil, session.ErrDenied
 	}

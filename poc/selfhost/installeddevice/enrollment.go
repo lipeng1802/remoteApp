@@ -41,6 +41,7 @@ type enrollment struct {
 	proofCancel          context.CancelFunc
 	watch                *enrollmentWatch
 	session              *enrollmentSession
+	closePrepared        func() error
 	binding              invite.NetworkBinding
 	peers                *SessionPeers
 	witness              *cleanupwitness.Witness
@@ -131,6 +132,9 @@ func (e *enrollment) closeJoined() error {
 		if err := e.session.Err(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			joinedErr = err
 		}
+	}
+	if e.closePrepared != nil {
+		joinedErr = errors.Join(joinedErr, e.closePrepared())
 	}
 	if e.watch != nil {
 		e.watch.Stop()
