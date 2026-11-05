@@ -11,6 +11,7 @@ from pathlib import Path
 import secrets
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import tarfile
@@ -18,6 +19,7 @@ import time
 
 from activity_control import Activity
 from activity_trace import RecordedEndpoint
+import desktop_workorder as desktop
 from persistent_supervisor import Endpoint
 from supervised_requests import WindowsRelay, reply as strict_reply
 
@@ -175,7 +177,7 @@ def prewarm_product_build(work,go):
                  '-o',str(output),'./cmd/installed-autonomous-product'],240)
 
 
-def build_current_helpers(work,go):
+def build_current_helpers(work,go,build_env=()):
     directory=work/'current-helpers';directory.mkdir(mode=0o700)
     result={'version':1,'helpers':{}}
     for target in ('darwin','windows'):
@@ -184,7 +186,7 @@ def build_current_helpers(work,go):
         for name in ('trust-journal','identity-vault'):
             filename=name+('.exe' if target=='windows' else '')
             output=folder/filename
-            command(['env','GOOS='+target,'GOARCH=amd64','CGO_ENABLED='+('1' if target=='darwin' else '0'),
+            command(['env',*build_env,'GOOS='+target,'GOARCH=amd64','CGO_ENABLED='+('1' if target=='darwin' else '0'),
                      str(go),'-C',str(REPO/'poc/selfhost'),'build','-trimpath','-o',str(output),'./cmd/'+name],240)
             if target=='darwin':
                 command(['/usr/bin/codesign','--force','--sign','-','--identifier','com.personalremotedesktop.test.'+name,str(output)])
@@ -229,6 +231,13 @@ def metadata(work):
     port=m.setdefault("forward_port",18444)
     if type(port) is not int or not 18444<=port<=18460:raise RuntimeError("activity_forward_port_invalid")
     if type(m.get('program_removal',False)) is not bool:raise RuntimeError('activity_removal_mode_invalid')
+    if work.name.startswith("desktop-activity-") or any(k in m for k in ("desktop_permission", "authority_port", "authority_stage")):
+        if (m.get("desktop_permission") != desktop.SCOPE or m.get("program_removal") or
+                type(m.get("authority_port")) is not int or not 1024 <= m["authority_port"] <= 65535 or
+                m["authority_port"] in (8444, 19443)):
+            raise RuntimeError("activity_desktop_metadata_rejected")
+        if work.name != "desktop-activity-" + desktop.stage_id(m.get("authority_stage")):
+            raise RuntimeError("activity_desktop_stage_mismatch")
     return work,m
 
 
@@ -296,11 +305,107 @@ def prepare(program_removal=False):
     return work
 
 
+def desktop_preflight():
+    url = desktop.CONTROL + "/health"
+    checks = {}
+    try:
+        checks["controller"] = command([
+            "/usr/bin/curl", "-q", "--noproxy", "*", "--max-time", "6", "--silent",
+            "--output", "/dev/null", "--write-out", "%{http_code}", url,
+        ], 8) == b"200"
+    except RuntimeError:
+        checks["controller"] = False
+    try:
+        checks["target"] = ps(
+            "$code=& curl.exe -q --noproxy '*' --max-time 6 --silent --output NUL --write-out '%{http_code}' "
+            + quote(url) + ";if($LASTEXITCODE -eq 0 -and $code -ceq '200'){'PASS'}"
+        ) == "PASS"
+    except RuntimeError:
+        checks["target"] = False
+    return checks
+
+
+def prepare_desktop(stage, profile_root):
+    stage_id = desktop.stage_id(stage)
+    if not desktop.valid_root(profile_root):
+        raise RuntimeError("activity_desktop_public_root_rejected")
+    artifacts = REPO / "artifacts/connection-poc"
+    work = artifacts / ("desktop-activity-" + stage_id)
+    work.mkdir(mode=0o700)  # One preflight attempt for this exact isolated stage.
+    a = Activity(work)
+    a.save({"version": 1, "desktop": True, "phase": "preflight_outcome_unknown"})
+    ready_path = stage + "/authority-ready.json"
+    raw = command(["ssh", *OPTIONS, SERVER,
+                   f"test ! -e '{stage}/authority-joined' && test ! -L '{ready_path}' && head -c 8193 '{ready_path}'"], 20)
+    authority_port, profile = desktop.ready_profile(raw, profile_root, time.time())
+    checks = desktop_preflight()
+    if not all(checks.values()):
+        a.save({"version": 1, "desktop": True, "phase": "isolated_ingress_unavailable", "checks": checks})
+        raise RuntimeError("activity_desktop_preflight_failed")
+    tls = desktop.gui_inputs(artifacts / "r214-desktop-stop")
+    port = select_forward_port()
+    nonce = secrets.token_hex(6)
+    parent = Path("/private/tmp/remoteapp-r75-" + nonce)
+    parent.mkdir(mode=0o700)
+    (parent / "holder").mkdir(mode=0o700)
+    m = dict(nonce=nonce, forward_port=port, authority_port=authority_port, authority_stage=stage,
+             desktop_permission=desktop.SCOPE, win_dir="C:\\Users\\jarvis\\remoteapp-r75-package-" + nonce,
+             win_root="C:\\Users\\jarvis\\remoteapp-r75-" + nonce,
+             mac_root=str(parent / "installed"), holder_dir=str(parent / "holder"))
+    (work / "management.json").write_text(json.dumps(m, sort_keys=True))
+    a.save({"version": 1, "desktop": True, "phase": "build_outcome_unknown", "checks": checks})
+    source = work / "service-profile.json"
+    source.write_bytes(profile)
+    go = artifacts / "toolchain/go/bin/go"
+    build_env = ["GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off",
+                 "GOMODCACHE=" + str(artifacts / "gomod"), "GOCACHE=" + str(artifacts / "gocache")]
+    current = build_current_helpers(work, go, build_env)
+    compiler = test_build_wrapper(work, go)
+    module = REPO / "poc/selfhost"
+    for platform in ("darwin", "windows"):
+        helpers = []
+        suffix = ".exe" if platform == "windows" else ""
+        for filename in ("trust-journal" + suffix, "identity-vault" + suffix):
+            digest = current["helpers"][platform][filename]
+            path = work / "current-helpers" / platform / filename
+            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                raise RuntimeError("activity_current_helper_changed")
+            helpers.append(str(path))
+        root = m["win_root" if platform == "windows" else "mac_root"]
+        args = ["env", *build_env, str(go), "run", "./cmd/product-maintenance-validation-build",
+                str(compiler), str(module), platform, str(work / platform), *helpers, str(tls[platform]),
+                "--verified-live-profile", str(source), f"--test-tunnel={port}", "--test-install-root", root,
+                f"--desktop-scope={desktop.SCOPE}", f"--desktop-profile-root={profile_root}"]
+        try:
+            result = subprocess.run(limited_build_command(args), cwd=module,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=510)
+        except Exception:
+            raise RuntimeError("activity_desktop_build_outcome_unknown") from None
+        if result.returncode:
+            record_build_failure(work, platform, result.stdout)
+            raise RuntimeError("activity_desktop_build_failed")
+    if expiry(work) - time.time() < 600:
+        raise RuntimeError("activity_desktop_profile_window_consumed")
+    a.save({"version": 1, "desktop": True, "phase": "built", "checks": checks})
+    return work
+
+
 def expiry(work):
     values=[]
+    desktop_bundle = work.name.startswith("desktop-activity-")
+    source = json.loads((work / "service-profile.json").read_text())["claims"] if desktop_bundle else None
     for target in ("darwin","windows"):
-        spec=json.loads(base64.b64decode(json.loads((work/target/"fixture.json").read_text())["release"]))
+        bundle=json.loads((work/target/"fixture.json").read_text())
+        spec=json.loads(base64.b64decode(bundle["release"]))
         if spec.get("test_namespace") is not True:raise RuntimeError("activity_test_bundle_required")
+        if desktop_bundle or "desktop_permission" in bundle:
+            claims = spec["bundled_profile"]["claims"]
+            if (not desktop_bundle or bundle.get("desktop_permission") != desktop.SCOPE or
+                    bundle.get("platform") != target or claims.get("service") != desktop.SERVICE or
+                    claims.get("endpoint") != desktop.ENDPOINT or
+                    any(claims.get(key) != source.get(key) for key in ("certificate", "issuer", "epoch")) or
+                    type(claims.get("expires_at")) is not int or claims["expires_at"] > source["expires_at"]):
+                raise RuntimeError("activity_desktop_bundle_rejected")
         values.append(spec["bundled_profile"]["claims"]["expires_at"])
     return min(values)
 
@@ -348,14 +453,22 @@ try { & (Join-Path $PSScriptRoot 'validate-supervised-install.ps1') -StayReady -
         owner=work/'windows/run-owner.ps1'
         owner.write_text(owner.read_text().replace('-StayReady -RetainUntilStop','-StayReady -RetainUntilStop -ProgramRemoval'))
         (work/'windows/run-retire-removed.ps1').write_text(retirement_script(removed=True))
+    if m.get("desktop_permission") == desktop.SCOPE:
+        owner = work / "windows/run-owner.ps1"
+        owner.write_text(owner.read_text().replace(
+            "-StayReady -RetainUntilStop", "-StayReady -RetainUntilStop -DesktopPermission desktop-control"))
     for idle,name in ((False,'run-retire-node.ps1'),(True,'run-retire-idle.ps1')):
         (work/'windows'/name).write_text(retirement_script(idle))
     archive=work/"windows.tar.xz"
-    input_source,inputs=verified_windows_inputs(work)
-    from archive_cache import pack
-    audit=pack(work/'windows',archive,BYTE_CACHE_WORK/'windows',work/'compile-preflight/archive-restorer.exe',omit={item['relative'] for item in inputs})
-    with (work/'archive-cache.json').open('x') as f:
-        json.dump(audit,f,sort_keys=True);f.flush();os.fsync(f.fileno())
+    if m.get("desktop_permission") == desktop.SCOPE:
+        input_source, inputs = None, []
+        pack_windows(work / "windows", archive)
+    else:
+        input_source,inputs=verified_windows_inputs(work)
+        from archive_cache import pack
+        audit=pack(work/'windows',archive,BYTE_CACHE_WORK/'windows',work/'compile-preflight/archive-restorer.exe',omit={item['relative'] for item in inputs})
+        with (work/'archive-cache.json').open('x') as f:
+            json.dump(audit,f,sort_keys=True);f.flush();os.fsync(f.fileno())
     remote="remoteapp-r75-"+m["nonce"]+".tar.xz"
     # Transfer may be slow over the management overlay. Only this file-copy
     # budget changes; retain a fixed 300s of the original signed profile for
@@ -371,7 +484,7 @@ def resume_transfer(work):
     # The original upload process must already have ended before this explicit
     # serial operator action. Both native roots/tasks must still be absent.
     work,m=metadata(work)
-    if Activity(work).read()['phase']!='startup_outcome_unknown' or expiry(work)-time.time()<360:
+    if m.get("desktop_permission") or Activity(work).read()['phase']!='startup_outcome_unknown' or expiry(work)-time.time()<360:
         raise RuntimeError('activity_transfer_recovery_not_admitted')
     if Path(m['mac_root']).exists() or any((work/n).exists() for n in ('mac-setup-attempt.json','mac-manager.json','windows-bootstrap.json','tunnels.json')) or list(Path(m['holder_dir']).iterdir()):
         raise RuntimeError('activity_transfer_native_start_possible')
@@ -417,11 +530,29 @@ def resume_transfer(work):
     finish_start_after_transfer(work,m,archive,input_source,inputs)
 
 
+def prove_desktop_authority_forward(work, port):
+    claims = json.loads((work / "service-profile.json").read_text())["claims"]
+    certificate = base64.b64decode(claims["certificate"], validate=True)
+    ca = work / "desktop-authority-ca.pem"
+    with ca.open("x") as out:
+        out.write(ssl.DER_cert_to_PEM_cert(certificate))
+    status = command([
+        "/usr/bin/curl", "-q", "--noproxy", "*", "--max-time", "6", "--silent",
+        "--cacert", str(ca), "--connect-to", f"mk.fengmap.com:8444:127.0.0.1:{port}",
+        "--output", "/dev/null", "--write-out", "%{http_code}", desktop.ENDPOINT + "/v1/request",
+    ], 8)
+    if status != b"405":
+        raise RuntimeError("activity_desktop_authority_forward_unconfirmed")
+
+
 def finish_start_after_transfer(work,m,archive,input_source,inputs):
     port=m['forward_port']
     remote='remoteapp-r75-'+m['nonce']+'.tar.xz'
     if expiry(work)-time.time()<300:raise RuntimeError("activity_transfer_consumed_validity_window")
     audit=None
+    if m.get("desktop_permission") == desktop.SCOPE and (
+            input_source is not None or inputs or (work / "archive-cache.json").exists()):
+        raise RuntimeError("activity_desktop_full_archive_required")
     if (work/'archive-cache.json').exists():
         from archive_cache import verify
         audit=json.loads((work/'archive-cache.json').read_text())
@@ -438,11 +569,17 @@ def finish_start_after_transfer(work,m,archive,input_source,inputs):
         ps("$ErrorActionPreference='Stop';$s=Join-Path "+quote(input_source)+" "+quote(item["name"])+";$p=Join-Path "+d+" "+quote(item["relative"].replace('/','\\'))+";if(Test-Path $p){throw 'Input target exists'};"
            "if((Get-FileHash $s).Hash.ToLowerInvariant() -ne "+quote(item["sha256"])+"){throw 'Input changed'};Copy-Item -LiteralPath $s -Destination $p;if((Get-FileHash $p).Hash.ToLowerInvariant() -ne "+quote(item["sha256"])+"){throw 'Copied input mismatch'}")
     tunnels=[]
-    for label,host,flags in (("server",SERVER,["-L",f"127.0.0.1:{port}:127.0.0.1:8444"]),("windows",WIN,["-R",f"127.0.0.1:{port}:127.0.0.1:{port}"])):
+    hosts = {"server": SERVER, "windows": WIN}
+    for label, flags in desktop.endpoint_arguments(port, m.get("authority_port", 8444)):
+        host = hosts[label]
         sock="/tmp/ra75-"+m["nonce"]+"-"+label+".sock"
         command(["ssh",*OPTIONS,"-M","-S",sock,"-fNT","-o","ExitOnForwardFailure=yes",*flags,host])
         tunnels.append({"socket":sock,"host":host})
         (work/"tunnels.json").write_text(json.dumps(tunnels))
+    if m.get("desktop_permission") == desktop.SCOPE:
+        prove_desktop_authority_forward(work, port)
+        if expiry(work) - time.time() < 300:
+            raise RuntimeError("activity_desktop_profile_window_consumed")
     ps("$ErrorActionPreference='Stop';$d="+d+";$t="+task+";if(Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue){throw 'Task exists'};"
        "$a=New-ScheduledTaskAction -Execute powershell.exe -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File '+[char]34+(Join-Path $d 'run-owner.ps1')+[char]34);"
        "$p=New-ScheduledTaskPrincipal -UserId jarvis -LogonType Interactive -RunLevel Limited;Register-ScheduledTask -TaskName $t -Action $a -Principal $p | Out-Null;Start-ScheduledTask -TaskName $t")
@@ -453,6 +590,8 @@ def finish_start_after_transfer(work,m,archive,input_source,inputs):
         time.sleep(.5)
     else:raise RuntimeError("activity_windows_ready_unconfirmed")
     public=json.loads(raw)
+    if public.get("desktop_permission") != m.get("desktop_permission"):
+        raise RuntimeError("activity_windows_scope_unconfirmed")
     WindowsRelay(WIN,m["win_dir"]+"\\supervised-control-relay.exe",public["control_pipe"])
     (work/"windows-bootstrap.json").write_text(json.dumps(public))
     start_mac(work,m)
@@ -500,7 +639,10 @@ def start_mac(work,m):
         if ready.exists():break
         time.sleep(.2)
     else:raise RuntimeError("activity_mac_ready_unconfirmed")
-    public=json.loads(ready.read_text());(work/"mac-bootstrap.json").write_text(json.dumps(public))
+    public=json.loads(ready.read_text())
+    if public.get("desktop_permission") != m.get("desktop_permission"):
+        raise RuntimeError("activity_mac_scope_unconfirmed")
+    (work/"mac-bootstrap.json").write_text(json.dumps(public))
     if m.get('program_removal'):
         from supervised_removal import checked_bootstrap
         checked_bootstrap(public)
@@ -511,7 +653,7 @@ def start_mac(work,m):
 
 def resume_windows(work):
     work,m=metadata(work)
-    if (Activity(work).read()["phase"]!="startup_outcome_unknown" or expiry(work)-time.time()<300
+    if (m.get("desktop_permission") or Activity(work).read()["phase"]!="startup_outcome_unknown" or expiry(work)-time.time()<300
             or Path(m["mac_root"]).exists() or (work/"mac-manager.json").exists()):
         raise RuntimeError("activity_windows_recovery_not_admitted")
     d=quote(m["win_dir"]);task=quote("RemoteApp-R75-"+m["nonce"])
@@ -696,12 +838,21 @@ def retire_pair(work,m,a,state,final_phase,before_empty_cleanup=None):
 if __name__=="__main__":
     try:
         if sys.argv[1:]==["prepare"]:print(prepare())
+        elif len(sys.argv) == 4 and sys.argv[1] == "prepare-desktop":
+            print(prepare_desktop(sys.argv[2], sys.argv[3]))
+        elif len(sys.argv) == 3 and sys.argv[2] == "exercise-desktop":
+            if not sys.stdin.isatty():
+                raise RuntimeError("desktop_interactive_operator_required")
+            result = exercise_desktop(sys.argv[1], observe_gui=desktop.observe_gui, request_stop=desktop.request_stop)
+            print(json.dumps(result, sort_keys=True))
         elif len(sys.argv)==3 and sys.argv[2]=="local-stop":
             import local_cancel_activity
             local_cancel_activity.stop(sys.argv[1])
         elif len(sys.argv)==3 and sys.argv[2] in ("start","monitor","exercise","stop","retire","resume-windows"):
             {"start":start,"monitor":monitor,"exercise":exercise,"stop":stop,"retire":retire,"resume-windows":resume_windows}[sys.argv[2]](sys.argv[1])
         elif len(sys.argv)==3 and sys.argv[2] in ('fault-revoke','fault-stop','fault-retire'):
+            if metadata(sys.argv[1])[1].get("desktop_permission"):
+                raise RuntimeError("activity_desktop_fault_requires_explicit_recovery")
             import fault_activity
             {'fault-revoke':fault_activity.revoke,'fault-stop':fault_activity.stop,'fault-retire':fault_activity.retire}[sys.argv[2]](sys.argv[1])
         else:raise RuntimeError("activity_explicit_step_required")

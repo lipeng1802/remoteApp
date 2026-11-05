@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-05 r219 新鲜桌面双机工单及入口阻塞
+
+承接 7ca1648。确认无前组重型任务，工作卷约 128 GiB。本轮仅改本机 TEST 管理脚本并进行边界测试及现存 GUI 字节核验，未连接远端或重探测 19443。
+
+新增 `prepare-desktop <stage> <公开根>`。按专用 stage 路径与独立 root 读取 authority ready 回执，每个 stage 只准一次预检，两端各做一次固定 19443 的系统信任 HTTPS 检查。失败先持久化两端结果并禁止进入编译、上传和安装。成功后按 r214 固定摘要复用 GUI 构建物，以同一源 profile、隔离转发和固定 control 范围串行签出新鲜双端包。所有 Go 构建继续限 GOMAXPROCS=2、GOFLAGS=-p=2、nice10，并使用原可信离线缓存。
+
+start 以完整 Windows 桌面包走原隐藏 Interactive 任务。只转发到当前 stage 回执的 authority 回环端口，以签名 CA、原 TLS 主机名和无业务变更的 GET 拒绝回执核验后才启动 Windows 任务和 Mac owner。两端核对 READY 范围。新增交互 `exercise-desktop`，直接观察真实画面和实际鼠标、键盘效果后才确认；后续复用原实际退出与精确退休，最后按 r217 收尾隔离服务。桌面工单拒绝旧自动批准/PONG、旧缓存补装及不明回执自动重试。
+
+新工单边界及旧管理兼容性 29 项 Python 测试通过，exec82973 exit0。r214 双端 GUI 字节摘要重新核对通过，Mac strict codesign 通过。证据 artifacts/connection-poc/r219-desktop-workorder/。Windows Interactive 包装器、实际隔离 provider 运行与完整 GUI 仍待真机验收。
+
+本机可执行工单已接完。当前阻塞仍为 Mac 和 Windows 到预发布隔离 TCP 19443 不可达，最后实测见 r214，尚无可验证环境变化。最小人工操作是仅向两台测试机开放预发布独立 TCP 19443，并回复已开放；如果证书输入需由运维提供，也请确认可供隔离 stage 使用的受信 TLS 输入。按用户规则暂停现有 `remoteapp`，等待环境变化后再建立独立服务并执行一次新鲜预检。保留现有服务、历史工单和原始回执。
+
 ## 2026-11-05 r218 双端 GUI TEST 申请、观察与停止协调
 
 承接 0cad8f9，开始时无前组重型任务、磁盘约 128 GiB。本轮只有本机源码及 Python 边界测试，没有部署、访问远端或重探测 19443。

@@ -223,3 +223,22 @@ Windows 的隐藏 Interactive 包装器以 `-StayReady -RetainUntilStop -Desktop
 `observe_gui` 由可信操作者直接观察 Mac 显示的 Windows 画面，以及 Windows 上鼠标和键盘的实际效果。两端活性和帧数、输入计数作为辅助证据。随后 `request_stop` 在 Mac GUI 发起停止，由原生 owner 核对停止意图并按计划停止。两端产品退出后才确认独立撤销，再由原持有器的停止接口证明实际零退出，最后精确退休。
 
 明确拒绝或撤销可通过两端原生终态确认收尾。已掌握确切目标授权时，异常路径只尝试一次独立撤销。出现未知结果时保留持有器和隧道，禁止自动重试桌面工单或以停止标记代替实际退出。日志只保留公开阶段与聚合计数。
+
+## r219 新鲜双机工单
+
+确认隔离 TCP 19443 对两台测试机可达后，在预发布的 `/var/lib/remoteapp-desktop-test/` 私有父目录创建一个全新 stage。按 r217 使用已核对摘要的 authority 产物完成 prepare，放置本 stage 的受信控制面 TLS 输入。以现有受信 Headscale 0.29.4 可执行文件、空继承环境和本 stage 的 `headscale.yaml` 先做 `configtest`，再启动独立 provider。provider 与 authority 分别由可信本机进程管理器持有。等待 authority 的新鲜 ready 回执，经受信管理通道取得独立公开根，并在本机工作卷确认没有前一组重型构建。
+
+在仓库根运行以下显式阶段，每一步核对上一阶段回执。命令中的 `STAGE`、`ROOT` 和 `WORK` 是实际隔离 stage、已核对的公开根和本地工单路径。
+
+```sh
+runner=poc/selfhost/public-server/run_supervised_activity.py
+nice -n 10 python3 "$runner" prepare-desktop "$STAGE" "$ROOT"
+nice -n 10 python3 "$runner" "$WORK" start
+python3 "$runner" "$WORK" exercise-desktop
+python3 "$runner" "$WORK" stop
+python3 "$runner" "$WORK" retire
+```
+
+`prepare-desktop` 对同一 stage 只允许一次，使用 Mac 与 Windows 各一次的系统信任 HTTPS 检查确认控制入口。成功后才按确切摘要使用已验收 GUI 可执行输入，串行构建两端新签名包。start 上传完整 Windows 桌面包，通过两段 SSH 建立独立 authority 回环转发，在签名 CA 与原 HTTPS 主机名下验证服务后，才启动隐藏 Interactive 任务和 Mac 持有器。
+
+`exercise-desktop` 需要交互终端，同时观察两端桌面并完成本机批准。操作者在真正看见画面及两种输入效果后才确认，然后在 Mac GUI 发起停止。由脚本记录原生正常退出、独立撤销和客户端精确退休。客户端退出与退休完成后，按 r217 先正常停止并实际等待 authority，再运行其 retire，最后正常停止并实际等待独立 provider。网络或工单回执不明时保留现场。
