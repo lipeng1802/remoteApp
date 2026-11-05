@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteProtocol\RemoteProtocol.csproj" />
+    <ProjectReference Include="..\WindowsInput\WindowsInput.csproj" />
+    <Compile Include="..\RemoteAgent\PrimaryScreenCapture.cs" Link="PrimaryScreenCapture.cs" />
+    <Compile Include="..\RemoteAgent\SessionNativeInputSink.cs" Link="SessionNativeInputSink.cs" />
+  </ItemGroup>
+</Project>

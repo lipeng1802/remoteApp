@@ -9,6 +9,10 @@ using RemoteProtocol;
 
 var tests = new (string Name, Action Run)[]
 {
+    ("owned target strict private preparation", OwnedAgentPreparationTests.StrictTargetOnly),
+    ("owned target explicit scoped single use", OwnedAgentPreparationTests.ExplicitScopedSingleUse),
+    ("owned target denial cancellation and malformed activation", OwnedAgentPreparationTests.DenyCancelMalformedNeverActivate),
+    ("owned target private one-time invite display", OwnedAgentPreparationTests.InviteDisplayIsPrivateSingleUse),
     ("owned desktop requires local consent before listening", OwnedDesktopTests.ConsentBeforeListen),
     ("owned desktop view and unknown scopes cannot enable input", OwnedDesktopTests.ViewGrantCannotEnableInput),
     ("owned desktop view shares JPEG without input capability", DuplexSessionTests.OwnedDesktopViewDoesNotAdvertiseInput),
@@ -88,7 +92,9 @@ var failures = 0;
 // Default runs still include this unchanged credential-store test.
 if (args.Length > 0)
 {
-    if (args.Length == 1 && args[0] == "--owned-desktop-validation")
+    if (args.Length == 1 && args[0] == "--owned-agent-preparation-validation")
+        tests = tests.Where(test => test.Name.StartsWith("owned target ", StringComparison.Ordinal)).ToArray();
+    else if (args.Length == 1 && args[0] == "--owned-desktop-validation")
         tests = tests.Where(t => t.Name.StartsWith("owned desktop ", StringComparison.Ordinal)).ToArray();
     else
     {

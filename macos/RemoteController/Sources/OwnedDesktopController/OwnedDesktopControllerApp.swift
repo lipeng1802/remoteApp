@@ -177,7 +177,7 @@ private final class OwnedViewerModel: ObservableObject {
             preview = nil
             status = allowed ? "等待已授权的连接" : "已拒绝连接"
             pipe.write(reply)
-        } catch { protocolFailure() }
+        } catch { preview = nil; protocolFailure() }
     }
     private func activate(_ handoff: OwnedDesktopHandoff) throws {
         guard !activated else { throw OwnedControllerPreparationError.invalidState }
@@ -234,7 +234,9 @@ private final class OwnedViewerModel: ObservableObject {
         // and commands its joined quiesce. Never emit an unsolicited closed ACK.
     }
     private func protocolFailure() {
-        failed = true; requestStop()
+        guard !failed else { return }
+        failed = true; preview = nil; enteringConnection = false
+        preparation?.cancel(); requestStop()
         pipe.write(["status": "failed"])
     }
     private func beginStop() {

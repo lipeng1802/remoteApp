@@ -1,6 +1,6 @@
 # 自主连接链与桌面界面接入
 
-2026-11-05 r211（承接 r203–r210）。独立 Mac 查看器已接入预备/同意与桌面适配，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
+2026-11-05 r212（承接 r203–r211）。双端独立 GUI 已接入预备/同意与桌面适配，native 异步协调和 GUI 双机验收尚未完成。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
 
 ## 已落实的边界
 
@@ -166,3 +166,17 @@ Mac Swift增量nice10/jobs2编译现有GUI及协议模块，4项OwnedControllerP
 验证：Swift 41项定向检查（预备、handoff、输入捕获、输入连接驱动）通过；窗口挂接修改后的6项预备复验及实际 App 两范围预备/正常收尾通过。真实 App SHA-256 `3ab3133182c090da8ad3ab55085ffd6bb5b8f3de18d0cfd2ee4a414f8a3961a5`，view PID48728/control PID48731，均在未激活时无网络端点，closed/EOF/实际exit0。脚本 `validation/owned_preparation.py` 没有点击确认、交付 bootstrap 或模拟键鼠；未知 join 会保留原 driver/进程，无 terminate/kill。Go prepared/intent定向race通过24.851秒，Windows vet为交叉静态检查。材料 `artifacts/connection-poc/r211-owned-controller/`。
 
 本轮没有 SSH、真实授权、屏幕或输入操作，不计 GUI 双机验收。后续必须把新 App 接入 native Prepared 产品与异步本机等待，接 Windows 明确确认界面；短管理交换不能等待120秒人工决定，关闭/拒绝/启动失败须先 join 同一 prepared child，再释放 node/signer。真实服务与 fresh builder 接线仍遵守 r207 唯一规则 writer/verifier 所有权约束，原服务时效及3秒 TCP/密钥交换和8秒 TLS启动截止不变。
+
+## r212：独立 Windows 确认界面与本机停止
+
+新增 `src/OwnedDesktopAgent` WPF 程序（已加入解决方案），没有旧配对/首次信任/剪贴板、地址或连续重连入口，不接受 argv 模式。`OwnedAgentPreparation` 只解析继承管道中精确 Go 规范的 target prepare、单次 show_invite、同申请/controller 的 consent 和一次 activate；拒绝重复/未知字段、错角色、self-approval、非规范编码、提前/拒绝后/取消后/重复激活。此模型不验证 authority，本机决定也不代替真实 approve/status；签名、scope 和授权时效仍由原 owner/gate 执行。
+
+Windows 显示本次设备码/验证码及当前请求，控制范围必须另勾选本次键鼠许可且物理紧急停止 hook 可用，才能点击允许。hook 复用 `PhysicalEmergencyChord`，不采纳注入的按键状态。父帧没有 Allow/本机控制许可字段可代选。明确允许后的同一 child 才生成一次临时证书/HMAC、固定 loopback47478 单会话监听并回 ready，同一证书响应一次限定 grant/target/challenge 的 possession proof；不从旧证书 Store 加载。`PrimaryScreenCapture` 与 `SessionNativeInputSink` 直接复用，source/sink 仍在真实 TLS/HMAC 认证后才构造，无剪贴板回调。
+
+窗口关闭、停止或物理紧急停止立即取消共享/输入，保留进程供 owner 观察 stop_requested 并撤销/join。父 stop/EOF 后须等同一 server task、输入释放路径和 stdin reader 实际结束、hook 成功解除，才 closed/自然退出；hook join 未知时保留原进程。短状态包含帧/成功 native 调用计数、释放/held、停止/结束/失败，不能当画面可见或真实输入效果的独立验收证明。未知/重复命令只发一次 failed；双端均修复已打开确认框时错误帧触发拒绝再入的递归收尾，父故障不能制造一条迟到的本机决定。
+
+构建及检查：Windows BelowNormal/双核、dotnet单并发/无共享构建服务，独立 WPF 与协议组件均0warning/0error；4项新协议检查通过。Release self-contained/PublishSingleFile/IncludeNativeLibrariesForSelfExtract 单文件 SHA-256 `0815407ec02be3b8131aa03023f4ffb0d6c7e7b56efe4d8f3c03de606a97e325`，避免只固定多文件 apphost 而遗漏托管依赖。隐藏 Interactive 管理驱动验证 normal_view PID40476、normal_control PID36200、窗口关闭 PID40564 均 closed/EOF/实际exit0；待确认错误帧 PID35280 单次 failed、closed/EOF/实际exit1。窗口关闭后进程仍在等原 owner，预备均无网络端点、无画面/输入。驱动没有点击允许或 activate，不是远控双机通过。
+
+Mac 最终6项预备检查通过；实际 App 待确认错误帧组件 PID49263 单次 failed 后正常 stop/EOF/exit0，未联网/无 bootstrap。注意此组件的最终 exit0 只证明 child 收尾，原 owner 仍必须保留失败结果，不能改报整个会话成功。Windows 初轮驱动因默认 CRLF 被严格协议拒绝，改为 LF；另修正新任务脚本路径。旧尝试均已退出且证据保留，未重发同意/激活或复用未知工单。最终精确检查为零组件进程/任务、测试程序根与上传归档均已删除，历史现场未动。材料 `artifacts/connection-poc/r212-owned-agent/`，验证脚本 `windows/RemoteAgent/validation/owned-preparation.ps1` 未知 join 会保留同一 driver，不强杀或替换。
+
+下一组应直接实现 native owner 可取消的异步准备/连接意图/本机决定与短状态轮询，把双方 `Product.Prepared` 接上：Mac ConnectIntent →真实 claim，Windows show_invite/incoming →本机决定→明确 Allow/Deny，approve/status 成功关联才 ObserveApproved。20秒管理交换不承载120秒人等待；拒绝、过期、窗口关闭与任何 provision 前失败也须先 join GUI，再 node/signer；已 provision 后保留独立撤销。随后接新 fresh builder/唯一 writer-verifier 服务组合和真实画面键鼠双机，不复用已退休 fixed TEST 工单、不放宽原截止。

@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenCapture.Tests", "test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsInput.Tests", "tests\WindowsInput.Tests\WindowsInput.Tests.csproj", "{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnedDesktopAgent", "src\OwnedDesktopAgent\OwnedDesktopAgent.csproj", "{5B46D3A8-5376-4983-BA90-9A6B60855849}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -58,6 +60,10 @@ Global
 		{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B0B17D50-C6C6-42E8-AEC5-61CF24B51326}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5B46D3A8-5376-4983-BA90-9A6B60855849}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5B46D3A8-5376-4983-BA90-9A6B60855849}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5B46D3A8-5376-4983-BA90-9A6B60855849}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5B46D3A8-5376-4983-BA90-9A6B60855849}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{952C4AE7-A557-460A-ABDD-847B1D031D34} = {274FF14D-87B7-48AE-8A97-81DBF517039C}

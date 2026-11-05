@@ -6,6 +6,26 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r212：独立Windows确认界面与双端待确认故障收尾
+
+承接r211/b72c87f，确认无前组重型构建，磁盘约133GiB；Mac→Windows SSH单次复测成功。仅本机/Windows组件构建和明确无激活的GUI预备检查，未连接预发布、创建新签名TEST工单、操作OS signer、产生真实桌面授权或采集/注入。r201退休及历史未知现场未动；docs/archive/未跟踪。
+
+新增OwnedDesktopAgent WPF独立程序及OwnedAgentPreparation协议，加入solution。target-only、精确规范JSON、单次show_invite、本机请求/范围显示与明确Allow/Deny；控制范围须独立未预选checkbox+物理hook可用，不接受父帧Allow代选，不自动回退范围。新hook适配器复用PhysicalEmergencyChord，忽略注入键状态。继承管道/固定摘要owner仍须核对真正HTTPS incoming/approve/status与签名grant，本机模型不认证parent/authority。
+
+允许后的同一child才一次activate，生成临时证书/HMAC并启动固定loopback47478单会话，回同scope ready；随后限定grant/Target=self/challenge的一次证书proof。不加载旧配对/证书Store，无public host/模式/剪贴板/自动重连。复用PrimaryScreenCapture和SessionNativeInputSink，原TLS/HMAC通过后才构造source/sink。本机窗口关闭/停止/物理热键立即取消共享/输入，保留进程等owner；父stop/EOF后等server/input释放/reader结束及hook解除成功才closed/退出，未知保留。桌面状态含帧/native调用/释放/held和停止/结束/失败，尚未接native轮询，计数不等同可见画面/输入效果验收。
+
+修复双端确认框已打开时错误/重复帧可能递归进入拒绝/故障的路径：先清除pending决定并取消模型，只发一次failed，不制造故障之后的迟到Allow/Deny。Mac同一App实际组件验证：PID49263，SHA256=4dfabd18b2e8a56b31d047b851108ca2df015bcbb4c26248191704f3858c2082，failed→stop→closed/EOF/exit0，无网络；exit0仅证明子进程收尾，outer owner必须保留失败结果。Swift最终6项预备检查PASS，exec81028实际exit0，组件exec37089实际exit0。r211原41项输入/协议结果继续有效，不重复无变化完整回归。
+
+Windows dotnet BelowNormal/双核、单并发/无共享服务；WPF/协议两构建0warning/0error，4项新目标预备协议检查PASS，exec89762实际exit0；故障处理修改后WPF增量构建0warning/0error，exec41613实际exit0。最终Release self-contained/PublishSingleFile/IncludeNativeLibrariesForSelfExtract发布成功，exec73986实际exit0；单文件SHA256=0815407ec02be3b8131aa03023f4ffb0d6c7e7b56efe4d8f3c03de606a97e325，不以多文件apphost摘要冒充整个产品pin。
+
+隐藏Interactive组件任务最终4项全PASS：normal_view PID40476、normal_control PID36200、window-close PID40564均closed/EOF/实际exit0；close后stop_requested=true且原进程仍等待owner；pending错误帧PID35280只发一次failed，closed/EOF/实际exit1。均预备时无TCP/UDP端点、无画面/输入，不点Allow、不activate，不能计双机GUI验收。原驱动初轮CRLF被严格JSON拒绝且实际exit1；驱动修为LF，另一个新任务路径替换错误未启动App；保留初轮回执，不对未知同意/激活重发。最终exec40257实际exit0、任务LastTaskResult0。
+
+精确清理前已复制所有receipt/log到本机；核验四项全PASS、单文件摘要、无任何进程依赖该组件根、3个自建任务均Ready且Action匹配已知脚本，才注销。组件根C:/Users/jarvis/AppData/Local/Temp/RemoteApp-r212-agent-266a08818f92、上传归档/初轮构建脚本和清理脚本已删除。exec41246实际exit0；windows-cleanup.json证明root/archive absent、active_processes=0、remaining_tasks=0。不删除其它根/任务/锁/凭据，不强杀。仅原生运行缓存由.NET自身管理，未对未知Temp/.net目录做清理。
+
+材料artifacts/connection-poc/r212-owned-agent/{component-owner.json,windows-build.txt,windows-final-build.txt,windows-publish.txt,publish-receipt.json,initial-gui-preparation.json,windows-gui-final.txt,windows-gui-corrected.txt,gui-final.json,windows-cleanup.json,swift-final.txt,mac-pending-fault.json}；源码/驱动版本与原始组件archive保留本机。收尾无本轮Mac App/driver/重型进程，磁盘仍约133GiB，保留可信缓存，无本机清理必要。自动续办ACTIVE，无人工阻塞，本地提交不推送。
+
+下一组直接完成native异步owner协调而非再开无变化GUI组件：现native main仍未设置Product.Prepared，需同一GUI在prepare→Mac ConnectIntent→真实claim / Windows show_invite→incoming→本机Decide→明确Allow/Deny→精确approve/status→ObserveApproved→授权后同一child激活。20秒管理Exchange只做启动/短状态，120秒人工等待由原owner持有可取消操作，停止要实际join该操作；不能超时重发。所有未provision拒绝/过期/关闭/启动失败也先join prepared GUI再node/signer，provision后独立撤销owner继续保留。另接固定范围产品builder、真实服务唯一writer/verifier组合；完成边界后才开一份新鲜双机，目标监听真实就绪才触发控制fresh identity/gate，实际可见画面+键鼠效果+双端停止/撤销/全层join才算本批完成。旧已退休工单不重跑、旧未知现场保留。
+
 ## 2026-11-05 r211：独立Mac查看器、连接按钮与正常子进程收尾
 
 承接r210/8f8f37f，先读交接/Git，确认无前组重型构建；磁盘约133GiB可用。没有SSH、新签名包、服务部署、OS凭据、真实授权/屏幕/输入操作；已退休与历史未知现场未动，docs/archive/继续未跟踪。保留缓存和全部验收材料，无清理必要。

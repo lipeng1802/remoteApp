@@ -43,19 +43,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--executable", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--pending-fault", action="store_true")
     args = parser.parse_args()
     executable = Path(args.executable).resolve(strict=True)
     output = Path(args.output)
     if output.exists() or not executable.is_file():
         raise RuntimeError("validation_path_rejected")
     pin = hashlib.sha256(executable.read_bytes()).hexdigest()
-    report = {"test": "owned_gui_preparation_only", "sha256": pin, "runs": []}
+    report = {"test": "owned_gui_pending_fault" if args.pending_fault else "owned_gui_preparation_only", "sha256": pin, "runs": []}
     output.parent.mkdir(parents=True, exist_ok=True)
 
     def save():
         output.write_text(json.dumps(report, indent=2) + "\n")
 
-    for permission in ("desktop-view", "desktop-control"):
+    scopes = ("desktop-view",) if args.pending_fault else ("desktop-view", "desktop-control")
+    for permission in scopes:
         if hashlib.sha256(executable.read_bytes()).hexdigest() != pin:
             raise RuntimeError("executable_changed")
         child = subprocess.Popen([str(executable)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -69,9 +71,15 @@ def main():
             if read_frame(child.stdout, 8) != {"status": "desktop_prepared", "Permission": permission,
                                                "Role": "controller"}:
                 raise RuntimeError("preparation_rejected")
+            if args.pending_fault:
+                question = {"Op": "consent", "Controller": "ab" * 32, "RequestID": "cd" * 16}
+                send(child.stdin, question)
+                send(child.stdin, question)
+                if read_frame(child.stdout, 4) != {"status": "failed"}:
+                    raise RuntimeError("pending_fault_not_terminal")
             send(child.stdin, {"Op": "desktop_state"})
             if read_frame(child.stdout, 4) != {"status": "desktop_state", "frames": 0, "inputs": 0,
-                                               "stop_requested": False, "ended": False, "failed": False}:
+                                               "stop_requested": args.pending_fault, "ended": False, "failed": args.pending_fault}:
                 raise RuntimeError("unactivated_state_rejected")
             # Observe just this process, never dump endpoint details to logs.
             sockets = subprocess.run(["/usr/sbin/lsof", "-nP", "-a", "-p", str(child.pid), "-i"],
@@ -111,7 +119,7 @@ def main():
         if not run["passed"]:
             print("GUI_PREPARATION_FAILED", flush=True)
             return 1
-    print("GUI_PREPARATION_JOINED_NO_CONSENT", flush=True)
+    print("GUI_PENDING_FAULT_JOINED_NO_CONSENT" if args.pending_fault else "GUI_PREPARATION_JOINED_NO_CONSENT", flush=True)
     return 0
 
 
