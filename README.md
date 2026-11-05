@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r209：桌面 native owner/监督器已可按编译期 view/control 常量独立构建，并修复私有管理通道提前拒绝桌面 scope 的接线缺口。相关边界、race 与双范围 Windows 静态检查通过；GUI 预备/明确同意仍待接入，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
+
 2026-11-05 r208：独立桌面 runner、同范围维护/撤销 owner 与载荷分派已接通。本机 HTTPS 批准/查询、scope 边界及真实子进程 join 检查通过；下一步接独立原生构建入口与 GUI 预备/明确同意。尚未计双机 GUI 验收，见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
 
 2026-11-05 r207：独立撤销与 provision 前故障收尾已绑定精确桌面权限；显式 broker/headscale 组合和未知回执/实际 join 边界检查通过。尚未部署新服务或接通 GUI；下一步接限定桌面 owner/runner 与人工同意。见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。

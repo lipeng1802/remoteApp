@@ -15,6 +15,13 @@ func startDesktopControl(ctx context.Context, b *productmaintenance.Controller) 
 	}
 	life, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
-	go func() { defer close(done); supervisedcontrol.Serve(life, ln, b) }()
+	go func() {
+		defer close(done)
+		if compiledDesktopPermission != "" {
+			supervisedcontrol.ServeDesktop(life, ln, b, compiledDesktopPermission)
+		} else {
+			supervisedcontrol.Serve(life, ln, b)
+		}
+	}()
 	return ln.Address(), func() error { cancel(); ln.Close(); <-done; return ln.Cleanup() }, nil
 }

@@ -213,6 +213,9 @@ func TestDesktopOwnerRequiresMatchingReadinessAndIndependentRevocationBeforeBusi
 		if c.ConfigureRevocation(context.Background(), 0) != nil || c.ConfigureRevocation(context.Background(), 0) == nil {
 			t.Fatal("channel setup not one-shot")
 		}
+		if _, e = c.Count(context.Background()); e == nil || c.broken {
+			t.Fatal("PONG query reached/poisoned desktop child")
+		}
 		if _, e = c.Forward(context.Background(), register); e != nil {
 			t.Fatal("scoped business rejected")
 		}

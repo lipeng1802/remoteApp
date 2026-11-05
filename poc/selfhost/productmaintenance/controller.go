@@ -311,6 +311,11 @@ func (c *Controller) Count(ctx context.Context) (clientruntime.ProductCount, err
 		return clientruntime.ProductCount{}, e
 	}
 	defer c.unlock()
+	// Desktop builds have separate frame/input telemetry. A legacy PONG query
+	// must not reach (or terminate) their child or poison its active lifecycle.
+	if c.policy.IsDesktop() {
+		return clientruntime.ProductCount{}, ErrProduct
+	}
 	if c.child == nil || c.requested || c.broken || c.closed || c.released || c.quiesced {
 		return clientruntime.ProductCount{}, ErrProduct
 	}

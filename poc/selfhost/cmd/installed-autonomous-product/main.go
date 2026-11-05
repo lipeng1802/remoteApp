@@ -71,6 +71,9 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 	if err != nil {
 		return err
 	}
+	if compiledDesktopPermission != "" && !release.Specification().Test {
+		return trustprofile.ErrTrust
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -165,7 +168,7 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 	installed := binding.Record()
 	open := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, installed.VaultScope, installed.PublicKey)
 	var observation *clientruntime.ProductObservation
-	if release.Specification().Test {
+	if release.Specification().Test && compiledDesktopPermission == "" {
 		observation = &clientruntime.ProductObservation{}
 	}
 	product := clientruntime.Product{Observation: observation, Spec: processowner.Spec{
@@ -183,13 +186,23 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 			return installeddevice.CoordinatedSessionViaTestTunnel(r, open, commands, output, factory, work, port)
 		}
 	}
+	work := installeddevice.ProductSession(product)
+	if compiledDesktopPermission != "" {
+		work = installeddevice.DesktopProductSession(compiledDesktopPermission, product)
+		makeRunner = func(r trustinstall.Release, open clientruntime.SignerFactory, commands <-chan installeddevice.Request, output func(any) error, factory installeddevice.EnrollmentFactory, work installeddevice.SessionWork) clientowner.Runner {
+			if port != 0 {
+				return installeddevice.CoordinatedDesktopSessionViaTestTunnel(r, open, commands, output, factory, work, compiledDesktopPermission, port)
+			}
+			return installeddevice.CoordinatedDesktopSession(r, open, commands, output, factory, work, compiledDesktopPermission)
+		}
+	}
 	runner := makeRunner(
 		release,
 		open,
 		commands,
 		output,
 		installeddevice.NativeEnrollmentFactoryWithJournal(installed.EnrollmentScope, release.Specification().Test, enrollmentRecords(recordFactory)),
-		installeddevice.ProductSession(product),
+		work,
 	)
 	handle, err := owner.Start(ctx, runner)
 	if err != nil {

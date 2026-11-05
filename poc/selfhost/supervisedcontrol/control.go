@@ -11,6 +11,7 @@ import (
 
 	"remoteapp.local/selfhost-poc/clientruntime"
 	"remoteapp.local/selfhost-poc/installeddevice"
+	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/startuptrace"
 )
@@ -24,6 +25,23 @@ type Backend interface {
 // active connections, then joins all handlers before the caller releases it.
 // One bounded request per connection; private replies must never be logged.
 func Serve(ctx context.Context, ln net.Listener, b Backend) {
+	serve(ctx, ln, b, installeddevice.ValidSupervisedCommand, true)
+}
+
+// ServeDesktop is explicit trusted listener composition for the same compiled
+// owner scope. The existing same-user kernel peer check is unchanged. A frame
+// cannot select its policy, and legacy PONG counts never reach the desktop child.
+func ServeDesktop(ctx context.Context, ln net.Listener, b Backend, expected invite.DesktopPermission) {
+	if _, e := invite.DesktopGrantPolicy(expected); e != nil {
+		ln.Close()
+		return
+	}
+	serve(ctx, ln, b, func(r installeddevice.Request) bool {
+		return installeddevice.ValidDesktopSupervisedCommand(r, expected)
+	}, false)
+}
+
+func serve(ctx context.Context, ln net.Listener, b Backend, valid func(installeddevice.Request) bool, countAllowed bool) {
 	life, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	monitor := make(chan struct{})
@@ -78,6 +96,10 @@ func Serve(ctx context.Context, ln net.Listener, b Backend) {
 				return
 			}
 			if request == (installeddevice.Request{Op: "product_count"}) {
+				if !countAllowed {
+					output.Encode(map[string]string{"status": "request_rejected"})
+					return
+				}
 				count, e := b.Count(command)
 				if e != nil {
 					output.Encode(map[string]string{"status": "product_unavailable"})
@@ -86,7 +108,7 @@ func Serve(ctx context.Context, ln net.Listener, b Backend) {
 				}
 				return
 			}
-			if !installeddevice.ValidSupervisedCommand(request) && !installeddevice.ValidSupervisedRevocation(request) && !installeddevice.ValidSupervisedQuiesce(request) && !installeddevice.ValidPreprovisionTerminal(request) && !installeddevice.ValidControllerStart(request) {
+			if !valid(request) && !installeddevice.ValidSupervisedRevocation(request) && !installeddevice.ValidSupervisedQuiesce(request) && !installeddevice.ValidPreprovisionTerminal(request) && !installeddevice.ValidControllerStart(request) {
 				output.Encode(map[string]string{"status": "request_rejected"})
 				return
 			}

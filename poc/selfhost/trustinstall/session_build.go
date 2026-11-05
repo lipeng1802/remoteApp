@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/trustprofile"
 	"time"
 )
@@ -258,6 +259,10 @@ func CompileRemovalProductSupervisorTest(ctx context.Context, goexe, module, tar
 	return compileProductSupervisorTest(ctx, goexe, module, target, dest, s, productPath, productDigest, signerDigest, now, extra, port)
 }
 func compileProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, maintenanceFlags string, testTunnel ...uint16) error {
+	return compileProductSupervisorTagged(ctx, goexe, module, target, dest, s, productPath, productDigest, signerDigest, now, maintenanceFlags, "", testTunnel...)
+}
+
+func compileProductSupervisorTagged(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, now time.Time, maintenanceFlags, tag string, testTunnel ...uint16) error {
 	if !s.Test || !validInstallRoot(target, productPath) || !canonical(productDigest, 32) || !canonical(signerDigest, 32) {
 		return trustprofile.ErrTrust
 	}
@@ -268,10 +273,14 @@ func compileProductSupervisorTest(ctx context.Context, goexe, module, target, de
 		}
 		extra += testTunnelFlags(testTunnel[0])
 	}
-	return compileReleaseTool(ctx, goexe, module, target, dest, s, "./cmd/supervised-autonomous-product-test", extra, now)
+	return compileReleaseToolTagged(ctx, goexe, module, target, dest, s, "./cmd/supervised-autonomous-product-test", extra, now, tag)
 }
 
 func compileReleaseTool(ctx context.Context, goexe, module, target, dest string, s Specification, entry, extra string, now time.Time) error {
+	return compileReleaseToolTagged(ctx, goexe, module, target, dest, s, entry, extra, now, "")
+}
+
+func compileReleaseToolTagged(ctx context.Context, goexe, module, target, dest string, s Specification, entry, extra string, now time.Time, tag string) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust
 	}
@@ -286,7 +295,12 @@ func compileReleaseTool(ctx context.Context, goexe, module, target, dest string,
 	if target == "windows" {
 		arch = "amd64"
 	}
-	cmd := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-ldflags=-X main.embeddedRelease="+encoded+extra, "-o", dest, entry)
+	args := []string{"build", "-trimpath"}
+	if tag != "" {
+		args = append(args, "-tags="+tag)
+	}
+	args = append(args, "-ldflags=-X main.embeddedRelease="+encoded+extra, "-o", dest, entry)
+	cmd := exec.CommandContext(ctx, goexe, args...)
 	cmd.Dir = module
 	cmd.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED="+cgo, "GOOS="+target, "GOARCH="+arch)
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
@@ -363,6 +377,10 @@ func CompileAutonomousProductTestTunnel(ctx context.Context, goexe, module, targ
 	return compileEntry(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-autonomous-product", true, now, port)
 }
 func compileEntry(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, native bool, now time.Time, testTunnel ...uint16) error {
+	return compileEntryTagged(ctx, goexe, module, target, dest, s, signerDigest, productDigest, entry, native, now, "", testTunnel...)
+}
+
+func compileEntryTagged(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest, entry string, native bool, now time.Time, tag string, testTunnel ...uint16) error {
 	if ctx == nil || !filepath.IsAbs(goexe) || !filepath.IsAbs(module) || !filepath.IsAbs(dest) || filepath.Clean(dest) != dest || (target != "darwin" && target != "windows") {
 		return trustprofile.ErrTrust
 	}
@@ -384,7 +402,13 @@ func compileEntry(ctx context.Context, goexe, module, target, dest string, s Spe
 			return trustprofile.ErrTrust
 		}
 		extra = testTunnelFlags(testTunnel[0])
-		args = append(args, "-tags=remoteapp_test_capture")
+		if tag != "" {
+			tag += ","
+		}
+		tag += "remoteapp_test_capture"
+	}
+	if tag != "" {
+		args = append(args, "-tags="+tag)
 	}
 	args = append(args, "-ldflags=-X main.embeddedRelease="+encoded+" -X main.embeddedSignerDigest="+signerDigest+" -X main.embeddedProductDigest="+productDigest+extra, "-o", dest, entry)
 	cmd := exec.CommandContext(ctx, goexe, args...)
@@ -405,6 +429,55 @@ func compileEntry(ctx context.Context, goexe, module, target, dest string, s Spe
 		return buildProcessFailure(ctx)
 	}
 	return nil
+}
+
+func desktopBuildTag(expected invite.DesktopPermission) (string, error) {
+	switch expected {
+	case invite.DesktopView:
+		return "remoteapp_desktop_view", nil
+	case invite.DesktopControl:
+		return "remoteapp_desktop_control", nil
+	default:
+		return "", trustprofile.ErrTrust
+	}
+}
+
+// CompileAutonomousDesktopProductTest compiles an independent native binary
+// with a source constant for one permission. Runtime input and -X cannot switch
+// it. No native state is initialized by this build; GUI/capture pins are fixed.
+func CompileAutonomousDesktopProductTest(ctx context.Context, goexe, module, target, dest string, s Specification, signerDigest, productDigest string, expected invite.DesktopPermission, now time.Time, port uint16) error {
+	tag, e := desktopBuildTag(expected)
+	if e != nil || !s.Test || !canonical(productDigest, 32) {
+		return trustprofile.ErrTrust
+	}
+	var tunnel []uint16
+	if port != 0 {
+		tunnel = []uint16{port}
+	}
+	return compileEntryTagged(ctx, goexe, module, target, dest, s, signerDigest, productDigest, "./cmd/installed-autonomous-product", true, now, tag, tunnel...)
+}
+
+// CompileDesktopProductSupervisorTest uses the same exact source constant as
+// the native child. Its pinned digest plus ready scope must both match. Removal
+// remains an independently authenticated optional TEST client, never a GUI flag.
+func CompileDesktopProductSupervisorTest(ctx context.Context, goexe, module, target, dest string, s Specification, productPath, productDigest, signerDigest string, expected invite.DesktopPermission, address, removalDigest string, now time.Time, port uint16) error {
+	tag, e := desktopBuildTag(expected)
+	if e != nil || !s.Test {
+		return trustprofile.ErrTrust
+	}
+	maintenanceFlags := ""
+	if address != "" || removalDigest != "" {
+		endpoint, e := netip.ParseAddrPort(address)
+		if e != nil || !canonical(removalDigest, 32) || endpoint.Addr().String() != "127.0.0.1" || endpoint.Port() < 1024 || endpoint.String() != address {
+			return trustprofile.ErrTrust
+		}
+		maintenanceFlags = " -X main.embeddedMaintenanceAddress=" + base64.RawURLEncoding.EncodeToString([]byte(address)) + " -X main.embeddedRemovalDigest=" + removalDigest
+	}
+	var tunnel []uint16
+	if port != 0 {
+		tunnel = []uint16{port}
+	}
+	return compileProductSupervisorTagged(ctx, goexe, module, target, dest, s, productPath, productDigest, signerDigest, now, maintenanceFlags, tag, tunnel...)
 }
 
 func testTunnelFlags(port uint16) string {

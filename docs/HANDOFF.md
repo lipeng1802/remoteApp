@@ -6,6 +6,22 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r209：编译期桌面native组合与私有管理通道路由
+
+承接r208/8876c1b，先读Git/交接，确认无前组重型构建；磁盘约134GiB可用。仅本机源码/组件检查，没有SSH、服务部署、新签名包或OS/GUI操作；r201退休及历史未知现场未动，docs/archive/仍未跟踪、未纳入提交。
+
+新增CompileAutonomousDesktopProductTest/CompileDesktopProductSupervisorTest，trusted expected scope映射到remoteapp_desktop_view或remoteapp_desktop_control构建标签，源码const compiledDesktopPermission固定view/control。native产品/监督器同源独立编译，旧无标签构建固定fixed；不能由父JSON、argv、环境或-X变量切换scope。两个标签同时选实际编译按预期因重复const拒绝。新builder要求TEST、固定产品/签名helper摘要、合法路径，保留Mac native client CGO=1、Windows amd64/CGO=0、原限定TEST tunnel及可选独立卸载器/维护端口。
+
+标签组合已接r208 runner/DesktopProductSession、StartDesktopTest和同scope独立撤销，supervisor ready metadata回显范围，桌面不创建PONG Observation。保留原binding/profile/原生租约、信任、有效期、3秒TCP/密钥交换和8秒产品启动预算。现有fresh-builder调用方与Swift/C#真实GUI产品尚未切换，不生成半接线双机包。
+
+排查修复真实接线缺口：supervisedcontrol.Serve旧业务过滤器在维护owner前拒绝桌面Permission。新增独立ServeDesktop，桌面标签的Windows命名管道/Mac Unix私有监听显式选用；OS same-user认证不变，scope来自编译常量，不从请求推导。默认Serve保持fixed，错scope/身份选择/越界生命周期拒绝。原quiesce/revoke/start/preprovision-terminal保持限定请求。桌面在supervisor、ServeDesktop、Controller.Count三处拒绝旧product_count，避免旧PONG查询进入nil observation路径而意外结束child；不把PONG当真实帧/输入遥测。
+
+验证：builder新负向及参数捕获、维护owner防PONG定向PASS（trustinstall1.950s/productmaintenance2.423s）；默认管理路由及命令包PASS（supervisedcontrol1.230s/supervisor1.390s，native client实际编译但无单测）。view/control命令包组合均实际编译通过，supervisor测试分别0.924s/1.193s；冲突两标签编译只有预期重复const错误，exit1为负向通过。新边界race PASS（trustinstall2.638s/supervisedcontrol2.068s/productmaintenance10.710s，exec18217实际exit0）。两scope Windows amd64交叉vet PASS，exec14294实际exit0、两份日志为空。全程GOMAXPROCS=2/GOFLAGS=-p=2/nice10/离线cache，重型任务组串行，没有整项目无变化回归。
+
+材料artifacts/connection-poc/r209-desktop-build/{initial.txt,boundaries.txt,default-routing.txt,view-build.txt,control-build.txt,conflicting-tags.txt,scope-race.txt,windows-view-vet.txt,windows-control-vet.txt}。builder参数捕获为shell compiler fixture，source标签组合是本机真实Go编译，私有路由测试为真实本机TCP+mock backend；没有OS signer/Headscale/Swift/C#桌面payload或画面键鼠，也不计GUI验收。原受保护监听器认证逻辑未改，新scope尚无独立kernel peer/原生运行验收。
+
+收尾无新构建/测试进程，磁盘约133GiB可用，保留受信增量cache，无清理必要。下一组直接推进同一个固定摘要GUI child的pre-arm/请求明确确认/激活与取消：目前clientruntime.Product.start仍在授权后新Start child，必须先支持预备且保留同一child，人工同意置于原8秒启动预算之前；授权后由同一owner交付bootstrap/启动TLS，不扩大截止或另起替代。Windows确认须绑定经HTTPS/owner核对的同一RequestID/controller/scope，再签明确Allow；拒绝/过期不进入provision。GUI停止/窗口关闭先通知原owner quiesce/revoke/join，不能将意外child退出改报正常zero。随后将原生新builder接fresh-builder，核对新鲜服务根/profile的唯一policy writer/verifier所有权，再安排真实画面/输入双机；禁止旧PONG TLSBridgeProbe冒充桌面GUI。当前无人工阻塞，现有自动续办ACTIVE，本地提交不推送。
+
 ## 2026-11-05 r208：独立桌面runner、同策略维护owner与载荷分派
 
 承接r207/24ec209，首读交接/Git，无前组重型构建；磁盘约135GiB可用。仅本机代码/组件检查，没有SSH、新服务/双机包、OS凭据或真实GUI操作，不触碰历史未知/已退休工单。docs/archive/继续为原未跟踪材料，未纳入提交。

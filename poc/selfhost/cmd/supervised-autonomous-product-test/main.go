@@ -108,13 +108,19 @@ func run(output func(any) error) (result error) {
 			return e
 		}
 	}
-	controller, e = productmaintenance.StartTest(ctx, r, processowner.Spec{Executable: string(product), SHA256: embeddedProductDigest, CaptureProductStage: true}, factory, bf, func(record autonomousbinding.Record) (productmaintenance.Signer, error) {
+	open := func(record autonomousbinding.Record) (productmaintenance.Signer, error) {
 		s, e := clientruntime.NativeSigner(filepath.Join(dir, "identity-vault"+suffix), embeddedSignerDigest, record.VaultScope, record.PublicKey)()
 		if e != nil {
 			return nil, e
 		}
 		return s.(*privatepipe.Signer), nil
-	})
+	}
+	spec := processowner.Spec{Executable: string(product), SHA256: embeddedProductDigest, CaptureProductStage: true}
+	if compiledDesktopPermission != "" {
+		controller, e = productmaintenance.StartDesktopTest(ctx, r, spec, factory, bf, open, compiledDesktopPermission)
+	} else {
+		controller, e = productmaintenance.StartTest(ctx, r, spec, factory, bf, open)
+	}
 	if e != nil {
 		return e
 	}
@@ -178,6 +184,9 @@ func run(output func(any) error) (result error) {
 	}()
 	identity := controller.Identity()
 	metadata := map[string]any{"status": "ready", "maintenance_address": l.Addr().String(), "vault_scope": identity.VaultScope, "public_key": identity.PublicKey}
+	if compiledDesktopPermission != "" {
+		metadata["Permission"] = string(compiledDesktopPermission)
+	}
 	if remover != nil {
 		metadata["removal_protocol"] = 1
 		metadata["uninstaller_process_id"] = remover.PID()
@@ -310,6 +319,12 @@ func run(output func(any) error) (result error) {
 			if request.Op == "product_count" {
 				if request != (installeddevice.Request{Op: "product_count"}) {
 					return trustprofile.ErrTrust
+				}
+				if compiledDesktopPermission != "" {
+					if e = output(map[string]string{"status": "request_rejected"}); e != nil {
+						return e
+					}
+					continue
 				}
 				life, stop := context.WithTimeout(ctx, 4*time.Second)
 				count, e := controller.Count(life)

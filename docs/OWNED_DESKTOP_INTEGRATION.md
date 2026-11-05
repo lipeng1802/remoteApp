@@ -1,6 +1,6 @@
 # 自主连接链与桌面界面接入
 
-2026-11-05 r208（承接 r203–r207）。当前是桌面 owner/runner 与协议接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
+2026-11-05 r209（承接 r203–r208）。当前是桌面 native 构建、owner 与协议接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
 
 ## 已落实的边界
 
@@ -20,7 +20,7 @@ Windows 新增 `TlsProbeServer.RunOwnedDesktopOnceAsync`，固定监听/peer 为
 
 Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重新打开校验 scope 与同一申请/签名 grant 一致。默认 Open 不接受新模式，新构造器也不能打开已有 fixed-only Store，失败不改快照或重建 issuer。没有线上 Store 迁移或任何旧文件回写。既有 Authorized、默认网络后端与业务 IPC 继续拒绝桌面授权；r206 的显式桌面后端另行接通如下。AuthorizedDesktop 本身仍只核查设备授权账本。
 
-**r208 已接精确 scope 的桌面 owner/runner 和载荷分派；下一组接独立固定摘要的 native 构建入口、GUI pre-arm 与新鲜服务组合。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
+**r209 已接独立 native 构建入口和桌面私有管理路由；下一组接 GUI pre-arm、明确同意与新鲜服务组合。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
 
 ## r205：客户端明确策略、watch 与私有载荷接线
 
@@ -62,7 +62,19 @@ revoke mutation 的服务端正常回执仍只有 `status=revoked`，不添加�
 
 `productmaintenance.StartDesktopTest` 在打开原生身份租约前固定本机范围，只重开既有 binding，核对原公钥，固定摘要 child 的 ready 必须回显范围。ConfigureRevocation 从该不可变策略建立独立 NewDesktop 通路，建立前拒绝业务；默认 StartTest/ConfigureRevocation 不升级。未知 provision 仍先 Pin 原 grant、锁住单次尝试并保留 child/signer；错误/混合业务回复锁闭但不提前丢失撤销 owner。维护器的 privatepipe 解码同步拒绝重复/未知字段，多余或错范围 ready 不成为可用 owner。
 
-当前仅导出受信库组合，`cmd/installed-autonomous-product`、现有构建器与两个正式 GUI 可执行入口仍走 fixed/旧路径，不能用旧二进制装入桌面 grant。下一组需新增独立编译的桌面 native 产品/监督器和签名构建接线，把本机 expected scope 固定在构建中，不能加 parent/peer 的 mode 选择字段。
+默认 `cmd/installed-autonomous-product`、旧构建器与两个正式 GUI 可执行入口仍走 fixed/旧路径，不能用旧二进制装入桌面 grant。r209 另行提供下述同源、独立编译的桌面 native 产品/监督器；本机 expected scope 固定在构建中，没有 parent/peer 的 mode 选择字段。
+
+## r209：编译期 scope 与私有管理路由
+
+新增 `CompileAutonomousDesktopProductTest` / `CompileDesktopProductSupervisorTest`：只接受 TEST、精确 view/control、本轮固定产品/签名 helper 摘要与合法安装路径；受信调用方可显式选原 TEST tunnel，约束 endpoint/端口不变。通过 `remoteapp_desktop_view` 或 `remoteapp_desktop_control` 构建标签，编入 `compiledDesktopPermission` **源码 const**，不能用 JSON、argv、环境或 `-X` 链接变量切换。没有新增可运行时解释的 mode。两个标签同时选会因 const 重复而编译失败；默认不带标签仍 fixed。
+
+native 产品与监督器共享既有生命周期源码，按标签分别生成独立固定摘要产物。desktop native client 只选 r208 的 CoordinatedDesktopSession/桌面产品 work，禁止生产并不创建 PONG Observation；desktop supervisor 只选 StartDesktopTest、同范围独立撤销，ready metadata 回显范围。保留原生 binding、profile/租约、signer、维护与卸载协议。新构建器保持 Mac native client 的 CGO=1 和 Windows amd64/CGO=0，不因交叉构建静默丢失原生日志能力；optional removal 仍固定维护端口/独立卸载器摘要。
+
+同时修复接线缺口：旧 `supervisedcontrol.Serve` 的业务过滤器会在 r208 维护器之前拒绝桌面 Permission。新增独立 `ServeDesktop`，桌面标签的 Windows 命名管道/Mac 私有 Unix listener 显式选择它；仍由原 OS listener 做 same-user peer 检查，响应/业务 scope 继续由 r208 owner 核验，不从来帧计算策略。既有 Serve 保持 fixed。新服务接受同 scope invite/Allow 与原受限 quiesce/revoke/start/preprovision-terminal；错 scope、身份选择、生命周期越界拒绝。
+
+旧 `product_count` 在桌面 supervisor、ServeDesktop 和 Controller.Count 三处拒绝，不能到达 native child，更不能触发 nil PONG observation 导致桌面 owner 意外退出。原 fixed 查询保持。后续需要单独接真实帧/输入遥测，不能恢复 PONG 计数充当桌面验收。
+
+当前新增的是 native 产品/监督器构建函数和标签接线，旧 fresh-builder 调用方尚未切换。Swift/C# GUI 尚无预备/请求确认/激活阶段的完整父管道实现，不能提前签发双机桌面包或把旧 TLSBridgeProbe 当真实桌面产品。下一组必须实现并保留同一个固定摘要 GUI child，人工同意位于原8秒产品启动前，待确认后才交付同 grant 的 bootstrap/激活，禁止用扩大截止或另开替代 child 解决等待。
 
 ## 下一组管理与界面接线
 
@@ -114,3 +126,9 @@ installeddevice/productmaintenance 包回归与新桌面边界 race 通过。真
 另验证 scope 经 ACTIVE watch→新 session identity→streamgate/runtime 保留、控制端仅一次触发；同一固定 SHA-256 Go child 实际接收 scoped 私有 handoff 并正常 Stop/exit/reader join；默认产品/错 scope/PONG Observation 在网络前拒绝。维护 owner 测试只读既有内存 binding，检查 lease 先关闭，拒绝旧/重复 ready，独立撤销建好前拒绝业务，错 scope/混合回执锁闭，以及未知 provision 仍已 Pin 且保留 signer，显式 Release 等同一 child 退出。
 
 材料 `artifacts/connection-poc/r208-desktop-runner/`。真实本机 HTTPS、签名协议、Go 子进程/监督器和 join，node/issuer/credential/capture/input 均为 fixture；没有真实 Headscale、Swift/C# 桌面载荷、画面键鼠或双机 GUI 验收，没有远程部署/新包或历史现场操作。全部本机构建和测试采用原限额、离线缓存与串行任务组，Windows vet 为交叉静态检查。
+
+### r209 验证增量
+
+构建器负向与 argv 捕获检查覆盖两 scope、Mac/Windows、direct/TEST tunnel、监督器/客户端、非法 scope/生产/未固定摘要/维护地址和只提供半边 removal 组合；捕获编译器为脚本 fixture，不计真正原生构建。default/view/control 三种 Go 命令包组合实际编译通过；同时两个 scope 标签的实际编译按预期拒绝，只出现重复 const 错误。两 scope 的 Windows amd64 交叉 vet 通过，不代表 Windows 原生运行。
+
+supervisedcontrol 默认路由回归通过；新桌面管理路由、取消后在途 reader/handler join、维护 owner 拒绝 PONG 又不污染业务状态定向 race 通过。管理路由新测试使用真实本机 TCP + fixture backend，不包含 OS signer 或新 kernel peer 验收，原受保护监听器未改认证策略。证据 `artifacts/connection-poc/r209-desktop-build/`，无 SSH、服务部署、安装根或 GUI/真实画面键鼠操作。
