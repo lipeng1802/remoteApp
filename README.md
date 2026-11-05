@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r205：客户端明确桌面权限策略已接入证明验证、watch/gate、双向协议与私有产品 handoff。现有入口保持 fixed 默认；服务端桌面网络授权和 GUI 尚待接入，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
+
 2026-11-05 r204：已补设备授权层明确签名的桌面查看/控制范围，并加严 Mac/Windows 组件的权限匹配；旧 fixed-payload 不授予桌面能力。新的网络 scope 与 GUI 接线尚待，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
 
 2026-11-05 r203：自主桌面接入组件已通过——Mac 一次性私有 handoff、Windows 固定本地桌面端点及认证/同意/资源释放边界。GUI 与真实画面键鼠整链仍在接线，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。

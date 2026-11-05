@@ -1,6 +1,7 @@
 package clientruntime
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -13,6 +14,7 @@ import (
 
 	"remoteapp.local/selfhost-poc/cleanupwitness"
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/processowner"
 	"remoteapp.local/selfhost-poc/session"
 )
@@ -41,6 +43,7 @@ type networkAPI = ProductNetworkAPI
 type productReady struct {
 	Status           string `json:"status"`
 	Key, Fingerprint string
+	Permission       string `json:"Permission,omitempty"`
 }
 
 func hmacKey(s string) bool {
@@ -58,7 +61,7 @@ func descriptor(ctx context.Context, api networkAPI, issuer ed25519.PublicKey, c
 		return invite.TLSIdentity{}, session.ErrDenied
 	}
 	r, e := api.Request(ctx, invite.NetworkRequestBody{Action: "tls_identity", Grant: c.Grant, Challenge: n})
-	if e != nil || r.TLS == nil || !invite.VerifyTLSIdentity(issuer, *r.TLS, c.Grant, c.Binding, n, clock()) {
+	if e != nil || r.TLS == nil || !invite.VerifyTLSIdentityForPolicy(c.grantPolicy, issuer, *r.TLS, c.Grant, c.Binding, n, clock()) {
 		return invite.TLSIdentity{}, session.ErrDenied
 	}
 	return *r.TLS, nil
@@ -74,6 +77,9 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	if api == nil || clock == nil || len(issuer) != 32 || (c.Server && (p.ControllerKey != "" || p.TargetReady == nil)) || (!c.Server && (!hmacKey(p.ControllerKey) || port < 1 || port > 65535)) {
 		return nil, session.ErrDenied
 	}
+	if !c.grantPolicy.Verify(issuer, c.Grant, c.Grant.Claims.Target, c.Grant.Claims.Controller, clock()) {
+		return nil, session.ErrDenied
+	}
 	if !c.Server {
 		d, e := descriptor(ctx, api, issuer, c, clock)
 		if e != nil {
@@ -83,11 +89,18 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 		if e != nil {
 			return nil, e
 		}
-		raw, e := child.Exchange(ctx, map[string]any{"Port": port, "Key": p.ControllerKey, "Fingerprint": d.Claims.Fingerprint, "Target": c.Grant.Claims.Target})
-		var ready struct {
-			Status string `json:"status"`
+		bootstrap := map[string]any{"Port": port, "Key": p.ControllerKey, "Fingerprint": d.Claims.Fingerprint, "Target": c.Grant.Claims.Target}
+		expected := ""
+		if c.grantPolicy.IsDesktop() {
+			expected = c.grantPolicy.Permission()
+			bootstrap["Permission"] = expected
 		}
-		if e != nil || json.Unmarshal(raw, &ready) != nil || ready.Status != "ready" {
+		raw, e := child.Exchange(ctx, bootstrap)
+		var ready struct {
+			Status     string `json:"status"`
+			Permission string `json:"Permission"`
+		}
+		if e != nil || decodeProductReady(raw, &ready) != nil || ready.Status != "ready" || ready.Permission != expected {
 			return child, session.ErrDenied
 		}
 		p.Observation.bind(child, false)
@@ -109,7 +122,11 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	}
 	raw, e := child.Exchange(ctx, nil)
 	var ready productReady
-	if e != nil || json.Unmarshal(raw, &ready) != nil || ready.Status != "ready" || !hmacKey(ready.Key) {
+	expected := ""
+	if c.grantPolicy.IsDesktop() {
+		expected = c.grantPolicy.Permission()
+	}
+	if e != nil || decodeProductReady(raw, &ready) != nil || ready.Status != "ready" || ready.Permission != expected || !hmacKey(ready.Key) {
 		if p.CertificateScope != "" {
 			return child, errors.Join(session.ErrDenied, ErrTestCertificateOpen)
 		}
@@ -164,11 +181,32 @@ func startObservedTLS(ctx context.Context, spec processowner.Spec) (*processowne
 	return processowner.StartObserved(spec, func(e error) { w.Complete(cleanupwitness.TLSProduct, e) })
 }
 
+func decodeProductReady(raw []byte, out any) error {
+	return privatepipe.NewReader(bytes.NewReader(append(append([]byte(nil), raw...), '\n'))).Read(out)
+}
+
 // StartBoundProduct is trusted composition for an already-authorized native
 // owner. It does not enroll a node or choose a destination; its caller must own
 // the session transport and join the returned child on every outcome.
 func StartBoundProduct(ctx context.Context, p Product, api ProductNetworkAPI, issuer ed25519.PublicKey, grant invite.Grant, binding invite.NetworkBinding, server bool, clock func() time.Time, port int, expectedFingerprint string) (*processowner.Child, error) {
-	if api == nil {
+	return startBoundProduct(ctx, invite.GrantPolicy{}, p, api, issuer, grant, binding, server, clock, port, expectedFingerprint)
+}
+
+// StartBoundDesktopProduct is separate trusted composition. The exact desktop
+// permission is selected locally, then verified against the signed grant and
+// descriptor before any private handoff. Child readiness must echo that scope;
+// a legacy PONG product cannot stand in for a desktop product. The caller still
+// owns pre-consent, the live gate and joining this same child on every outcome.
+func StartBoundDesktopProduct(ctx context.Context, expected invite.DesktopPermission, p Product, api ProductNetworkAPI, issuer ed25519.PublicKey, grant invite.Grant, binding invite.NetworkBinding, server bool, clock func() time.Time, port int, expectedFingerprint string) (*processowner.Child, error) {
+	policy, e := invite.DesktopGrantPolicy(expected)
+	if e != nil || p.Observation != nil {
+		return nil, session.ErrDenied
+	}
+	return startBoundProduct(ctx, policy, p, api, issuer, grant, binding, server, clock, port, expectedFingerprint)
+}
+
+func startBoundProduct(ctx context.Context, policy invite.GrantPolicy, p Product, api ProductNetworkAPI, issuer ed25519.PublicKey, grant invite.Grant, binding invite.NetworkBinding, server bool, clock func() time.Time, port int, expectedFingerprint string) (*processowner.Child, error) {
+	if ctx == nil || api == nil {
 		return nil, session.ErrDenied
 	}
 	if expectedFingerprint != "" {
@@ -177,7 +215,7 @@ func StartBoundProduct(ctx context.Context, p Product, api ProductNetworkAPI, is
 		}
 		api = pinnedProductAPI{ProductNetworkAPI: api, fingerprint: expectedFingerprint}
 	}
-	return p.start(ctx, api, issuer, Config{Grant: grant, Binding: binding, Server: server}, clock, port)
+	return p.start(ctx, api, issuer, Config{grantPolicy: policy, Grant: grant, Binding: binding, Server: server}, clock, port)
 }
 
 type pinnedProductAPI struct {

@@ -68,7 +68,7 @@ func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGa
 		return invite.ErrDenied
 	}
 	if reply.Session == nil || reply.Ticket != "" || reply.Credential != nil || reply.State != nil || reply.Proof != nil || reply.TLS != nil || reply.Verifier != nil ||
-		!invite.VerifySessionIdentity(g.issuer, *reply.Session, g.grant, e.binding, challenge, g.clock()) || !g.validGrant(g.grant, g.clock()) ||
+		!invite.VerifySessionIdentityForPolicy(g.policy, g.issuer, *reply.Session, g.grant, e.binding, challenge, g.clock()) || !g.validGrant(g.grant, g.clock()) ||
 		!bytes.Equal(g.public, g.signer.PublicKey()) || e.node == nil || e.node.PublicKey() != e.key {
 		return invite.ErrDenied
 	}
@@ -89,7 +89,7 @@ func (e *enrollment) prepareSessionPeers(ctx context.Context, g *authorizationGa
 		if !state.Claims.Active {
 			return nil, invite.ErrDenied
 		}
-		return streamgate.NewWithSigner(g.issuer, target, controller, g.signer, state, server, g.clock)
+		return streamgate.NewWithPolicy(g.policy, g.issuer, target, controller, g.signer, state, server, g.clock)
 	})
 	if err != nil {
 		stage = startuptrace.LifecycleIdentityGateRejected

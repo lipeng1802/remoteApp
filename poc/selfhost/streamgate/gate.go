@@ -36,9 +36,14 @@ func New(issuer, target, controller ed25519.PublicKey, key ed25519.PrivateKey, s
 	return NewWithSigner(issuer, target, controller, signer, state, server, now)
 }
 func NewWithSigner(issuer, target, controller ed25519.PublicKey, signer invite.DeviceSigner, state invite.NetworkState, server bool, now func() time.Time) (*Gate, error) {
+	return NewWithPolicy(invite.GrantPolicy{}, issuer, target, controller, signer, state, server, now)
+}
+
+// NewWithPolicy takes an exact locally selected scope, never a peer-selected one.
+func NewWithPolicy(policy invite.GrantPolicy, issuer, target, controller ed25519.PublicKey, signer invite.DeviceSigner, state invite.NetworkState, server bool, now func() time.Time) (*Gate, error) {
 	if now == nil || signer == nil || len(target) != 32 || len(controller) != 32 || !state.Claims.Active ||
 		!invite.VerifyNetworkState(issuer, state, now()) ||
-		!invite.VerifyGrant(issuer, state.Claims.Grant, session.Identity(target), session.Identity(controller), now()) {
+		!policy.Verify(issuer, state.Claims.Grant, session.Identity(target), session.Identity(controller), now()) {
 		return nil, session.ErrDenied
 	}
 	expected := controller
@@ -49,9 +54,9 @@ func NewWithSigner(issuer, target, controller ed25519.PublicKey, signer invite.D
 		return nil, session.ErrDenied
 	}
 	b := state.Claims.Binding
-	c := session.Config{Issuer: append(ed25519.PublicKey(nil), issuer...), Signer: signer, Grant: state.Claims.Grant, Now: now,
+	c := session.Config{GrantPolicy: policy, Issuer: append(ed25519.PublicKey(nil), issuer...), Signer: signer, Grant: state.Claims.Grant, Now: now,
 		Binding: session.Binding{Target: append(ed25519.PublicKey(nil), target...), Controller: append(ed25519.PublicKey(nil), controller...), TargetIP: netip.MustParseAddr(b.TargetIP), ControllerIP: netip.MustParseAddr(b.ControllerIP)}}
-	cache := session.NewStateCache(c.Issuer, c.Grant, b, now)
+	cache := session.NewStateCacheForPolicy(policy, c.Issuer, c.Grant, b, now)
 	if !cache.Update(state) {
 		return nil, session.ErrDenied
 	}
@@ -65,7 +70,7 @@ func (g *Gate) Fresh(n invite.NetworkState) bool {
 func (g *Gate) Deny() { g.denied.Store(true) }
 func (g *Gate) active(ctx context.Context) bool {
 	return !g.denied.Load() && g.cache.Check(ctx, g.cfg.Grant, g.cfg.Grant.Claims.Target, g.cfg.Grant.Claims.Controller) &&
-		invite.VerifyGrant(g.cfg.Issuer, g.cfg.Grant, g.cfg.Grant.Claims.Target, g.cfg.Grant.Claims.Controller, g.cfg.Now())
+		g.cfg.GrantPolicy.Verify(g.cfg.Issuer, g.cfg.Grant, g.cfg.Grant.Claims.Target, g.cfg.Grant.Claims.Controller, g.cfg.Now())
 }
 
 // LocalAPI dialing returns a local proxy socket. Only after actual self/map

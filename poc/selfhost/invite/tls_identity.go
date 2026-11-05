@@ -134,9 +134,14 @@ func (b *ProvisionBackend) TLSIdentity(g Grant, challenge string) (TLSIdentity, 
 	return TLSIdentity{c, hex.EncodeToString(ed25519.Sign(ed25519.PrivateKey(key), tlsIdentityBytes(c)))}, nil
 }
 func VerifyTLSIdentity(pub ed25519.PublicKey, d TLSIdentity, g Grant, binding NetworkBinding, challenge string, now time.Time) bool {
+	return VerifyTLSIdentityForPolicy(GrantPolicy{}, pub, d, g, binding, challenge, now)
+}
+
+// VerifyTLSIdentityForPolicy uses the exact trusted local scope without relaxing any proof bound.
+func VerifyTLSIdentityForPolicy(policy GrantPolicy, pub ed25519.PublicKey, d TLSIdentity, g Grant, binding NetworkBinding, challenge string, now time.Time) bool {
 	c := d.Claims
 	sig, e := hex.DecodeString(d.Signature)
 	fp, fe := hex.DecodeString(c.Fingerprint)
 	nonce, ne := hex.DecodeString(challenge)
-	return len(pub) == 32 && e == nil && len(sig) == 64 && fe == nil && len(fp) == 32 && c.Fingerprint == hex.EncodeToString(fp) && ne == nil && len(nonce) == 32 && challenge == hex.EncodeToString(nonce) && c.Version == 1 && c.Grant == g && c.Binding == binding && validBinding(binding) && c.Challenge == challenge && VerifyGrant(pub, g, g.Claims.Target, g.Claims.Controller, now) && c.IssuedAt <= now.UnixNano() && c.ExpiresAt > now.UnixNano() && c.ExpiresAt <= time.Unix(g.Claims.ExpiresAt, 0).UnixNano() && c.ExpiresAt-c.IssuedAt > 0 && c.ExpiresAt-c.IssuedAt <= int64(3*time.Second) && ed25519.Verify(pub, tlsIdentityBytes(c), sig)
+	return len(pub) == 32 && e == nil && len(sig) == 64 && fe == nil && len(fp) == 32 && c.Fingerprint == hex.EncodeToString(fp) && ne == nil && len(nonce) == 32 && challenge == hex.EncodeToString(nonce) && c.Version == 1 && c.Grant == g && c.Binding == binding && validBinding(binding) && c.Challenge == challenge && policy.Verify(pub, g, g.Claims.Target, g.Claims.Controller, now) && c.IssuedAt <= now.UnixNano() && c.ExpiresAt > now.UnixNano() && c.ExpiresAt <= time.Unix(g.Claims.ExpiresAt, 0).UnixNano() && c.ExpiresAt-c.IssuedAt > 0 && c.ExpiresAt-c.IssuedAt <= int64(3*time.Second) && ed25519.Verify(pub, tlsIdentityBytes(c), sig)
 }

@@ -29,6 +29,7 @@ import (
 const ControlURL = "https://mk.fengmap.com:8443"
 
 type Config struct {
+	grantPolicy             invite.GrantPolicy // trusted in-process desktop composition only
 	StateDir                string
 	AuthKey                 string
 	Verifier                string

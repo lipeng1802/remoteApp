@@ -34,9 +34,14 @@ func canonicalHex(s string, n int) bool {
 	return e == nil && len(b) == n && hex.EncodeToString(b) == s
 }
 func VerifyVerifierPermit(pub ed25519.PublicKey, p VerifierPermit, grant Grant, device, ticket, node, challenge string, now time.Time) bool {
+	return VerifyVerifierPermitForPolicy(GrantPolicy{}, pub, p, grant, device, ticket, node, challenge, now)
+}
+
+// VerifyVerifierPermitForPolicy uses the exact trusted local scope without relaxing any proof bound.
+func VerifyVerifierPermitForPolicy(policy GrantPolicy, pub ed25519.PublicKey, p VerifierPermit, grant Grant, device, ticket, node, challenge string, now time.Time) bool {
 	c := p.Claims
 	sig, e := hex.DecodeString(p.Signature)
-	return len(pub) == 32 && VerifyGrant(pub, grant, grant.Claims.Target, grant.Claims.Controller, now) && e == nil && len(sig) == 64 && hex.EncodeToString(sig) == p.Signature && c.Version == 1 &&
+	return len(pub) == 32 && policy.Verify(pub, grant, grant.Claims.Target, grant.Claims.Controller, now) && e == nil && len(sig) == 64 && hex.EncodeToString(sig) == p.Signature && c.Version == 1 &&
 		canonicalHex(c.GrantID, 16) && canonicalHex(device, 32) && canonicalHex(ticket, 16) && canonicalHex(challenge, 32) &&
 		validNodeKey(node) && validNodeKey(c.VerifierKey) && c.VerifierKey != node &&
 		c.GrantID == grant.Claims.ID && c.Device == device && (device == grant.Claims.Target || device == grant.Claims.Controller) &&

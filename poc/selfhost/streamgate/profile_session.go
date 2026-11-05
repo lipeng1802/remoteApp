@@ -32,6 +32,12 @@ func ProfileSession(ctx context.Context, release trustinstall.Release, p trustpr
 // calibrated clock to trusted product certificate/descriptor preparation. The
 // client/signature authority is never passed to a parent or product process.
 func ProfileSessionWithClient(ctx context.Context, release trustinstall.Release, p trustprofile.Profile, signer invite.DeviceSigner, target, controller ed25519.PublicKey, grant invite.Grant, binding invite.NetworkBinding, server bool, work func(context.Context, *Gate, *invite.NetworkClient, func() time.Time) error) error {
+	return ProfileSessionWithClientForPolicy(ctx, invite.GrantPolicy{}, release, p, signer, target, controller, grant, binding, server, work)
+}
+
+// ProfileSessionWithClientForPolicy threads a compiled exact scope through time
+// calibration, the watch and the same joined gate/worker lifetime.
+func ProfileSessionWithClientForPolicy(ctx context.Context, policy invite.GrantPolicy, release trustinstall.Release, p trustprofile.Profile, signer invite.DeviceSigner, target, controller ed25519.PublicKey, grant invite.Grant, binding invite.NetworkBinding, server bool, work func(context.Context, *Gate, *invite.NetworkClient, func() time.Time) error) error {
 	if ctx == nil || work == nil {
 		return session.ErrDenied
 	}
@@ -51,7 +57,7 @@ func ProfileSessionWithClient(ctx context.Context, release trustinstall.Release,
 	if e != nil {
 		return session.ErrDenied
 	}
-	clock, e := Calibrate(ctx, client, issuer, grant)
+	clock, e := CalibrateForPolicy(ctx, client, policy, issuer, grant)
 	if e != nil {
 		if ctx.Err() != nil {
 			return nil
@@ -60,7 +66,7 @@ func ProfileSessionWithClient(ctx context.Context, release trustinstall.Release,
 	}
 	life, cancel := context.WithCancel(ctx)
 	defer cancel()
-	m, e := StartManaged(life, client, issuer, target, controller, signer, grant, binding, server, clock)
+	m, e := StartManagedForPolicy(life, client, policy, issuer, target, controller, signer, grant, binding, server, clock)
 	if e != nil {
 		if ctx.Err() != nil {
 			return nil

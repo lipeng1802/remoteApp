@@ -23,7 +23,11 @@ type ManagedGate struct {
 // Calibrate uses a helper-generated nonce and monotonic request start. Neither
 // an untrusted parent timestamp nor receipt-time TTL extends authority leases.
 func Calibrate(ctx context.Context, c *invite.NetworkClient, issuer ed25519.PublicKey, grant invite.Grant) (func() time.Time, error) {
-	if c == nil || len(issuer) != 32 {
+	return CalibrateForPolicy(ctx, c, invite.GrantPolicy{}, issuer, grant)
+}
+
+func CalibrateForPolicy(ctx context.Context, c *invite.NetworkClient, policy invite.GrantPolicy, issuer ed25519.PublicKey, grant invite.Grant) (func() time.Time, error) {
+	if ctx == nil || c == nil || len(issuer) != 32 || !policy.Verify(issuer, grant, grant.Claims.Target, grant.Claims.Controller, time.Unix(grant.Claims.IssuedAt, 0)) {
 		return nil, session.ErrDenied
 	}
 	var nonce [32]byte
@@ -35,22 +39,26 @@ func Calibrate(ctx context.Context, c *invite.NetworkClient, issuer ed25519.Publ
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	reply, e := c.Request(ctx, invite.NetworkRequestBody{Action: "grant_clock", Grant: grant, Challenge: challenge})
-	if e != nil || reply.Proof == nil {
+	if e != nil || reply.Proof == nil || reply.Ticket != "" || reply.Credential != nil || reply.State != nil || reply.TLS != nil || reply.Session != nil || reply.Verifier != nil {
 		return nil, session.ErrDenied
 	}
 	clock, e := invite.AuthorityClock(issuer, *reply.Proof, grant.Claims.ID, challenge, start)
-	if e != nil || !invite.VerifyGrant(issuer, grant, grant.Claims.Target, grant.Claims.Controller, clock()) {
+	if e != nil || !policy.Verify(issuer, grant, grant.Claims.Target, grant.Claims.Controller, clock()) {
 		return nil, session.ErrDenied
 	}
 	return clock, nil
 }
 
 func StartManaged(ctx context.Context, client *invite.NetworkClient, issuer, target, controller ed25519.PublicKey, signer invite.DeviceSigner, grant invite.Grant, binding invite.NetworkBinding, server bool, clock func() time.Time) (*ManagedGate, error) {
+	return StartManagedForPolicy(ctx, client, invite.GrantPolicy{}, issuer, target, controller, signer, grant, binding, server, clock)
+}
+
+func StartManagedForPolicy(ctx context.Context, client *invite.NetworkClient, policy invite.GrantPolicy, issuer, target, controller ed25519.PublicKey, signer invite.DeviceSigner, grant invite.Grant, binding invite.NetworkBinding, server bool, clock func() time.Time) (*ManagedGate, error) {
 	if client == nil {
 		return nil, session.ErrDenied
 	}
 	ctx, cancel := client.BoundLifetime(ctx)
-	watch, e := client.StartStateWatch(ctx, issuer, grant, binding, clock)
+	watch, e := client.StartStateWatchForPolicy(ctx, policy, issuer, grant, binding, clock)
 	if e != nil {
 		cancel()
 		return nil, session.ErrDenied
@@ -63,7 +71,7 @@ func StartManaged(ctx context.Context, client *invite.NetworkClient, issuer, tar
 	var gate *Gate
 	for gate == nil {
 		if state, err := watch.Snapshot(); err == nil {
-			gate, e = NewWithSigner(issuer, target, controller, signer, state, server, clock)
+			gate, e = NewWithPolicy(policy, issuer, target, controller, signer, state, server, clock)
 			if e != nil {
 				return fail()
 			}

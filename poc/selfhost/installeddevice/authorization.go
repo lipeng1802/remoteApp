@@ -20,6 +20,7 @@ type networkRequester interface {
 // The calibrated clock and verified state stay inside the leased client. Only
 // fixed diagnostics leave this layer; these are not capabilities to open data.
 type authorizationGate struct {
+	policy invite.GrantPolicy
 	issuer ed25519.PublicKey
 	public ed25519.PublicKey
 	signer invite.DeviceSigner
@@ -43,7 +44,7 @@ func newAuthorizationGate(p trustprofile.Profile, signer invite.DeviceSigner) *a
 
 func (g *authorizationGate) validGrant(v invite.Grant, now time.Time) bool {
 	c := v.Claims
-	return canonical(v.Signature, 64) && canonical(c.ID, 16) && canonical(c.Target, 32) && canonical(c.Controller, 32) && c.Target != c.Controller && (g.self == c.Target || g.self == c.Controller) && invite.VerifyGrant(g.issuer, v, c.Target, c.Controller, now)
+	return canonical(v.Signature, 64) && canonical(c.ID, 16) && canonical(c.Target, 32) && canonical(c.Controller, 32) && c.Target != c.Controller && (g.self == c.Target || g.self == c.Controller) && g.policy.Verify(g.issuer, v, c.Target, c.Controller, now)
 }
 
 func (g *authorizationGate) request(ctx context.Context, client networkRequester, b invite.NetworkRequestBody) (authorizationResult, error) {

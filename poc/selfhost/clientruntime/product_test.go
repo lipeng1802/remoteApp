@@ -31,6 +31,13 @@ func TestTLSProductFixture(t *testing.T) {
 		return
 	}
 	mode := strings.TrimPrefix(os.Args[len(os.Args)-1], "tls-fixture-")
+	scope := ""
+	for _, value := range []string{"desktop-view", "desktop-control"} {
+		if strings.HasPrefix(mode, value+"-") {
+			scope, mode = value, strings.TrimPrefix(mode, value+"-")
+			break
+		}
+	}
 	reader := privatepipe.NewReader(os.Stdin)
 	var cert []byte
 	var priv *rsa.PrivateKey
@@ -38,11 +45,16 @@ func TestTLSProductFixture(t *testing.T) {
 		var cfg struct {
 			Port                     int
 			Key, Fingerprint, Target string
+			Permission               string
 		}
-		if reader.Read(&cfg) != nil || cfg.Port != 32123 || cfg.Key != testHMAC || cfg.Fingerprint != strings.Repeat("c", 64) || len(cfg.Target) != 64 {
+		if reader.Read(&cfg) != nil || cfg.Port != 32123 || cfg.Key != testHMAC || cfg.Fingerprint != strings.Repeat("c", 64) || len(cfg.Target) != 64 || (scope != "" && cfg.Permission != scope) {
 			os.Exit(7)
 		}
-		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "ready"})
+		ready := map[string]string{"status": "ready"}
+		if scope != "" {
+			ready["Permission"] = scope
+		}
+		json.NewEncoder(os.Stdout).Encode(ready)
 	} else {
 		var e error
 		priv, e = rsa.GenerateKey(rand.Reader, 2048)
@@ -56,7 +68,7 @@ func TestTLSProductFixture(t *testing.T) {
 			os.Exit(7)
 		}
 		fp := sha256.Sum256(cert)
-		json.NewEncoder(os.Stdout).Encode(productReady{Status: "ready", Key: testHMAC, Fingerprint: hex.EncodeToString(fp[:])})
+		json.NewEncoder(os.Stdout).Encode(productReady{Status: "ready", Key: testHMAC, Fingerprint: hex.EncodeToString(fp[:]), Permission: scope})
 	}
 	for {
 		var cmd struct{ Op, GrantID, Target, Challenge string }

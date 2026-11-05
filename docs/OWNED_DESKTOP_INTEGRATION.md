@@ -1,6 +1,6 @@
 # 自主连接链与桌面界面接入
 
-2026-11-05 r204（承接 r203）。当前是桌面协议与签名权限组件接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
+2026-11-05 r205（承接 r203/r204）。当前是桌面协议与签名权限组件接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
 
 ## 已落实的边界
 
@@ -20,7 +20,17 @@ Windows 新增 `TlsProbeServer.RunOwnedDesktopOnceAsync`，固定监听/peer 为
 
 Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重新打开校验 scope 与同一申请/签名 grant 一致。默认 Open 不接受新模式，新构造器也不能打开已有 fixed-only Store，失败不改快照或重建 issuer。没有线上 Store 迁移或任何旧文件回写。现有 Authorized、网络 provision/ACTIVE/TLS、业务 IPC 仍拒绝桌面授权；新的 AuthorizedDesktop 只核查设备授权账本，不开启这些网络能力。
 
-**下一步必须先把明确 scope 贯穿独立的可信网络/会话/产品接线，再做 GUI pre-arm。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
+**r205 已补客户端验证与私有产品 handoff 的 scope 接线；下一组先补服务端网络授权及限定 owner 入口，再做 GUI pre-arm。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
+
+## r205：客户端明确策略、watch 与私有载荷接线
+
+新增值类型 `invite.GrantPolicy`，其零值仅代表既有 fixed-payload，桌面策略必须由可信本机组合以精确 DesktopPermission 构造。字段私有，JSON 编解码均拒绝，不能把配置或 peer 报文解析成策略；session.Config 的策略字段也不参与 JSON。新 `ForPolicy` 验证入口覆盖 TLS 描述符、session identity、verifier permit，既有函数继续使用零值 fixed 策略，原签名域、nonce、角色、binding 和有效期检查未放宽。
+
+明确策略贯穿 StateWatch 启动/每次查询/Snapshot、ManagedGate 校时/watch/gate、ProfileSession 的相同 join 生命周期，以及 session 双向证明/secret 交换/opaque Tunnel。StateCache 同时绑定本机策略、同一 grant/binding 与绝对有效期；inactive 仍永久锁闭，延迟收到的状态不重置 TTL。校时必须先验证本机 scope 下的 grant 签名，再发 fresh challenge；校时/状态响应混带其它回执类型立即拒绝。所有原 TCP/密钥交换3秒、状态3秒、授权300秒及产品启动8秒保持。
+
+新增独立 `StartBoundDesktopProduct`，要求本机 expected scope，先核验 grant 与签名 TLS 描述符，再经同一匿名管道交付五字段 bootstrap。控制端和目标端 ready 均须回显完全一致的 Permission，旧 PONG ready、未知字段或错范围拒绝；目标错范围在发布证书/会话 secret 前拒绝。它不接受旧 PONG Observation 作为桌面遥测。失败仍返回同一已启动 child 供原 owner join，不另开进程、不强杀、不把超时当退出。
+
+installeddevice 的内部授权/节点 verifier/session identity 验证点保留同一策略，当前既有 runner 仍构造 fixed 默认策略。尚未导出新的桌面 runner 或打通实际 GUI/原生载荷入口；原 RunProduct 也仍是 fixed 默认。**服务端 PlanProvision/NetworkState 等仍拒绝 desktop grant**，没有部署新 backend，没有改现有 Store、profile 或控制面。不能据此宣称已取得桌面网络身份或真实画面/输入。
 
 ## 下一组管理与界面接线
 
@@ -44,3 +54,9 @@ Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重
 Go invite/installeddevice 相关包回归通过，最终新桌面范围检查与旧签名 wire golden 检查通过；空 permission 不改变旧请求签名字节或旧结果 JSON。首次扩展负向形状 fixture 触发原持久邀请轮换预算，已用各检查间推进测试时钟隔离，保留原限额，无产品规则放宽。Go 全程 GOMAXPROCS=2 / GOFLAGS=-p=2 / nice10 / 受信离线缓存；未运行无变化完整项目回归。
 
 材料在 `artifacts/connection-poc/r204-owned-desktop/`（Go/Swift/第一轮 Windows 组件与清理）及 `r204-desktop-final-owned-desktop/`（补齐剪贴板拒绝后的最终 Windows 六项与精确清理）。两个 Windows 组件命令均实际 exit0，无真实 capture/input 或持久凭据操作；组件临时根、上传和相关进程检查通过。未准备新鲜双机产品包，不计 GUI 整链通过，未改部署服务、Nginx/443 或历史现场。
+
+### r205 验证增量
+
+相关 invite/session/streamgate/clientruntime/installeddevice 五包检查通过；新范围的 HTTPS watch、双向 secret/本地 TCP opaque worker、state cache 与 ManagedGate 定向 race 检查通过。随后针对最后加严的混合回执拒绝复验既有 StateWatch/Managed/Profile 默认路径，并覆盖桌面私有 child 的明确范围/ready/正常退出与拒绝 PONG Observation。证据在 `artifacts/connection-poc/r205-client-policy/`。全部本机 Go 使用既有限额与离线缓存，重型检查串行；没有重新构建 Swift/Windows 组件或重开新鲜双机工单。
+
+这些是内存 issuer/signers、私有 HTTPS fixture、本地 TCP 固定字节及 Go fixture child 的协议/生命周期检查；不是 OS signer 到线上服务、Headscale/WhoIs、实际 Swift/C# 桌面程序、真实屏幕键鼠或 GUI 整体验收。下一步按上面的服务端授权与限定 owner 入口继续，不得对旧 fixed Store 直接开启 desktop 模式，也不得复活已退休安装。

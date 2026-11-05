@@ -6,6 +6,20 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r205：明确scope贯穿客户端证明、watch/gate与私有产品handoff
+
+承接r204/7fc9e7a，先读Git/交接，无前组重型构建；磁盘约137GiB可用，无需清理。此组只做本机源码/组件验证，没有SSH、远程服务变更或新鲜双机产品工单，历史未知现场和已退休安装均未动。
+
+新增不可JSON编解码的值类型invite.GrantPolicy，零值保留fixed-payload-only；桌面策略只能由可信本机组合显式选择准确DesktopPermission。旧VerifyGrant及旧proof/watch/gate/ProfileSession函数继续默认fixed，不全局放宽scope。新ForPolicy入口贯通TLS identity、session identity、verifier permit与StateWatch每次查询/Snapshot；校时先核验同一策略的grant再fresh nonce，校时/状态混带其它回执拒绝。
+
+session.Config仅通过本机字段持策略（JSON忽略），双向证明、会话secret、opaque TLS桥和持续授权均使用它；StateCache同时核验同一grant/binding/本机scope及绝对lease，inactive不可由active重放复活，grant到期不被状态TTL延长。ManagedGate/ProfileSession把同一策略传到校时、HTTPS watch和gate，原Deny→cancel→watch/worker join顺序保留。节点WhoIs/身份检查及全部原3秒TCP/密钥交换、3秒状态、300秒grant、8秒产品启动预算未改。
+
+clientruntime新增单独StartBoundDesktopProduct：先核验本机expected scope下的grant/descriptor，控制端私有bootstrap含Permission，双角色ready须回显相同scope，严格拒绝未知字段/错scope/旧PONG ready；目标错scope在证书/secret发布前拒绝。拒绝PONG Observation进入桌面路径。已启动child遇错仍交给原owner实际join，不重试换child或强杀。installeddevice内部授权/verifier/session验证点沿用同一私有策略，但既有runner仍只选fixed默认，尚无新的desktop runner/GUI/原生程序接线。旧RunProduct默认fixed，因此不能用旧入口消费desktop grant。
+
+当前服务端PlanProvision/NetworkState/其它backend仍fixed-only，不能凭客户端组件提前运行真实桌面，也不能把旧fixed Store原地开启新模式。下一组优先服务端精确授权与签名网络证明的独立组合，继而限定desktop owner/产品构建、GUI pre-arm和人工明确同意；不从peer报文推导expected策略，不直接宽化旧Authorized/VerifyGrant。详见docs/OWNED_DESKTOP_INTEGRATION.md。
+
+五个相关Go包首轮均PASS；新scope watch/session/gate定向race三包PASS（invite4.888s/session2.025s/streamgate2.819s）；最后加严混合回执后的默认StateWatch/Managed/Profile与桌面PONG Observation边界三包复验PASS（clientruntime3.134s/invite4.276s/streamgate14.362s），原exec session7473实际exit0。所有Go保持GOMAXPROCS=2、GOFLAGS=-p=2、nice10、既有离线cache，组间重型串行；不重复无变化完整项目回归。证据已归档artifacts/connection-poc/r205-client-policy/{packages.txt,scope-race.txt,final-boundaries.txt}。收尾无重型构建驻留，磁盘约136GiB可用，保留增量构建cache，无需清理。测试仅内存issuer/signers、HTTPS fixture、本地TCP固定字节和Go受管fixture child，不能计OS双机/Headscale/真实画面键鼠/GUI通过。当前自动续办ACTIVE，无人工阻塞，本地提交不推送。
+
 ## 2026-11-05 r204：明确桌面签名权限与跨平台载荷能力边界
 
 承接r203/863f649，先读交接/Git，无前组重型构建；磁盘约138GiB可用，无清理需要。源码排查发现原authority与会话仅签发/接受fixed-payload，不能仅把PONG二进制换成真实capture/input产品。此轮先补明确授权边界，没有启动真实输入或新双机工单，也没有部署服务/改线上Store。

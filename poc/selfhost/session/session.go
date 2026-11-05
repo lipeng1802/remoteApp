@@ -38,12 +38,13 @@ type Binding struct {
 type Check func(ctx context.Context, g invite.Grant, target, controller string) bool
 
 type Config struct {
-	Issuer  ed25519.PublicKey
-	Key     ed25519.PrivateKey
-	Signer  invite.DeviceSigner
-	Binding Binding
-	Grant   invite.Grant
-	Now     func() time.Time
+	GrantPolicy invite.GrantPolicy `json:"-"`
+	Issuer      ed25519.PublicKey
+	Key         ed25519.PrivateKey
+	Signer      invite.DeviceSigner
+	Binding     Binding
+	Grant       invite.Grant
+	Now         func() time.Time
 }
 
 type transcript struct {
@@ -176,7 +177,7 @@ func (c Config) valid(conn net.Conn, server bool) bool {
 	r, e2 := netip.ParseAddrPort(conn.RemoteAddr().String())
 	return e1 == nil && e2 == nil && l.Addr().Unmap() == local && r.Addr().Unmap() == remote &&
 		Identity(signer.PublicKey()) == Identity(pub) &&
-		invite.VerifyGrant(c.Issuer, c.Grant, Identity(b.Target), Identity(b.Controller), c.Now())
+		c.GrantPolicy.Verify(c.Issuer, c.Grant, Identity(b.Target), Identity(b.Controller), c.Now())
 }
 
 // Framing is bounded before allocation; strict decoding rejects extra fields and
@@ -223,13 +224,13 @@ func write(conn net.Conn, value any) error {
 // callback may delay return, in which case the outer owner times out closed and
 // retains its native lease instead of publishing a new configuration.
 func authorized(ctx context.Context, c Config, check Check) bool {
-	if check == nil || !invite.VerifyGrant(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now()) {
+	if check == nil || !c.GrantPolicy.Verify(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now()) {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
 	ok := check(ctx, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller))
-	return ok && ctx.Err() == nil && invite.VerifyGrant(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now())
+	return ok && ctx.Err() == nil && c.GrantPolicy.Verify(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now())
 }
 func closeOnCancel(ctx context.Context, conn net.Conn) func() {
 	done := make(chan struct{})
@@ -364,7 +365,7 @@ func probe(ctx context.Context, conn net.Conn, c Config, received func(), wrongP
 		return ErrDenied
 	}
 	for {
-		if !invite.VerifyGrant(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now()) {
+		if !c.GrantPolicy.Verify(c.Issuer, c.Grant, Identity(c.Binding.Target), Identity(c.Binding.Controller), c.Now()) {
 			return ErrDenied
 		}
 		conn.SetDeadline(time.Now().Add(3 * time.Second))

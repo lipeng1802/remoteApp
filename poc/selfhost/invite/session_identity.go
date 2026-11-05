@@ -70,6 +70,11 @@ func (b *ProvisionBackend) SessionIdentity(g Grant, challenge string) (SessionId
 }
 
 func VerifySessionIdentity(pub ed25519.PublicKey, d SessionIdentity, g Grant, binding NetworkBinding, challenge string, now time.Time) bool {
+	return VerifySessionIdentityForPolicy(GrantPolicy{}, pub, d, g, binding, challenge, now)
+}
+
+// VerifySessionIdentityForPolicy uses the exact trusted local scope without relaxing any proof bound.
+func VerifySessionIdentityForPolicy(policy GrantPolicy, pub ed25519.PublicKey, d SessionIdentity, g Grant, binding NetworkBinding, challenge string, now time.Time) bool {
 	c := d.Claims
 	sig, sigErr := hex.DecodeString(d.Signature)
 	target, targetErr := hex.DecodeString(c.TargetPublic)
@@ -80,7 +85,7 @@ func VerifySessionIdentity(pub ed25519.PublicKey, d SessionIdentity, g Grant, bi
 		controllerErr == nil && len(controller) == ed25519.PublicKeySize && c.ControllerPublic == hex.EncodeToString(controller) && deviceID(controller) == g.Claims.Controller &&
 		!ed25519.PublicKey(target).Equal(ed25519.PublicKey(controller)) && nonceErr == nil && len(nonce) == 32 && challenge == hex.EncodeToString(nonce) &&
 		c.Version == 1 && c.Grant == g && c.Binding == binding && validBinding(binding) && c.Challenge == challenge &&
-		VerifyGrant(pub, g, g.Claims.Target, g.Claims.Controller, now) && c.IssuedAt <= now.UnixNano() && c.ExpiresAt > now.UnixNano() &&
+		policy.Verify(pub, g, g.Claims.Target, g.Claims.Controller, now) && c.IssuedAt <= now.UnixNano() && c.ExpiresAt > now.UnixNano() &&
 		c.ExpiresAt <= time.Unix(g.Claims.ExpiresAt, 0).UnixNano() && c.ExpiresAt-c.IssuedAt > 0 && c.ExpiresAt-c.IssuedAt <= int64(3*time.Second) &&
 		ed25519.Verify(pub, sessionIdentityBytes(c), sig)
 }
