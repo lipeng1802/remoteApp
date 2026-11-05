@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r217 已接入独立桌面 TEST authority。测试使用新签名 profile 验证了本机 HTTPS 注册与 broker 的实际退出。后续使用隔离入口验证完整控制面和真实桌面会话。[接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)
+
 2026-11-05 r216 已完成隔离桌面 TEST 的 Headscale 配置、管理通道与 verifier 接线。Headscale 0.29.4 配置预检和跨控制面拒绝测试通过。下一组接入独立 authority 的启动、签名 profile 和退出收尾。[接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)
 
 2026-11-05 r215 已接入独立桌面 TEST 签名包构建。两端以同一编译期权限绑定 GUI、产品和监督器，注册节点只使用隔离控制面。正式发行先完成真实 GUI 双机验收，再验收正式签名安装、升级、卸载和跨网运行。见[桌面接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。

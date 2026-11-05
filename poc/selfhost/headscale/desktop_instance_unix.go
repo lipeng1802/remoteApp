@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"remoteapp.local/selfhost-poc/productprofile"
 )
@@ -90,7 +91,9 @@ func (d *DesktopTestInstance) Run(ctx context.Context, args ...string) ([]byte, 
 		return nil, ErrDriver
 	}
 	args = append([]string{"-c", d.configPath(), "-o", "json"}, args...)
-	cmd := exec.CommandContext(ctx, "/opt/remoteapp-poc/headscale", args...)
+	call, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(call, "/opt/remoteapp-poc/headscale", args...)
 	cmd.Env = []string{"LANG=C"}
 	var out limitedBuffer
 	cmd.Stdout = &out

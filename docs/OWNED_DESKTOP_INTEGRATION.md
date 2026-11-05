@@ -205,3 +205,11 @@ Mac 本机停止意图和活动 GUI 状态通过同一 native owner 核对。Win
 `headscale.PrepareDesktopTest` 仅在当前用户拥有的空私有测试目录生成固定配置和策略目录。实例使用本目录的数据库、Noise/DERP 密钥、TLS 文件和管理 socket。CLI 每次操作前复核配置及私有 socket，清除继承的配置覆盖环境。现有控制面的配置和 CLI 路径保持原行为。
 
 桌面 TEST verifier 绑定 TCP 19443 的独立控制地址。恢复与退休均核对同一 journal 的控制面归属。隔离 broker 组合只接收桌面 TEST verifier，并通过专用实例应用数据库策略。配置已通过本机 Headscale 0.29.4 `configtest`。后续由独立 authority 在第一条注册前确认空 ACL，并在退出时依次等待 HTTP、策略监督器和 verifier 完成收尾。
+
+## r217 隔离 authority
+
+在独立私有父目录下以有效 UID/GID 创建空的 `remoteapp-desktop-test-<16位小写十六进制>` stage，父目录与 stage 权限均为 0700。用 `desktop-test-authority prepare <stage>` 生成固定 Headscale 配置和独立桌面 Store，准备回执绑定原 issuer。控制面需要在该 stage 配置可由系统信任链验证的 `mk.fengmap.com` TLS 证书和密钥。以无配置覆盖的环境启动 Headscale，配置固定为本 stage 的 `headscale.yaml`。
+
+`desktop-test-authority serve <stage>` 仅尝试一次。在创建 verifier 前清空并回读本 stage 的隔离 ACL，然后接入监督器和同 UID 私有 broker。Authority 仅监听随机回环 TCP 端口。它在私有 stage 内原子发布 `authority-ready.json`，包含端口、短期签名 profile 和独立公开根。通过受信的管理连接读取该文件并单独核对公开根，向 r215 builder 提供其中的 profile 与根，权威访问通过固定测试转发。Headscale TLS 和 authority 的临时 TLS CA 分开验证。回执是启动材料，活性仍需经实际签名 HTTPS 请求核实。
+
+客户端完成撤销、停止和实际退出后，向 authority 发正常终止信号并等待其实际退出。只有 HTTPS、broker、策略监督器、verifier 和 Store 全部正常收尾并确认空 ACL，才写 `authority-joined`。在同一隔离 Headscale 仍运行时调用 `desktop-test-authority retire <stage>`，仅回收 Store 已记录工单和该 verifier，再停隔离 Headscale 并确认退出。未知启动或关闭结果保留同一 stage 与所有权证据。不要复用该 stage，也不要把 ready 文件当成正常退出证明。

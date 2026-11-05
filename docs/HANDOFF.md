@@ -1,5 +1,17 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-05 r217 独立桌面 authority 与签名启动材料
+
+承接 1bac922，分支和历史现场保持原约束。确认无上一组重型进程，工作卷约 129 GiB，构建中仍约 127 GiB。Go 采用 GOMAXPROCS=2、GOFLAGS=-p=2、nice10 及可信离线缓存，重型任务串行。
+
+新增 `desktop-test-authority prepare/serve/retire`。准备仅接受新私有空 stage，并以准备回执绑定独立桌面 Store 的 issuer。serve 先写单次启动标记，只对该 Headscale 实例确认空 ACL，之后才创建隔离 verifier、启动策略监督器及同 UID broker。Authority 用 TLS 1.3 监听回环地址，生成独立临时 CA 和 45 分钟的源 profile，ready 回执包含固定逻辑 HTTPS 名称、独立公开根和实际回环端口。私钥不进入回执，r215 builder 仍将安装 profile 缩到最多 20 分钟。专用管理 CLI 单次调用最多 10 秒，并服从更短的上游截止。
+
+HTTPS 关闭并等待请求结束后才关闭 broker。其后实际等待监督器、verifier 和 Store 收尾，且确认空 ACL 才写 joined 回执。retire 只接受同一 stage 的 started 与 joined 回执，使用原 journal 精确清理工单和 verifier，保留状态和证据。未知启动或收尾结果无 joined 回执，禁止自动重开或清理。现有正式 Store 和配置未改动。
+
+本机定向 race 验证无 provider 的单次失败保留、源 profile 可被 r215 校验、通过固定逻辑名的实际 TLS 签名设备注册，以及取消和模拟网络故障后的 broker socket 消失。首次测试目录在 macOS 继承了不同组，按 broker 既有约束补设测试根 GID 后通过。最终 authority race 2.383s，Headscale 定向 race 2.550s，Linux amd64 静态交叉构建 exit0。产物 SHA256 `2634fcac8f5bb47f17f8f1f03137caf8d2da74bfc7a7e6bb855f4008170cb6ed`。证据在 artifacts/connection-poc/r217-desktop-authority/。没有部署、连接预发布、重探测 19443 或启动实际控制面。
+
+下一组接双端 GUI TEST 协调，覆盖单次本机同意、双端同请求签名回执、精确授权启动、未知回执保留和实际停止/撤销流程。再准备隔离 provider 启动与回环转发的可执行预检。公开控制 TLS 需要该 stage 自有的受信证书输入。收到入口变化证据后再执行一次双端可达预检并签发新鲜工单。现有自动续办保持 ACTIVE。
+
 ## 2026-11-05 r216 隔离 Headscale、verifier 与策略驱动
 
 用户明确要求继续并恢复自动续办。已将现有 `remoteapp` 更新为 ACTIVE，保持原线程及 10 分钟节奏。提示承接最新交接，先推进可离线完成的隔离准备。GUI 验收后继续已授权的正式发行准备。等待外部变化时保留一次预检与暂停规则。
