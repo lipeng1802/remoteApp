@@ -103,6 +103,24 @@ def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,
     raise RuntimeError("session_payload_growth_unconfirmed")
 
 
+def quiesce_desktop(target, controller, *, expires_at, clock=time.time):
+    """Join a planned desktop stop while the independent revoke owners remain."""
+    for endpoint in (controller, target):
+        require(clock() < expires_at, "desktop_stop_window_expired")
+        ack = endpoint({"Op": "desktop_arm_stop"})
+        require(type(ack) is dict and ack == {"status": "desktop_stop_armed"},
+                "desktop_stop_intent_unconfirmed")
+    # The target has acknowledged the planned peer close. Keep it live until
+    # the controller's process and network worker have actually joined.
+    for endpoint in (controller, target):
+        require(clock() < expires_at, "desktop_stop_window_expired")
+        receipt = endpoint({"Op": "quiesce_session"})
+        require(type(receipt) is dict and set(receipt) == {"status", "joined", "zero_exit"}
+                and receipt["status"] == "session_quiesced" and receipt["joined"] is True
+                and receipt["zero_exit"] is True, "desktop_stop_join_unconfirmed")
+    return {"products_quiesced_both": True}
+
+
 def active_round(target, controller, *, profile_expires_at, clock=time.time,
                  monotonic=time.monotonic, sleep=time.sleep, quiesce_before_revoke=False, after_provision=None, before_provision_terminal=None, before_provision=None, on_failure=None, after_growth=None):
     """Fresh explicit approval -> clocks -> concurrent provision -> PONG -> revoke.

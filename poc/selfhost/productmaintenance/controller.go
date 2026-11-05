@@ -73,7 +73,7 @@ type Controller struct {
 	revocation                                    boundRevocation
 	desktopRequest                                string
 	desktopApproved                               *invite.Grant
-	desktopPreprovisionPinned                     bool
+	desktopPreprovisionPinned, desktopStopArmed   bool
 }
 
 // ConfigureRevocation is trusted compiled wiring, never a pipe-supplied switch.

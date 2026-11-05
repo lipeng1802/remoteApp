@@ -87,6 +87,29 @@ func (p *PreparedDesktop) State(ctx context.Context) (DesktopState, error) {
 	return state, nil
 }
 
+// ArmTargetStop marks the one live target GUI for an expected transport close.
+// Its receipt carries no permission or evidence of a joined worker.
+func (p *PreparedDesktop) ArmTargetStop(ctx context.Context) error {
+	if p == nil || ctx == nil || ctx.Err() != nil {
+		return session.ErrDenied
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.server || !p.consumed || p.stopArmAttempted || !p.idle() {
+		return session.ErrDenied
+	}
+	p.stopArmAttempted = true
+	raw, err := p.shortExchange(ctx, map[string]string{"Op": "arm_stop"})
+	var ack struct {
+		Status string `json:"status"`
+	}
+	if err != nil || decodeProductReady(raw, &ack) != nil || ack.Status != "desktop_stop_armed" {
+		p.broken = true
+		return session.ErrDenied
+	}
+	return nil
+}
+
 func (p *PreparedDesktop) idle() bool {
 	return p.child != nil && !p.closing && !p.broken && p.opCancel == nil
 }

@@ -13,7 +13,8 @@ func (c *Controller) quiesce(ctx context.Context) (json.RawMessage, error) {
 		return nil, err
 	}
 	defer c.unlock()
-	if c.child == nil || c.revocation == nil || !c.provisioned || c.requested || c.prepared || c.broken || c.closed || c.released {
+	if c.child == nil || c.revocation == nil || !c.provisioned || c.requested || c.prepared || c.broken || c.closed || c.released ||
+		(c.policy.IsDesktop() && !c.desktopStopArmed) {
 		return nil, ErrProduct
 	}
 	if !c.quiesced {

@@ -23,7 +23,8 @@ func (c *Controller) desktopForward(ctx context.Context, request installeddevice
 	defer c.unlock()
 	if !c.policy.IsDesktop() || c.child == nil || c.revocation == nil || c.requested || c.prepared ||
 		c.broken || c.closed || c.quiesced || c.released ||
-		((c.provisioned || c.desktopPreprovisionPinned) && request.Op != "desktop_state") {
+		((c.provisioned || c.desktopPreprovisionPinned) && request.Op != "desktop_state" && request.Op != "desktop_arm_stop") ||
+		(request.Op == "desktop_arm_stop" && (!c.provisioned || c.desktopStopArmed)) {
 		return nil, ErrProduct
 	}
 	raw, err := c.child.Exchange(ctx, request)
@@ -45,6 +46,11 @@ func (c *Controller) desktopForward(ctx context.Context, request installeddevice
 	case "desktop_status":
 		var p installeddevice.DesktopProgress
 		if decode(raw, &p) == nil && p.Valid() && c.observeDesktopProgress(ctx, p) == nil {
+			return raw, nil
+		}
+	case "desktop_arm_stop":
+		if decode(raw, &ack) == nil && ack.Status == "desktop_stop_armed" {
+			c.desktopStopArmed = true
 			return raw, nil
 		}
 	case "desktop_state":

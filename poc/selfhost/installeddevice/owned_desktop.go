@@ -35,7 +35,7 @@ type desktopProduct struct {
 
 func ValidDesktopLifecycle(r Request) bool {
 	switch r.Op {
-	case "desktop_begin", "desktop_status", "desktop_state":
+	case "desktop_begin", "desktop_status", "desktop_state", "desktop_arm_stop":
 		return r == (Request{Op: r.Op})
 	default:
 		return false
@@ -71,11 +71,12 @@ func (p DesktopProgress) Valid() bool {
 
 type desktopFlow struct {
 	desktopProduct
-	mu       sync.Mutex
-	progress DesktopProgress
-	cancel   context.CancelFunc
-	done     chan struct{}
-	prepared *clientruntime.PreparedDesktop // published before done closes
+	mu        sync.Mutex
+	progress  DesktopProgress
+	cancel    context.CancelFunc
+	done      chan struct{}
+	stopArmed bool
+	prepared  *clientruntime.PreparedDesktop // published before done closes
 }
 
 func (d *desktopFlow) snapshot() DesktopProgress {
@@ -285,7 +286,7 @@ func (d *desktopFlow) poll(ctx context.Context, call desktopDeviceRequest, body 
 	}
 }
 
-func (d *desktopFlow) control(ctx context.Context, request Request, gate *authorizationGate, client *invite.NetworkClient, output func(any) error) error {
+func (d *desktopFlow) control(ctx context.Context, request Request, gate *authorizationGate, client *invite.NetworkClient, enrolled *enrollment, output func(any) error) error {
 	switch request.Op {
 	case "desktop_begin":
 		if d.done != nil {
@@ -295,6 +296,12 @@ func (d *desktopFlow) control(ctx context.Context, request Request, gate *author
 		return output(map[string]string{"status": "desktop_pending"})
 	case "desktop_status":
 		return output(d.snapshot())
+	case "desktop_arm_stop":
+		if d.stopArmed || !d.armStop(ctx, gate, enrolled) {
+			return output(map[string]string{"status": "request_rejected"})
+		}
+		d.stopArmed = true
+		return output(map[string]string{"status": "desktop_stop_armed"})
 	case "desktop_state":
 		if d.finished() && d.prepared != nil {
 			if state, err := d.prepared.State(ctx); err == nil {
@@ -304,4 +311,30 @@ func (d *desktopFlow) control(ctx context.Context, request Request, gate *author
 		return output(map[string]string{"status": "product_unavailable"})
 	}
 	return trustprofile.ErrTrust
+}
+
+// Arm only an active session. The controller proves the local stop intent;
+// the target must still be serving when it accepts the bounded expectation.
+func (d *desktopFlow) armStop(ctx context.Context, gate *authorizationGate, enrolled *enrollment) bool {
+	if !d.finished() || d.prepared == nil || enrolled.session == nil ||
+		enrolled.watch == nil || enrolled.watch.Faulted() ||
+		gate.clock == nil || !gate.validGrant(gate.grant, gate.clock()) {
+		return false
+	}
+	select {
+	case <-enrolled.session.Done():
+		return false
+	case <-enrolled.watch.Done():
+		return false
+	default:
+	}
+	state, err := d.prepared.State(ctx)
+	wantLocalStop := !d.target
+	if err != nil || state.Frames == 0 || state.Failed || state.Ended || state.StopRequested != wantLocalStop {
+		return false
+	}
+	if d.target {
+		return d.prepared.ArmTargetStop(ctx) == nil
+	}
+	return true
 }

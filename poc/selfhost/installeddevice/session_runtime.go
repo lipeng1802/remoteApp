@@ -3,6 +3,7 @@ package installeddevice
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"net"
 	"remoteapp.local/selfhost-poc/startuptrace"
 	"time"
@@ -227,7 +228,13 @@ func (r *SessionRuntime) runControllerProduct(ctx context.Context, product clien
 			return runtimeWorkerError(life, err)
 		}
 		startuptrace.Emit(life, startuptrace.ControllerBridge)
-		return runtimeWorkerError(life, r.ConnectTLS(life, local))
+		bridgeErr := r.ConnectTLS(life, local)
+		// Tunnel cancels its own copy context on EOF. That cancellation while
+		// the desktop owner is still live must remain a session fault.
+		if product.Prepared != nil && life.Err() == nil && errors.Is(bridgeErr, context.Canceled) {
+			return invite.ErrDenied
+		}
+		return runtimeWorkerError(life, bridgeErr)
 	})
 }
 

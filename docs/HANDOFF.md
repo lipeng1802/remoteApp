@@ -6,6 +6,20 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r214：活动桌面计划停止与真实发布产物预检
+
+承接 r213/d592b74。无前组重型任务，磁盘约133GiB。实现精确 desktop_arm_stop，要求已 provision、原 session 和 ACTIVE watch 仍有效、同一 GUI 有画面且健康。控制端必须已经记录 Mac 本机停止意图。目标在同一个活动 Windows GUI 的私有管道一次标记预期断流。仅计划标记后的20秒内，Windows 可按计划归类传输 I/O 关闭。其他协议、认证和释放失败仍走故障。本机停止及物理紧急停止仍可立即取消采集和输入。
+
+TEST 协调 helper 按 Mac arm、Windows arm、Mac quiesce、Windows quiesce 串行执行。每步检查截止和精确回执，未知回执保留原 owner。桌面监督器只在对应 arm 后接受 quiesce，原 Stop/EOF/实际 exit0 与进程 join 检查仍生效，独立 signer 留给撤销。Mac live bridge 自身因 EOF 取消时，若 owner 尚未取消，归类为会话故障，避免按正常 Stop 过滤。正常双端收尾顺序有本机边界证据，待真实活动 GUI 会话验证。
+
+Go 定向 race 四包通过，clientruntime 8.082s、installeddevice 10.851s、productmaintenance 12.529s、supervisedcontrol 2.066s，exec7494 exit0。Python supervised_session 15项通过。所有 Go 构建测试采用 GOMAXPROCS=2、GOFLAGS=-p=2、nice10 与可信离线缓存。测试包含未启动/重复 arm、错误混合回执、真实子进程 exit 与 signer 保留，以及双端顺序和失败截止。
+
+Windows SSH 单次复测成功。唯一隐藏 Interactive 任务 RemoteApp-r214-1d6f28a7af15e7e4 下，以 BelowNormal、双核、dotnet 单并发构建当前 WPF 压缩自包含单文件。发布产物 71,663,611 bytes，SHA256=4b7ce0f88fbd68cb72e260f995b638c67f008cd84927188289a1451a3cc75f9f，符合100MiB native pin 限额。normal_view PID37992、normal_control PID6372 均拒绝未激活 arm，closed/EOF/exit0。close_view PID39952 exit0，malformed_view PID3084 exit1，四项均符合预期且无网络/采集/注入。任务 Ready/LastTaskResult0。下载并验证发布物与回执后，精确清理任务及本组临时根，active_processes=0，root_absent/task_absent=true。exec13480/72993 exit0。
+
+Mac Swift Release nice10/jobs2 构建成功39.05s。独立产物以 TEST ad hoc 签名并 strict verify，991,232 bytes，SHA256=4cafc19adb1bfafdce26dae412f88e3a6d2cc1807fcd332123fc69f32ce1fdcf。该确切产物的 view/control 预备、未联网、closed/EOF/exit0 均通过，PID52031/52034，exec30013/90985 exit0。两端可复用的未打包 GUI 输入、构建与验收回执保存在 artifacts/connection-poc/r214-desktop-stop/，尚无短期签名工单。
+
+预发布 SSH 单次连通成功，随后纠正旧 systemctl 不支持 --value 的查询参数完成只读所有权确认。remoteapp-authority PID18147、frontend PID18272、poc Headscale PID31683 均 active，正式 writer.lock 与 verifier owner.lock 均存在。8443 是现有 PoC Nginx，8444 为现有 frontend，18443 为现有 Headscale loopback，19443 当次空闲。证据 server-preflight.txt 和 server-owners.txt。现有控制面存在 writer，不能用另一 policy 目录并行接管；下一组需隔离的 TEST control/authority/verifier、独立根和编译期连接目标，再由可信 builder 签发新鲜双机包。须先验证隔离控制端口的 HTTPS 可达与可信配置，原 live TEST profile 及固定 ControlURL 不能直接复用。真实画面、键鼠效果、撤销和活动双端 join 待验收。当前自动续办 ACTIVE，无人工阻塞，r201 历史工单原样保留。
+
 ## 2026-11-05 r213：native owner 接入同一 GUI 的异步授权
 
 承接 r212/1c55782。开始前确认无前组构建，磁盘约133GiB，使用原可信离线 Go 缓存和 GOMAXPROCS=2、GOFLAGS=-p=2、nice10 串行任务组。本轮只在本机运行源码与组件检查，历史工单和远端保持原状态，docs/archive/ 仍未跟踪。

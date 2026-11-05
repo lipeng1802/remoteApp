@@ -46,6 +46,12 @@ foreach($mode in @('normal_view','normal_control','close_view','malformed_view')
         if(-not $process.WaitForInputIdle(8000)){throw 'component window not idle'}
         if(@(Get-NetTCPConnection -OwningProcess $process.Id -ErrorAction SilentlyContinue).Count -ne 0 -or
            @(Get-NetUDPEndpoint -OwningProcess $process.Id -ErrorAction SilentlyContinue).Count -ne 0){throw 'component unexpected endpoint'}
+        if($mode -in @('normal_view','normal_control')){
+            Send-Frame $process ([ordered]@{Op='arm_stop'})
+            $arm=Read-Frame $process;Require-Fields $arm @('status')
+            if($arm.status -cne 'desktop_stop_unavailable'){throw 'unactivated desktop armed stop'}
+            $run.inactive_arm_rejected=$true
+        }
         $run.no_network_endpoints=$true
         $step='local_stop_or_fault'
         if($mode -eq 'close_view'){

@@ -1,7 +1,7 @@
 import threading
 import unittest
 
-from supervised_session import active_round, counts
+from supervised_session import active_round, counts, quiesce_desktop
 from test_supervised_consent import Pair
 
 
@@ -230,5 +230,35 @@ class ActiveSessionBoundaries(unittest.TestCase):
             quiesce_before_revoke=True,after_growth=removed)
         self.assertTrue(result['products_quiesced_both']);self.assertEqual(calls,[1]);self.assertFalse(p.quiesced)
         self.assertEqual(p.revoke_calls,1)
+
+class DesktopStopBoundaries(unittest.TestCase):
+    def test_both_arms_precede_ordered_join_and_unknown_outcomes_do_not_continue(self):
+        expected = [("controller", "desktop_arm_stop"), ("target", "desktop_arm_stop"),
+                    ("controller", "quiesce_session"), ("target", "quiesce_session")]
+        for failed in (None, 1, 2, 3):
+            with self.subTest(failed=failed):
+                calls = []
+
+                def endpoint(role):
+                    def call(frame):
+                        calls.append((role, frame["Op"]))
+                        if len(calls) - 1 == failed:
+                            return {"status": "request_rejected"}
+                        if frame["Op"] == "desktop_arm_stop":
+                            return {"status": "desktop_stop_armed"}
+                        return {"status": "session_quiesced", "joined": True, "zero_exit": True}
+                    return call
+
+                def run():
+                    return quiesce_desktop(endpoint("target"), endpoint("controller"),
+                                           expires_at=1000, clock=lambda: 999)
+
+                if failed is None:
+                    self.assertEqual(run(), {"products_quiesced_both": True})
+                else:
+                    with self.assertRaises(RuntimeError):
+                        run()
+                self.assertEqual(calls, expected if failed is None else expected[:failed + 1])
+
 
 if __name__ == "__main__": unittest.main()

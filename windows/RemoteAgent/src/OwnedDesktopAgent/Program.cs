@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -44,6 +45,7 @@ internal sealed class OwnedWindow : Window
     private byte[]? key;
     private bool pending, localControl, activated, proofUsed, stopRequested, ownerStopping, readerEnded, serverEnded = true, failed, closed;
     private long frames, events, releases;
+    private long plannedStop;
     private int held;
 
     internal OwnedWindow()
@@ -106,6 +108,20 @@ internal sealed class OwnedWindow : Window
     {
         if (closed) return;
         if (json == "{\"Op\":\"stop\"}") { BeginOwnerStop(); return; }
+        if (json == "{\"Op\":\"arm_stop\"}")
+        {
+            // This expectation belongs to a single active transfer. The local
+            // stop button and emergency chord can still cancel it immediately.
+            if (plannedStop != 0 || !activated || server is null || server.IsCompleted ||
+                ownerStopping || stopRequested || failed || Interlocked.Read(ref frames) == 0)
+            {
+                Reply(new { status = "desktop_stop_unavailable" });
+                return;
+            }
+            plannedStop = Stopwatch.GetTimestamp();
+            Reply(new { status = "desktop_stop_armed" });
+            return;
+        }
         if (json == "{\"Op\":\"desktop_state\"}")
         {
             Reply(new { status = "desktop_state", frames = Interlocked.Read(ref frames),
@@ -203,12 +219,21 @@ internal sealed class OwnedWindow : Window
     {
         try { await active; }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+        catch (IOException) when (ExpectedPeerClose()) { }
         catch { failed = true; }
         serverEnded = true;
-        if (!ownerStopping && !stopRequested) { failed = true; stopRequested = true; status.Text = "连接已结束"; }
+        if (!ownerStopping && !stopRequested)
+        {
+            if (!ExpectedPeerClose()) failed = true;
+            stopRequested = true;
+            status.Text = "连接已结束";
+        }
         metrics.Text = $"画面 {Interlocked.Read(ref frames)} · 已应用输入 {Interlocked.Read(ref events)} · 按住 {Volatile.Read(ref held)}";
         FinishIfJoined();
     }
+
+    private bool ExpectedPeerClose() =>
+        plannedStop != 0 && Stopwatch.GetElapsedTime(plannedStop) <= TimeSpan.FromSeconds(20);
 
     private void RequestStop()
     {

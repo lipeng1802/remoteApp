@@ -172,6 +172,10 @@ func TestTLSProductFixture(t *testing.T) {
 			}
 			os.Exit(0)
 		}
+		if cmd.Op == "arm_stop" && prepared && priv != nil {
+			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "desktop_stop_armed"})
+			continue
+		}
 		if cmd.Op == "count" {
 			if mode == "controller" {
 				json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "count", "pongs": 3, "ended": false, "result": "pending", "pin_rejected": false})

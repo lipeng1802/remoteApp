@@ -247,7 +247,7 @@ func runner(release trustinstall.Release, open clientruntime.SignerFactory, comm
 				}
 				if desktop != nil {
 					if ValidDesktopLifecycle(request) {
-						if err := desktop.control(ctx, request, gate, client, output); err != nil {
+						if err := desktop.control(ctx, request, gate, client, &enrolled, output); err != nil {
 							return err
 						}
 						continue

@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r214 已接入桌面双端计划停止。Mac 本机停止意图确认后，Windows 确认预期断流，随后控制端和目标端依次实际 join，保留独立撤销。双端发布产物已核对摘要与组件启动退出。下一组接隔离 TEST 控制面与新鲜签名工单。[接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)
+
 2026-11-05 r213 已将双端 GUI 的邀请、连接和明确同意接入 native owner。Go race 检查覆盖真实本机 HTTPS 请求关联与取消后的进程收尾。下一组接两端正常停止协调和新鲜 TEST 双机入口。见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
 
 2026-11-05 r212：独立 Windows OwnedDesktopAgent 已接明确确认、同一 child 激活/证书证明、原生画面/键鼠适配及物理紧急停止。隐藏 Interactive 的四项 GUI 组件检查通过并完成精确清理；双端待确认错误帧收尾已验证。native 异步协调与真实双机画面输入仍待接线，见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。

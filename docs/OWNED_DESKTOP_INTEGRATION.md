@@ -186,3 +186,8 @@ Mac 最终6项预备检查通过；实际 App 待确认错误帧组件 PID49263 
 Mac 作为控制端，Windows 作为目标端。编译期桌面范围与安装摘要绑定同一 GUI。私有管理使用单次 `desktop_begin` 和短 `desktop_status` 查询。原 native owner 持有可取消的本机等待，从签名邀请、claim、incoming 到明确决定和同请求状态核对。授权成功后，同一个 GUI 通过 `Product.Prepared` 进入现有 ACTIVE 和 TLS 路径。取消先等待异步工作及 GUI 收尾，再释放 signer。目标可以在尚未 provision 时用独立通路撤销已观测批准，等待精确终态后再停止。
 
 `desktop_state` 提供角色限定的帧数、输入计数与停止状态。授权及活性门禁仍来自原签名和 watch。验收将观察真实可见画面与键鼠效果，并确认两端停止、撤销和进程实际退出。当前本机 HTTPS 与子进程 race 检查已经覆盖允许、拒绝与取消。活动停止需要双端计划收尾协调，之后接新鲜 TEST 签名包与隔离 authority。
+
+
+## r214 计划停止
+
+Mac 本机停止意图和活动 GUI 状态通过同一 native owner 核对。Windows 在仍有画面时确认一次预期断流。协调器核对两端回执后，先 quiesce 控制端并等待实际退出，再 quiesce 目标端。独立 signer 继续持有原 grant 的撤销能力。目标端预期传输关闭的分类限定在20秒内。本机紧急停止仍立即切断采集和输入。Go race 与 Python 边界检查通过，双端发布 GUI 组件完成预备/正常退出。下一步是隔离服务和真实双机活动停止验收。

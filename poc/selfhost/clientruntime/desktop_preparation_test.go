@@ -83,6 +83,9 @@ func TestPreparedDesktopActivatesSameChildOnlyAfterDecisionAndMatchingApproval(t
 			if child, e := StartBoundDesktopProduct(context.Background(), scope, product, a, issuer, a.c.Grant, a.c.Binding, server, time.Now, 32123, ""); e == nil || child != nil || a.published {
 				t.Fatal("activation before consent")
 			}
+			if p.ArmTargetStop(context.Background()) == nil {
+				t.Fatal("unactivated GUI armed")
+			}
 			request := strings.Repeat("e", 32)
 			allowed, e := p.Decide(context.Background(), request, a.c.Grant.Claims.Controller)
 			if e != nil || !allowed {
@@ -113,6 +116,12 @@ func TestPreparedDesktopActivatesSameChildOnlyAfterDecisionAndMatchingApproval(t
 			}
 			if repeated, e := StartBoundDesktopProduct(context.Background(), scope, product, a, issuer, a.c.Grant, a.c.Binding, server, time.Now, 32123, ""); e == nil || repeated != nil {
 				t.Fatal("second activation")
+			}
+			if e = p.ArmTargetStop(context.Background()); (e == nil) != server {
+				t.Fatal("stop arm scope or phase changed", e)
+			}
+			if p.ArmTargetStop(context.Background()) == nil {
+				t.Fatal("stop arm replay")
 			}
 			if p.Stop(context.Background()) != nil {
 				t.Fatal("prepared child not normally joined")

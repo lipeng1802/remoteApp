@@ -26,7 +26,7 @@ type PreparedDesktop struct {
 	server                                              bool
 	request, controller                                 string
 	decisionStarted, allowed, consumed, closing, broken bool
-	connectStarted, inviteShown                         bool
+	connectStarted, inviteShown, stopArmAttempted       bool
 	approved                                            invite.Grant
 	issuer                                              ed25519.PublicKey
 	opCancel                                            context.CancelFunc

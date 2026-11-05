@@ -73,7 +73,7 @@ func TestDesktopPrivateRoutingScopeLifecycleAndActualHandlerJoin(t *testing.T) {
 		for _, op := range []string{"open", "stop", "stop_fault", "stop_local_fault", "maintenance_prepare"} {
 			call(installeddevice.Request{Op: op}, "request_rejected", false)
 		}
-		for _, op := range []string{"desktop_begin", "desktop_status", "desktop_state"} {
+		for _, op := range []string{"desktop_begin", "desktop_status", "desktop_state", "desktop_arm_stop"} {
 			call(installeddevice.Request{Op: op}, "device_result", true)
 			call(installeddevice.Request{Op: op, Device: invite.Body{Allow: true}}, "request_rejected", false)
 		}

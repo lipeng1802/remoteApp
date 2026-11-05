@@ -63,6 +63,12 @@ func TestDesktopOwnerProcessFixture(t *testing.T) {
 				d.Permission = "clipboard"
 			}
 			enc.Encode(map[string]any{"status": "device_result", "passed": true, "device": d})
+		case "desktop_arm_stop":
+			ack := map[string]any{"status": "desktop_stop_armed"}
+			if mode == "mixed-stop" {
+				ack["joined"] = true
+			}
+			enc.Encode(ack)
 		case "provision":
 			if mode == "slow" {
 				time.Sleep(150 * time.Millisecond)
@@ -321,5 +327,51 @@ func TestDesktopApprovedCancellationPinsWithoutProvision(t *testing.T) {
 	}
 	if _, err := c.Forward(ctx, installeddevice.Request{Op: "preprovision_terminal"}); err != nil || c.AllowRetainedStop(ctx) != nil {
 		t.Fatal("independent terminal verification failed")
+	}
+}
+
+func TestDesktopQuiesceNeedsExactStopArmAndActualExit(t *testing.T) {
+	for _, mode := range []string{"normal", "mixed-stop"} {
+		t.Run(mode, func(t *testing.T) {
+			c, signer, _, err := startDesktopOwnerFixture(t, invite.DesktopControl, mode, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := context.Background()
+			c.revocation = &revokeFixture{}
+			arm := installeddevice.Request{Op: "desktop_arm_stop"}
+			quiesce := installeddevice.Request{Op: "quiesce_session"}
+			if _, err := c.Forward(ctx, arm); err == nil || c.broken {
+				t.Fatal("unprovisioned desktop armed")
+			}
+			c.provisioned = true
+			if _, err := c.Forward(ctx, quiesce); err == nil || c.quiesced || c.broken {
+				t.Fatal("unarmed desktop quiesced")
+			}
+			_, err = c.Forward(ctx, arm)
+			if mode == "mixed-stop" {
+				if err == nil || !c.broken || c.desktopStopArmed {
+					t.Fatal("mixed reply accepted")
+				}
+				return
+			}
+			if err != nil || !c.desktopStopArmed || c.quiesced {
+				t.Fatal("arm treated as join or lost")
+			}
+			if _, err := c.Forward(ctx, arm); err == nil || c.broken {
+				t.Fatal("stop replay admitted")
+			}
+			if _, err := c.Forward(ctx, quiesce); err != nil {
+				t.Fatal("armed child could not join")
+			}
+			select {
+			case <-c.child.Done():
+			default:
+				t.Fatal("quiesce before exit")
+			}
+			if signer.closed.Load() != 0 {
+				t.Fatal("independent revocation signer released")
+			}
+		})
 	}
 }
