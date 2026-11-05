@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-05 r215 独立桌面 TEST 签名包与发行关键路径
+
+承接 21fab67。用户要求尽快推进正式发行，先完成可离线验证的双端构建和桌面协调。工作卷检查约 132 GiB，构建期间最低观测约 129 GiB。所有 Go 构建和测试采用 GOMAXPROCS=2、GOFLAGS=-p=2、nice10、可信离线缓存，重型任务串行。
+
+桌面 builder 校验独立公开根、`remoteapp-desktop-test` 服务和签名 HTTPS 名称，生成 20 分钟以内的 TEST profile，按 GUI 摘要和固定桌面权限编译两端产品及监督器。隔离 authority 通过独立固定回环转发，客户端校验逻辑 HTTPS 名称 `https://mk.fengmap.com:8444`。桌面注册使用固定独立控制地址 `https://mk.fengmap.com:19443`，原节点状态与新控制地址双向拒绝混用。连接、授权、TCP 与密钥交换截止保持原值。
+
+首轮 Mac 构建在 3 分钟编译上限处退出，保留原输出。仅桌面 TEST 编译上限调整到 8 分钟，写出成功元数据前复核 profile 有效期。使用新离线签名样本串行构建两端，通过真实构建物审计，核对签名 profile、payload 与 bootstrap 签名清单、产品摘要和产品/监督器的 `desktop-control` 编译标签。Mac audit 1.804s，Windows audit 3.371s，exec98246 exit0。原生 GUI 输入复用 r214 已核对的字节。只借用已验哈希的独立 helper 文件，未访问已退休工单的安装、状态或旧 profile。
+
+发现 Windows 同用户本机 relay 仍只接受旧管理帧，现按打包权限接入桌面帧，最终同用户监督器继续核对权限与生命周期。TEST 启动协调在目标监听后用短 GUI 状态确认目标健康，再单次启动控制端。状态未知或异常时不启动，未知启动回执不重试。Python 协调 16 项通过，exec94322 exit0。Go 定向 race 通过，productprofile 2.078s、nodeidentity 1.962s、installeddevice 12.347s，最终 relay 7.119s、builder 4.624s。relay 最终源码另做两平台定向构建，Mach-O 和 PE32+ 均生成，exec77837 exit0。材料在 artifacts/connection-poc/r215-desktop-bundle/，离线签名样本及编译物未部署。
+
+隔离入口仍等待可验证的环境变化，本轮没有重探测或改动远端。最小外部操作是让两台测试机可访问预发布独立 TCP 19443。下一组完成独立 Headscale 配置与专用 CLI、独立 verifier 及桌面 authority 组合，使用独立 DB、socket、TLS 和新的可信根。随后生成一份新鲜双机工单，明确同意后验证真实画面、键鼠、正常退出与撤销。现有自动续办保持暂停，历史现场保留。
+
+正式发行剩余两组依次是正式包与干净机器验收，以及长期入口、跨网和耐久验收。复用既有安装事务、稳定启动器和维护屏障。Mac 当前钥匙串未发现可用 Developer ID Application 身份，正式签名和公证需签名环境。Windows Authenticode 环境尚未核实。RK3588 和历史异常单独排期。
+
 ## 后续平台切片：RK3588 ARM64 真机
 
 用户指定 RK3588 主板作为后续运行目标。暂以 Linux ARM64 被控端作为首个验收方向，板卡型号、系统镜像、桌面会话和首发角色待确认。r201 已完成 Mac ↔ Windows TEST 载荷与正常收尾，当前优先接入 GUI 真实画面与键鼠。

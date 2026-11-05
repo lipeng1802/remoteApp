@@ -24,6 +24,16 @@ func TSNetEnrollmentFactory(dir string) EnrollmentFactory {
 }
 
 func tsNetEnrollmentFactory(dir, controlURL string) EnrollmentFactory {
+	return tsNetEnrollmentFactoryWithIdentity(dir, controlURL, func(dir string) (string, error) {
+		return nodeidentity.Prepare(dir, controlURL)
+	})
+}
+
+func desktopTestEnrollmentFactory(dir string) EnrollmentFactory {
+	return tsNetEnrollmentFactoryWithIdentity(dir, nodeidentity.DesktopControlURL, nodeidentity.PrepareDesktopTest)
+}
+
+func tsNetEnrollmentFactoryWithIdentity(dir, controlURL string, prepare func(string) (string, error)) EnrollmentFactory {
 	return func(ctx context.Context) (EnrollmentNode, error) {
 		if ctx.Err() != nil || !filepath.IsAbs(dir) || filepath.Clean(dir) != dir {
 			return nil, invite.ErrDenied
@@ -39,7 +49,7 @@ func tsNetEnrollmentFactory(dir, controlURL string) EnrollmentFactory {
 		if err != nil || len(entries) != 0 {
 			return nil, invite.ErrDenied
 		}
-		pub, err := nodeidentity.Prepare(dir, controlURL)
+		pub, err := prepare(dir)
 		if err != nil || ctx.Err() != nil {
 			return nil, invite.ErrDenied
 		}

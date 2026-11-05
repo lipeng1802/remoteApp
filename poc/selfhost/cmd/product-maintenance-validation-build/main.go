@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"remoteapp.local/selfhost-poc/installrelease"
+	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/productprofile"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
@@ -43,6 +44,18 @@ func digest(raw []byte) string { h := sha256.Sum256(raw); return hex.EncodeToStr
 func run() error {
 	if len(os.Args) == 3 && os.Args[1] == "--check-offline-install-root" {
 		return installrelease.CheckFreshTestInstallRoot(os.Args[2])
+	}
+	var desktop invite.DesktopPermission
+	var desktopRoot string
+	if len(os.Args) == 15 {
+		scope, scopeOK := strings.CutPrefix(os.Args[13], "--desktop-scope=")
+		root, rootOK := strings.CutPrefix(os.Args[14], "--desktop-profile-root=")
+		if !scopeOK || !rootOK || (invite.DesktopPermission(scope) != invite.DesktopView &&
+			invite.DesktopPermission(scope) != invite.DesktopControl) {
+			return os.ErrInvalid
+		}
+		desktop, desktopRoot = invite.DesktopPermission(scope), root
+		os.Args = os.Args[:13]
 	}
 	removal := len(os.Args) == 14 && os.Args[13] == "--program-removal"
 	if removal {
@@ -88,6 +101,9 @@ func run() error {
 	if len(os.Args) == 13 {
 		installRoot = os.Args[12]
 	}
+	if desktop != "" && (!live || !tunnel || port < 1024 || installRoot == "") {
+		return os.ErrInvalid
+	}
 	if removal && (!live || !tunnel || installRoot == "" || port > 64535) {
 		return os.ErrInvalid
 	}
@@ -101,7 +117,11 @@ func run() error {
 		if e != nil {
 			return e
 		}
-		liveClaims, e = productprofile.Claims(raw, time.Now())
+		if desktop == "" {
+			liveClaims, e = productprofile.Claims(raw, time.Now())
+		} else {
+			liveClaims, e = productprofile.DesktopClaims(raw, desktopRoot, time.Now())
+		}
 		if e != nil {
 			return e
 		}
@@ -201,7 +221,12 @@ func run() error {
 			return e
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	buildTimeout := 3 * time.Minute
+	if desktop != "" {
+		// The native desktop and supervisor builds share a low-concurrency cache.
+		buildTimeout = 8 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), buildTimeout)
 	defer cancel()
 	product := filepath.Join(payload, "installed-autonomous-product"+suffix)
 	if live || offlineInstall {
@@ -224,7 +249,9 @@ func run() error {
 			return e
 		}
 	}
-	if tunnel {
+	if desktop != "" {
+		e = trustinstall.CompileAutonomousDesktopProductTest(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), desktop, now, port)
+	} else if tunnel {
 		e = trustinstall.CompileAutonomousProductTestTunnel(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now, port)
 	} else {
 		e = trustinstall.CompileAutonomousProductClient(ctx, goexe, module, target, product, spec, digest(vaultRaw), digest(tlsRaw), now)
@@ -305,7 +332,9 @@ func run() error {
 			return e
 		}
 		if !offlineInstall {
-			if removal {
+			if desktop != "" {
+				e = trustinstall.CompileDesktopProductSupervisorTest(ctx, goexe, module, target, filepath.Join(dest, "supervisor"+suffix), spec, productPath, digest(productRaw), digest(vaultRaw), desktop, "", "", now, port)
+			} else if removal {
 				address := fmt.Sprintf("127.0.0.1:%d", port+1000)
 				client := filepath.Join(dest, "bound-authenticated-removal-test"+suffix)
 				if e = trustinstall.CompileBoundAuthenticatedRemovalTest(ctx, goexe, module, target, client, spec, installRoot, address, digest(vaultRaw), now); e != nil {
@@ -339,7 +368,12 @@ func run() error {
 			if target == "windows" {
 				arch = "amd64"
 			}
-			relay := exec.CommandContext(ctx, goexe, "build", "-trimpath", "-o", filepath.Join(dest, "supervised-control-relay"+suffix), "./cmd/supervised-control-relay")
+			relayArgs := []string{"build", "-trimpath"}
+			if desktop != "" {
+				relayArgs = append(relayArgs, "-ldflags=-X main.embeddedDesktopPermission="+string(desktop))
+			}
+			relayArgs = append(relayArgs, "-o", filepath.Join(dest, "supervised-control-relay"+suffix), "./cmd/supervised-control-relay")
+			relay := exec.CommandContext(ctx, goexe, relayArgs...)
 			relay.Dir = module
 			relay.Env = append(os.Environ(), "GOENV=off", "GOTOOLCHAIN=local", "GOPROXY=off", "CGO_ENABLED=0", "GOOS="+target, "GOARCH="+arch)
 			if e = relay.Run(); e != nil {
@@ -348,11 +382,12 @@ func run() error {
 		}
 	}
 	meta := struct {
-		Version       int    `json:"version"`
-		Release       string `json:"release"`
-		Platform      string `json:"platform"`
-		ProductSHA256 string `json:"product_sha256"`
-	}{1, encoded, target, digest(productRaw)}
+		Version       int                      `json:"version"`
+		Release       string                   `json:"release"`
+		Platform      string                   `json:"platform"`
+		ProductSHA256 string                   `json:"product_sha256"`
+		Desktop       invite.DesktopPermission `json:"desktop_permission,omitempty"`
+	}{1, encoded, target, digest(productRaw), desktop}
 	raw, e = json.Marshal(meta)
 	if e != nil {
 		return e
@@ -366,6 +401,11 @@ func run() error {
 			return e
 		}
 		if e = checkTreeBudgetForNewFile(filepath.Dir(dest), offlineWorkBudget, maximumBudgetEntries, int64(len(raw))); e != nil {
+			return e
+		}
+	}
+	if desktop != "" {
+		if _, e = trustprofile.Verify(profile, public, spec.Service, spec.MinimumEpoch, time.Now()); e != nil {
 			return e
 		}
 	}

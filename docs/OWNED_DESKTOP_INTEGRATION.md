@@ -191,3 +191,11 @@ Mac 作为控制端，Windows 作为目标端。编译期桌面范围与安装�
 ## r214 计划停止
 
 Mac 本机停止意图和活动 GUI 状态通过同一 native owner 核对。Windows 在仍有画面时确认一次预期断流。协调器核对两端回执后，先 quiesce 控制端并等待实际退出，再 quiesce 目标端。独立 signer 继续持有原 grant 的撤销能力。目标端预期传输关闭的分类限定在20秒内。本机紧急停止仍立即切断采集和输入。Go race 与 Python 边界检查通过，双端发布 GUI 组件完成预备/正常退出。下一步是隔离服务和真实双机活动停止验收。
+
+## r215 独立桌面 TEST 构建
+
+在 `product-maintenance-validation-build` 的 `--verified-live-profile`、固定 `--test-tunnel=<port>` 和 `--test-install-root` 后附加 `--desktop-scope=desktop-view|desktop-control` 与 `--desktop-profile-root=<受信公开根>`。构建前验证来源签名、有效期、`remoteapp-desktop-test` 服务和权威 HTTPS 名称。构建时用 GUI 摘要绑定产品，并用同一权限配置监督器与本机管理 relay。桌面注册的固定控制地址为 `https://mk.fengmap.com:19443`。隔离 authority 的签名 HTTPS 名称为 `https://mk.fengmap.com:8444`，通过独立 TEST 转发访问。既有预发布服务入口及节点状态保留原约束。
+
+新包有效期最多 20 分钟，编译上限 8 分钟，产出时复核签名 profile 仍有效。真机工单使用新生成的源 profile 与新安装根，构建审计使用的合成 profile 不参与部署。现有 Headscale 实例由既有服务持有。部署前需要独立的数据库、管理 socket、策略、authority 和 verifier，并验证客户端可达的 TLS 入口。GUI 验收需要观察 Mac 显示的真实 Windows 画面、Windows 对键鼠的实际响应，以及撤销和双端正常退出。
+
+真机验收后，复用已有安装事务、稳定启动器和维护收尾，完成正式 Mac 与 Windows 包的签名、干净机器安装、保留身份升级、降级拒绝和活动卸载。发行前还需验证脱离 SSH 的长期入口、跨网和耐久运行。

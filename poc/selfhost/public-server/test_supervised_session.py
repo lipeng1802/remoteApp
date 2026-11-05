@@ -1,7 +1,7 @@
 import threading
 import unittest
 
-from supervised_session import active_round, counts, quiesce_desktop
+from supervised_session import active_round, counts, quiesce_desktop, start_after_target_ready
 from test_supervised_consent import Pair
 
 
@@ -232,6 +232,46 @@ class ActiveSessionBoundaries(unittest.TestCase):
         self.assertEqual(p.revoke_calls,1)
 
 class DesktopStopBoundaries(unittest.TestCase):
+    def test_desktop_readiness_uses_gui_state_after_listener_without_pong(self):
+        for fault in (None, "ended", "invalid_counter", "lost_start"):
+            with self.subTest(fault=fault):
+                elapsed, starts = 0, []
+
+                def sleep(seconds):
+                    nonlocal elapsed
+                    elapsed += seconds
+
+                def target(frame):
+                    if frame == {"Op": "product_stage"}:
+                        return {"status": "product_stage",
+                                "stage": "target_tls" if elapsed < 1 else "target_listening"}
+                    self.assertEqual(frame, {"Op": "desktop_state"})
+                    self.assertGreaterEqual(elapsed, 1)
+                    if elapsed < 2:
+                        return {"status": "product_unavailable"}
+                    return {"status": "desktop_state", "frames": True if fault == "invalid_counter" else 0,
+                            "inputs": 0, "releases": 0, "held": 0, "stop_requested": False,
+                            "ended": fault == "ended", "failed": False}
+
+                def controller(frame):
+                    self.assertEqual(frame, {"Op": "start_controller"})
+                    starts.append(elapsed)
+                    if fault == "lost_start":
+                        raise RuntimeError("start acknowledgement lost")
+                    return {"status": "controller_started", "passed": True}
+
+                def run():
+                    start_after_target_ready(target, controller, desktop=True, expires_at=1100,
+                                             clock=lambda: 1000 + elapsed,
+                                             monotonic=lambda: elapsed, sleep=sleep)
+
+                if fault:
+                    with self.assertRaises(RuntimeError):
+                        run()
+                else:
+                    run()
+                self.assertEqual(starts, [2] if fault in (None, "lost_start") else [])
+
     def test_both_arms_precede_ordered_join_and_unknown_outcomes_do_not_continue(self):
         expected = [("controller", "desktop_arm_stop"), ("target", "desktop_arm_stop"),
                     ("controller", "quiesce_session"), ("target", "quiesce_session")]

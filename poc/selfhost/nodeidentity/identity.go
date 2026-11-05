@@ -16,6 +16,9 @@ import (
 	"tailscale.com/types/persist"
 )
 
+// DesktopControlURL is the separate desktop TEST control plane.
+const DesktopControlURL = "https://mk.fengmap.com:19443"
+
 var ErrIdentity = errors.New("private node identity unavailable")
 
 // ReadProfileID is read-only metadata for exact joined TEST cleanup. It never
@@ -49,6 +52,15 @@ func Prepare(dir, controlURL string) (string, error) {
 	if controlURL != "https://mk.fengmap.com:8443" && controlURL != "http://127.0.0.1:18443" {
 		return "", ErrIdentity
 	}
+	return prepare(dir, controlURL)
+}
+
+// PrepareDesktopTest creates or reopens only the isolated desktop TEST node.
+func PrepareDesktopTest(dir string) (string, error) {
+	return prepare(dir, DesktopControlURL)
+}
+
+func prepare(dir, controlURL string) (string, error) {
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return "", ErrIdentity
 	}

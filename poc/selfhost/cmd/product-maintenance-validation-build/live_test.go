@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"remoteapp.local/selfhost-poc/productprofile"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -89,6 +92,7 @@ func TestBuiltLiveBundle(t *testing.T) {
 		Release  string `json:"release"`
 		Platform string `json:"platform"`
 		Product  string `json:"product_sha256"`
+		Desktop  string `json:"desktop_permission"`
 	}
 	if json.Unmarshal(raw, &meta) != nil {
 		t.Fatal("metadata")
@@ -99,7 +103,11 @@ func TestBuiltLiveBundle(t *testing.T) {
 	}
 	s := r.Specification()
 	root, e := hex.DecodeString(s.Root)
-	if e != nil || !s.Test || s.Service != "remoteapp-prerelease" {
+	expectedService := "remoteapp-prerelease"
+	if meta.Desktop != "" {
+		expectedService = productprofile.DesktopService
+	}
+	if e != nil || !s.Test || s.Service != expectedService {
 		t.Fatal("wrong build trust")
 	}
 	if _, e = trustprofile.Verify(s.Bundled, root, s.Service, s.MinimumEpoch, time.Now()); e != nil {
@@ -109,7 +117,12 @@ func TestBuiltLiveBundle(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	original, e := productprofile.Claims(source, time.Now())
+	var original trustprofile.Claims
+	if meta.Desktop == "" {
+		original, e = productprofile.Claims(source, time.Now())
+	} else {
+		original, e = productprofile.DesktopClaims(source, os.Getenv("REMOTEAPP_DESKTOP_BUILD_AUDIT_ROOT"), time.Now())
+	}
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -130,6 +143,37 @@ func TestBuiltLiveBundle(t *testing.T) {
 	suffix := ""
 	if meta.Platform == "windows" {
 		suffix = ".exe"
+	}
+	productPath := filepath.Join(dir, "payload", "installed-autonomous-product"+suffix)
+	product, e := os.ReadFile(productPath)
+	if e != nil || digest(product) != meta.Product {
+		t.Fatal("product pin mismatch")
+	}
+	if meta.Desktop != "" {
+		var expectedTag string
+		switch meta.Desktop {
+		case "desktop-view":
+			expectedTag = "remoteapp_desktop_view"
+		case "desktop-control":
+			expectedTag = "remoteapp_desktop_control"
+		default:
+			t.Fatal("unknown desktop scope")
+		}
+		for _, path := range []string{productPath, filepath.Join(dir, "supervisor"+suffix)} {
+			info, err := buildinfo.ReadFile(path)
+			if err != nil {
+				t.Fatal("desktop compiler metadata missing")
+			}
+			found := false
+			for _, v := range info.Settings {
+				if v.Key == "-tags" && slices.Contains(strings.Split(v.Value, ","), expectedTag) {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("desktop compile scope missing")
+			}
+		}
 	}
 	for _, p := range []string{filepath.Join(dir, "payload", "trust-install"+suffix), filepath.Join(dir, "payload", "autonomous-enrollment-install"+suffix), filepath.Join(dir, "bootstrap-payload", "installed-release-launcher"+suffix)} {
 		b, e := os.ReadFile(p)

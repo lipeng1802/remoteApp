@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"math/big"
 	"remoteapp.local/selfhost-poc/trustprofile"
+	"strings"
 	"testing"
 	"time"
 )
@@ -70,4 +71,24 @@ func TestVerifiedPublicProfileCannotReplaceTrustOrExtendValidity(t *testing.T) {
 	if _, e = Claims(encode(c), now); e == nil {
 		t.Fatal("production entry accepted test anchor")
 	}
+	desktop := c
+	desktop.ExpiresAt = now.Add(5 * time.Minute).Unix()
+	desktop.Service = DesktopService
+	desktop.Endpoint = DesktopEndpoint
+	anchor := hex.EncodeToString(root)
+	got, e = DesktopClaims(encode(desktop), anchor, now)
+	if e != nil || got.ExpiresAt != desktop.ExpiresAt || got.Issuer != desktop.Issuer {
+		t.Fatal("isolated claims lost their signed expiry or issuer")
+	}
+	if _, e := DesktopClaims(encode(c), anchor, now); e == nil {
+		t.Fatal("shared service accepted as isolated desktop")
+	}
+	if _, e := DesktopClaims(encode(desktop), strings.Repeat("1", 64), now); e == nil {
+		t.Fatal("unrelated bootstrap anchor accepted")
+	}
+	desktop.Endpoint = "https://mk.fengmap.com:19443"
+	if _, e := DesktopClaims(encode(desktop), anchor, now); e == nil {
+		t.Fatal("overlay control used as the authority endpoint")
+	}
+
 }

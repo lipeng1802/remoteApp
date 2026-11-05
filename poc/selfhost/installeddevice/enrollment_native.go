@@ -22,6 +22,14 @@ func NativeEnrollmentFactoryWithJournal(scope string, test bool, factory enrollm
 	}, TSNetEnrollmentFactory)
 }
 
+// NativeDesktopTestEnrollmentFactoryWithJournal pins the isolated TEST control
+// plane. The installed binding still selects the existing OS namespace.
+func NativeDesktopTestEnrollmentFactoryWithJournal(scope string, factory enrollmentstore.JournalFactory) EnrollmentFactory {
+	return protectedEnrollmentFactoryWithOpen(func() (*enrollmentstore.Store, error) {
+		return enrollmentstore.OpenWithJournal(scope, true, factory)
+	}, desktopTestEnrollmentFactory)
+}
+
 func (n *nativeEnrollment) StartProof(ctx context.Context, s invite.DeviceSigner, p invite.VerifierPermit) error {
 	proof, ok := n.node.(proofEnrollmentNode)
 	if !ok || n.store.Check() != nil || n.store.State().Phase != "registered" || p.Claims.NodeKey != n.key {

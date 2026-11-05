@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r215 已接入独立桌面 TEST 签名包构建。两端以同一编译期权限绑定 GUI、产品和监督器，注册节点只使用隔离控制面。正式发行先完成真实 GUI 双机验收，再验收正式签名安装、升级、卸载和跨网运行。见[桌面接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
+
 2026-11-05 r214 已接入桌面双端计划停止。Mac 本机停止意图确认后，Windows 确认预期断流，随后控制端和目标端依次实际 join，保留独立撤销。双端发布产物已核对摘要与组件启动退出。下一组接隔离 TEST 控制面与新鲜签名工单。[接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)
 
 2026-11-05 r213 已将双端 GUI 的邀请、连接和明确同意接入 native owner。Go race 检查覆盖真实本机 HTTPS 请求关联与取消后的进程收尾。下一组接两端正常停止协调和新鲜 TEST 双机入口。见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。

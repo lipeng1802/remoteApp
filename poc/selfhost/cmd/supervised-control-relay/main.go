@@ -8,9 +8,27 @@ import (
 	"os"
 	"remoteapp.local/selfhost-poc/desktopcontrol"
 	"remoteapp.local/selfhost-poc/installeddevice"
+	"remoteapp.local/selfhost-poc/invite"
 	"remoteapp.local/selfhost-poc/privatepipe"
 	"time"
 )
+
+var embeddedDesktopPermission string
+
+func validRequest(r installeddevice.Request, scope invite.DesktopPermission) bool {
+	var command bool
+	if scope == "" {
+		command = installeddevice.ValidSupervisedCommand(r) || r == (installeddevice.Request{Op: "product_count"})
+	} else {
+		if _, err := invite.DesktopGrantPolicy(scope); err != nil {
+			return false
+		}
+		command = installeddevice.ValidDesktopSupervisedCommand(r, scope)
+	}
+	return command || installeddevice.ValidSupervisedRevocation(r) ||
+		installeddevice.ValidSupervisedQuiesce(r) || installeddevice.ValidPreprovisionTerminal(r) ||
+		installeddevice.ValidControllerStart(r) || r == (installeddevice.Request{Op: "product_stage"})
+}
 
 func run() error {
 	if len(os.Args) != 2 {
@@ -20,7 +38,7 @@ func run() error {
 	if privatepipe.NewReader(os.Stdin).Read(&request) != nil {
 		return privatepipe.ErrProtocol
 	}
-	if !installeddevice.ValidSupervisedCommand(request) && !installeddevice.ValidSupervisedRevocation(request) && !installeddevice.ValidSupervisedQuiesce(request) && !installeddevice.ValidPreprovisionTerminal(request) && !installeddevice.ValidControllerStart(request) && request != (installeddevice.Request{Op: "product_count"}) && request != (installeddevice.Request{Op: "product_stage"}) {
+	if !validRequest(request, invite.DesktopPermission(embeddedDesktopPermission)) {
 		return privatepipe.ErrProtocol
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)

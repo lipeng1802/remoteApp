@@ -78,3 +78,28 @@ func TestMissingStateInExistingPrivateDirectoryNotReset(t *testing.T) {
 		t.Fatal("state regenerated")
 	}
 }
+
+func TestDesktopTestIdentityCannotReopenSharedControlState(t *testing.T) {
+	shared := t.TempDir()
+	const old = "https://mk.fengmap.com:8443"
+	key, err := Prepare(shared, old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = PrepareDesktopTest(shared); err == nil {
+		t.Fatal("desktop reopened the old control plane")
+	}
+	if again, err := Prepare(shared, old); err != nil || again != key {
+		t.Fatal("old control identity changed")
+	}
+	isolated := t.TempDir()
+	if _, err = Prepare(isolated, DesktopControlURL); err == nil {
+		t.Fatal("ordinary preparation selected desktop TEST control")
+	}
+	if _, err = PrepareDesktopTest(isolated); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = Prepare(isolated, old); err == nil {
+		t.Fatal("shared control reopened the desktop node")
+	}
+}

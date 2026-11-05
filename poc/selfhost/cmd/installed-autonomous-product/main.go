@@ -23,6 +23,7 @@ import (
 	"remoteapp.local/selfhost-poc/installeddevice"
 	"remoteapp.local/selfhost-poc/privatepipe"
 	"remoteapp.local/selfhost-poc/processowner"
+	"remoteapp.local/selfhost-poc/productprofile"
 	"remoteapp.local/selfhost-poc/trustinstall"
 	"remoteapp.local/selfhost-poc/trustprofile"
 )
@@ -71,7 +72,10 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 	if err != nil {
 		return err
 	}
-	if compiledDesktopPermission != "" && !release.Specification().Test {
+	specification := release.Specification()
+	isolatedDesktop := compiledDesktopPermission != "" && specification.Service == productprofile.DesktopService
+	if compiledDesktopPermission != "" && (!specification.Test ||
+		isolatedDesktop && (specification.Bundled.Claims.Endpoint != productprofile.DesktopEndpoint || embeddedTestTunnel == "")) {
 		return trustprofile.ErrTrust
 	}
 	exe, err := os.Executable()
@@ -187,6 +191,11 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 		}
 	}
 	work := installeddevice.ProductSession(product)
+	records := enrollmentRecords(recordFactory)
+	enrollment := installeddevice.NativeEnrollmentFactoryWithJournal(installed.EnrollmentScope, specification.Test, records)
+	if isolatedDesktop {
+		enrollment = installeddevice.NativeDesktopTestEnrollmentFactoryWithJournal(installed.EnrollmentScope, records)
+	}
 	if compiledDesktopPermission != "" {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 			return trustprofile.ErrTrust
@@ -200,7 +209,7 @@ func runObserved(output func(any) error, w *cleanupwitness.Witness) (result erro
 		open,
 		commands,
 		output,
-		installeddevice.NativeEnrollmentFactoryWithJournal(installed.EnrollmentScope, release.Specification().Test, enrollmentRecords(recordFactory)),
+		enrollment,
 		work,
 	)
 	handle, err := owner.Start(ctx, runner)

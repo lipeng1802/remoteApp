@@ -50,7 +50,7 @@ def counts(endpoints):
 
 
 def start_after_target_ready(target, controller, *, expires_at, clock=time.time,
-                             monotonic=time.monotonic, sleep=time.sleep):
+                             monotonic=time.monotonic, sleep=time.sleep, desktop=False):
     # TEST telemetry only coordinates timing. The controller obtains a NEW
     # signed identity and initial gate on admission, then uses the original TCP
     # and secret-exchange deadlines and every native identity/trust check.
@@ -63,7 +63,8 @@ def start_after_target_ready(target, controller, *, expires_at, clock=time.time,
         if stage["stage"] in ("target_listening", "target_filter_match"):
             # The native TLS child must still be live; a cached stage alone
             # cannot establish even startup readiness, let alone acceptance.
-            if counts((target,))[0] is not None:
+            ready = desktop_target_ready(target) if desktop else counts((target,))[0] is not None
+            if ready:
                 require(monotonic() < deadline and clock() < expires_at,
                         "session_target_readiness_expired")
                 ack = controller({"Op": "start_controller"})
@@ -76,6 +77,21 @@ def start_after_target_ready(target, controller, *, expires_at, clock=time.time,
                 "session_target_readiness_failed")
         sleep(.25)
     raise RuntimeError("session_target_readiness_unconfirmed")
+
+
+def desktop_target_ready(target):
+    state = target({"Op": "desktop_state"})
+    if state == {"status": "product_unavailable"}:
+        return False
+    counters = ("frames", "inputs", "releases", "held")
+    flags = ("stop_requested", "ended", "failed")
+    require(type(state) is dict and set(state) == {"status", *counters, *flags}
+            and state["status"] == "desktop_state"
+            and all(type(state[k]) is int and state[k] >= 0 for k in counters)
+            and all(state[k] is False for k in flags),
+            "desktop_target_state_rejected")
+    # Listener readiness precedes the peer connection and the first frame.
+    return True
 
 
 def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,
