@@ -31,7 +31,19 @@ func (f *fakeAPI) DeviceRequest(_ context.Context, b invite.Body) (invite.Result
 }
 func (f *fakeAPI) Close() { f.closed = true }
 func fixture(t *testing.T) (*Channel, invite.Grant, *fakeAPI, *time.Time) {
+	return scopedFixture(t, "", "")
+}
+
+func scopedFixture(t *testing.T, expected, granted invite.DesktopPermission) (*Channel, invite.Grant, *fakeAPI, *time.Time) {
 	t.Helper()
+	var policy invite.GrantPolicy
+	if expected != "" {
+		var e error
+		policy, e = invite.DesktopGrantPolicy(expected)
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
 	now := time.Now().Truncate(time.Second)
 	root, key, _ := ed25519.GenerateKey(rand.Reader)
 	pub, _, _ := ed25519.GenerateKey(rand.Reader)
@@ -44,12 +56,15 @@ func fixture(t *testing.T) (*Channel, invite.Grant, *fakeAPI, *time.Time) {
 	}
 	p, _ := trustprofile.Sign(key, trustprofile.Claims{Version: 1, Service: "revoke-test", Epoch: 1, Endpoint: "https://127.0.0.1:8444", Certificate: base64.StdEncoding.EncodeToString(der), Issuer: hex.EncodeToString(issuer), IssuedAt: now.Add(-time.Minute).Unix(), ExpiresAt: now.Add(20 * time.Minute).Unix()})
 	api := &fakeAPI{reply: func(b invite.Body) (invite.Result, error) { return invite.Result{Status: "revoked"}, nil }}
-	c, e := newChannel(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: p.Claims.Service, MinimumEpoch: 1, Bundled: p}, pub, api, func() time.Time { return now })
+	c, e := newChannelForPolicy(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: p.Claims.Service, MinimumEpoch: 1, Bundled: p}, pub, api, func() time.Time { return now }, policy)
 	if e != nil {
 		t.Fatal(e)
 	}
 	id := sha256.Sum256(pub)
 	claims := invite.Claims{Version: 1, ID: strings.Repeat("a", 32), Target: hex.EncodeToString(id[:]), Controller: strings.Repeat("b", 64), Permission: "fixed-payload", IssuedAt: now.Unix(), ExpiresAt: now.Add(5 * time.Minute).Unix()}
+	if granted != "" {
+		claims.Permission = string(granted)
+	}
 	raw, _ := json.Marshal(claims)
 	g := invite.Grant{Claims: claims, Signature: hex.EncodeToString(ed25519.Sign(issuerKey, append([]byte("remoteapp-invite-grant-v1\n"), raw...)))}
 	return c, g, api, &now

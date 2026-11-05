@@ -1,5 +1,7 @@
 # Personal Remote Desktop MVP
 
+2026-11-05 r207：独立撤销与 provision 前故障收尾已绑定精确桌面权限；显式 broker/headscale 组合和未知回执/实际 join 边界检查通过。尚未部署新服务或接通 GUI；下一步接限定桌面 owner/runner 与人工同意。见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
+
 2026-11-05 r206：显式桌面服务端授权后端已通过范围、HTTPS 组合及故障恢复检查；默认后端保持 fixed，尚未部署。下一步接独立撤销与受信 native/owner 入口，GUI 仍待实际验收。见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。
 
 2026-11-05 r205：客户端明确桌面权限策略已接入证明验证、watch/gate、双向协议与私有产品 handoff。现有入口保持 fixed 默认；服务端桌面网络授权和 GUI 尚待接入，详见 [接入说明](docs/OWNED_DESKTOP_INTEGRATION.md)。

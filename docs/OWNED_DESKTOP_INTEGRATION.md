@@ -1,6 +1,6 @@
 # 自主连接链与桌面界面接入
 
-2026-11-05 r206（承接 r203–r205）。当前是桌面协议与签名权限组件接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
+2026-11-05 r207（承接 r203–r206）。当前是桌面协议与签名权限组件接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
 
 ## 已落实的边界
 
@@ -20,7 +20,7 @@ Windows 新增 `TlsProbeServer.RunOwnedDesktopOnceAsync`，固定监听/peer 为
 
 Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重新打开校验 scope 与同一申请/签名 grant 一致。默认 Open 不接受新模式，新构造器也不能打开已有 fixed-only Store，失败不改快照或重建 issuer。没有线上 Store 迁移或任何旧文件回写。既有 Authorized、默认网络后端与业务 IPC 继续拒绝桌面授权；r206 的显式桌面后端另行接通如下。AuthorizedDesktop 本身仍只核查设备授权账本。
 
-**r206 已补显式服务端网络授权组合；下一组接受信 broker/native 入口、独立撤销的 scope 和限定 desktop owner，再做 GUI pre-arm。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
+**r207 已补精确 scope 的独立撤销、provision 前终态确认与显式 broker/headscale 组合；下一组接限定 desktop owner/runner、native 新鲜服务组合，再做 GUI pre-arm。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
 
 ## r205：客户端明确策略、watch 与私有载荷接线
 
@@ -40,7 +40,19 @@ installeddevice 的内部授权/节点 verifier/session identity 验证点保留
 
 重开检查新增：非 fixed provision 必须仍关联同一持久已签 scope 申请；浮动/错 scope 记录拒绝打开，不重写或清理未知记录。正常已批准的混合范围重开后保持 issuer 与投影且不重新 Mint；已撤销记录不能复活。默认 Open 或旧 Store 不自动迁移为新模式。
 
-此后端目前仅由组件测试显式构造。实际 broker/headscale 组合、deviceservice 与 native-enrollment-authority 入口仍用默认构造；尚未部署或提供 GUI 新包。下一组检查并接这些 trusted 入口，以及仍使用 VerifyGrant fixed 默认的 `grantrevocation/revoke.go`；独立撤销必须先支持同一明确本机 scope，才能启动 desktop owner 的实际 provision。不要为接线直接放宽默认函数，或在已部署旧 Store 上开启新模式。
+此后端尚未部署或提供 GUI 新包。r207 增加下述显式 broker/headscale 函数；既有 daemon、deviceservice 与 native-enrollment-authority 可执行入口继续使用默认构造。不要为接线直接放宽默认函数，或在已部署旧 Store 上开启新模式。
+
+## r207：同范围独立撤销、终态证明与服务组合
+
+`grantrevocation.NewDesktop` 在可信本机组合中明确选择 view 或 control，再打开同一已验证 profile 下的独立 HTTPS 客户端。策略保存在私有值字段，不能由 grant、parent command 或响应推导；原 `New` 仍 fixed-only。观察、最多2秒 authentic not-before 等待与 provision 前 Pin 均校验相同本机策略、签名、角色、时间和完整 grant。Close 仍串行等待在途请求，signer 归外部 owner，不因业务 child 出错提前释放。
+
+独立状态确认严格匹配已观察 RequestID 与该策略的 Permission：ConfirmBeforeProvision 仅接受明确 denied/revoked，不把 pending、过期、profile 回退、缺范围或混合回执当成收尾许可；ObserveRequest 更换旧请求也必须取得同范围明确终态。Pin 后两角色 ConfirmRevoked 只读，只有目标 owner 可显式 Revoke。丢失 mutation 回执时，下一次明确调用先查询同一申请；只有精确 revoked 才完成，只有精确 approved + 原完整 grant 才允许该次显式重发，未知继续保留。旧 fixed 路径也拒绝 scoped 终态和夹带其它结果字段。
+
+revoke mutation 的服务端正常回执仍只有 `status=revoked`，不添加选择字段；此回执只确认已签的固定 GrantID 操作。它与携带 RequestID/Permission 的 status 响应严格区分，两者都不构成产品/watch/node/进程 join 证据。认证维护/原生删除的独立门禁保持。
+
+`broker.StartDesktopHeadscaleNetworkSupervisor` 使用同一现有固定 Headscale driver、registered device proof、LiveVerifier 与监督收尾，显式构造桌面 backend。默认 StartHeadscaleNetworkSupervisor 仍 fixed；没有新增 HTTP/IPC/daemon 配置的 mode、endpoint、root、issuer 或 namespace 字段。新函数不创建 Store/verifier、不接管旧 owner；Stop 必须先 join network workers/maintenance、确认规则撤回，再由调用方停止 verifier/关闭 Store。测试覆盖 verifier fault 期间 Mint 未返回时 Stop 不能报已 join、取消后的凭据不返回、网络停止后独立 device revoke/status 仍可用。
+
+**线上接入前的约束**：现有 `cmd/native-enrollment-authority` 是旧维护验收专用，绑定旧维护 Store 摘要、candidate 路径和持久 verifier；不能通过去掉其 hash/lock/paused 检查或改旧 Store 模式来复用。应给桌面准备明确的新鲜 TEST 服务根/profile，并先核对现有测试服务的规则 writer 与 verifier 实际所有权。Headscale driver 对隔离 PoC 的策略执行全量替换，另起不同 policy 目录并不自动隔离同一控制面的规则，禁止让两个 writer 并行争抢。此次没有 SSH 或修改远端服务，尚未验证新的线上组合。
 
 ## 下一组管理与界面接线
 
@@ -76,3 +88,9 @@ Go invite/installeddevice 相关包回归通过，最终新桌面范围检查与
 invite 包回归通过；六个新后端边界（含两范围的实际本机 HTTPS/API 组合）定向 race 通过；deviceservice/headscale 消费方回归通过。增加 approved 混合范围重开及完整 RTT 起点检查后的定向复验通过。测试 driver 在内存中模拟 Mint/Observe/live-proof/Cleanup/投影，绝不代表实际 Headscale、节点持有证明、OS signer、画面键鼠或跨机 GUI 已验收。
 
 覆盖包括：scope 批准→HTTPS enroll/verifier/bind→signed ACTIVE→TLS certificate possession/descriptor 与 registered session identity→scope watch 观察 revoke→精确 cleanup/node retirement→重开不复活；凭据不落盘；无关模拟资源保留。另覆盖错 mode/backend Store 重绑完全无 driver/fence/nonce 副作用、未入账 issuer-signed scope 拒绝、未知 Mint 后重开仅 cleanup 不 remint、三范围共存与单范围撤销、未知 scoped record 打开失败不回写。证据 `artifacts/connection-poc/r206-desktop-backend/`，全部限额本机检查，无 SSH、服务部署或新双机工单。
+
+### r207 验证增量
+
+grantrevocation/broker 包检查通过；新增 scope 边界、本机实际 HTTPS（含故意丢失撤销回执）及 kernel peer broker/HTTPS 接线定向 race 通过。覆盖 view/control/fixed 独立传输、原客户端关闭后同一授权撤销仅一次、双方只读终态确认、provision 前明确拒绝；授权 scope 互斥、混合 approved 回执不得引发重发、默认客户端不得接受 scoped 收尾证明。productmaintenance/installeddevice 消费方回归通过，保持原 lifecycle 与默认固定策略。
+
+证据 `artifacts/connection-poc/r207-scoped-revocation/{revocation.txt,broker.txt,scope-race.txt,consumers.txt,final-boundaries.txt}`。内存 issuer/signers 与 fixture driver，真实本机 HTTPS/Unix socket/Store/监督线程 join；没有 Headscale CLI、OS signer、真实画面或键鼠，也没有新双机包。现有四组 TEST 完成证据不变，尚未完成本批 GUI 验收。

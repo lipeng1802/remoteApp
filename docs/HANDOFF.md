@@ -6,6 +6,22 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r207：同scope独立撤销、provision前终态与broker监督组合
+
+承接r206/6313990，先读交接/Git，确认无前组重型构建。工作卷约135GiB可用，无需清理，继续复用离线缓存。此轮仅本机源码/组件检查，没有SSH、服务部署、新双机工单或GUI/OS凭据操作；r201已退休与历史未知现场均未动。
+
+新增grantrevocation.NewDesktop，expected view/control由可信本机代码显式选择，私有GrantPolicy贯穿观察/2秒authentic not-before/Pin与终态；原New保持fixed。独立Revoke丢回执后，下一次明确调用先查同一RequestID：精确同scope revoked才确认；只有approved+原完整grant+同scope且没有额外字段才允许本次显式重发。mutation正常ACK严格为status-only，不能与status查询证明混用。未知保持原owner，不推断join、不盲重发。
+
+provision前ConfirmBeforeProvision与更换旧ObserveRequest均要求精确已观察申请的denied/revoked、同本机scope；pending/缺范围/错范围/过期或profile回退/夹带字段不成为收尾许可。Pin后两角色只读ConfirmRevoked可确认，只有目标可签撤销；默认fixed也拒绝scoped终态。Close仍串行等待在途API，signer由外部owner持有；没有放宽原有效期/角色/签名/3秒TCP与密钥交换。
+
+broker新增单独StartDesktopHeadscaleNetworkSupervisor，采用同一固定headscale driver/注册公钥proof/LiveVerifier与原监督器。默认入口仍fixed，无peer/daemon可选mode。错误Store模式无driver规则写；scope经真实本机HTTPS与kernel peer私有broker保留，校时/篡改拒绝、网络停止后的独立device revoke/status保持可用。verifier故障取消Mint时必须实际等worker退出，Stop超时不伪报join，取消所得凭据不逃逸，最终规则撤回结果仍单列。
+
+验证：grantrevocation包PASS2.082s，broker包PASS4.413s；新scope/真实HTTPS丢回执/私有broker接线定向race PASS（grantrevocation3.339s/broker3.174s）。productmaintenance13.076s、installeddevice7.480s消费方回归通过，原exec3035已exit0；最后新增混合approved不得重发与fixed不得采用scoped终态两项定向race PASS2.261s，exec32758实际exit0。全部GOMAXPROCS=2/GOFLAGS=-p=2/nice10/离线cache，重型串行，没有无变化完整项目回归。材料artifacts/connection-poc/r207-scoped-revocation/{revocation.txt,broker.txt,scope-race.txt,consumers.txt,final-boundaries.txt}；内存issuer/signers、模拟driver和真实本机HTTPS/Unix socket/监督线程，不代表Headscale/OS signer/原生屏幕键鼠/GUI双机验收。
+
+下一组应把同一明确策略接installeddevice独立桌面runner及productmaintenance受信Start/ConfigureRevocation，不从父JSON/grant临时选策略；目前它们既有导出runner/StartTest仍fixed，不能直接喂desktop grant。SessionRuntime的ProductSession仍StartBoundProduct fixed，要新增限定desktop product接线并携带同策略的streamgate/session.Config；不得借旧PONG入口开启原生能力。然后接固定摘要Swift/C#产品、GUI pre-arm与明确同意，同意等待放在原8秒产品启动前。
+
+线上新鲜组合另须先核对规则writer/verifier实际所有权：现cmd/native-enrollment-authority绑定旧维护StoreSHA、candidate路径与持久verifier，不能删hash/paused/lock门禁来复用；桌面须新鲜TEST服务根/profile。Headscale driver执行隔离PoC全量policy替换，不同policy目录并不隔离同一控制面，禁止并行writer争抢或改旧Store模式。本轮仅增加可复用显式函数，既有native executable/daemon/deviceservice未启用新模式，没有线上变化。不存在当前人工阻塞；自动续办ACTIVE，继续GUI批次，仅本地提交不推送。
+
 ## 2026-11-05 r206：明确scope服务端网络后端与严格恢复组合
 
 承接r205/869d369，先读Git/交接，无前组重型构建，磁盘约136GiB可用。此轮仅本机源码/测试，没有SSH、远程部署、profile/旧Store修改或新双机工单，历史未知现场/已退休安装不动。

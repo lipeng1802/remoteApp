@@ -25,11 +25,22 @@ import (
 )
 
 func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T) {
+	for _, scope := range []invite.DesktopPermission{"", invite.DesktopView, invite.DesktopControl} {
+		t.Run(string(scope), func(t *testing.T) { realHTTPSRevocation(t, scope) })
+	}
+}
+
+func realHTTPSRevocation(t *testing.T, scope invite.DesktopPermission) {
+	t.Helper()
 	directory, e := filepath.EvalSymlinks(t.TempDir())
 	if e != nil {
 		t.Fatal(e)
 	}
-	store, e := invite.Open(filepath.Join(directory, "authority"), time.Now)
+	open := invite.Open
+	if scope != "" {
+		open = invite.OpenDesktopAuthorization
+	}
+	store, e := open(filepath.Join(directory, "authority"), time.Now)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -95,13 +106,20 @@ func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T
 	}
 	targetID := call(target, invite.Body{Action: "register"})
 	call(controller, invite.Body{Action: "register"})
-	invitation := call(target, invite.Body{Action: "invite"})
-	pending := call(controller, invite.Body{Action: "claim", TargetCode: targetID.DeviceCode, Code: invitation.Code})
-	approved := call(target, invite.Body{Action: "approve", RequestID: pending.RequestID, Allow: true})
+	invitation := call(target, invite.Body{Action: "invite", Permission: scope})
+	pending := call(controller, invite.Body{Action: "claim", TargetCode: targetID.DeviceCode, Code: invitation.Code, Permission: scope})
+	approved := call(target, invite.Body{Action: "approve", RequestID: pending.RequestID, Allow: true, Permission: scope})
 	if approved.Grant == nil {
 		t.Fatal("grant missing")
 	}
-	channel, e := New(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: profile.Claims.Service, MinimumEpoch: 1, Bundled: profile}, owner, 0)
+	spec := trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: profile.Claims.Service, MinimumEpoch: 1, Bundled: profile}
+	newChannel := func(signer invite.DeviceSigner) (*Channel, error) {
+		if scope != "" {
+			return NewDesktop(spec, signer, 0, scope)
+		}
+		return New(spec, signer, 0)
+	}
+	channel, e := newChannel(owner)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -112,7 +130,7 @@ func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T
 	if e = channel.Pin(*approved.Grant); e != nil {
 		t.Fatal(e)
 	}
-	peerChannel, e := New(trustinstall.Specification{Test: true, Root: hex.EncodeToString(root), Service: profile.Claims.Service, MinimumEpoch: 1, Bundled: profile}, peer, 0)
+	peerChannel, e := newChannel(peer)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -122,6 +140,28 @@ func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T
 	}
 	if channel.ConfirmRevoked(context.Background()) == nil || peerChannel.ConfirmRevoked(context.Background()) == nil || mutations.Load() != 0 {
 		t.Fatal("approved status became fault close authority")
+	}
+	if scope != "" {
+		legacy, e := New(spec, owner, 0)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if legacy.Observe(pending.RequestID, *approved.Grant) == nil {
+			t.Fatal("legacy channel adopted desktop scope")
+		}
+		legacy.Close()
+		wrong := invite.DesktopView
+		if scope == wrong {
+			wrong = invite.DesktopControl
+		}
+		other, e := NewDesktop(spec, owner, 0, wrong)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if other.Observe(pending.RequestID, *approved.Grant) == nil {
+			t.Fatal("other desktop scope adopted")
+		}
+		other.Close()
 	}
 	target.Close() // independent transport must remain usable
 	if channel.Revoke(context.Background()) == nil {
@@ -134,10 +174,33 @@ func TestRealHTTPSRevocationAfterOriginalClientClosedAndLostReceipt(t *testing.T
 		t.Fatal("HTTP mutation blindly retried")
 	}
 	final := call(controller, invite.Body{Action: "status", RequestID: pending.RequestID})
-	if final.Status != "revoked" || final.Grant != nil {
+	if final != (invite.Result{Status: "revoked", RequestID: pending.RequestID, Permission: scope}) {
 		t.Fatal("revocation not authoritative")
 	}
 	if channel.ConfirmRevoked(context.Background()) != nil || peerChannel.ConfirmRevoked(context.Background()) != nil || mutations.Load() != 1 {
 		t.Fatal("both real signed status confirmations must remain read-only")
+	}
+	// Real signed denial before provisioning is a different cleanup proof. A
+	// view/control channel must retain the observed request's precise scope.
+	denier, e := invite.NewProfileNetworkClient(profile, root, profile.Claims.Service, 1, owner)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer denier.Close()
+	invitation = call(denier, invite.Body{Action: "invite", Permission: scope})
+	pending = call(controller, invite.Body{Action: "claim", TargetCode: targetID.DeviceCode, Code: invitation.Code, Permission: scope})
+	before, e := newChannel(peer)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer before.Close()
+	if before.ObserveRequest(context.Background(), pending.RequestID) != nil || before.ConfirmBeforeProvision(context.Background()) == nil {
+		t.Fatal("pending request became terminal cleanup authority")
+	}
+	if denied := call(denier, invite.Body{Action: "approve", RequestID: pending.RequestID, Allow: false}); denied != (invite.Result{Status: "denied", RequestID: pending.RequestID, Permission: scope}) {
+		t.Fatal("signed denial scope")
+	}
+	if before.ConfirmBeforeProvision(context.Background()) != nil || mutations.Load() != 1 {
+		t.Fatal("preprovision denial must be read-only")
 	}
 }

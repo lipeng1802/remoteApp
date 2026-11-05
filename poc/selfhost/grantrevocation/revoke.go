@@ -26,6 +26,7 @@ type Channel struct {
 	mu                                   sync.Mutex
 	api                                  API
 	issuer                               ed25519.PublicKey
+	policy                               invite.GrantPolicy
 	subject                              string
 	now                                  func() time.Time
 	issued, expires                      int64
@@ -35,6 +36,21 @@ type Channel struct {
 }
 
 func New(s trustinstall.Specification, signer invite.DeviceSigner, port uint16) (*Channel, error) {
+	return newForPolicy(s, signer, port, invite.GrantPolicy{})
+}
+
+// NewDesktop selects the exact scope in trusted local composition, before any
+// authority reply. Neither a grant nor a private command may select this policy.
+// This channel grants no desktop/approval/provisioning or process-join authority.
+func NewDesktop(s trustinstall.Specification, signer invite.DeviceSigner, port uint16, expected invite.DesktopPermission) (*Channel, error) {
+	policy, err := invite.DesktopGrantPolicy(expected)
+	if err != nil {
+		return nil, ErrDenied
+	}
+	return newForPolicy(s, signer, port, policy)
+}
+
+func newForPolicy(s trustinstall.Specification, signer invite.DeviceSigner, port uint16, policy invite.GrantPolicy) (*Channel, error) {
 	if !s.Test || signer == nil {
 		return nil, ErrDenied
 	}
@@ -52,7 +68,7 @@ func New(s trustinstall.Specification, signer invite.DeviceSigner, port uint16) 
 	if e != nil {
 		return nil, e
 	}
-	c, e := newChannel(s, signer.PublicKey(), client, time.Now)
+	c, e := newChannelForPolicy(s, signer.PublicKey(), client, time.Now, policy)
 	if e != nil {
 		client.Close()
 	}
@@ -60,6 +76,10 @@ func New(s trustinstall.Specification, signer invite.DeviceSigner, port uint16) 
 }
 
 func newChannel(s trustinstall.Specification, public ed25519.PublicKey, api API, clock func() time.Time) (*Channel, error) {
+	return newChannelForPolicy(s, public, api, clock, invite.GrantPolicy{})
+}
+
+func newChannelForPolicy(s trustinstall.Specification, public ed25519.PublicKey, api API, clock func() time.Time, policy invite.GrantPolicy) (*Channel, error) {
 	root, e := hex.DecodeString(s.Root)
 	if e != nil || !s.Test || len(public) != 32 || api == nil || clock == nil {
 		return nil, ErrDenied
@@ -72,11 +92,29 @@ func newChannel(s trustinstall.Specification, public ed25519.PublicKey, api API,
 		return nil, e
 	}
 	id := sha256.Sum256(public)
-	return &Channel{api: api, issuer: issuer, subject: hex.EncodeToString(id[:]), now: clock, issued: s.Bundled.Claims.IssuedAt, expires: s.Bundled.Claims.ExpiresAt}, nil
+	return &Channel{api: api, issuer: issuer, policy: policy, subject: hex.EncodeToString(id[:]), now: clock, issued: s.Bundled.Claims.IssuedAt, expires: s.Bundled.Claims.ExpiresAt}, nil
 }
 
 func (c *Channel) valid(g invite.Grant) bool {
-	return c.now().Unix() >= c.issued && c.now().Unix() < c.expires && invite.VerifyGrant(c.issuer, g, g.Claims.Target, g.Claims.Controller, c.now()) && (g.Claims.Target == c.subject || g.Claims.Controller == c.subject)
+	return c.now().Unix() >= c.issued && c.now().Unix() < c.expires && c.policy.Verify(c.issuer, g, g.Claims.Target, g.Claims.Controller, c.now()) && (g.Claims.Target == c.subject || g.Claims.Controller == c.subject)
+}
+
+// Terminal/approved status must name the exact observed request and locally
+// selected scope. Other result slots cannot be smuggled into a cleanup proof.
+func (c *Channel) statusResult(status string) invite.Result {
+	r := invite.Result{Status: status, RequestID: c.request}
+	if c.policy.IsDesktop() {
+		r.Permission = invite.DesktopPermission(c.policy.Permission())
+	}
+	return r
+}
+
+func (c *Channel) approved(r invite.Result) bool {
+	if r.Grant == nil || *r.Grant != c.grant {
+		return false
+	}
+	r.Grant = nil
+	return r == c.statusResult("approved")
 }
 
 // Observe accepts only the exact request's successful native product reply.
@@ -96,7 +134,7 @@ func (c *Channel) Observe(request string, g invite.Grant) error {
 		if now.Unix() >= c.issued && now.Unix() < c.expires &&
 			g.Claims.IssuedAt > now.Unix() && g.Claims.IssuedAt-now.Unix() <= 2 &&
 			(g.Claims.Target == c.subject || g.Claims.Controller == c.subject) &&
-			invite.VerifyGrant(c.issuer, g, g.Claims.Target, g.Claims.Controller, time.Unix(g.Claims.IssuedAt, 0)) {
+			c.policy.Verify(c.issuer, g, g.Claims.Target, g.Claims.Controller, time.Unix(g.Claims.IssuedAt, 0)) {
 			return errors.Join(ErrDenied, errGrantNotYetValid)
 		}
 		return ErrDenied
@@ -157,20 +195,22 @@ func (c *Channel) Revoke(ctx context.Context) error {
 	}
 	if c.attempted {
 		r, e := c.api.DeviceRequest(ctx, invite.Body{Action: "status", RequestID: c.request})
-		if e != nil || r.RequestID != c.request {
+		if e != nil {
 			return ErrDenied
 		}
-		if r.Status == "revoked" && r.Grant == nil {
+		if r == c.statusResult("revoked") {
 			c.confirmed = true
 			return nil
 		}
-		if r.Status != "approved" || r.Grant == nil || *r.Grant != c.grant {
+		if !c.approved(r) {
 			return ErrDenied
 		}
 	}
 	c.attempted = true
 	r, e := c.api.DeviceRequest(ctx, invite.Body{Action: "revoke", GrantID: c.grant.Claims.ID})
-	if e != nil || r.Status != "revoked" || r.Grant != nil {
+	// The mutation endpoint intentionally returns only this minimal receipt;
+	// the request/grant are fixed in our signed call. Scoped status is separate.
+	if e != nil || r != (invite.Result{Status: "revoked"}) {
 		return ErrDenied
 	}
 	c.confirmed = true
@@ -194,7 +234,7 @@ func (c *Channel) ConfirmRevoked(ctx context.Context) error {
 		return ErrDenied
 	}
 	r, e := c.api.DeviceRequest(ctx, invite.Body{Action: "status", RequestID: c.request})
-	if e != nil || r != (invite.Result{Status: "revoked", RequestID: c.request}) {
+	if e != nil || r != c.statusResult("revoked") {
 		return ErrDenied
 	}
 	c.confirmed = true
@@ -212,8 +252,7 @@ func (c *Channel) ObserveRequest(ctx context.Context, request string) error {
 	}
 	if c.request != "" && c.request != request {
 		r, err := c.api.DeviceRequest(ctx, invite.Body{Action: "status", RequestID: c.request})
-		if err != nil || (r != (invite.Result{Status: "revoked", RequestID: c.request}) &&
-			r != (invite.Result{Status: "denied", RequestID: c.request})) {
+		if err != nil || (r != c.statusResult("revoked") && r != c.statusResult("denied")) {
 			return ErrDenied
 		}
 		c.grant = invite.Grant{}
@@ -232,8 +271,7 @@ func (c *Channel) ConfirmBeforeProvision(ctx context.Context) error {
 		return ErrDenied
 	}
 	r, err := c.api.DeviceRequest(ctx, invite.Body{Action: "status", RequestID: c.request})
-	if err != nil || (r != (invite.Result{Status: "revoked", RequestID: c.request}) &&
-		r != (invite.Result{Status: "denied", RequestID: c.request})) {
+	if err != nil || (r != c.statusResult("revoked") && r != c.statusResult("denied")) {
 		return ErrDenied
 	}
 	return nil

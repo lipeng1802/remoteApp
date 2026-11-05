@@ -15,7 +15,19 @@ import (
 // and caller must Stop supervisor BEFORE stopping runtime or closing Store.
 // The fixed local CLI and runtime-owned overlay never use installed Tailscale.
 func StartHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, policyDir string, interval time.Duration) (*NetworkSupervisor, error) {
-	if st == nil || v == nil || !v.Live() {
+	return startHeadscaleNetworkSupervisor(ctx, st, v, policyDir, interval, false)
+}
+
+// StartDesktopHeadscaleNetworkSupervisor opts a new trusted server composition
+// into its explicitly desktop-enabled Store. This is not a mode field in the
+// existing daemon config or frontend IPC; it does not create/upgrade a Store or
+// acquire another verifier's ownership. The caller owns the same Stop ordering.
+func StartDesktopHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, policyDir string, interval time.Duration) (*NetworkSupervisor, error) {
+	return startHeadscaleNetworkSupervisor(ctx, st, v, policyDir, interval, true)
+}
+
+func startHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *verifier.Runtime, policyDir string, interval time.Duration, desktop bool) (*NetworkSupervisor, error) {
+	if ctx == nil || ctx.Err() != nil || st == nil || v == nil || !v.Live() {
 		return nil, ErrBroker
 	}
 	if !filepath.IsAbs(policyDir) || filepath.Clean(policyDir) != policyDir {
@@ -31,11 +43,29 @@ func StartHeadscaleNetworkSupervisor(ctx context.Context, st *invite.Store, v *v
 		pub, e := st.DevicePublicKey(r.Device)
 		return e == nil && v.Verify(ctx, r, o, pub)
 	}
-	return StartNetworkSupervisor(ctx, &invite.ProvisionBackend{Store: st, Driver: d, VerifierSource: func(call context.Context) (string, error) {
+	b, e := headscaleBackend(st, d, desktop)
+	if e != nil {
+		return nil, e
+	}
+	b.VerifierSource = func(call context.Context) (string, error) {
 		info := v.Info()
 		if call.Err() != nil || !info.Healthy || !v.Live() {
 			return "", invite.ErrDenied
 		}
 		return info.Key, nil
-	}}, v, interval)
+	}
+	return StartNetworkSupervisor(ctx, b, v, interval)
+}
+
+// Both public entry points share this exact selection. No backend can infer
+// opt-in from a peer grant. Reconcile still validates the default Store mode
+// before invoking the privileged driver or changing shared readiness.
+func headscaleBackend(st *invite.Store, driver invite.ProvisionDriver, desktop bool) (*invite.ProvisionBackend, error) {
+	if desktop {
+		return invite.NewDesktopProvisionBackend(st, driver)
+	}
+	if st == nil || driver == nil {
+		return nil, ErrBroker
+	}
+	return &invite.ProvisionBackend{Store: st, Driver: driver}, nil
 }
