@@ -31,6 +31,17 @@ func TestTLSProductFixture(t *testing.T) {
 		return
 	}
 	mode := strings.TrimPrefix(os.Args[len(os.Args)-1], "tls-fixture-")
+	prepared := strings.HasPrefix(mode, "prepared-")
+	preparationMode := ""
+	if prepared {
+		mode = strings.TrimPrefix(mode, "prepared-")
+		for _, flag := range []string{"deny", "wrong", "missing", "slow", "readywrong"} {
+			if strings.HasPrefix(mode, flag+"-") {
+				preparationMode, mode = flag, strings.TrimPrefix(mode, flag+"-")
+				break
+			}
+		}
+	}
 	scope := ""
 	for _, value := range []string{"desktop-view", "desktop-control"} {
 		if strings.HasPrefix(mode, value+"-") {
@@ -39,15 +50,80 @@ func TestTLSProductFixture(t *testing.T) {
 		}
 	}
 	reader := privatepipe.NewReader(os.Stdin)
+	if prepared {
+		var prepare struct{ Op, Permission, Role, Self string }
+		if reader.Read(&prepare) != nil || prepare.Op != "prepare" || prepare.Permission != scope || len(prepare.Self) != 64 {
+			os.Exit(7)
+		}
+		role := "target"
+		if strings.HasPrefix(mode, "controller") {
+			role = "controller"
+		}
+		if prepare.Role != role {
+			os.Exit(7)
+		}
+		ackScope := scope
+		if preparationMode == "readywrong" {
+			ackScope = "fixed-payload"
+		}
+		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "desktop_prepared", "Permission": ackScope, "Role": role})
+		var consent struct{ Op, RequestID, Controller string }
+		if reader.Read(&consent) != nil || consent.Op == "stop" {
+			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
+			os.Exit(0)
+		}
+		if consent.Op != "consent" {
+			os.Exit(7)
+		}
+		if preparationMode == "slow" {
+			for _, arg := range os.Args {
+				if marker, ok := strings.CutPrefix(arg, "prepared-barrier="); ok {
+					_ = os.WriteFile(marker, []byte("entered"), 0600)
+				}
+			}
+			// Hold the local dialog until cancellation closes the private pipe.
+			var end struct{ Op string }
+			_ = reader.Read(&end)
+			time.Sleep(150 * time.Millisecond)
+			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
+			os.Exit(0)
+		}
+		decision := map[string]any{"status": "desktop_decision", "Permission": scope, "RequestID": consent.RequestID, "Allow": preparationMode != "deny"}
+		if preparationMode == "wrong" {
+			decision["RequestID"] = "foreign"
+		}
+		if preparationMode == "missing" {
+			delete(decision, "Allow")
+		}
+		json.NewEncoder(os.Stdout).Encode(decision)
+		if !strings.HasPrefix(mode, "controller") {
+			var activate struct{ Op string }
+			if reader.Read(&activate) != nil || activate.Op == "stop" {
+				json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
+				os.Exit(0)
+			}
+			if activate.Op != "activate" {
+				os.Exit(7)
+			}
+		}
+	}
 	var cert []byte
 	var priv *rsa.PrivateKey
 	if strings.HasPrefix(mode, "controller") {
 		var cfg struct {
+			Op                       string
 			Port                     int
 			Key, Fingerprint, Target string
 			Permission               string
 		}
-		if reader.Read(&cfg) != nil || cfg.Port != 32123 || cfg.Key != testHMAC || cfg.Fingerprint != strings.Repeat("c", 64) || len(cfg.Target) != 64 || (scope != "" && cfg.Permission != scope) {
+		if reader.Read(&cfg) != nil {
+			os.Exit(7)
+		}
+		if prepared && cfg.Op == "stop" {
+			json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "closed"})
+			os.Exit(0)
+		}
+		if cfg.Op != "" || cfg.Port != 32123 || cfg.Key != testHMAC || cfg.Fingerprint != strings.Repeat("c", 64) || len(cfg.Target) != 64 || (scope != "" && cfg.Permission != scope) {
 			os.Exit(7)
 		}
 		ready := map[string]string{"status": "ready"}
@@ -164,7 +240,11 @@ func (a *productAPI) Request(ctx context.Context, b invite.NetworkRequestBody) (
 		sig[0] ^= 1
 	}
 	d := invite.TLSIdentity{Claims: claims, Signature: hex.EncodeToString(sig)}
-	return invite.NetworkReply{TLS: &d}, nil
+	r := invite.NetworkReply{TLS: &d}
+	if a.mutate == "mixed" {
+		r.Ticket = "extra"
+	}
+	return r, nil
 }
 func productFixture(t *testing.T) (*productAPI, ed25519.PublicKey) {
 	t.Helper()

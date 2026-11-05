@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -19,11 +18,12 @@ import (
 	"remoteapp.local/selfhost-poc/session"
 )
 
-// Product is trusted runtime wiring for the actual Swift/C# TLS probes. The
+// Product is trusted runtime wiring for fixed or desktop Swift/C# payloads. The
 // compiled command fixes Spec. Legacy runners may still supply ControllerKey;
 // the autonomous installeddevice path rejects that field and performs its own
 // mutually authenticated one-shot delivery into the anonymous product pipe.
 type Product struct {
+	Prepared          *PreparedDesktop `json:"-"` // same pre-consented child; never a peer field
 	Spec              processowner.Spec
 	ControllerKey     string
 	TargetReady       func(key, fingerprint string) // private parent pipe; never log
@@ -61,7 +61,7 @@ func descriptor(ctx context.Context, api networkAPI, issuer ed25519.PublicKey, c
 		return invite.TLSIdentity{}, session.ErrDenied
 	}
 	r, e := api.Request(ctx, invite.NetworkRequestBody{Action: "tls_identity", Grant: c.Grant, Challenge: n})
-	if e != nil || r.TLS == nil || !invite.VerifyTLSIdentityForPolicy(c.grantPolicy, issuer, *r.TLS, c.Grant, c.Binding, n, clock()) {
+	if e != nil || ctx.Err() != nil || r.TLS == nil || r.Proof != nil || r.State != nil || r.Credential != nil || r.Session != nil || r.Verifier != nil || r.Ticket != "" || !invite.VerifyTLSIdentityForPolicy(c.grantPolicy, issuer, *r.TLS, c.Grant, c.Binding, n, clock()) {
 		return invite.TLSIdentity{}, session.ErrDenied
 	}
 	return *r.TLS, nil
@@ -80,14 +80,29 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	if !c.grantPolicy.Verify(issuer, c.Grant, c.Grant.Claims.Target, c.Grant.Claims.Controller, clock()) {
 		return nil, session.ErrDenied
 	}
-	if !c.Server {
-		d, e := descriptor(ctx, api, issuer, c, clock)
+	var retained *processowner.Child
+	if p.Prepared != nil {
+		if !c.grantPolicy.IsDesktop() || p.CertificateScope != "" || p.CertificateReopen || p.CertificateOpened != nil {
+			return nil, session.ErrDenied
+		}
+		life, child, finish, e := p.Prepared.take(ctx, c.grantPolicy, p.Spec, issuer, c.Grant, c.Server)
 		if e != nil {
 			return nil, e
 		}
-		child, e := startObservedTLS(ctx, p.Spec)
+		defer finish()
+		ctx, retained = life, child
+	}
+	if !c.Server {
+		d, e := descriptor(ctx, api, issuer, c, clock)
 		if e != nil {
-			return nil, e
+			return retained, e
+		}
+		child := retained
+		if child == nil {
+			child, e = startObservedTLS(ctx, p.Spec)
+			if e != nil {
+				return nil, e
+			}
 		}
 		bootstrap := map[string]any{"Port": port, "Key": p.ControllerKey, "Fingerprint": d.Claims.Fingerprint, "Target": c.Grant.Claims.Target}
 		expected := ""
@@ -100,7 +115,7 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 			Status     string `json:"status"`
 			Permission string `json:"Permission"`
 		}
-		if e != nil || decodeProductReady(raw, &ready) != nil || ready.Status != "ready" || ready.Permission != expected {
+		if e != nil || ctx.Err() != nil || decodeProductReady(raw, &ready) != nil || ready.Status != "ready" || ready.Permission != expected {
 			return child, session.ErrDenied
 		}
 		p.Observation.bind(child, false)
@@ -116,17 +131,25 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	} else if p.CertificateReopen {
 		return nil, session.ErrDenied
 	}
-	child, e := startObservedTLS(ctx, spec)
-	if e != nil {
-		return nil, e
+	child := retained
+	var e error
+	if child == nil {
+		child, e = startObservedTLS(ctx, spec)
+		if e != nil {
+			return nil, e
+		}
 	}
-	raw, e := child.Exchange(ctx, nil)
+	var activate any
+	if p.Prepared != nil {
+		activate = map[string]string{"Op": "activate"}
+	}
+	raw, e := child.Exchange(ctx, activate)
 	var ready productReady
 	expected := ""
 	if c.grantPolicy.IsDesktop() {
 		expected = c.grantPolicy.Permission()
 	}
-	if e != nil || decodeProductReady(raw, &ready) != nil || ready.Status != "ready" || ready.Permission != expected || !hmacKey(ready.Key) {
+	if e != nil || ctx.Err() != nil || decodeProductReady(raw, &ready) != nil || ready.Status != "ready" || ready.Permission != expected || !hmacKey(ready.Key) {
 		if p.CertificateScope != "" {
 			return child, errors.Join(session.ErrDenied, ErrTestCertificateOpen)
 		}
@@ -147,7 +170,7 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 		Status                        string `json:"status"`
 		Certificate, CertificateProof string
 	}
-	if e != nil || json.Unmarshal(raw, &proof) != nil || proof.Status != "certificate_proof" {
+	if e != nil || ctx.Err() != nil || decodeProductReady(raw, &proof) != nil || proof.Status != "certificate_proof" {
 		return child, session.ErrDenied
 	}
 	der, e := base64.StdEncoding.DecodeString(proof.Certificate)
@@ -160,7 +183,8 @@ func (p Product) start(ctx context.Context, api networkAPI, issuer ed25519.Publi
 	}
 	// The authority verifies the actual RSA private-key proof under the target
 	// device's OS signature. No certificate private key is copied to this helper.
-	if _, e = api.Request(ctx, invite.NetworkRequestBody{Action: "publish_tls", Grant: c.Grant, Challenge: n, Certificate: proof.Certificate, CertificateProof: proof.CertificateProof}); e != nil {
+	publication, e := api.Request(ctx, invite.NetworkRequestBody{Action: "publish_tls", Grant: c.Grant, Challenge: n, Certificate: proof.Certificate, CertificateProof: proof.CertificateProof})
+	if e != nil || ctx.Err() != nil || publication != (invite.NetworkReply{}) {
 		return child, errors.Join(session.ErrDenied, ErrTLSCertificatePublication)
 	}
 	d, e := descriptor(ctx, api, issuer, c, clock)

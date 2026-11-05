@@ -1,6 +1,6 @@
 # 自主连接链与桌面界面接入
 
-2026-11-05 r209（承接 r203–r208）。当前是桌面 native 构建、owner 与协议接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
+2026-11-05 r210（承接 r203–r209）。当前是桌面预备/同意协议与 owner 接入，尚未完成 GUI 双机验收。r201 的固定 TLS 载荷验收继续有效，不重跑已退休工单。
 
 ## 已落实的边界
 
@@ -20,7 +20,7 @@ Windows 新增 `TlsProbeServer.RunOwnedDesktopOnceAsync`，固定监听/peer 为
 
 Store 将 DesktopAuthorization 模式和每个邀请/申请范围持久化，重新打开校验 scope 与同一申请/签名 grant 一致。默认 Open 不接受新模式，新构造器也不能打开已有 fixed-only Store，失败不改快照或重建 issuer。没有线上 Store 迁移或任何旧文件回写。既有 Authorized、默认网络后端与业务 IPC 继续拒绝桌面授权；r206 的显式桌面后端另行接通如下。AuthorizedDesktop 本身仍只核查设备授权账本。
 
-**r209 已接独立 native 构建入口和桌面私有管理路由；下一组接 GUI pre-arm、明确同意与新鲜服务组合。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
+**r210 已补同一固定摘要 child 的预备/同意/批准绑定/激活能力和 Mac 协议状态模型；下一组接真实 GUI 按钮、native 协调与新鲜服务组合。** 不得将 VerifyGrant 全局改成接受任意已知 scope，也不能从网络报文计算 expected scope 来代替本机角色/许可策略。新五字段 handoff 的 scope 只能来自该已校验 grant，不是父帧自己声明就有权访问。当前真实 GUI、受信桌面产品构建、人工同意及跨机验收尚未完成。
 
 ## r205：客户端明确策略、watch 与私有载荷接线
 
@@ -74,13 +74,29 @@ native 产品与监督器共享既有生命周期源码，按标签分别生成�
 
 旧 `product_count` 在桌面 supervisor、ServeDesktop 和 Controller.Count 三处拒绝，不能到达 native child，更不能触发 nil PONG observation 导致桌面 owner 意外退出。原 fixed 查询保持。后续需要单独接真实帧/输入遥测，不能恢复 PONG 计数充当桌面验收。
 
-当前新增的是 native 产品/监督器构建函数和标签接线，旧 fresh-builder 调用方尚未切换。Swift/C# GUI 尚无预备/请求确认/激活阶段的完整父管道实现，不能提前签发双机桌面包或把旧 TLSBridgeProbe 当真实桌面产品。下一组必须实现并保留同一个固定摘要 GUI child，人工同意位于原8秒产品启动前，待确认后才交付同 grant 的 bootstrap/激活，禁止用扩大截止或另开替代 child 解决等待。
+当前新增的是 native 产品/监督器构建函数和标签接线，旧 fresh-builder 调用方尚未切换。Swift/C# GUI 尚无预备/请求确认/激活阶段的完整父管道实现，不能提前签发双机桌面包或把旧 TLSBridgeProbe 当真实桌面产品。r210 已实现下面的同 child 预备能力，但 native main 尚未传入它；仍需真实 GUI 和批准协调接线。
+
+## r210：同一 child 的预备、同意与激活
+
+`clientruntime.PrepareDesktop` 在 TLS 启动前按固定 Spec/SHA-256 启动一个 child，私有 `prepare` 命令只包含 Op/Permission/Role/Self，要求精确 `desktop_prepared` + 同 scope/role。准备阶段的8秒仅覆盖 GUI 初始化；child 此时不得打开 TLS、capture 或 input。准备返回失败时也可能持有 partial owner，必须 Stop/实际 join，不能丢弃。
+
+`PreparedDesktop.Decide` 只针对经 HTTPS/owner 核对的同 RequestID/controller，要求本机 controller 身份或非自身的 target 请求。只有同 child 的完整 `desktop_decision` + 精确 RequestID/Permission + 显式 Allow bool 才是决定；不是 grant 或撤销证明。人工等待独立有界120秒、发生在 TLS 启动前，不能延长服务端原120秒申请/300秒grant或任何profile期限。拒绝、错字段、缺 Allow、未知回执均不可重做这次决定。
+
+可信 owner 收到匹配 approve/status 成功回复后，才调用 `ObserveApproved`，核对签名、参与者、scope并保存完整 grant；**grant 本身不签 RequestID**，因此调用方必须按r208的真实 HTTPS 回复关联，不能自行给 grant 贴一个 RequestID。历史验签仅用于绑定，激活仍由原校时/ACTIVE/session/WhoIs与当前有效期检查把关。拒绝时需另行向真实 authority 明确签名 Deny；本地拒绝不能冒充服务端终态收尾。
+
+`Product.Prepared` 是不参与JSON的受信能力，只允许桌面入口、同 Spec（含参数与摘要）、本机角色、issuer、完整 grant 和已同意请求。激活前先占用一次尝试，再查询 TLS 描述符；查询未知也不能换 child 或重试。目标对同 child 发 selector-free `activate`，控制端对同 child 交付原五字段 bootstrap。复用原证书持有证明/单次 HMAC/TLS协议和8秒启动预算，不调用第二次 process Start。当前 prepared 组合只允许内存临时证书，不接受旧测试证书 scope/reopen/open callback 的混用。
+
+Stop 会取消在途同意/激活，等同一 child、EOF/reader及私有操作完成；超时仅保留该 join，后续 Stop 不重发决定/激活、不强杀。child 退出本身也不能代替仍在途的描述符查询完成，更不是全 session/watch/node/signer 的 join。outer owner 仍须按原生命周期停止并 join 所有资源。TLS 描述符与证书证明同时加严额外字段/混合回执和取消后返回；默认固定路径的正常回执不变。
+
+Mac 新增 `OwnedControllerPreparation` 协议模型：仅controller角色、规范私有prepare/consent帧，绑定自身ID与同一请求，拒绝重复/未知字段、错scope和重放；只有显式本机决定之后才能一次消费同scope的 `OwnedDesktopHandoff`。取消/拒绝不创建客户端或网络。模型方法不是用户同意证据，真实App须从新鲜本机按钮事件调用，并拥有reader/客户端/进程join；本组没有修改或打开GUI窗口。
+
+下一组需把此能力接入 native main/runner 的真实 incoming/claim/approve/status 与 Swift/C# App。注意旧业务管理Exchange有20秒预算，不能把120秒人工等待塞进它并超时后重发；应让同一个owner持有可取消且实际join的待决定操作，向限定管理端点提供短查询状态，最终仍只接受该GUI决定。保留原单次provision、独立撤销和取消/正常收尾门禁。之后再接真实连接发起、画面/输入遥测、窗口停止与fresh builder。
 
 ## 下一组管理与界面接线
 
 1. 选择独立、固定摘要的桌面产品构建入口。不得用公开 IPC 的 `mode/native/host/path` 字段把旧 PONG fixture 或业务命令升级为画面/原生输入能力。
 2. 接入已有 register/invite/claim/incoming/approve/status/revoke 与私有监督协议。把经过原 owner 验证的当前申请/角色显示给 Windows 用户，明确同意关联该申请；用户拒绝不能继续 provision 或启动桌面载荷。不允许自动化脚本模拟点击来充当本机许可证据。
-3. 人工等待安排在已有 `StartBoundProduct` 的 8 秒 TLS 产品启动预算**之前**。优先研究预启动并保持同一个固定摘要桌面 child 的准备/许可阶段，后续仍由 owner 交付原 bootstrap、发布证书证明并拥有该 child。不能为了等待弹窗而延长原 3 秒 TCP/密钥交换或有效期，不能将未知状态换进程重试。预启动失败、拒绝或过期也必须实际 join。
+3. 使用r210预启动并保持同一个固定摘要桌面 child，人工等待放在原8秒TLS启动之前，后续仍由owner交付bootstrap、发布证书证明并拥有该child。不能延长3秒TCP/密钥交换或有效期，不能将未知状态换进程重试。预启动失败、拒绝或过期也必须实际join。
 4. Windows 复用每次共享许可、物理 Ctrl+Alt+Esc 和本机停止；后台管理保持隐藏 Interactive。真实 capture/input 只在允许的用户桌面执行，默认只读。Mac 复用现有画面 canvas/焦点输入释放，使用新的一次性 handoff，禁止旧地址/配对密钥回退。
 5. 接线后验证取消/断网/撤销/窗口关闭与 owner 的正常及故障收尾，严格等待同一 child、watch/node/signer/reader 实际 join。再启动一份全新签名双机工单，记录实际画面增长、输入事件与本机可见效果、拒绝不产生输入，以及双端停止/撤销。组件 JPEG/sink fixture 与 PONG 都不是这些效果的替代。
 
@@ -132,3 +148,9 @@ installeddevice/productmaintenance 包回归与新桌面边界 race 通过。真
 构建器负向与 argv 捕获检查覆盖两 scope、Mac/Windows、direct/TEST tunnel、监督器/客户端、非法 scope/生产/未固定摘要/维护地址和只提供半边 removal 组合；捕获编译器为脚本 fixture，不计真正原生构建。default/view/control 三种 Go 命令包组合实际编译通过；同时两个 scope 标签的实际编译按预期拒绝，只出现重复 const 错误。两 scope 的 Windows amd64 交叉 vet 通过，不代表 Windows 原生运行。
 
 supervisedcontrol 默认路由回归通过；新桌面管理路由、取消后在途 reader/handler join、维护 owner 拒绝 PONG 又不污染业务状态定向 race 通过。管理路由新测试使用真实本机 TCP + fixture backend，不包含 OS signer 或新 kernel peer 验收，原受保护监听器未改认证策略。证据 `artifacts/connection-poc/r209-desktop-build/`，无 SSH、服务部署、安装根或 GUI/真实画面键鼠操作。
+
+### r210 验证增量
+
+clientruntime/installeddevice包回归通过；prepared/desktop产品定向race通过。真实固定摘要Go子进程覆盖两scope×双角色：prepare→模拟决定→批准绑定→同一PID激活→certificate proof/descriptor/private handoff→正常Stop/实际exit/reader join；拒绝、缺Allow、错scope/请求/Spec、未知描述符不能发布或重试。对话取消的迟退出与描述符操作阻塞均测试了超时保留、原child/原操作完成后才join，无强杀。
+
+Mac Swift增量nice10/jobs2编译现有GUI及协议模块，4项OwnedControllerPreparation检查通过；只创建未联网状态/handoff，不点击GUI、不读Keychain、不采集/注入。Go子进程的同意回复与issuer/API均为fixture，不能当真实人工许可或画面键鼠验收。Windows交叉vet通过，材料 `artifacts/connection-poc/r210-desktop-preparation/`，没有SSH或新双机包。

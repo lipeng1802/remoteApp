@@ -6,6 +6,26 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r210：同一child的预备/同意/批准绑定/激活与Mac协议模型
+
+承接r209/a3af113，先读交接/Git，确认无前组重型构建；磁盘约133GiB可用。仅本机源码/组件检查，无SSH、新签名包、服务部署、OS凭据、真实GUI或画面输入操作；已退休与历史未知现场未动，docs/archive/继续未跟踪。
+
+新增clientruntime.PrepareDesktop/PreparedDesktop：按固定Spec/SHA-256预启动一个child，prepare私有帧限定Op/Permission/Role/Self，精确desktop_prepared回显同scope/role，阶段不得打开TLS/capture/input。GUI初始化独立8秒，人工Decide独立上限120秒，均在原TLS启动8秒之前，不延长服务申请/授权/profile或3秒TCP/密钥交换。Decide绑定经owner核对的RequestID/controller，显式Allow bool才是决定；拒绝、缺字段、错范围/申请、未知或超时都不可重做同一次决定。
+
+ObserveApproved只在可信owner收到真实匹配approve/status成功回执后绑定同一完整grant、issuer、角色和scope。注意grant本身不签RequestID，不能在父JSON里给任意grant贴RequestID；调用方必须保留r208 HTTPS关联核验。本方法历史验签不授予当前活动权限，激活仍通过原校时/ACTIVE/watch/session/WhoIs及当前expiry。拒绝须另向真实authority签明确Deny，本地false不是服务端终态证明。
+
+Product.Prepared为不参与JSON的受信能力：只接桌面、同一固定Spec（包括参数/摘要）、角色、issuer/完整grant和已同意请求。激活尝试在TLS描述符查询前就一次占用，未知查询也不重试/换child；目标对原child发activate，控制端给原child五字段bootstrap，复用原证书持有证明/HMAC/TLS流程，不再Start第二个进程。prepared组合拒绝旧测试证书scope/reopen/open-callback混用。描述符/证书proof加严混合/未知字段和取消后回执，原fixed正常路径保持。
+
+Stop取消在途决定/激活并实际等待同一child、EOF/reader和私有操作；超时保留同一join，不强杀、不重发。同意等待取消时child迟退出不能报已join；GUI已退出但描述符API仍在途也不能报准备owner已join。它不替代整个session/watch/node/signer的outer owner收尾，仍须按原顺序保留资源直至全层结束。
+
+Mac新增OwnedControllerPreparation协议模型，精确规范prepare/consent、controller-only、同Self/申请/scope，显式本机决定后才一次交付OwnedDesktopHandoff。拒绝/取消/错scope/重放/重复字段/超长帧锁闭，不启动网络，不读Keychain。此模型和fixture决定都不等于真实GUI用户同意；本轮未修改/打开App窗口。
+
+验证：最终Go两包PASS（clientruntime8.666s/installeddevice8.833s）；prepared/desktop产品定向race PASS27.057s，exec2807实际exit0；最后补激活API阻塞的取消/join定向race PASS3.842s，exec15232实际exit0。Windows amd64交叉vet两包PASS，exec19843实际exit0，日志为空。Swift nice10/jobs2增量构建（编译现有GUI/协议）4项PASS；最后加超长handoff边界后4项复验PASS，exec42117实际exit0。全部Go GOMAXPROCS=2/GOFLAGS=-p=2/nice10/离线cache，重型任务组串行，无整项目无变化回归。
+
+证据artifacts/connection-poc/r210-desktop-preparation/{initial.txt,preparation.txt,packages.txt,scope-race.txt,activation-join.txt,windows-vet.txt,swift-preparation.txt,swift-final.txt}。两scope×双角色固定摘要Go child实际同PID激活、证书proof/descriptor/private handoff与Stop/exit/reader join；RSA/issuer/API与同意回复均为fixture，未做真实TLS桌面网络、OS signer、屏幕键鼠或GUI验收。收尾无新构建/测试进程，磁盘仍约133GiB，保留受信cache，无需清理。
+
+下一组：把Prepared能力接真实Swift/C# App的本机按钮/管道、native main/runner和incoming/claim/approve/status关联。当前native main仍未设置Product.Prepared，两GUI入口仍旧路径，不能提前签fresh桌面包。旧管理Exchange有20秒预算，勿将120秒人等待塞进去并超时重发；应由同一owner拥有可取消且实际join的等待操作，管理端只做短的限定状态查询，决定仍来自原GUI child。未激活/拒绝/任何启动失败也必须把prepared child纳入runner cleanup，保证product先于node/signer实际join。还需Mac GUI真实连接意图、Windows明确确认、帧/输入遥测及窗口停止先通知outer owner quiesce/revoke/join；不能直接退出GUI再伪报正常zero。完成接线后才接fresh builder/新鲜服务唯一writer-verifier组合及真实双机。当前无人工阻塞，现有自动续办ACTIVE，本地提交不推送。
+
 ## 2026-11-05 r209：编译期桌面native组合与私有管理通道路由
 
 承接r208/8876c1b，先读Git/交接，确认无前组重型构建；磁盘约134GiB可用。仅本机源码/组件检查，没有SSH、服务部署、新签名包或OS/GUI操作；r201退休及历史未知现场未动，docs/archive/仍未跟踪、未纳入提交。
