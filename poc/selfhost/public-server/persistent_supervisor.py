@@ -51,6 +51,7 @@ class Owner:
         self.removal_enabled = False
         self.removal_requested = False
         self.removal_completed = False
+        self.desktop_permission = None
         self.lifecycle = self.endpoint if isinstance(self.endpoint,LocalSupervisor) else LocalSupervisor(child)
 
     def call(self, request):
@@ -108,8 +109,14 @@ class Owner:
                 self.child.proc.stdout.close()
                 self.joined=True;self.fault=True
             return {'status':'owner_fault_closed','joined':True,'fault':True,'exit_code':1}
-        if getattr(self.child,'local_cancel_sent',False) or self.joined or not isinstance(request, dict) or request.get("Op") not in {
-                "device", "network", "provision", "product_stage", "product_count", "revoke_session", "quiesce_session", "preprovision_terminal", "start_controller"}:
+        if getattr(self.child,'local_cancel_sent',False) or self.joined or not isinstance(request, dict):
+            raise RuntimeError("holder_request_rejected")
+        op = request.get("Op")
+        if self.desktop_permission is not None and op in ("desktop_begin", "desktop_status", "desktop_state", "desktop_arm_stop"):
+            if request != {"Op": op}:
+                raise RuntimeError("holder_request_rejected")
+        elif op not in ("device", "network", "provision", "product_stage", "product_count", "revoke_session",
+                        "quiesce_session", "preprovision_terminal", "start_controller"):
             raise RuntimeError("holder_request_rejected")
         return self.endpoint(request)
 
@@ -139,6 +146,10 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
             raise RuntimeError("holder_owner_not_ready_preserve_state")
         native = NativeUnix(ready["control_socket"]) if require_native else None
         owner = Owner(child, native)
+        if "Permission" in ready:
+            if ready["Permission"] not in ("desktop-view", "desktop-control"):
+                raise RuntimeError("holder_desktop_scope_rejected")
+            owner.desktop_permission = ready["Permission"]
         removal=type(ready.get('removal_protocol')) is int and ready.get('removal_protocol')==1 and type(ready.get('uninstaller_process_id')) is int and ready['uninstaller_process_id']>0
         owner.removal_enabled=removal
         # Publish public discovery only; authority material and application
@@ -148,6 +159,8 @@ def serve(directory, command, child_factory=JoinedPipe, *, require_native=True):
         if require_native:
             metadata.update(control_socket=ready["control_socket"], supervisor_process_id=child.proc.pid,fault_protocol=1,local_cancel_protocol=1)
         if removal:metadata.update(removal_protocol=1,uninstaller_process_id=ready['uninstaller_process_id'])
+        if owner.desktop_permission is not None:
+            metadata["desktop_permission"] = owner.desktop_permission
         published = json.dumps(metadata, separators=(",", ":")).encode()
         pending_file=directory/("owner.json."+str(os.getpid())+".new")
         with pending_file.open("xb") as output:

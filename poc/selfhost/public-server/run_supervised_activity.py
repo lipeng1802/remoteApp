@@ -539,6 +539,8 @@ def resume_windows(work):
 
 def exercise(work, preprovision_fault=False):
     work,m=metadata(work)
+    if "desktop_permission" in m:
+        raise RuntimeError("activity_desktop_requires_direct_observation")
     public=json.loads((work/"windows-bootstrap.json").read_text())
     target=WindowsRelay(WIN,m["win_dir"]+"\\supervised-control-relay.exe",public["control_pipe"])
     target=RecordedEndpoint(work,'target',target)
@@ -576,6 +578,21 @@ def exercise(work, preprovision_fault=False):
         try:capture(work,target,controller)
         except Exception:pass
         raise
+
+
+def exercise_desktop(work, *, observe_gui, request_stop):
+    work, m = metadata(work)
+    if m.get("desktop_permission") != "desktop-control" or m.get("program_removal"):
+        raise RuntimeError("activity_desktop_scope_rejected")
+    windows = json.loads((work / "windows-bootstrap.json").read_text())
+    mac = json.loads((work / "mac-bootstrap.json").read_text())
+    target = WindowsRelay(WIN, m["win_dir"] + "\\supervised-control-relay.exe", windows["control_pipe"])
+    controller = Endpoint(m["holder_dir"])
+    return Activity(work).exercise_desktop(
+        RecordedEndpoint(work, "target", target), RecordedEndpoint(work, "controller", controller),
+        expiry(work), target_bootstrap=windows, controller_bootstrap=mac,
+        observe_gui=observe_gui, request_stop=request_stop,
+    )
 
 
 def stop(work):

@@ -79,10 +79,9 @@ def start_after_target_ready(target, controller, *, expires_at, clock=time.time,
     raise RuntimeError("session_target_readiness_unconfirmed")
 
 
-def desktop_target_ready(target):
-    state = target({"Op": "desktop_state"})
+def desktop_live_state(state):
     if state == {"status": "product_unavailable"}:
-        return False
+        return None
     counters = ("frames", "inputs", "releases", "held")
     flags = ("stop_requested", "ended", "failed")
     require(type(state) is dict and set(state) == {"status", *counters, *flags}
@@ -90,8 +89,12 @@ def desktop_target_ready(target):
             and all(type(state[k]) is int and state[k] >= 0 for k in counters)
             and all(state[k] is False for k in flags),
             "desktop_target_state_rejected")
+    return state
+
+
+def desktop_target_ready(target):
     # Listener readiness precedes the peer connection and the first frame.
-    return True
+    return desktop_live_state(target({"Op": "desktop_state"})) is not None
 
 
 def observe_growth(endpoints, *, monotonic=time.monotonic, sleep=time.sleep,

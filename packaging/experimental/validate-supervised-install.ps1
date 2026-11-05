@@ -1,6 +1,7 @@
-param([switch]$ResumeFiles, [switch]$StayReady, [switch]$RetainUntilStop, [switch]$ProgramRemoval)
+param([switch]$ResumeFiles, [switch]$StayReady, [switch]$RetainUntilStop, [switch]$ProgramRemoval, [ValidateSet('desktop-view','desktop-control')][string]$DesktopPermission)
 $ErrorActionPreference = 'Stop'
 if ($RetainUntilStop -and -not $StayReady) { throw 'Retained owner requires StayReady' }
+if ($DesktopPermission -and (-not $RetainUntilStop -or $ProgramRemoval -or $ResumeFiles)) { throw 'Desktop TEST requires a fresh retained owner' }
 # Run in the logged-in desktop (or an Interactive scheduled task). This only
 # initializes a fresh isolated TEST root; it does not register an online device.
 $publicReady = Join-Path $PSScriptRoot 'owner-ready.json'
@@ -52,6 +53,7 @@ try {
     $process.StandardInput.WriteLine('{"Op":"open"}')
     $ready = Read-Reply
     if ($ready.status -ne 'ready' -or $ready.control_pipe -notmatch '^\\\\\.\\pipe\\remoteapp-session-[0-9a-f]{32}$') { throw 'Invalid desktop supervisor readiness' }
+    if ([string]$ready.Permission -cne [string]$DesktopPermission) { throw 'Supervisor permission mismatch' }
     if($ProgramRemoval){
         if($ready.removal_protocol -ne 1 -or $ready.uninstaller_process_id -le 0){throw 'Armed removal bootstrap missing'}
         $removalState=New-SupervisedRemovalState $process
@@ -63,14 +65,16 @@ try {
         $writer = New-Object System.IO.StreamWriter($pipe)
         $writer.AutoFlush = $true
         $reader = New-Object System.IO.StreamReader($pipe)
-        $writer.WriteLine('{"Op":"product_count"}')
+        if ($DesktopPermission) { $writer.WriteLine('{"Op":"desktop_state"}') }
+        else { $writer.WriteLine('{"Op":"product_count"}') }
         $replyTask = $reader.ReadLineAsync()
         if (-not $replyTask.Wait(10000)) { throw 'Business pipe query timeout' }
-        if (($replyTask.Result | ConvertFrom-Json).status -ne 'product_unavailable') { throw 'Idle product count did not match' }
+        if (($replyTask.Result | ConvertFrom-Json).status -ne 'product_unavailable') { throw 'Idle product state did not match' }
     } finally { $pipe.Dispose() }
     if ($StayReady) {
         # Public discovery only. Invitations/grants never enter this file.
         $public=@{version=1;process_id=$process.Id;control_pipe=$ready.control_pipe;vault_scope=$ready.vault_scope;public_key=$ready.public_key}
+        if ($DesktopPermission) { $public.desktop_permission = $DesktopPermission }
         if($RetainUntilStop -and $faultAvailable){$public.fault_protocol=1;$public.local_cancel_protocol=1}
         if($ProgramRemoval){$public.removal_protocol=1;$public.uninstaller_process_id=$ready.uninstaller_process_id}
         $published = ($public | ConvertTo-Json -Compress)

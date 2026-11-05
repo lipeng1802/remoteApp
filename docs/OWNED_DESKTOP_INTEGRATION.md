@@ -213,3 +213,13 @@ Mac 本机停止意图和活动 GUI 状态通过同一 native owner 核对。Win
 `desktop-test-authority serve <stage>` 仅尝试一次。在创建 verifier 前清空并回读本 stage 的隔离 ACL，然后接入监督器和同 UID 私有 broker。Authority 仅监听随机回环 TCP 端口。它在私有 stage 内原子发布 `authority-ready.json`，包含端口、短期签名 profile 和独立公开根。通过受信的管理连接读取该文件并单独核对公开根，向 r215 builder 提供其中的 profile 与根，权威访问通过固定测试转发。Headscale TLS 和 authority 的临时 TLS CA 分开验证。回执是启动材料，活性仍需经实际签名 HTTPS 请求核实。
 
 客户端完成撤销、停止和实际退出后，向 authority 发正常终止信号并等待其实际退出。只有 HTTPS、broker、策略监督器、verifier 和 Store 全部正常收尾并确认空 ACL，才写 `authority-joined`。在同一隔离 Headscale 仍运行时调用 `desktop-test-authority retire <stage>`，仅回收 Store 已记录工单和该 verifier，再停隔离 Headscale 并确认退出。未知启动或关闭结果保留同一 stage 与所有权证据。不要复用该 stage，也不要把 ready 文件当成正常退出证明。
+
+## r218 双端 GUI TEST 协调
+
+Windows 的隐藏 Interactive 包装器以 `-StayReady -RetainUntilStop -DesktopPermission desktop-control` 启动新持有器，核对 native READY 的范围，用 `desktop_state` 做空闲就绪检查。Mac 持有器从受信 supervisor READY 发布同一范围，转发精确无参数桌面帧。旧固定载荷流程仍使用原 PONG 入口。
+
+使用 `run_supervised_activity.exercise_desktop` 接已经验证的两端持有器。Windows 先显示本次邀请，Mac 本机输入邀请并确认，Windows 再对本次申请明确决定。协调器核对两端同一请求、完整授权、固定控制范围和与启动回执绑定的设备身份，之后才调用两端原生时钟检查与并行 provision。目标监听和 GUI 活性都就绪才启动控制端。
+
+`observe_gui` 由可信操作者直接观察 Mac 显示的 Windows 画面，以及 Windows 上鼠标和键盘的实际效果。两端活性和帧数、输入计数作为辅助证据。随后 `request_stop` 在 Mac GUI 发起停止，由原生 owner 核对停止意图并按计划停止。两端产品退出后才确认独立撤销，再由原持有器的停止接口证明实际零退出，最后精确退休。
+
+明确拒绝或撤销可通过两端原生终态确认收尾。已掌握确切目标授权时，异常路径只尝试一次独立撤销。出现未知结果时保留持有器和隧道，禁止自动重试桌面工单或以停止标记代替实际退出。日志只保留公开阶段与聚合计数。

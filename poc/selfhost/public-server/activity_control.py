@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 
+from supervised_desktop import DESKTOP_EVIDENCE, desktop_round
 from supervised_session import active_round
 
 
@@ -34,12 +35,7 @@ class Activity:
         finally:os.close(descriptor)
 
     def exercise(self,target,controller,expiry,episode=active_round):
-        state=self.read()
-        if state.get("phase")!="owners_ready":
-            raise RuntimeError("activity_requires_fresh_ready_owners")
-        # Persist uncertainty BEFORE registration/claim/provision can escape.
-        # An exception leaves no automatic restart/reapproval/stop permission.
-        self.save({"version":1,"phase":"exercise_outcome_unknown"})
+        self.begin_exercise()
         try:
             result=episode(target,controller,profile_expires_at=expiry,quiesce_before_revoke=True)
         except Exception:
@@ -53,10 +49,37 @@ class Activity:
         self.save({"version":1,"phase":"normal_revoked","checks":result})
         return result
 
+    def begin_exercise(self, *, desktop=False):
+        if self.read().get("phase") != "owners_ready":
+            raise RuntimeError("activity_requires_fresh_ready_owners")
+        # Persist uncertainty before any registration or provision can escape.
+        state = {"version": 1, "phase": "exercise_outcome_unknown"}
+        if desktop:
+            state["desktop"] = True
+        self.save(state)
+
+    def exercise_desktop(self, target, controller, expiry, **options):
+        self.begin_exercise(desktop=True)
+        try:
+            result = desktop_round(target, controller, profile_expires_at=expiry, **options)
+        except Exception:
+            raise RuntimeError("activity_outcome_unknown_preserve_owners_and_tunnels") from None
+        state = {"version": 1, "desktop": True}
+        if result == {"preprovision_terminal": True} and result["preprovision_terminal"] is True:
+            state.update(phase="preprovision_terminal", preprovision=True)
+        elif set(result) == DESKTOP_EVIDENCE and all(v is True for v in result.values()):
+            state.update(phase="normal_revoked", checks=result)
+        else:
+            raise RuntimeError("activity_evidence_rejected_preserve_owners")
+        self.save(state)
+        return result
+
     def stop_owners(self,stop_target,stop_controller):
         state=self.read()
         if state.get("phase") not in ("normal_revoked","preprovision_terminal","owner_stop_outcome_unknown"):
             raise RuntimeError("activity_revocation_not_verified_preserve_signers")
+        if state.get("desktop") is True and state["phase"] == "owner_stop_outcome_unknown":
+            raise RuntimeError("desktop_owner_stop_unknown_preserve_owners")
         joined=state.get("joined",{})
         if not isinstance(joined,dict) or any(k not in ("target","controller") or v is not True for k,v in joined.items()):
             raise RuntimeError("activity_join_state_rejected")

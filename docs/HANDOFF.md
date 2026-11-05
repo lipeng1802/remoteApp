@@ -1,5 +1,19 @@
 # 下一次 Codex 会话交接
 
+## 2026-11-05 r218 双端 GUI TEST 申请、观察与停止协调
+
+承接 0cad8f9，开始时无前组重型任务、磁盘约 128 GiB。本轮只有本机源码及 Python 边界测试，没有部署、访问远端或重探测 19443。
+
+新桌面协调先从同一可信启动回执绑定双方身份和 control 范围，再由两个已驻留 owner 各发一次 `desktop_begin`。邀请、验证码、决定均由本机 GUI 与原生签名通路处理。仅在两端报告同一请求、完整同一授权后通过原生 grant_clock、并行 provision、ACTIVE 与目标监听/GUI 活性接入启动。键鼠效果和可见画面来自操作者直接观察，附加双端帧与输入计数。Mac 本机停止意图、双端计划 join 和目标独立撤销均需确切回执后才允许走原 owner 退出流程。
+
+授权已由可信目标 owner 观测时，故障仅单次尝试独立撤销。任何未知回执保留原两端 owner/隧道，禁止重做工单或自动重发停止。只有双方确切拒绝或撤销且独立终态确认均通过，才允许按未 provision 分支正常退出。trace 限定公开阶段与聚合计数，邀请/申请 ID/授权/原始错误不落盘。
+
+Mac holder 由已验证 supervisor READY 取得范围并转发四个 selector-free 桌面命令。Windows Interactive 包装器按编译范围核对 READY，桌面启动探测使用 desktop_state。原固定载荷路径仍走 product_count。新增 `exercise_desktop` 接原管理通道和直接观察回调，拒绝把桌面工单送入固定载荷自动批准/PONG流程。
+
+Python 协调、回执、持有器及管理回归 58 项通过，exec60021 exit0。最后补目标已批准但控制端回执丢失，以及桌面 trace 脱敏，定向 9 项通过，exec796636 exit0。日志在 artifacts/connection-poc/r218-desktop-coordination/。Windows PowerShell 包装器变更仍需在下一次隐藏 Interactive 真机工单中验证。
+
+下一组把 r217 私有 stage 的 provider/authority 启动和端口证明、r215 新鲜桌面包、r218 协调及原精确退出/退休接到一条可执行双机工单。先做可离线验证的接线，保留 19443 的原阻塞和无重复探测规则。等待入口变化证据后再一次预检，真实双机必须看见画面和输入效果并完成零退出。现有自动续办保持 ACTIVE。
+
 ## 2026-11-05 r217 独立桌面 authority 与签名启动材料
 
 承接 1bac922，分支和历史现场保持原约束。确认无上一组重型进程，工作卷约 129 GiB，构建中仍约 127 GiB。Go 采用 GOMAXPROCS=2、GOFLAGS=-p=2、nice10 及可信离线缓存，重型任务串行。

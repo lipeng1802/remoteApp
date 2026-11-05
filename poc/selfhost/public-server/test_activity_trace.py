@@ -76,3 +76,21 @@ class PublicActivityTrace(unittest.TestCase):
             self.assertNotIn('stage',rows[1]);self.assertEqual(rows[2]['pongs'],12)
             self.assertNotIn('preauth_rejected',rows[2]);self.assertIs(rows[3]['passed'],True)
             self.assertNotIn('PRIVATE',repr(rows))
+
+    def test_desktop_trace_keeps_only_phase_and_aggregate_state(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            replies = iter((
+                {"status": "desktop_status", "phase": "approved", "grant": "PRIVATE", "request_id": "PRIVATE"},
+                {"status": "desktop_state", "frames": 5, "inputs": 2, "held": True,
+                 "stop_requested": False, "unknown": "PRIVATE"},
+            ))
+            traced = RecordedEndpoint(Path(d), "target", lambda _: next(replies))
+            traced({"Op": "desktop_status"})
+            traced({"Op": "desktop_state"})
+            rows = [json.loads(p.read_text()) for p in sorted(traced.directory.glob("*.json"))][1::2]
+            self.assertEqual(rows[0]["desktop_phase"], "approved")
+            self.assertEqual((rows[1]["frames"], rows[1]["inputs"]), (5, 2))
+            self.assertIs(rows[1]["stop_requested"], False)
+            self.assertNotIn("held", rows[1])
+            self.assertNotIn("PRIVATE", repr(rows))

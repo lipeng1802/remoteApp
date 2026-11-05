@@ -95,5 +95,19 @@ for line in sys.stdin:
             owner.call({"Op":"owner_stop"})
         self.assertFalse(owner.joined)
 
+    def test_desktop_holder_requires_ready_scope_and_exact_frames(self):
+        frames = []
+        owner = Owner(object(), lambda frame: frames.append(frame))
+        for op in ("desktop_begin", "desktop_status", "desktop_state", "desktop_arm_stop"):
+            with self.assertRaisesRegex(RuntimeError, "holder_request_rejected"):
+                owner.call({"Op": op})
+        owner.desktop_permission = "desktop-control"
+        for op in ("desktop_begin", "desktop_status", "desktop_state", "desktop_arm_stop"):
+            with self.assertRaisesRegex(RuntimeError, "holder_request_rejected"):
+                owner.call({"Op": op, "Device": {"action": "approve"}})
+            owner.call({"Op": op})
+        self.assertEqual(frames, [{"Op": op} for op in
+                                 ("desktop_begin", "desktop_status", "desktop_state", "desktop_arm_stop")])
+
 
 if __name__ == "__main__": unittest.main()

@@ -24,7 +24,8 @@ class RecordedEndpoint:
     def __call__(self,frame):
         with self.lock:
             op=frame.get('Op') if isinstance(frame,dict) else None
-            if op not in ('device','network','provision','product_stage','product_count','quiesce_session','revoke_session','preprovision_terminal','start_controller'):op='other'
+            if op not in ('device','network','provision','product_stage','product_count','quiesce_session','revoke_session','preprovision_terminal','start_controller',
+                          'desktop_begin','desktop_status','desktop_state','desktop_arm_stop'):op='other'
             nested=frame.get('Device' if op=='device' else 'Network',{}) if isinstance(frame,dict) else {}
             action=nested.get('action') if isinstance(nested,dict) else None
             if action not in ('register','invite','claim','incoming','approve','status','revoke','grant_clock'):action='other'
@@ -34,7 +35,8 @@ class RecordedEndpoint:
                 self.event('outcome_unknown',op,action)
                 raise
             status=result.get('status') if isinstance(result,dict) else None
-            if status not in ('device_result','network_authorization','network_watch','product_stage','product_count','product_unavailable','session_quiesced','session_revoked','preprovision_terminal','controller_started','failed','unavailable','rejected','request_rejected'):status='other'
+            if status not in ('device_result','network_authorization','network_watch','product_stage','product_count','product_unavailable','session_quiesced','session_revoked','preprovision_terminal','controller_started','failed','unavailable','rejected','request_rejected',
+                              'desktop_pending','desktop_status','desktop_state','desktop_stop_armed'):status='other'
             evidence = {}
             if status == 'product_stage':
                 from startup_diagnostic import STAGES
@@ -46,6 +48,17 @@ class RecordedEndpoint:
                     if type(n) is int and 0 <= n <= 2**63-1:
                         evidence[key] = n
                 for key in ('ended','pin_rejected'):
+                    if type(result.get(key)) is bool:
+                        evidence[key] = result[key]
+            if status == 'desktop_status':
+                if result.get('phase') in ('idle','waiting','approved','denied','revoked','expired','declined','fault','stopped'):
+                    evidence['desktop_phase'] = result['phase']
+            if status == 'desktop_state':
+                for key in ('frames','inputs','releases','held'):
+                    n = result.get(key)
+                    if type(n) is int and 0 <= n <= 2**63-1:
+                        evidence[key] = n
+                for key in ('stop_requested','ended','failed'):
                     if type(result.get(key)) is bool:
                         evidence[key] = result[key]
             if status == 'controller_started' and type(result.get('passed')) is bool:
