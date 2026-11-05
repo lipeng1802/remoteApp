@@ -6,6 +6,14 @@
 
 先在板上验证 ARM64 网络组件、设备注册、授权与撤销，再适配目标桌面的屏幕采集、键鼠注入与权限，最终交付 ARM64 安装包并用真机验证跨网络连接、控制、断开及卸载。Android 或无桌面场景需按实际系统与用途另定范围。
 
+## 2026-11-05 r214 后续：独立 TEST 入口待恢复
+
+源码与双端发布物已保存，当前代码提交 3b95842。Mac 和 Windows 的实际 GUI 预备/进程退出组件检查通过。预发布现有 Headscale 及正式 authority/verifier 仍持有原控制面，因此新桌面工单需要可达的隔离入口。
+
+预发布 19443 当次空闲。在同一个 SSH 会话短时启动仅回复合成测试字节的 TCP listener。首个命令因服务器无 python3 在 bind 前退出127，改用现有 python 完成一次监听。Windows 单次连接等待3.5秒超时，exit2；Mac 单次探测未收到回执。原 listener 自行关闭且实际 exit0，MAC=False WIN=False LISTENER_CLOSED。证据 artifacts/connection-poc/r214-desktop-stop/isolated-port-{python2,windows}.txt。这里仅验证入口连通，尚未创建新 authority、安装、签名短包或真正远控会话。业务 Nginx、控制面、旧 Store 和历史工单均保留。
+
+按本轮连通超时约束暂停现有 remoteapp 续办，等待可验证的路由变化。最小人工操作是提供 Mac 和 Windows 测试机可达的独立测试入口，例如为两台测试机放行预发布 TCP 19443，随后回复。候选 listener 已关闭，环境改变后由下一轮一次验证，再建立有 TLS 校验、独立 Headscale/authority/verifier 和新根的 TEST 服务。准备签名工单时复用本轮固定摘要 GUI 构建物并生成新鲜 profile。真实画面、键鼠和活动停机/撤销仍待双机验收。
+
 ## 2026-11-05 r214：活动桌面计划停止与真实发布产物预检
 
 承接 r213/d592b74。无前组重型任务，磁盘约133GiB。实现精确 desktop_arm_stop，要求已 provision、原 session 和 ACTIVE watch 仍有效、同一 GUI 有画面且健康。控制端必须已经记录 Mac 本机停止意图。目标在同一个活动 Windows GUI 的私有管道一次标记预期断流。仅计划标记后的20秒内，Windows 可按计划归类传输 I/O 关闭。其他协议、认证和释放失败仍走故障。本机停止及物理紧急停止仍可立即取消采集和输入。
