@@ -58,9 +58,12 @@ class Activity:
             state["desktop"] = True
         self.save(state)
 
-    def exercise_desktop(self, target, controller, expiry, **options):
+    def exercise_desktop(self, target, controller, expiry, *, record=None, **options):
         self.begin_exercise(desktop=True)
         try:
+            if record is not None:
+                target = record("target", target)
+                controller = record("controller", controller)
             result = desktop_round(target, controller, profile_expires_at=expiry, **options)
         except Exception:
             raise RuntimeError("activity_outcome_unknown_preserve_owners_and_tunnels") from None

@@ -51,7 +51,11 @@ func TestWindowsFaultHolderFixture(t *testing.T) {
 			if localCancel {
 				status = "local_cancel_rejected"
 			}
-			emit(map[string]string{"status": status})
+			rejection := map[string]string{"status": status}
+			if localCancel {
+				rejection["reason"] = "child_terminal_unconfirmed"
+			}
+			emit(rejection)
 			continue
 		}
 		if mode == "late-ready" {

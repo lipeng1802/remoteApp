@@ -155,7 +155,10 @@ func serve(ctx context.Context, root string) (result error) {
 			result = errStage
 		}
 	}()
-	if !super.Ready() || ctx.Err() != nil {
+	readyCtx, cancelReady := context.WithTimeout(ctx, 10*time.Second)
+	ready := super.WaitReady(readyCtx)
+	cancelReady()
+	if !ready || ctx.Err() != nil {
 		return errStage
 	}
 	return serveEndpoint(ctx, root, hex.EncodeToString(store.PublicKey()), super.Authority(), super.Done())

@@ -5,6 +5,8 @@ import (
 	"io"
 	"net"
 	"time"
+
+	"remoteapp.local/selfhost-poc/startuptrace"
 )
 
 // Tunnel admits an encrypted product stream only after the same bounded mutual
@@ -65,6 +67,9 @@ func Tunnel(ctx context.Context, conn net.Conn, c Config, check Check, server bo
 	defer local.Close()
 	defer closeOnCancel(ctx, local)()
 	conn.SetDeadline(time.Time{})
+	// The first observed end wins. In particular, cancellation initiated by
+	// the authorization monitor must not be reported as a copy failure.
+	ended := make(chan startuptrace.Stage, 3)
 	watchJoined := make(chan struct{})
 	defer func() { cancel(); <-watchJoined }()
 	go func() {
@@ -77,20 +82,28 @@ func Tunnel(ctx context.Context, conn net.Conn, c Config, check Check, server bo
 				return
 			case <-t.C:
 				if !authorized(ctx, c, check) {
-					cancel()
+					ended <- startuptrace.LifecycleTunnelAuthorizationEnded
 					return
 				}
 			}
 		}
 	}()
-	results := make(chan error, 2)
-	copyStream := func(dst, src net.Conn) { _, e := io.CopyBuffer(dst, src, make([]byte, 32*1024)); results <- e }
-	go copyStream(local, conn)
-	go copyStream(conn, local)
-	<-results
+	copiesDone := make(chan struct{}, 2)
+	copyStream := func(dst, src net.Conn, stage startuptrace.Stage) {
+		_, _ = io.CopyBuffer(dst, src, make([]byte, 32*1024))
+		ended <- stage
+		copiesDone <- struct{}{}
+	}
+	go copyStream(local, conn, startuptrace.LifecycleTunnelOverlayToLocalEnded)
+	go copyStream(conn, local, startuptrace.LifecycleTunnelLocalToOverlayEnded)
+	stage := <-ended
+	if ctx.Err() == nil {
+		startuptrace.Emit(ctx, stage)
+	}
 	cancel()
 	conn.Close()
 	local.Close()
-	<-results // both bounded copy workers must leave before normal helper shutdown
+	<-copiesDone
+	<-copiesDone
 	return ctx.Err()
 }

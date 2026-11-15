@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +19,13 @@ import (
 )
 
 func desktopSupervisorFixture(t *testing.T, d *supervisorDriver) (*NetworkSupervisor, *invite.Store, *liveDependency) {
+	t.Helper()
+	s, st, v := startDesktopSupervisorFixture(t, d)
+	waitSupervisor(t, s.Ready)
+	return s, st, v
+}
+
+func startDesktopSupervisorFixture(t *testing.T, d invite.ProvisionDriver) (*NetworkSupervisor, *invite.Store, *liveDependency) {
 	t.Helper()
 	dir, e := filepath.EvalSymlinks(t.TempDir())
 	if e != nil {
@@ -45,8 +53,80 @@ func desktopSupervisorFixture(t *testing.T, d *supervisorDriver) (*NetworkSuperv
 			t.Error("desktop supervisor did not join")
 		}
 	})
-	waitSupervisor(t, s.Ready)
 	return s, st, v
+}
+
+type firstCycleDriver struct {
+	supervisorDriver
+	writes    atomic.Int32
+	entered   chan struct{}
+	release   chan struct{}
+	failCycle bool
+}
+
+func (d *firstCycleDriver) ReplaceRules(ctx context.Context, rules []invite.NetworkRule) error {
+	// The initial reconciliation makes two writes. Hold the first write
+	// of the next reconciliation, which runs in the maintenance worker.
+	if d.writes.Add(1) == 3 {
+		close(d.entered)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-d.release:
+		}
+		if d.failCycle {
+			return invite.ErrDenied
+		}
+	}
+	return d.supervisorDriver.ReplaceRules(ctx, rules)
+}
+
+func TestDesktopSupervisorStartupWaitsForFirstPolicyCycle(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		failCycle bool
+	}{
+		{name: "delayed_success"},
+		{name: "first_cycle_failure", failCycle: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := &firstCycleDriver{
+				entered: make(chan struct{}), release: make(chan struct{}), failCycle: tc.failCycle,
+			}
+			s, _, _ := startDesktopSupervisorFixture(t, d)
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			select {
+			case <-d.entered:
+			case <-ctx.Done():
+				t.Fatal("startup maintenance did not reach the policy driver")
+			}
+			if s.Ready() {
+				t.Fatal("policy projection is still in flight")
+			}
+			result := make(chan bool, 1)
+			go func() { result <- s.WaitReady(ctx) }()
+			select {
+			case <-result:
+				t.Fatal("startup returned before the first policy cycle finished")
+			case <-time.After(20 * time.Millisecond):
+			}
+			canceled, stop := context.WithCancel(ctx)
+			stop()
+			if s.WaitReady(canceled) {
+				t.Fatal("canceled waiter reported ready")
+			}
+			close(d.release)
+			select {
+			case ready := <-result:
+				if ready == tc.failCycle {
+					t.Fatalf("startup ready = %t with first cycle failure = %t", ready, tc.failCycle)
+				}
+			case <-ctx.Done():
+				t.Fatal("startup did not observe the first policy result")
+			}
+		})
+	}
 }
 
 func desktopNonce(t *testing.T) string {

@@ -103,6 +103,23 @@ class Pair:
 
 
 class DesktopRoundTests(unittest.TestCase):
+    def test_trace_setup_requires_fresh_owners_and_consumes_the_attempt(self):
+        with tempfile.TemporaryDirectory() as root:
+            activity = Activity(root)
+            activity.save({"version": 1, "phase": "owners_ready"})
+            calls = []
+
+            def record(role, endpoint):
+                calls.append(role)
+                self.assertEqual(activity.read()["phase"], "exercise_outcome_unknown")
+                raise FileExistsError()
+
+            with self.assertRaisesRegex(RuntimeError, "outcome_unknown"):
+                activity.exercise_desktop(self.fail, self.fail, 1500, record=record)
+            with self.assertRaisesRegex(RuntimeError, "fresh_ready"):
+                activity.exercise_desktop(self.fail, self.fail, 1500, record=record)
+            self.assertEqual(calls, ["target"])
+
     def test_actual_observations_required_before_planned_join_and_revoke(self):
         with tempfile.TemporaryDirectory() as root:
             activity = Activity(root)

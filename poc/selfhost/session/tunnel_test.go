@@ -5,11 +5,13 @@ import (
 	"context"
 	"io"
 	"net"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"remoteapp.local/selfhost-poc/invite"
+	"remoteapp.local/selfhost-poc/startuptrace"
 )
 
 func TestTunnelOpaqueBytesAndAuthorityClosure(t *testing.T) {
@@ -83,5 +85,82 @@ func TestFixedPayloadProofCannotEnterProductTunnel(t *testing.T) {
 	}
 	if e := <-done; e == nil || opened.Load() != 0 {
 		t.Fatal("cross-domain peer opened upstream")
+	}
+}
+
+func TestTunnelTerminalTrace(t *testing.T) {
+	for _, mode := range []string{"authorization", "local", "overlay", "cancel", "disabled"} {
+		t.Run(mode, func(t *testing.T) {
+			f := portableSetup(t)
+			server, client := sockets(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			defer cancel()
+			local, targetApp := net.Pipe()
+			upstream, controllerApp := net.Pipe()
+			defer targetApp.Close()
+			defer controllerApp.Close()
+
+			reader, writer, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			original := os.Stderr
+			os.Stderr = writer
+			defer func() { os.Stderr = original; writer.Close(); reader.Close() }()
+
+			done := make(chan error, 2)
+			var denied atomic.Bool
+			check := func(ctx context.Context, g invite.Grant, target, controller string) bool {
+				return !denied.Load() && f.portableCheck(ctx, g, target, controller)
+			}
+			go func() {
+				traceCtx := startuptrace.Context(ctx, mode != "disabled")
+				done <- Tunnel(traceCtx, server, f.server, check, true, func(context.Context) (net.Conn, error) { return local, nil })
+			}()
+			go func() {
+				done <- Tunnel(ctx, client, f.probe, f.portableCheck, false, func(context.Context) (net.Conn, error) { return upstream, nil })
+			}()
+			controllerApp.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			targetApp.SetReadDeadline(time.Now().Add(2 * time.Second))
+			sent := make(chan error, 1)
+			go func() { _, err := controllerApp.Write([]byte{42}); sent <- err }()
+			var got [1]byte
+			_, readErr := io.ReadFull(targetApp, got[:])
+			writeErr := <-sent
+			if readErr != nil || writeErr != nil || got[0] != 42 {
+				cancel()
+				<-done
+				<-done
+				t.Fatal("tunnel did not forward data", readErr, writeErr)
+			}
+
+			var expected startuptrace.Stage
+			switch mode {
+			case "authorization":
+				expected = startuptrace.LifecycleTunnelAuthorizationEnded
+				denied.Store(true)
+			case "local":
+				expected = startuptrace.LifecycleTunnelLocalToOverlayEnded
+				targetApp.Close()
+			case "overlay":
+				expected = startuptrace.LifecycleTunnelOverlayToLocalEnded
+				controllerApp.Close()
+			case "cancel":
+				cancel()
+			case "disabled":
+				targetApp.Close()
+			}
+			<-done
+			<-done
+			writer.Close()
+			raw, err := io.ReadAll(reader)
+			want := ""
+			if expected != "" {
+				want = "PRODUCT_STAGE " + string(expected) + "\n"
+			}
+			if err != nil || string(raw) != want {
+				t.Fatalf("trace = %q, %v, want %q", raw, err, want)
+			}
+		})
 	}
 }

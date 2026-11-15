@@ -10,10 +10,11 @@ import (
 // before closing/replacing Store or Driver. No provider output or secrets are
 // exposed through status. A successful cycle means the full Reconcile passed.
 type Maintenance struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-	mu     sync.Mutex
-	status MaintenanceStatus
+	cancel         context.CancelFunc
+	done           chan struct{}
+	firstCycleDone chan struct{}
+	mu             sync.Mutex
+	status         MaintenanceStatus
 }
 type MaintenanceStatus struct {
 	Cycles, Failures, ConsecutiveFailures uint64
@@ -26,6 +27,10 @@ func (m *Maintenance) Status() MaintenanceStatus {
 	defer m.mu.Unlock()
 	return m.status
 }
+
+// FirstCycleDone closes after the first policy reconciliation records its result.
+func (m *Maintenance) FirstCycleDone() <-chan struct{} { return m.firstCycleDone }
+
 func (m *Maintenance) Stop(ctx context.Context) error {
 	m.cancel()
 	select {
@@ -45,7 +50,11 @@ func (b *ProvisionBackend) StartMaintenance(ctx context.Context, interval, maxBa
 	}
 	b.fence()
 	run, cancel := context.WithCancel(ctx)
-	m := &Maintenance{cancel: cancel, done: make(chan struct{})}
+	m := &Maintenance{
+		cancel:         cancel,
+		done:           make(chan struct{}),
+		firstCycleDone: make(chan struct{}),
+	}
 	go func() {
 		defer close(m.done)
 		defer b.maintenance.Store(false)
@@ -70,6 +79,9 @@ func (b *ProvisionBackend) StartMaintenance(ctx context.Context, interval, maxBa
 				delay = interval
 			}
 			m.status.NextDelay = delay
+			if m.status.Cycles == 1 {
+				close(m.firstCycleDone)
+			}
 			m.mu.Unlock()
 			timer := time.NewTimer(delay)
 			select {

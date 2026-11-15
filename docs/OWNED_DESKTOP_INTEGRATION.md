@@ -228,17 +228,28 @@ Windows 的隐藏 Interactive 包装器以 `-StayReady -RetainUntilStop -Desktop
 
 确认隔离 TCP 19443 对两台测试机可达后，在预发布的 `/var/lib/remoteapp-desktop-test/` 私有父目录创建一个全新 stage。按 r217 使用已核对摘要的 authority 产物完成 prepare，放置本 stage 的受信控制面 TLS 输入。以现有受信 Headscale 0.29.4 可执行文件、空继承环境和本 stage 的 `headscale.yaml` 先做 `configtest`，再启动独立 provider。provider 与 authority 分别由可信本机进程管理器持有。等待 authority 的新鲜 ready 回执，经受信管理通道取得独立公开根，并在本机工作卷确认没有前一组重型构建。
 
-在仓库根运行以下显式阶段，每一步核对上一阶段回执。命令中的 `STAGE`、`ROOT` 和 `WORK` 是实际隔离 stage、已核对的公开根和本地工单路径。
+在仓库根用支持 TLS 1.3 和 Ed25519 证书的 Python 3 运行以下显式阶段，每一步核对上一阶段回执。Mac 测试机使用 OpenSSL 版的 /usr/local/bin/python3。命令中的 `STAGE`、`ROOT` 和 `WORK` 是实际隔离 stage、已核对的公开根和本地工单路径。
 
 ```sh
 runner=poc/selfhost/public-server/run_supervised_activity.py
-nice -n 10 python3 "$runner" prepare-desktop "$STAGE" "$ROOT"
-nice -n 10 python3 "$runner" "$WORK" start
-python3 "$runner" "$WORK" exercise-desktop
-python3 "$runner" "$WORK" stop
-python3 "$runner" "$WORK" retire
+py=/usr/local/bin/python3
+nice -n 10 "$py" "$runner" prepare-desktop "$STAGE" "$ROOT"
+nice -n 10 "$py" "$runner" "$WORK" start
+"$py" "$runner" "$WORK" exercise-desktop
+"$py" "$runner" "$WORK" stop
+"$py" "$runner" "$WORK" retire
 ```
 
 `prepare-desktop` 对同一 stage 只允许一次，使用 Mac 与 Windows 各一次的系统信任 HTTPS 检查确认控制入口。成功后才按确切摘要使用已验收 GUI 可执行输入，串行构建两端新签名包。start 上传完整 Windows 桌面包，通过两段 SSH 建立独立 authority 回环转发，在签名 CA 与原 HTTPS 主机名下验证服务后，才启动隐藏 Interactive 任务和 Mac 持有器。
 
 `exercise-desktop` 需要交互终端，同时观察两端桌面并完成本机批准。操作者在真正看见画面及两种输入效果后才确认，然后在 Mac GUI 发起停止。由脚本记录原生正常退出、独立撤销和客户端精确退休。客户端退出与退休完成后，按 r217 先正常停止并实际等待 authority，再运行其 retire，最后正常停止并实际等待独立 provider。网络或工单回执不明时保留现场。
+
+## 2026-11-13 双机测试与故障停止诊断
+
+工单 49c74444e1e4b484 双机 HTTPS 预检、签名包和 Mac 桌面会话安装通过。操作者确认在 Mac 上看到过 Windows 画面。Windows 最后记录 11 帧、0 次输入，随后报告会话异常结束。目标独立撤销回执已保存。Mac 后续收到本地故障退出回执，Windows 本地故障停止被明确拒绝，仍缺退出证明。该工单保持封存，隔离 Headscale 占用 TCP 19443。
+
+转发诊断记录授权检查终止或最先观察到的复制方向结束。Windows 本地故障停止现在也会返回固定拒绝原因，沿原 PowerShell 回执流程记录。Go 竞态测试与 Windows 两阶段停止的 19 项独立进程检查通过。实机断流和 Windows 拒绝的具体原因待定位。下一轮使用新鲜签名工单和专用 Mac 桌面启动目录。
+
+复核补记：按原工单的公开记录核实 11 帧、0 次输入及独立撤销，Windows 任务当前仍为 Running，原记录为 FAULT_STOP_PHASE rejected，退出回执缺失。此次对预发布机的只读 SSH 检查未通过公钥认证，19443 的当前监听状态未能复核。保留原任务及记录，未重发停止请求或开启新工单。
+
+桌面验收入口现先核对 owners_ready，再建立诊断通道；工单进入 exercise_outcome_unknown 后才创建 trace，创建失败仍保留原状态。新增两项回归覆盖旧工单不接触端点、不写诊断，以及诊断建立失败不再次启动。桌面相关 Python 15 项及活动管理相关 Python 11 项通过；Mac 的 session、processowner、productmaintenance、desktop-test-authority Go 竞态测试通过。这些结果不作为画面、键鼠或正常退出的实机验收证据。

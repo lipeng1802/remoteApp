@@ -36,6 +36,7 @@ foreach($mode in $modes) {
         $phase=Await-FaultPhase $state
         if($mode -eq 'rejected'){
             Assert-True ($phase -eq 'rejected' -and -not $process.HasExited -and $process.StandardInput.BaseStream.CanWrite) 'Rejected confirmation dropped owner'
+            if($LocalCancel){Assert-True ($state.RejectionReason -ceq 'child_terminal_unconfirmed') 'Local rejection reason missing'}
             1..3 | ForEach-Object { $null=Receive-SupervisedFaultStop $state }
             Assert-True (@(Get-Content $log | Where-Object {$_ -eq $op}).Count -eq 1) 'Implicit fault request retry'
             $process.StandardInput.WriteLine('{"Op":"fixture_authorize"}')

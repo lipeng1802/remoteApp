@@ -73,6 +73,19 @@ func (s *NetworkSupervisor) Ready() bool {
 	return st.Ready && st.Failures == 0 && !st.Stopped
 }
 
+// WaitReady waits for the first maintenance projection before admitting startup.
+// A failed projection stays closed even if maintenance runs another cycle.
+func (s *NetworkSupervisor) WaitReady(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-s.done:
+		return false
+	case <-s.maintenance.FirstCycleDone():
+		return ctx.Err() == nil && s.Ready()
+	}
+}
+
 func (s *NetworkSupervisor) watch() {
 	defer close(s.done)
 	ticker := time.NewTicker(100 * time.Millisecond)

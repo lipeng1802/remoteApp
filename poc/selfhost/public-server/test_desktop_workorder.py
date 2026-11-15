@@ -26,6 +26,19 @@ def receipt(expires_at):
 
 
 class DesktopWorkorder(unittest.TestCase):
+    def test_unknown_desktop_workorder_does_not_touch_endpoints_or_trace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            Activity(work).save({"version": 1, "phase": "exercise_outcome_unknown", "desktop": True})
+            with (patch.object(runner, "metadata", return_value=(work, {"desktop_permission": desktop.SCOPE})),
+                  patch.object(runner, "WindowsRelay") as relay,
+                  patch.object(runner, "Endpoint") as endpoint):
+                with self.assertRaisesRegex(RuntimeError, "activity_requires_fresh_ready_owners"):
+                    runner.exercise_desktop(work, observe_gui=self.fail, request_stop=self.fail)
+                relay.assert_not_called()
+                endpoint.assert_not_called()
+            self.assertEqual([item.name for item in work.iterdir()], ["activity-state.json"])
+
     def test_bootstrap_bound_to_fixed_stage_and_independently_supplied_root(self):
         raw = receipt(2500)
         self.assertEqual(desktop.stage_id(STAGE), "a" * 16)
@@ -89,6 +102,31 @@ class DesktopWorkorder(unittest.TestCase):
             path.write_text(json.dumps(bundle))
             with self.assertRaisesRegex(RuntimeError, "desktop_bundle_rejected"):
                 runner.expiry(work)
+
+    def test_forward_proof_pins_stage_ca_and_https_hostname(self):
+        for status in (405, 200):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as root:
+                work = Path(root)
+                (work / "service-profile.json").write_text(json.dumps(source(2500)))
+                with (patch.object(runner.ssl, "SSLContext") as tls,
+                      patch.object(runner.socket, "create_connection") as dial,
+                      patch.object(runner.http.client, "HTTPConnection") as request):
+                    context = tls.return_value
+                    response = request.return_value.getresponse.return_value.__enter__.return_value
+                    response.status = status
+                    if status == 405:
+                        runner.prove_desktop_authority_forward(work, 18450)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "forward_unconfirmed"):
+                            runner.prove_desktop_authority_forward(work, 18450)
+                    tls.assert_called_once_with(runner.ssl.PROTOCOL_TLS_CLIENT)
+                    self.assertEqual(context.minimum_version, runner.ssl.TLSVersion.TLSv1_3)
+                    context.load_verify_locations.assert_called_once_with(cafile=work / "desktop-authority-ca.pem")
+                    dial.assert_called_once_with(("127.0.0.1", 18450), timeout=6)
+                    context.wrap_socket.assert_called_once_with(
+                        dial.return_value.__enter__.return_value, server_hostname="mk.fengmap.com")
+                    request.assert_called_once_with("mk.fengmap.com", 8444, timeout=6)
+                    request.return_value.request.assert_called_once_with("GET", "/v1/request")
 
     def test_forward_proof_precedes_scheduled_desktop_start(self):
         with tempfile.TemporaryDirectory() as root:

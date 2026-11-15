@@ -29,7 +29,7 @@ func TestLocalCancellationRetainsSameChildOnTimeout(t *testing.T) {
 	c.provisioned = true
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
-	if c.CancelLocalFault(ctx) == nil || s.closes.Load() != 0 || !c.broken {
+	if err := c.CancelLocalFault(ctx); FaultReleaseReason(err) != "child_join_pending" || s.closes.Load() != 0 || !c.broken {
 		t.Fatal("timeout released signer")
 	}
 	if c.ReleaseFault(context.Background()) == nil {

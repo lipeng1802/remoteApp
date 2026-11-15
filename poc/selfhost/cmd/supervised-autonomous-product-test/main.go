@@ -268,7 +268,11 @@ func run(output func(any) error) (result error) {
 				e := controller.CancelLocalFault(life)
 				stop()
 				if e != nil {
-					if e = output(map[string]string{"status": "local_cancel_rejected"}); e != nil {
+					rejection := map[string]string{"status": "local_cancel_rejected"}
+					if runtime.GOOS == "windows" {
+						rejection["reason"] = productmaintenance.FaultReleaseReason(e)
+					}
+					if e = output(rejection); e != nil {
 						return e
 					}
 					continue

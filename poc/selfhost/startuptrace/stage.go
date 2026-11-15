@@ -10,18 +10,21 @@ import (
 type Stage string
 
 const (
-	LifecycleIdentityRequestRejected Stage = "lifecycle_identity_request_rejected"
-	LifecycleIdentityGateRejected    Stage = "lifecycle_identity_gate_rejected"
-	LifecycleStateLocalRejected      Stage = "lifecycle_state_local_rejected"
-	LifecycleStateRequestRejected    Stage = "lifecycle_state_request_rejected"
-	LifecycleStateBindingRejected    Stage = "lifecycle_state_binding_rejected"
-	LifecycleStateFuture             Stage = "lifecycle_state_future"
-	LifecycleStateExpired            Stage = "lifecycle_state_expired"
-	LifecycleIdentityRejected        Stage = "lifecycle_identity_rejected"
-	LifecycleStateRejected           Stage = "lifecycle_state_rejected"
-	LifecycleInactive                Stage = "lifecycle_inactive"
-	LifecycleGateRejected            Stage = "lifecycle_gate_rejected"
-	LifecycleSessionEnded            Stage = "lifecycle_session_ended"
+	LifecycleIdentityRequestRejected   Stage = "lifecycle_identity_request_rejected"
+	LifecycleIdentityGateRejected      Stage = "lifecycle_identity_gate_rejected"
+	LifecycleStateLocalRejected        Stage = "lifecycle_state_local_rejected"
+	LifecycleStateRequestRejected      Stage = "lifecycle_state_request_rejected"
+	LifecycleStateBindingRejected      Stage = "lifecycle_state_binding_rejected"
+	LifecycleStateFuture               Stage = "lifecycle_state_future"
+	LifecycleStateExpired              Stage = "lifecycle_state_expired"
+	LifecycleIdentityRejected          Stage = "lifecycle_identity_rejected"
+	LifecycleStateRejected             Stage = "lifecycle_state_rejected"
+	LifecycleInactive                  Stage = "lifecycle_inactive"
+	LifecycleGateRejected              Stage = "lifecycle_gate_rejected"
+	LifecycleSessionEnded              Stage = "lifecycle_session_ended"
+	LifecycleTunnelAuthorizationEnded  Stage = "lifecycle_tunnel_authorization_ended"
+	LifecycleTunnelLocalToOverlayEnded Stage = "lifecycle_tunnel_local_to_overlay_ended"
+	LifecycleTunnelOverlayToLocalEnded Stage = "lifecycle_tunnel_overlay_to_local_ended"
 
 	TargetSYNParentEnded                   Stage = "target_syn_parent_ended"
 	TargetSYNWindowEnded                   Stage = "target_syn_window_ended"
@@ -163,7 +166,8 @@ func Valid(s string) bool {
 	switch Stage(s) {
 	case LifecycleIdentityRequestRejected, LifecycleIdentityGateRejected, LifecycleStateLocalRejected, LifecycleStateRequestRejected, LifecycleStateBindingRejected, LifecycleStateFuture, LifecycleStateExpired, LifecycleIdentityRejected:
 		return true
-	case LifecycleStateRejected, LifecycleInactive, LifecycleGateRejected, LifecycleSessionEnded, TargetSYNParentEnded, TargetSYNWindowEnded, TargetSYNOpenFailed, TargetSYNHeaderUnavailable, TargetSYNNotObserved, TargetSYNStreamUnavailable, TargetSYNObserved, TargetSYNReplyObserved, ControllerSYNObserved, ControllerSYNReplyObserved, ControllerDiscoveryDERPDataObserved, ControllerDiscoveryDERPDataUnconfirmed, ControllerDiscoveryUnavailable, ControllerDiscoveryDirect, ControllerDiscoveryUDPRelay, ControllerDiscoveryDERP, ControllerPeerSendDirectSelected, ControllerPeerSendUDPRelaySelected, ControllerPeerSendObserved, ControllerPeerSendUnchanged, ControllerSendUnavailable, ControllerSendFilterDrop, ControllerSendObserved, ControllerSendUnchanged, TargetReceiveUnavailable, TargetReceiveFilterDrop, TargetReceiveObserved, TargetReceiveUnchanged, TargetAcceptEnded, TargetTCPAccepted, TargetFilterUnavailable, TargetFilterMatch, TargetFilterNoIPMatch, DeadlineSelfRelayUnknown, DeadlinePeerRelayUnknown, DeadlineHandshakeUnseen, ControllerRouteWait, ControllerRouteDenied, DeadlineRouteQueryFailed, DeadlineRoutePeerMissing, DeadlineRouteNotReady, DeadlineRouteEnginePending, DeadlineRouteEnginePresent, SecretTargetConfig, SecretTargetAuthorize, SecretTargetHello, SecretTargetNonce, SecretTargetSign, SecretTargetWelcome, SecretTargetProof, SecretTargetReauthorize, SecretTargetSend, SecretControllerConfig, SecretControllerAuthorize, SecretControllerHello, SecretControllerWelcome, SecretControllerVerify, SecretControllerSign, SecretControllerProof, SecretControllerReauthorize, SecretControllerReceive, SecretControllerCanonical, OverlayRequestDeadline, OverlayRequestCanceled, OverlayRequestEOF, OverlayRequestRefused, OverlayRequestReset, OverlayRequestTimeout, OverlayBadUpgrade, OverlayPermissionDenied, OverlayResolveFailed, OverlayConnectRefused, OverlayConnectTimeout, OverlayConnectFailed, TargetGateDenied, TargetLocalFailed, TargetSelfDenied, TargetListenFailed, TargetListening, TargetAcceptDenied, TargetPeerDenied, ControllerGateDenied, ControllerLocalFailed, ControllerUpgrade, ControllerPeer, ControllerPeerDenied, OverlayRequestFailed, OverlayUpgradeRejected, OverlayRouteMissing, OverlayResponseInvalid, OverlayUpgraded, TargetTLS, TargetListen, TargetSecret, TargetServe, ControllerListen, ControllerDial, ControllerSecret, ControllerTLS, ControllerAccept, ControllerBridge:
+	case LifecycleTunnelAuthorizationEnded, LifecycleTunnelLocalToOverlayEnded, LifecycleTunnelOverlayToLocalEnded,
+		LifecycleStateRejected, LifecycleInactive, LifecycleGateRejected, LifecycleSessionEnded, TargetSYNParentEnded, TargetSYNWindowEnded, TargetSYNOpenFailed, TargetSYNHeaderUnavailable, TargetSYNNotObserved, TargetSYNStreamUnavailable, TargetSYNObserved, TargetSYNReplyObserved, ControllerSYNObserved, ControllerSYNReplyObserved, ControllerDiscoveryDERPDataObserved, ControllerDiscoveryDERPDataUnconfirmed, ControllerDiscoveryUnavailable, ControllerDiscoveryDirect, ControllerDiscoveryUDPRelay, ControllerDiscoveryDERP, ControllerPeerSendDirectSelected, ControllerPeerSendUDPRelaySelected, ControllerPeerSendObserved, ControllerPeerSendUnchanged, ControllerSendUnavailable, ControllerSendFilterDrop, ControllerSendObserved, ControllerSendUnchanged, TargetReceiveUnavailable, TargetReceiveFilterDrop, TargetReceiveObserved, TargetReceiveUnchanged, TargetAcceptEnded, TargetTCPAccepted, TargetFilterUnavailable, TargetFilterMatch, TargetFilterNoIPMatch, DeadlineSelfRelayUnknown, DeadlinePeerRelayUnknown, DeadlineHandshakeUnseen, ControllerRouteWait, ControllerRouteDenied, DeadlineRouteQueryFailed, DeadlineRoutePeerMissing, DeadlineRouteNotReady, DeadlineRouteEnginePending, DeadlineRouteEnginePresent, SecretTargetConfig, SecretTargetAuthorize, SecretTargetHello, SecretTargetNonce, SecretTargetSign, SecretTargetWelcome, SecretTargetProof, SecretTargetReauthorize, SecretTargetSend, SecretControllerConfig, SecretControllerAuthorize, SecretControllerHello, SecretControllerWelcome, SecretControllerVerify, SecretControllerSign, SecretControllerProof, SecretControllerReauthorize, SecretControllerReceive, SecretControllerCanonical, OverlayRequestDeadline, OverlayRequestCanceled, OverlayRequestEOF, OverlayRequestRefused, OverlayRequestReset, OverlayRequestTimeout, OverlayBadUpgrade, OverlayPermissionDenied, OverlayResolveFailed, OverlayConnectRefused, OverlayConnectTimeout, OverlayConnectFailed, TargetGateDenied, TargetLocalFailed, TargetSelfDenied, TargetListenFailed, TargetListening, TargetAcceptDenied, TargetPeerDenied, ControllerGateDenied, ControllerLocalFailed, ControllerUpgrade, ControllerPeer, ControllerPeerDenied, OverlayRequestFailed, OverlayUpgradeRejected, OverlayRouteMissing, OverlayResponseInvalid, OverlayUpgraded, TargetTLS, TargetListen, TargetSecret, TargetServe, ControllerListen, ControllerDial, ControllerSecret, ControllerTLS, ControllerAccept, ControllerBridge:
 		return true
 	}
 	return false

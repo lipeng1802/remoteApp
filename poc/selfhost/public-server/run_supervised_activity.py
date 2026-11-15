@@ -5,6 +5,7 @@ the existing trusted builder. This is SSH test coordination, not product UX.
 """
 import base64
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 import time
+from urllib.parse import urlsplit
 
 from activity_control import Activity
 from activity_trace import RecordedEndpoint
@@ -433,6 +435,8 @@ def start(work):
     work,m=metadata(work);a=Activity(work)
     port=m["forward_port"]
     if a.read()["phase"]!="built" or expiry(work)-time.time()<600:raise RuntimeError("activity_fresh_build_required")
+    if m.get("desktop_permission") == desktop.SCOPE and not ssl.HAS_TLSv1_3:
+        raise RuntimeError("activity_desktop_tls13_runtime_required")
     require_free_forward_port(port)
     require_windows_forward_port(port)
     a.save({"version":1,"phase":"startup_outcome_unknown"})
@@ -536,13 +540,25 @@ def prove_desktop_authority_forward(work, port):
     ca = work / "desktop-authority-ca.pem"
     with ca.open("x") as out:
         out.write(ssl.DER_cert_to_PEM_cert(certificate))
-    status = command([
-        "/usr/bin/curl", "-q", "--noproxy", "*", "--max-time", "6", "--silent",
-        "--cacert", str(ca), "--connect-to", f"mk.fengmap.com:8444:127.0.0.1:{port}",
-        "--output", "/dev/null", "--write-out", "%{http_code}", desktop.ENDPOINT + "/v1/request",
-    ], 8)
-    if status != b"405":
-        raise RuntimeError("activity_desktop_authority_forward_unconfirmed")
+    endpoint = urlsplit(desktop.ENDPOINT)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.minimum_version = ssl.TLSVersion.TLSv1_3
+    # Trust only the CA from this workorder, with the signed HTTPS hostname.
+    context.load_verify_locations(cafile=ca)
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=6) as forward:
+            with context.wrap_socket(forward, server_hostname=endpoint.hostname) as transport:
+                connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=6)
+                connection.sock = transport
+                try:
+                    connection.request("GET", "/v1/request")
+                    with connection.getresponse() as response:
+                        if response.status != 405:
+                            raise RuntimeError("activity_desktop_authority_forward_unconfirmed")
+                finally:
+                    connection.close()
+    except (OSError, http.client.HTTPException):
+        raise RuntimeError("activity_desktop_authority_forward_unconfirmed") from None
 
 
 def finish_start_after_transfer(work,m,archive,input_source,inputs):
@@ -726,15 +742,27 @@ def exercise_desktop(work, *, observe_gui, request_stop):
     work, m = metadata(work)
     if m.get("desktop_permission") != "desktop-control" or m.get("program_removal"):
         raise RuntimeError("activity_desktop_scope_rejected")
+    activity = Activity(work)
+    if activity.read().get("phase") != "owners_ready":
+        raise RuntimeError("activity_requires_fresh_ready_owners")
     windows = json.loads((work / "windows-bootstrap.json").read_text())
     mac = json.loads((work / "mac-bootstrap.json").read_text())
     target = WindowsRelay(WIN, m["win_dir"] + "\\supervised-control-relay.exe", windows["control_pipe"])
     controller = Endpoint(m["holder_dir"])
-    return Activity(work).exercise_desktop(
-        RecordedEndpoint(work, "target", target), RecordedEndpoint(work, "controller", controller),
-        expiry(work), target_bootstrap=windows, controller_bootstrap=mac,
-        observe_gui=observe_gui, request_stop=request_stop,
-    )
+    try:
+        return activity.exercise_desktop(
+            target, controller, expiry(work),
+            record=lambda role, endpoint: RecordedEndpoint(work, role, endpoint),
+            target_bootstrap=windows, controller_bootstrap=mac,
+            observe_gui=observe_gui, request_stop=request_stop,
+        )
+    except Exception:
+        from startup_diagnostic import capture
+        try:
+            capture(work, target, controller)
+        except Exception:
+            pass
+        raise
 
 
 def stop(work):

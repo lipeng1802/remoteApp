@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -47,6 +48,7 @@ func testTLS(now time.Time, issuer string) (tls.Certificate, readyReceipt, error
 	}
 	defer clear(caKey)
 	ca := &x509.Certificate{
+		Subject:      pkix.Name{CommonName: "RemoteApp Desktop TEST Authority CA"},
 		SerialNumber: big.NewInt(1), NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
 		BasicConstraintsValid: true, IsCA: true, KeyUsage: x509.KeyUsageCertSign,
 	}

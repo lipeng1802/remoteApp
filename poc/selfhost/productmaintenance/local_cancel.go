@@ -14,24 +14,24 @@ var ErrLocalCancelJoined = errors.New("local_cancel_joined")
 // release the independent signer. Unknown exits retain ownership.
 func (c *Controller) CancelLocalFault(ctx context.Context) error {
 	if err := c.lock(ctx); err != nil {
-		return err
+		return errors.Join(err, ErrProduct, errFaultLock)
 	}
 	defer c.unlock()
 	if c.localCancelJoined {
 		return nil
 	}
 	if c.child == nil || c.signer == nil || c.requested || c.prepared || c.released || c.faultReleaseFailed {
-		return ErrProduct
+		return errors.Join(ErrProduct, errFaultState)
 	}
 	c.localCancelRequested = true
 	c.broken = true // no late reply may rearm business or maintenance success
 	_ = c.child.StopFault(ctx)
 	if !c.child.JoinedFault() {
-		return ErrProduct
+		return errors.Join(ErrProduct, errFaultChild, faultChildEvidence(c.child.FaultJoinFailure()))
 	}
 	if err := c.signer.CloseJoined(); err != nil {
 		c.faultReleaseFailed = true
-		return err
+		return errors.Join(err, ErrProduct, errFaultSigner)
 	}
 	if c.revocation != nil {
 		c.revocation.Close()
